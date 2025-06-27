@@ -1,0 +1,2445 @@
+import sys
+import json
+from datetime import date
+import datetime
+import threading
+import schedule
+import time
+from flask import Flask, render_template, redirect, url_for, request, send_file
+import subprocess
+from initialize import db_conn
+from database_insert import insert_data
+from flask import Flask, render_template, jsonify, redirect, request, session, url_for, Response, stream_with_context
+import os
+# Import xero client stuff here
+from xero_python.api_client import ApiClient
+from xero_python.accounting import AccountingApi
+from xero_python.api_client.oauth2 import OAuth2Token
+from xero_python.api_client.configuration import Configuration
+from authlib.integrations.flask_client import OAuth
+import requests
+from xml.etree import ElementTree as ET
+import io
+import zipfile
+import math
+from workflows.workflow_creator.workflow_creator import workflow_creator
+
+app = Flask(__name__)
+app.register_blueprint(workflow_creator)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+## Initialize Database Calls ##
+
+# Function to call the main() function from initialize.py
+def initialize_database():
+    python_executable = sys.executable
+    initialize_script = "initialize.py"
+    subprocess.run([python_executable, initialize_script])
+
+@app.route('/initialize', methods=['POST'])
+def initialize():
+    print("Accessed /initialize route")
+    initialize_database()
+    return redirect(url_for('index'))
+
+# Process sales invoices + Xero routes
+@app.route('/process-sales-invoices', methods=['POST'])
+def process_sales_invoices():
+    print("Accessed /process_sales_invoices route")
+    process_sales_invoices_function()
+    return redirect(url_for('index'))
+
+def process_sales_invoices_function():
+    python_executable = sys.executable
+    process_sales_invoices_script = "sales_pdf_processor.py"
+    subprocess.run([python_executable, process_sales_invoices_script])
+
+# Configure the API client
+oauth = OAuth(app)
+app.secret_key = os.urandom(24)  # Required for session
+
+# Define the Xero OAuth client (remote app setup)
+open_id_config_url = 'https://identity.xero.com/.well-known/openid-configuration'
+openid_config = requests.get(open_id_config_url).json()
+
+xero = oauth.register(
+    name="xero",
+    version="2",
+    client_id="40ADFC7B008F4AD1B75EE9D741DFE1F8",  # Replace with your actual Client ID
+    client_secret="SiKz3A-2ramUbm5oqNP_fTnE-cPu7rwIruLN4CYQqgrUmomI",  # Replace with your actual Client Secret
+    endpoint_url="https://api.xero.com/",
+    authorize_url="https://login.xero.com/identity/connect/authorize",
+    access_token_url="https://identity.xero.com/connect/token",
+    refresh_token_url="https://identity.xero.com/connect/token",
+    scope="openid profile email accounting.contacts accounting.transactions accounting.settings accounting.attachments",  # Add any required scope here
+    jwks_uri=openid_config['jwks_uri'],
+)
+
+def get_xero_tenant_id(access_token):
+    url = "https://api.xero.com/connections"
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        connections = response.json()
+        if connections:
+            # Assuming the user has at least one tenant, grab the first one
+            tenant_id = connections[0]['tenantId']
+            session['tenant_id'] = tenant_id  # Store tenant ID in session
+            return tenant_id
+        else:
+            return None
+    else:
+        raise Exception(f"Error fetching tenant ID: {response.status_code} - {response.text}")
+
+@app.route("/xerologin")
+def xerologin():
+    redirect_uri = url_for('xeroauth', _external=True)
+    print(redirect_uri)
+    return xero.authorize_redirect(redirect_uri)
+
+@app.route("/xeroauth")
+def xeroauth():
+    # Authorize and get the access token
+    token = xero.authorize_access_token()
+
+    # Save the token in the session
+    session['xero_token'] = token
+    print(f"Token stored in session: {session['xero_token']}")
+
+    # After storing the token, try to populate buyers
+    try:
+        populate_buyers()
+        print("Successfully populated buyers from Xero")
+        return redirect(url_for('invoices'))
+    except Exception as e:
+        print(f"Error populating buyers from Xero: {str(e)}")
+       #Continue with the flow even if populate_buyers fails
+    
+    #return redirect(url_for('populate_buyers'))
+    return redirect(url_for('invoices'))
+
+def get_tenant_id(access_token):
+    """Fetch the tenant ID using the access token"""
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+
+    response = requests.get('https://api.xero.com/connections', headers=headers)
+
+    if response.status_code == 200:
+        connections = response.json()
+        if connections:
+            # Assuming the first tenant is the one you need
+            return connections[0]['tenantId']
+    else:
+        return None
+
+@app.route('/populate-buyers')
+def populate_buyers():
+    print("\n=== Starting populate_buyers() ===")
+    from database_insert import update_data
+
+    token = session.get('xero_token')
+    if token is None:
+        print("❌ No Xero token found in session")
+        return redirect(url_for('xerologin'))
+    else:
+        print("✓ Xero session token found")
+
+    tenant_id = get_tenant_id(token['access_token'])
+    if not tenant_id:
+        print("❌ Failed to retrieve Xero tenant ID")
+        return "Could not retrieve Xero tenant ID.", 401
+    print(f"✓ Retrieved tenant ID: {tenant_id}")
+
+    # Fetch contacts from Xero API
+    url = 'https://api.xero.com/api.xro/2.0/Contacts'
+    headers = {
+        'Authorization': f'Bearer {token["access_token"]}',
+        'Xero-Tenant-Id': tenant_id,
+        'Accept': 'application/xml'
+    }
+    print("Sending request to Xero API...")
+
+    response = requests.get(url, headers=headers)
+    print(f"API Response Status Code: {response.status_code}")
+    if response.status_code != 200:
+        print(f"❌ Error response from API: {response.text}")
+        return f"Error fetching contacts: {response.status_code}", 400
+
+    try:
+        # Parse XML response
+        print("Parsing XML response...")
+        tree = ET.ElementTree(ET.fromstring(response.text))
+        root = tree.getroot()
+        print(f"✓ Found {len(root.findall('.//Contact'))} total contacts")
+
+        connection, cursor = db_conn()
+        print("✓ Database connection established")
+        buyers_added = 0
+        buyers_updated = 0
+
+        customer_contacts = 0
+        for contact in root.findall(".//Contact"):
+            print("\n=== Processing Contact ===")
+            # Print all available fields for the contact
+            for element in contact:
+                if element.text and element.text.strip():
+                    print(f"{element.tag}: {element.text}")
+                elif len(element) > 0:  # If element has child elements
+                    print(f"\n{element.tag}:")
+                    for child in element:
+                        if child.text and child.text.strip():
+                            print(f"  - {child.tag}: {child.text}")
+                        # Handle nested structures like Addresses and Phones
+                        elif len(child) > 0:
+                            print(f"  {child.tag}:")
+                            for subchild in child:
+                                if subchild.text and subchild.text.strip():
+                                    print(f"    - {subchild.tag}: {subchild.text}")
+
+            # Check if contact is a customer
+            is_customer = contact.find("IsCustomer")
+            if is_customer is not None and is_customer.text.lower() == "true":
+                print("\n✓ Found customer contact")
+                customer_contacts += 1
+                name = contact.find("Name").text
+                firstname = contact.find("FirstName")
+                firstname = firstname.text if firstname is not None else None
+                lastname = contact.find("LastName")
+                lastname = lastname.text if lastname is not None else None
+                email = contact.find("EmailAddress")
+                email = email.text if email is not None else None
+                phone = contact.find("Phones/Phone/PhoneNumber")
+                phone = phone.text if phone is not None else None
+                phonecountrycode = contact.find("Phones/Phone/PhoneCountryCode")
+                phonecountrycode = phonecountrycode.text if phonecountrycode is not None else None
+                phoneareacode = contact.find("Phones/Phone/PhoneAreaCode")
+                phoneareacode = phoneareacode.text if phoneareacode is not None else None
+                address = contact.find(".//AddressLine1")
+                address = address.text if address is not None else None
+
+                print(f"\nProcessing buyer data:")
+                print(f"Name: {name}")
+                print(f"First name: {firstname}")
+                print(f"Last name: {lastname}")
+                print(f"Email: {email}")
+                print(f"Phone: {phone}")
+                print(f"Phone country code: {phonecountrycode}")
+                print(f"Phone area code: {phoneareacode}")
+                print(f"Address: {address}")
+
+                # Check if buyer already exists
+                cursor.execute("SELECT buyer FROM buyers WHERE buyer = %s", (name,))
+                exists = cursor.fetchone()
+
+                if exists:
+                    print(f"Updating existing buyer: {name}")
+                    update_data(table_name="buyers", condition={'buyer': name}, buyer=name, buyer_email=email, buyer_phone=f"{phonecountrycode}{phoneareacode}{phone}", buyer_address=address, primary_contact=f"{firstname} {lastname}")
+                    cursor.execute("""
+                        UPDATE buyers 
+                        SET buyer_email = %s, buyer_phone = %s, buyer_address = %s
+                        WHERE buyer = %s
+                    """, (email, phone, address, name))
+                    buyers_updated += 1
+                else:
+                    print(f"Adding new buyer: {name}")
+                    insert_data(table_name="buyers", audit_action="Add buyer to buyers table", buyer=name, buyer_email=email, buyer_phone=f"{phonecountrycode}{phoneareacode}{phone}", buyer_address=address, primary_contact=f"{firstname} {lastname}")
+                    buyers_added += 1
+
+        print(f"\n=== Summary ===")
+        print(f"Total contacts processed: {len(root.findall('.//Contact'))}")
+        print(f"Customer contacts found: {customer_contacts}")
+        print(f"New buyers added: {buyers_added}")
+        print(f"Existing buyers updated: {buyers_updated}")
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+        return f"Successfully added {buyers_added} new buyers and updated {buyers_updated} existing buyers."
+
+    except ET.ParseError as e:
+        print(f"❌ XML Parse Error: {str(e)}")
+        print(f"Response content: {response.text[:200]}...")  # Print first 200 chars of response
+        return f"Error: Invalid XML response from Xero API", 400
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        return f"Error processing contacts: {str(e)}", 500
+
+@app.route('/invoices')
+def invoices():
+    def generate_responses():
+        # Get the saved token from the session
+        token = session.get('xero_token')
+        if token is None:
+            yield "Redirecting to login...<br>\n"
+            return redirect(url_for('xerologin'))
+        else:
+            yield "Xero session token acquired, searching for Xero tenant <br>\n"
+
+        # Retrieve the tenant ID using the access token
+        tenant_id = get_tenant_id(token['access_token'])
+        if tenant_id is None:
+            yield "Error: Unable to retrieve tenant ID.<br>\n"
+            return
+        else:
+            yield "Xero tenant identified, processing invoices..<br>\n"
+
+        # Start fetching invoices
+        url = 'https://api.xero.com/api.xro/2.0/Invoices'
+        headers = {
+            'Authorization': f'Bearer {token["access_token"]}',
+            'Xero-Tenant-Id': tenant_id,
+            'Accept': 'application/xml',
+        }
+
+        yield "Fetching invoices from Xero API...<br>\n"
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            try:
+                # Parse the XML response
+                tree = ET.ElementTree(ET.fromstring(response.text))
+                root = tree.getroot()
+
+                # Find all invoice elements and filter by status
+                invoices_data = []
+                for invoice in root.findall(".//Invoice"):
+                    status = invoice.find("Status").text
+                    if status not in ["AUTHORISED", "PAID"]:
+                        yield f"Skipping invoice {invoice.find('InvoiceNumber').text} with status {status}.<br>\n"
+                        continue
+                    else:
+                        yield f"{invoice.find('InvoiceNumber').text} valid, adding to list of invoices to process<br>\n"
+
+                    invoice_data = {
+                        "InvoiceID": invoice.find("InvoiceID").text,
+                        "InvoiceNumber": invoice.find("InvoiceNumber").text,
+                        "AmountDue": invoice.find("AmountDue").text,
+                        "AmountPaid": invoice.find("AmountPaid").text,
+                        "Status": status,
+                    }
+                    invoices_data.append(invoice_data)
+
+                # Ensure the invoices directory exists
+                invoices_dir = os.path.join(os.getcwd(), 'invoices')
+                os.makedirs(invoices_dir, exist_ok=True)
+
+                # Download PDFs for eligible invoices
+                for invoice in invoices_data:
+                    # Check if the invoice is already in the database
+                    connection, cursor = db_conn()
+                    cursor.execute("SELECT notes FROM sales_product WHERE notes LIKE %s", ('%' + invoice["InvoiceNumber"] + '%',))
+                    data = cursor.fetchall()
+                    print(data)
+                    # Check if any of the returned notes contain the invoice number
+                    invoice_exists = any(invoice["InvoiceNumber"] in note[0] for note in data)
+                    if invoice_exists:
+                        yield f"Invoice {invoice['InvoiceNumber']} already exists in the database.<br>\n"
+                        continue
+                    else:
+                        invoice_id = invoice["InvoiceID"]
+                    pdf_url = f'https://api.xero.com/api.xro/2.0/Invoices/{invoice_id}'
+                    pdf_headers = {
+                        'Authorization': f'Bearer {token["access_token"]}',
+                        'Xero-Tenant-Id': tenant_id,
+                        'Accept': 'application/pdf',
+                    }
+
+                    pdf_response = requests.get(pdf_url, headers=pdf_headers)
+
+                    if pdf_response.status_code == 200:
+                        pdf_filename = os.path.join(invoices_dir, f"{invoice['InvoiceNumber']}.pdf")
+                        with open(pdf_filename, 'wb') as pdf_file:
+                            pdf_file.write(pdf_response.content)
+                        yield f"Downloaded and saved {pdf_filename}.<br>\n"
+                    else:
+                        yield (f"Error downloading PDF for invoice {invoice_id} (Number: {invoice['InvoiceNumber']}). "
+                               f"Status Code: {pdf_response.status_code}, Response: {pdf_response.text}<br>\n")
+
+                # Trigger the /process-sales-invoices route
+                yield "Processing sales invoices...<br>\n"
+                with app.test_request_context():
+                    process_sales_invoices_function()
+                yield "Processed sales invoices.<br>\n"
+
+            except ET.ParseError:
+                yield f"Error: The response from Xero API is not in valid XML format. Raw response: {response.text}<br>\n"
+                return
+        else:
+            yield f"Error: Received {response.status_code} response from Xero API: {response.text}<br>\n"
+            return
+
+        yield """
+        <html>
+            <head>
+                <meta http-equiv="refresh" content="3; url=/" />
+            </head>
+            <body>
+                <p>Task completed! You will be redirected to the homepage in 3 seconds.</p>
+            </body>
+        </html>
+        """
+
+    # Stream the response to the client
+    return Response(stream_with_context(generate_responses()), content_type='text/html')
+
+def validate_xero_token():
+    """
+    Validates the Xero token and handles token refresh if needed.
+    Returns:
+        tuple: (is_valid, token, tenant_id)
+        - is_valid: boolean indicating if we have a valid token
+        - token: the token object if valid, None otherwise
+        - tenant_id: the tenant ID if valid, None otherwise
+    """
+    token = session.get('xero_token')
+    if token is None:
+        print("❌ No Xero token found in session")
+        return False, None, None
+
+    try:
+        # Check if token is expired
+        if token.get('expires_at', 0) < time.time():
+            print("Token expired, attempting to refresh...")
+            try:
+                # Try to refresh the token
+                new_token = xero.refresh_token(token['refresh_token'])
+                session['xero_token'] = new_token
+                token = new_token
+                print("✓ Token refreshed successfully")
+            except Exception as e:
+                print(f"❌ Failed to refresh token: {str(e)}")
+                return False, None, None
+
+        # Verify token by getting tenant ID
+        tenant_id = get_tenant_id(token['access_token'])
+        if not tenant_id:
+            print("❌ Failed to retrieve Xero tenant ID")
+            return False, None, None
+
+        print("✓ Valid Xero token found")
+        return True, token, tenant_id
+
+    except Exception as e:
+        print(f"❌ Error validating token: {str(e)}")
+        return False, None, None
+
+@app.route('/sync-xero-data', methods=['POST', 'GET'])
+def sync_xero_data():
+    print("\n=== Starting Xero data sync ===")
+    
+    # Get the current run count from session, default to 0 if not exists
+    run_count = session.get('sync_run_count', 0)
+    
+    # Validate token
+    is_valid, token, tenant_id = validate_xero_token()
+    if not is_valid:
+        print("❌ Invalid or expired token, redirecting to login")
+        session['sync_run_count'] = 0  # Reset counter on invalid token
+        return redirect(url_for('xerologin'))
+    
+    if run_count == 0:
+        # First run - get/refresh token and run initial functions
+        print("First run - processing initial functions...")
+        try:
+            print("Processing invoices from Xero...")
+            process_sales_invoices_function()
+            print("Successfully processed invoices from Xero")
+        except Exception as e:
+            print(f"Error processing invoices from Xero: {str(e)}")
+        
+        # Increment run count and store in session
+        session['sync_run_count'] = 1
+        # Redirect to same route to trigger second run
+        return redirect(url_for('sync_xero_data'))
+    
+    else:
+        # Second run - run remaining functions
+        print("Second run - processing remaining functions...")
+        try:
+            print("Populating buyers from Xero...")
+            populate_buyers()
+            print("Successfully populated buyers from Xero")
+        except Exception as e:
+            print(f"Error populating buyers from Xero: {str(e)}")
+        
+        # Reset run count
+        session['sync_run_count'] = 0
+        return redirect(url_for('index'))
+
+@app.route('/back-button', methods=['POST'])
+def back_button():
+    print("Accessed /back-button route")
+
+    return redirect(url_for('index'))
+
+@app.route('/back-button-data-tools', methods=['POST'])
+def back_button_data_tools():
+    print("Accessed /back-button-data-tools route")
+
+    return render_template('data_tools.html')
+
+@app.route('/back-button-audit-tools', methods=['POST'])
+def back_button_audit_tools():
+    print("Accessed /back-button-audit-tools route")
+
+    return render_template('audit_tools.html')
+
+@app.route('/back-button-database-query-form', methods=['POST'])
+def back_button_database_query_form():
+    print("Accessed /back-button-database-query-form route")
+
+    return render_template('database_query_form.html')
+
+@app.route('/back-button-product-tools', methods=['POST'])
+def back_button_product_tools():
+    print("Accessed /back-button-product-tools route")
+
+    return render_template('product_tools.html')
+
+@app.route('/back-button-buys-sells', methods=['POST'])
+def back_button_buys_sells():
+    print("Accessed /back-button-buys-sells route")
+
+    return render_template('buys_sells.html')
+
+@app.route('/back-button-calculations', methods=['POST'])
+def back_button_calculations():
+    print("Accessed /back-button-calculations route")
+
+    return render_template('calculations.html')
+
+@app.route('/back-button-audit-data', methods=['POST'])
+def back_button_audit_data():
+    print("Accessed /back-button-audit-data route")
+
+    return render_template('raw_data.html')
+
+@app.route('/data-tools', methods=['POST'])
+def data_tools():
+    print("Accessed /data-tools route")
+
+    return render_template('data_tools.html')
+
+@app.route('/audit-tools', methods=['POST'])
+def audit_tools():
+    print("Accessed /audit-tools route")
+
+    return render_template('audit_tools.html')
+
+@app.route('/product-tools', methods=['POST'])
+def product_tools():
+    print("Accessed /product-tools route")
+
+    return render_template('product_tools.html')
+
+@app.route('/buys-sells', methods=['POST'])
+def buys_sells():
+    print("Accessed /buys-sells route")
+
+    return render_template('buys_sells.html')
+
+@app.route('/calculation-tools', methods=['POST'])
+def calculation_tools():
+    print("Accessed /calculation-tools route")
+
+    return render_template('calculations.html')
+
+@app.route('/rawdata', methods=['POST'])
+def raw_data():
+    # Get data from the database
+    print("Accessed /rawdata route")
+    from data_fetch import raw_data
+    data = raw_data()
+    return render_template('raw_data.html', data=data)
+
+@app.route('/inventory', methods=['POST'])
+def inventory():
+    # Get data from the database
+    print("Accessed /inventory route")
+    from data_fetch import inventory
+    data = inventory()
+    inventory()
+
+    return render_template('inventory.html', data=data)
+
+@app.route('/monthly-totals', methods=['POST'])
+def monthly_totals():
+    print("Accessed /monthly-totals route")
+    from data_fetch import monthly_totals
+    data = monthly_totals()
+
+    monthly_totals()
+
+    return render_template('monthly_totals.html', data=data)
+
+@app.route('/lal-audit', methods=['POST'])
+def lal_audit():
+    print("Accessed /lal-audit route")
+    from lal_audit import ngs_audit_get_purchased
+    from lal_audit import ngs_audit_get_flavor
+    from lal_audit import ngs_audit_get_clearing
+    from lal_audit import ngs_audit_get_vats
+    from lal_audit import ngs_audit_bottles_sold
+    from lal_audit import ngs_audit_get_purchased_remaining
+    from lal_audit import ngs_audit_get_distillations_lal_not_in_vats
+    from lal_audit import ngs_audit_get_distillations_not_in_vats
+    from lal_audit import ngs_audit_get_lal_vats_not_bottled
+    from lal_audit import ngs_audit_get_vats_not_bottled
+    from lal_audit import ngs_audit_get_lal_bottles_not_sold
+    from lal_audit import ngs_audit_get_bottles_stored
+    from lal_audit import ngs_audit_get_customs_lodgements
+    from lal_audit import ngs_audit_get_current_month_sold_bottles
+    from lal_audit import ngs_audit_get_distillation_experiments
+    from lal_audit import ngs_audit_get_flavor_experiments_flavor_codes
+    from lal_audit import ngs_audit_get_flavor_experiments
+    from lal_audit import ngs_audit_get_distillation_experiments_get_experiment_id
+    from lal_audit import ngs_audit_populate_sales_product_table
+    from lal_audit import ngs_audit_get_ex_stock_storage
+    from lal_audit import ngs_audit_get_ex_stock_storage_ids
+    from lal_audit import ngs_audit_populate_lal_purchased_table
+    from lal_audit import ngs_audit_populate_lal_lodged_with_customs_table
+    from lal_audit import ngs_audit_populate_lodgements_summary_table
+    from lal_audit import ngs_audit_get_samples_consumed_table
+    from lal_audit import ngs_audit_get_samples_consumed
+    from lal_audit import ngs_audit_get_distillations_table
+    from lal_audit import ngs_audit_get_mixing_vats_table
+    from lal_audit import ngs_audit_get_bottling_table
+    from lal_audit import ngs_audit_get_flavor_experiments_table
+    from lal_audit import ngs_audit_get_distillation_experiments_table
+    from lal_audit import ngs_audit_get_ex_stock_storage_table
+    from lal_audit import ngs_audit_get_premix_lal
+    from lal_audit import ngs_audit_get_premix_container_ids
+    from lal_audit import ngs_audit_get_premix_table
+    from lal_audit import ngs_audit_get_lal_flavor_experiments
+
+    ngs_audit_get_purchased_data = ngs_audit_get_purchased()
+    ngs_audit_get_flavor_data = ngs_audit_get_flavor()
+    ngs_audit_get_clearing_data = ngs_audit_get_clearing()
+    ngs_audit_get_vats_data = ngs_audit_get_vats()
+    ngs_audit_bottles_sold_data = ngs_audit_bottles_sold()
+
+    ngs_audit_get_purchased_remaining_data = ngs_audit_get_purchased_remaining()
+    ngs_audit_get_flavor_lal_remaining_data = ngs_audit_get_distillations_lal_not_in_vats()
+    ngs_audit_get_flavor_remaining_data = ngs_audit_get_distillations_not_in_vats()
+    ngs_audit_get_vat_total_lal_remaining_data = ngs_audit_get_lal_vats_not_bottled(return_mode="total")
+    ngs_audit_get_vat_breakdown_lal_remaining_data = ngs_audit_get_lal_vats_not_bottled(return_mode="breakdown")
+    ngs_audit_get_vat_remaining_data = ngs_audit_get_vats_not_bottled()
+    ngs_audit_get_lal_bottles_not_sold_data = ngs_audit_get_lal_bottles_not_sold()
+    ngs_audit_get_bottles_stored_data = ngs_audit_get_bottles_stored()
+    ngs_audit_get_customs_lodgements_data = ngs_audit_get_customs_lodgements()
+    ngs_audit_get_current_month_sold_bottles_data = ngs_audit_get_current_month_sold_bottles()
+    ngs_audit_get_distillation_experiments_data = ngs_audit_get_distillation_experiments()
+    ngs_audit_get_flavor_experiments_flavor_codes_data = ngs_audit_get_flavor_experiments_flavor_codes()
+    ngs_audit_get_flavor_experiments_data = ngs_audit_get_flavor_experiments()
+    ngs_audit_get_distillation_experiments_get_experiment_id_data = ngs_audit_get_distillation_experiments_get_experiment_id()
+    ngs_audit_get_ex_stock_storage_data = ngs_audit_get_ex_stock_storage()
+    ngs_audit_get_ex_stock_storage_ids_data = ngs_audit_get_ex_stock_storage_ids()
+    ngs_audit_populate_lal_purchased_table_data = ngs_audit_populate_lal_purchased_table()
+    ngs_audit_populate_lal_lodged_with_customs_table_data = ngs_audit_populate_lal_lodged_with_customs_table()
+    ngs_audit_populate_lodgements_summary_table_data = ngs_audit_populate_lodgements_summary_table()
+    ngs_audit_get_samples_consumed_data = ngs_audit_get_samples_consumed()
+    ngs_audit_get_samples_consumed_table_data = ngs_audit_get_samples_consumed_table()
+    ngs_audit_get_distillations_table_data = ngs_audit_get_distillations_table()
+    ngs_audit_get_mixing_vats_table_data = ngs_audit_get_mixing_vats_table()
+    ngs_audit_get_bottling_table_data = ngs_audit_get_bottling_table()
+    ngs_audit_get_flavor_experiments_table_data = ngs_audit_get_flavor_experiments_table()
+    ngs_audit_get_distillation_experiments_table_data = ngs_audit_get_distillation_experiments_table()
+    ngs_audit_get_ex_stock_storage_table_data = ngs_audit_get_ex_stock_storage_table()
+    ngs_audit_get_premix_lal_data = ngs_audit_get_premix_lal()
+    ngs_audit_get_premix_container_ids_data = ngs_audit_get_premix_container_ids()
+    ngs_audit_get_premix_table_data = ngs_audit_get_premix_table()
+    ngs_audit_get_lal_flavor_experiments_data = ngs_audit_get_lal_flavor_experiments()
+    # Populate tables below summary for each section
+    ngs_audit_populate_sales_product_table_data = ngs_audit_populate_sales_product_table()
+
+    return render_template('lal_audit.html',
+                         ngs_audit_get_purchased_data=ngs_audit_get_purchased_data,
+                         ngs_audit_get_flavor_data=ngs_audit_get_flavor_data,
+                         ngs_audit_get_clearing_data=ngs_audit_get_clearing_data,
+                         ngs_audit_get_vats_data=ngs_audit_get_vats_data,
+                         ngs_audit_bottles_sold_data=ngs_audit_bottles_sold_data,
+                         ngs_audit_get_purchased_remaining_data=ngs_audit_get_purchased_remaining_data,
+                         ngs_audit_get_flavor_lal_remaining_data=ngs_audit_get_flavor_lal_remaining_data,
+                         ngs_audit_get_flavor_remaining_data=ngs_audit_get_flavor_remaining_data,
+                         ngs_audit_get_vat_breakdown_lal_remaining_data=ngs_audit_get_vat_breakdown_lal_remaining_data,
+                         ngs_audit_get_vat_remaining_data=ngs_audit_get_vat_remaining_data,
+                         ngs_audit_get_lal_bottles_not_sold_data=ngs_audit_get_lal_bottles_not_sold_data,
+                         ngs_audit_get_bottles_stored_data=ngs_audit_get_bottles_stored_data,
+                         ngs_audit_get_customs_lodgements_data=ngs_audit_get_customs_lodgements_data,
+                         ngs_audit_get_current_month_sold_bottles_data=ngs_audit_get_current_month_sold_bottles_data,
+                         ngs_audit_get_distillation_experiments_data=ngs_audit_get_distillation_experiments_data,
+                         ngs_audit_get_flavor_experiments_flavor_codes_data=ngs_audit_get_flavor_experiments_flavor_codes_data,
+                         ngs_audit_get_flavor_experiments_data=ngs_audit_get_flavor_experiments_data,
+                         ngs_audit_get_distillation_experiments_get_experiment_id_data=ngs_audit_get_distillation_experiments_get_experiment_id_data,
+                         ngs_audit_populate_sales_product_table_data=ngs_audit_populate_sales_product_table_data,
+                         ngs_audit_get_ex_stock_storage_data=ngs_audit_get_ex_stock_storage_data,
+                         ngs_audit_get_ex_stock_storage_ids_data=ngs_audit_get_ex_stock_storage_ids_data,
+                         ngs_audit_populate_lal_purchased_table_data=ngs_audit_populate_lal_purchased_table_data,
+                         ngs_audit_populate_lal_lodged_with_customs_table_data=ngs_audit_populate_lal_lodged_with_customs_table_data,
+                         ngs_audit_populate_lodgements_summary_table_data=ngs_audit_populate_lodgements_summary_table_data,
+                         ngs_audit_get_samples_consumed_data=ngs_audit_get_samples_consumed_data,
+                         ngs_audit_get_samples_consumed_table_data=ngs_audit_get_samples_consumed_table_data,
+                         ngs_audit_get_distillations_table_data=ngs_audit_get_distillations_table_data,
+                         ngs_audit_get_mixing_vats_table_data=ngs_audit_get_mixing_vats_table_data,
+                         ngs_audit_get_bottling_table_data=ngs_audit_get_bottling_table_data,
+                         ngs_audit_get_flavor_experiments_table_data=ngs_audit_get_flavor_experiments_table_data,
+                         ngs_audit_get_distillation_experiments_table_data=ngs_audit_get_distillation_experiments_table_data,
+                         ngs_audit_get_ex_stock_storage_table_data=ngs_audit_get_ex_stock_storage_table_data,
+                         ngs_audit_get_premix_lal_data=ngs_audit_get_premix_lal_data,
+                         ngs_audit_get_premix_container_ids_data=ngs_audit_get_premix_container_ids_data,
+                         ngs_audit_get_premix_table_data=ngs_audit_get_premix_table_data,
+                         ngs_audit_get_lal_flavor_experiments_data=ngs_audit_get_lal_flavor_experiments_data)
+
+@app.route('/view-suppliers', methods=['POST'])
+def view_suppliers():
+    # Get data from the database
+    print("Accessed /view-suppliers route")
+    from data_fetch import view_suppliers
+    
+    data = view_suppliers()
+
+    return render_template('view_suppliers.html', data=data)
+
+@app.route('/view-expired-ingredients', methods=['POST'])
+def view_expired_ingredients():
+    print("Accessed /view-expired-ingredients route")
+    from data_fetch import view_expired_ingredients
+
+    data = view_expired_ingredients()
+
+    return render_template('view_expired_ingredients.html', data=data)
+
+@app.route('/email-upcoming-expired-ingredients', methods=['POST'])
+def email_upcoming_expired_ingredients():
+    print("Accessed /email-upcoming-expired-ingredients route")
+    import smtplib
+    import pandas as pd
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from google.auth.transport.requests import Request
+    from google.oauth2 import service_account
+
+    from data_fetch import view_upcoming_expired_ingredients
+
+    data = view_upcoming_expired_ingredients()
+    df = pd.DataFrame(data)
+    df.columns = ['ID', 'Supplier', 'Ingredients', 'Quantity', 'WB Code', 'Expiry', 'Date Entered']
+    html_table = df.to_html(index=False, header=True, classes='table table-striped')
+    # Email settings
+    app_password = 'bglgsnrkbxdynrsm'
+    from initialize import email_settings, email_content
+    sender_email, receiver_emails, email_subject = email_settings()
+    email_content = email_content(html_table, sender_email, receiver_emails, email_subject)
+
+    # Join the list of recipient emails into a single string
+    receiver_emails_str = ', '.join(receiver_emails)
+
+    # Connect to the SMTP server and send the email
+    with smtplib.SMTP('smtp.gmail.com', 587) as server:
+        server.starttls()  # Use TLS
+        server.login(sender_email, app_password)
+        
+        # Set the "To" header with the joined recipient emails string
+        email_content.replace_header('To', receiver_emails_str)
+
+        server.sendmail(sender_email, receiver_emails, email_content.as_string())
+
+# Schedule the job to run view_upcoming_expired_ingredients every day at 8:00 AM
+schedule.every().sunday.at("08:00").do(email_upcoming_expired_ingredients)
+
+def email_stock_sales():
+    print("\n=== Starting email_stock_sales() function ===")
+    from email.mime.image import MIMEImage
+    import base64
+    from email.mime.base import MIMEBase
+    from email import encoders
+    from initialize import create_email, send_email, send_emails_concurrently
+    import datetime
+    from database_insert import update_data
+    connection, cursor = db_conn()
+
+    try:
+        # Step 1: Find buyers needing restock contact
+        print("Finding buyers needing restock contact...")
+        cursor.execute("""
+            WITH buyer_stats AS (
+                SELECT
+                    buyer,
+                    date,
+                    bottles_sold,
+                    MAX(date) OVER (PARTITION BY buyer) AS latest_date,
+                    SUM(bottles_sold) OVER (PARTITION BY buyer) AS total_bottles_sold,
+                    COUNT(CASE WHEN notes ILIKE '%Sample%' THEN 1 END) OVER (PARTITION BY buyer) AS sample_notes_count,
+                    COUNT(notes) OVER (PARTITION BY buyer) AS total_notes_count,
+                    FIRST_VALUE(bottles_sold) OVER (PARTITION BY buyer ORDER BY date DESC) as recent_bottles_sold,
+                    FIRST_VALUE(unit_price) OVER (PARTITION BY buyer ORDER BY date DESC) as recent_unit_price
+                FROM sales_product
+                WHERE notes LIKE '%INV%'  -- Only consider invoice sales
+            )
+            SELECT DISTINCT b.buyer, b.buyer_email, b.primary_contact, b.buyer_phone, b.store_type,
+                   bs.latest_date, bs.total_bottles_sold, bs.recent_bottles_sold, bs.recent_unit_price
+            FROM buyers b
+            JOIN (
+                SELECT DISTINCT ON (buyer)
+                    buyer, latest_date, total_bottles_sold, recent_bottles_sold, recent_unit_price,
+                    sample_notes_count, total_notes_count
+                FROM buyer_stats
+                ORDER BY buyer, latest_date DESC
+            ) bs ON b.buyer = bs.buyer
+            WHERE (
+                (bs.latest_date < CURRENT_DATE - INTERVAL '1 weeks' AND bs.total_bottles_sold < 2)
+                OR
+                (bs.latest_date < CURRENT_DATE - INTERVAL '2 weeks' AND bs.total_bottles_sold < 3)
+                OR
+                (bs.latest_date < CURRENT_DATE - INTERVAL '3 weeks' AND bs.total_bottles_sold < 4)
+                OR
+                bs.latest_date < CURRENT_DATE - INTERVAL '4 weeks'
+            )
+            AND b.buyer != 'WHISTLEBIRD INTERNAL (Personal)'
+            AND (bs.sample_notes_count < bs.total_notes_count OR bs.sample_notes_count = 0)
+            AND (b.restock_contact_date IS NULL OR b.restock_contact_date < CURRENT_DATE - INTERVAL '2 weeks')
+            ORDER BY b.buyer;
+        """)
+        
+        buyers_data = cursor.fetchall()
+        
+        if not buyers_data:
+            print("No buyers found needing restock contact.")
+            return
+
+        print(f"Found {len(buyers_data)} buyers needing restock contact")
+
+        # Load the Whistlebird logo
+        try:
+            with open('images/whistlebird_gold.png', 'rb') as f:
+                image_data = f.read()
+            print("✓ Loaded Whistlebird logo")
+        except Exception as e:
+            print(f"❌ Error loading logo: {str(e)}")
+            image_data = None
+
+        # Prepare notification emails
+        prepared_emails = []
+        for buyer_row in buyers_data:
+            buyer, email, primary_contact, phone, store_type, latest_date, total_bottles, recent_bottles, recent_unit_price = buyer_row
+            
+            print(f"\n=== Processing buyer: {buyer} ===")
+            print(f"Last purchase: {latest_date}")
+            print(f"Total bottles: {total_bottles}")
+            print(f"Most recent order: {recent_bottles} bottles")
+            print(f"Most recent unit price: {recent_unit_price}")
+            
+            # Create notification email
+            with open('email_templates/restock_email_notification.html', 'r') as html_file:
+                notification_template = html_file.read()
+
+            # Update contact date in database
+            try:
+                update_data(
+                    table_name='buyers',
+                    condition={'buyer': buyer},
+                    restock_contact_date=datetime.date.today()
+                )
+                print(f"✓ Updated restock_contact_date for {buyer}")
+            except Exception as e:
+                print(f"❌ Error updating restock_contact_date: {str(e)}")
+
+            # Prepare notification content
+            notification_content = notification_template.replace('{buyer_buyer}', buyer)
+            notification_content = notification_content.replace('{recipient}', email if email else 'No email')
+            notification_content = notification_content.replace('{primary_contact}', primary_contact.split()[0] if primary_contact else 'there')
+            notification_content = notification_content.replace('{primary_contact_full}', primary_contact if primary_contact else 'No contact')
+            notification_content = notification_content.replace('{buyer_phone}', phone if phone else 'No phone')
+            notification_content = notification_content.replace('{store_type}', store_type if store_type else 'Not specified')
+            notification_content = notification_content.replace('{bottles_sold}', str(total_bottles))
+            notification_content = notification_content.replace('{recent_bottles_sold}', str(recent_bottles))
+            notification_content = notification_content.replace('{recent_unit_price}', str(recent_unit_price))
+            notification_content = notification_content.replace('{date}', latest_date.strftime("%Y-%m-%d"))
+
+            # Create email object
+            notification_email = create_email(
+                sender='sales@whistlebird.co.nz',
+                recipients=['johnny@whistlebird.co.nz'],
+                subject=f"Followup due now: {buyer}",
+                email_content=notification_content,
+                content_type='html',
+                image_data=image_data,
+                image_cid='whistlebird_gold'
+            )
+            prepared_emails.append(notification_email)
+            print(f"✓ Prepared notification email for {buyer}")
+
+        # Send all notification emails
+        if prepared_emails:
+            print(f"\nSending {len(prepared_emails)} notification emails...")
+            send_emails_concurrently(prepared_emails)
+            print("✓ All notification emails sent")
+        else:
+            print("No notification emails to send")
+
+    except Exception as e:
+        print(f"❌ Error in email_stock_sales: {str(e)}")
+        raise
+    finally:
+        cursor.close()
+        connection.close()
+        print("\n=== Completed email_stock_sales() function ===")
+
+schedule.every().minute.do(email_stock_sales)
+
+@app.route('/view-upcoming-expired-ingredients', methods=['POST'])
+def view_upcoming_expired_ingredients():
+    print("Accessed /view-upcoming-expired-ingredients route")
+
+    from data_fetch import view_upcoming_expired_ingredients
+
+    data = view_upcoming_expired_ingredients()
+
+    return render_template('view_upcoming_expired_ingredients.html', data=data)
+
+@app.route('/download-csv', methods=['POST'])
+def download_csv():
+    from initialize import db_conn
+    import pandas as pd
+    from flask import Flask, render_template, Response, send_file
+    import io
+    import zipfile
+    connection, cursor = db_conn()
+
+    # Get a list of all tables in the public schema
+    cursor.execute("""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        AND table_name NOT IN ('actions', 'audit')  -- Exclude specific tables if needed
+    """)
+    tables = cursor.fetchall()
+
+    # Create a list to hold queries for each table
+    queries = []
+
+    # Generate a query for each table
+    for table in tables:
+        table_name = table[0]
+        query = f"SELECT * FROM {table_name}"
+        queries.append({"name": table_name, "query": query})
+
+    # Create a zip file in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w') as zipf:
+        for query_info in queries:
+            query_name = query_info["name"]
+            query = query_info["query"]
+
+            df = pd.read_sql_query(query, connection)
+            csv_data = df.to_csv(index=False)
+
+            # Add CSV data to the zip file
+            zipf.writestr(f'{query_name}.csv', csv_data)
+
+    # Create a Flask response with the zip file
+    zip_buffer.seek(0)
+    response = send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='data.zip'
+    )
+    connection.close()
+    return response
+
+@app.route('/add-purchase-entry', methods=['POST'])
+def add_purchase_entry_route():
+    print("Accessed /add-purchase-entry route")
+    connection, cursor = db_conn()
+
+    supplier = request.form.get("supplier") or request.form.get("new_supplier")
+    litres_purchased = request.form.get("litres")
+
+    if request.form.get("confirmation") == "true":
+        insert_data(table_name='purchases_gns', audit_action='Purchase of GNS', supplier=supplier, gns_purchased_l=litres_purchased, abv=96.4)
+
+    connection.close()
+
+    return redirect(url_for('index'))
+
+@app.route('/purchasing-gns', methods=['POST'])
+def purchasing_gns():
+    print("Accessed /purchasing-gns route")
+    connection, cursor = db_conn()
+
+    # Query the database for previous suppliers
+    cursor.execute("SELECT DISTINCT supplier FROM suppliers WHERE supplier_type = 'gns' AND supplier IS NOT NULL AND supplier <> 'None';")
+    previous_suppliers = [row[0] for row in cursor.fetchall()]
+
+    # Combine rendering the template and redirecting to index
+    print("Rendering template with previous suppliers:", previous_suppliers)
+    return render_template('purchasing_gns.html', previous_suppliers=previous_suppliers)
+
+@app.route('/delete-entry', methods=['POST', 'GET'])
+def delete_entry():
+    print("Accessed /delete-entry route")
+    connection, cursor = db_conn()
+
+    try:
+        entry_id = request.form.get('deleteId')  # Get the ID to be deleted from the form
+
+        # Delete the entry with the provided ID
+        with connection, connection.cursor() as cursor:
+            cursor.execute(f"DELETE FROM actions WHERE id = %s", (entry_id,))
+            connection.commit()
+
+        return redirect(url_for('index'))  # Redirect back to the index page
+    except Exception as e:
+        print(e)  # Handle or log any errors that occur
+        return redirect(url_for('index'))
+
+@app.route('/top-buyers', methods=['POST'])
+def top_buyers():
+    print("Accessed /top-buyers-form route")
+    from datetime import datetime, timedelta
+    from initialize import db_conn
+    connection, cursor = db_conn()
+
+    # Get new buyers by month
+    cursor.execute("""
+        WITH first_purchases AS (
+            SELECT 
+                buyer,
+                MIN(date) as first_purchase_date
+            FROM sales_product
+            WHERE notes LIKE '%INV%'
+            GROUP BY buyer
+        )
+        SELECT 
+            date_trunc('month', first_purchase_date) as month,
+            COUNT(*) as count,
+            STRING_AGG(buyer, ', ') as buyers
+        FROM first_purchases
+        GROUP BY date_trunc('month', first_purchase_date)
+        ORDER BY month DESC;
+    """)
+    new_buyers_by_month = cursor.fetchall()
+
+    # Get total unique buyers
+    cursor.execute("""
+        SELECT COUNT(DISTINCT buyer) 
+        FROM sales_product 
+        WHERE notes LIKE '%INV%';
+    """)
+    total_buyers = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT
+            buyer,
+            total_bottles_sold,
+            percentage_of_total,
+            ROUND(
+                CASE
+                    WHEN buyer = 'Total' THEN
+                        (total_bottles_sold / NULLIF((CURRENT_DATE - (SELECT MIN(date) FROM sales_product)::DATE) / 7, 0))::numeric
+                    ELSE
+                        (total_bottles_sold / NULLIF((CURRENT_DATE - first_purchase_date::DATE) / 7, 0))::numeric
+                END,
+                2
+            ) AS overall_rate_per_week,
+            ROUND(
+                CASE
+                    WHEN buyer = 'Total' THEN
+                        ((CURRENT_DATE - (SELECT MIN(date) FROM sales_product)::DATE) / 7)::numeric
+                    ELSE
+                        ((CURRENT_DATE - first_purchase_date::DATE) / 7)::numeric
+                END
+            ) AS total_weeks_since_first_order
+        FROM (
+            SELECT
+                buyer,
+                SUM(bottles_sold) AS total_bottles_sold,
+                (SUM(bottles_sold) * 100.0 / (SELECT SUM(bottles_sold) FROM sales_product)) AS percentage_of_total,
+                MIN(date) AS first_purchase_date
+            FROM sales_product
+            WHERE notes LIKE '%INV%'
+            GROUP BY buyer
+
+            UNION ALL
+
+            SELECT
+                'Total' AS buyer,
+                SUM(bottles_sold) AS total_bottles_sold,
+                NULL AS percentage_of_total,
+                NULL AS first_purchase_date
+            FROM sales_product
+        ) AS combined_results
+        GROUP BY buyer, total_bottles_sold, percentage_of_total, first_purchase_date
+        ORDER BY
+            CASE
+                WHEN buyer = 'Total' THEN 0
+                ELSE 1
+            END,
+            percentage_of_total DESC NULLS LAST;
+    """)
+    top_buyers = cursor.fetchall()
+
+    # Setting month names dynamically
+    current_month_name = datetime.now().strftime('%B %Y')  # Current month name
+    last_month_name = (datetime.now() - timedelta(days=30)).strftime('%B %Y')  # Last month name
+    two_months_ago_name = (datetime.now() - timedelta(days=60)).strftime('%B %Y')  # Two months ago name
+
+    cursor.execute("""
+        SELECT *
+        FROM (
+            SELECT 
+                buyer,
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) THEN bottles_sold END), 0) AS current_month,
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '1 month' THEN bottles_sold END), 0) AS last_month,
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '2 months' THEN bottles_sold END), 0) AS two_months_ago
+            FROM sales_product
+            WHERE date >= date_trunc('month', CURRENT_DATE) - interval '2 months'
+            GROUP BY buyer
+
+            UNION ALL
+
+            SELECT
+                'Total' AS buyer,
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) THEN bottles_sold END), 0) AS current_month,
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '1 month' THEN bottles_sold END), 0) AS last_month,
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '2 months' THEN bottles_sold END), 0) AS two_months_ago
+            FROM sales_product
+            WHERE date >= date_trunc('month', CURRENT_DATE) - interval '2 months'
+        ) subquery
+        ORDER BY 
+            CASE WHEN buyer = 'Total' THEN 1 ELSE 0 END,  -- Ensures "Total" appears last
+            buyer;
+    """)
+    three_month_totals = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT
+            buyer,
+            ROUND(
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) THEN bottles_sold END), 0)::numeric
+                / EXTRACT(DAY FROM date_trunc('month', CURRENT_DATE + INTERVAL '1 month') - INTERVAL '1 day') * 7, 2
+            ) AS current_month_weekly_rate,
+            ROUND(
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '1 month' THEN bottles_sold END), 0)::numeric
+                / EXTRACT(DAY FROM date_trunc('month', CURRENT_DATE) - INTERVAL '1 day') * 7, 2
+            ) AS last_month_weekly_rate,
+            ROUND(
+                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '2 months' THEN bottles_sold END), 0)::numeric
+                / EXTRACT(DAY FROM date_trunc('month', CURRENT_DATE - INTERVAL '1 month') - INTERVAL '1 day') * 7, 2
+            ) AS two_months_ago_weekly_rate
+        FROM sales_product
+        WHERE date >= date_trunc('month', CURRENT_DATE) - interval '2 months'
+        GROUP BY buyer
+        ORDER BY buyer;
+    """)
+    weekly_rate_summary = cursor.fetchall()
+
+    return render_template('top_buyers.html', 
+                         top_buyers=top_buyers, 
+                         three_month_totals=three_month_totals, 
+                         current_month_name=current_month_name, 
+                         last_month_name=last_month_name, 
+                         two_months_ago_name=two_months_ago_name, 
+                         weekly_rate_summary=weekly_rate_summary,
+                         new_buyers_by_month=new_buyers_by_month,
+                         total_buyers=total_buyers)
+
+@app.route('/database-query-form', methods=['POST'])
+def database_query_form():
+    print("Accessed /database-query-form route")
+
+    return render_template('database_query_form.html')
+
+@app.route('/database-query', methods=['POST'])
+def database_query():
+    print("Accessed /database-query route")
+    from initialize import db_conn_readonly
+    import psycopg2
+    import os
+    import subprocess
+    from psycopg2 import extensions
+    connection, cursor = db_conn_readonly()
+
+    sql_query = request.form['sql_query']
+    print(sql_query)
+
+    if sql_query.strip().startswith('\\'):
+        # Set the PGPASSWORD environment variable
+        os.environ['PGPASSWORD'] = 'wb_readonly'
+
+        # Execute special command using psql command-line tool
+        psql_command = f'psql -h localhost -p 5401 -U readonly_user -d whistlebird_inventory -c "{sql_query}"'
+        query_results = subprocess.check_output(psql_command, shell=True, text=True)
+
+        # Unset the PGPASSWORD environment variable after use
+        del os.environ['PGPASSWORD']
+
+        return render_template('database_query_result.html', query_results=query_results.splitlines())
+
+    cursor.execute(sql_query)
+
+    # Fetch column names
+    columns = [desc[0] for desc in cursor.description]
+
+    # Fetch rows
+    rows = cursor.fetchall()
+    return render_template('database_query_result.html', columns=columns, rows=rows)
+
+@app.route('/add-empty-bottles-form', methods=['GET'])
+def add_empty_bottles_form():
+    print("Accessed /add-empty-bottles-form route")
+    connection, cursor = db_conn()
+
+    # Query the database for previous suppliers
+    cursor.execute("SELECT DISTINCT supplier FROM suppliers WHERE supplier_type = 'bottles' AND supplier IS NOT NULL AND supplier <> 'None';")
+    previous_suppliers = [row[0] for row in cursor.fetchall()]
+
+    return render_template('add_empty_bottles.html', previous_suppliers=previous_suppliers)
+
+@app.route('/add-empty-bottles', methods=['POST'])
+def add_empty_bottles():
+    print("Accessed /add-empty-bottles route")
+    connection, cursor = db_conn()
+
+    # Query the database for previous suppliers
+    cursor.execute("SELECT DISTINCT supplier FROM suppliers WHERE supplier_type = 'bottles' AND supplier IS NOT NULL AND supplier <> 'None';")
+    previous_suppliers = [row[0] for row in cursor.fetchall()]
+
+    # Get the form data
+    empty_bottles_count = request.form.get("emptyBottlesCount")
+    supplier = request.form.get("supplier") or request.form.get("new_supplier")
+
+    # Insert the data into the database
+    insert_data(table_name='purchases_empty_bottles', audit_action='Add empty bottles to inventory', supplier=supplier, bottle_size_ml=700, empty_bottles_stored=empty_bottles_count)
+    
+    connection.close()
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/add-flavor-form', methods=['POST'])
+def add_flavor_form():
+    print("Accessed /add-flavor-form route")
+    connection, cursor = db_conn()
+
+    cursor.execute("SELECT DISTINCT flavor_code FROM product_actions_flavors WHERE flavor_code IS NOT NULL AND flavor_code <> 'None';")
+    previous_flavor_codes = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("SELECT ingredients, ingredients_code FROM purchases_ingredients ORDER BY id desc;")
+    ingredient_data = cursor.fetchall()
+    available_ingredients = []
+    for row in ingredient_data:
+        available_ingredients.append({
+            'ingredient_name': row[0],
+            'ingredient_code': row[1]
+        })
+
+    cursor.execute("SELECT DISTINCT flavor_batch from product_actions_flavors WHERE flavor_batch IS NOT NULL AND flavor_batch <> 'None';")
+    previous_flavor_batch_codes = [row[0] for row in cursor.fetchall()]
+
+    connection.close()
+
+    # Define flavor ingredients
+    recipes = {
+      'WB25 (Wildflower)': [
+          'juniper berries (himalayan)', 'juniper berries (macedonia)', 'orris root', 'coriander seeds', 'whole nutmeg (organic)', 'lemon juice', 'orange peel - dried', 'hibiscus flowers', 'liquorice root', 'grapefruit juice', 'green tea', 'cardamom pods', 'lemon peel', 'persian black lime', 'sumac berries - ground', 'lemon myrtle', 'dried mango slices', 'dried apple ring', 'elderflower'
+      ],
+      'WB30 (Rosella)': [
+        'juniper berries (himalayan)', 'juniper berries (macedonia)', 'kawakawa leaf', 'whole nutmeg (organic)', 'orange peel (fresh)', 'orange juice (fresh)', 'cinnamon', 'liquorice root', 'szechaun pepper'
+      ]
+    }
+
+    return render_template('add_flavor.html', previous_flavor_codes=previous_flavor_codes, previous_flavor_batch_codes=previous_flavor_batch_codes, available_ingredients=available_ingredients, recipes=recipes)
+
+@app.route('/add-flavor', methods=['POST'])
+def add_flavor():
+    print("Accessed /add-flavor route")
+
+    # Get the form data
+    flavor_stored = request.form.get("flavorStored")
+    clearing_amount = request.form.get("clearingAmount")
+    clearing_abv = request.form.get("clearingAbv")
+    flavor_code = request.form.get("flavorCode")
+    flavor_batch_code = request.form.get("flavorBatchCode")
+
+    ingredient_codes = request.form.getlist('ingredientCodeSelection[]')
+    print(ingredient_codes)
+
+    # insert into database
+    insert_data(table_name='product_actions_flavors', audit_action='Add flavor to inventory', flavor_stored_ml=flavor_stored, clearing_amount=clearing_amount, clearing_abv=clearing_abv, flavor_code=flavor_code, flavor_batch=flavor_batch_code, ingredient_codes=ingredient_codes)
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/add-premix-form', methods=['POST'])
+def add_premix_form():
+    print("Accessed /add-premix-form route")
+
+    return render_template('add_premix.html')
+
+@app.route('/add-premix', methods=['POST'])
+def add_premix():
+    print("Accessed /add-premix roiye")
+
+    # Fetch data from form input
+    notes = request.form.get("notes")
+    container_id = request.form.get("containerId")
+    if container_id:
+        container_id = container_id.strip("(),'")  # Remove parentheses, commas and quotes
+    
+    try:
+        alcohol_volume = float(request.form.get("alcoholVolume", 0))  # Default to 0 if missing
+        alcohol_abv = float(request.form.get("alcoholAbv", 0))  # Default to 0 if missing
+
+        lal = alcohol_volume * (alcohol_abv / 100)
+
+    except ValueError:
+        return "Invalid input: Please enter numeric values.", 400  # Return HTTP 400 Bad Request
+
+    # Store results in DB
+    insert_data(table_name='product_actions_create_premix', audit_action='Creating premix solution for product actions', notes=notes, alcohol_volume=alcohol_volume, alcohol_abv=alcohol_abv, lal=lal, container_id=container_id)
+
+    print(f"LAL for /add-premix = {lal}")
+    return render_template('index.html')
+
+@app.route('/add-ex-stock-storage-form', methods=['POST'])
+def add_ex_stock_storage_form():
+    print("Accessed /add-ex-stock-storage-form route")
+
+    return render_template('add_ex_stock_storage.html')
+
+@app.route('/add-ex-stock-storage', methods=['POST'])
+def add_ex_stock_storage():
+    print("Accessed /add-ex-stock-storage route")
+
+    # Fetch data from form input
+    notes = request.form.get("notes")
+    
+    try:
+        if request.form.get("productName") == "Wildflower":
+            abv = float(44)
+            bottles_stored = float(request.form.get("bottlesStored", 0))
+            product_name = request.form.get("productName")
+            storage_id = request.form.get("storageID")
+            bottle_size_ml = float(700)
+        elif request.form.get("productName") == "Rosella":
+            abv = float(40)
+            bottles_stored = float(request.form.get("bottlesStored", 0))
+            product_name = request.form.get("productName")
+            storage_id = request.form.get("storageID")
+            bottle_size_ml = float(700)
+
+        lal = (bottles_stored * 0.7 * abv) / 100
+        
+    except ValueError:
+        return "Invalid input: Please enter numeric values.", 400  # Return HTTP 400 Bad Request
+
+    # Store results in DB
+    insert_data(table_name='product_actions_ex_stock_storage', audit_action='Recording ex-stock storage', notes=notes, product_name=product_name, storage_id=storage_id, bottle_size_ml=bottle_size_ml, abv=abv, bottles_stored=bottles_stored, lal=lal)
+
+    print(f"LAL for /add-ex-stock-storage = {lal}")
+    return render_template('index.html')
+
+@app.route('/add-distillation-experiment-form', methods=['POST'])
+def add_distillation_experiment_form():
+    print("Accessed /add-distillation-experiment-form route")
+
+    connection, cursor = db_conn()
+
+    # Fetch flavor experiments from database
+    cursor.execute("SELECT flavor_code FROM product_actions_flavor_experiments WHERE flavor_code IS NOT NULL AND flavor_code <> 'None';")
+    previous_flavor_codes = [row[0] for row in cursor.fetchall()]
+
+    return render_template('distillation_experiment.html', previous_flavor_codes=previous_flavor_codes)
+
+@app.route('/add-distillation-experiment', methods=['POST'])
+def add_distillation_experiment():
+    print("Accessed /add-distillation-experiment route")
+    
+    # Fetch data from form input
+    alcohol_amount = request.form.get("alcoholAmount")
+    abv = request.form.get("alcoholAbv")
+    flavor_codes = request.form.getlist("flavorCode[]")
+    bottles_used = request.form.get("bottlesUsed")
+    bottle_abv = request.form.get("bottleAbv")
+    notes = request.form.get("experimentSummary")
+    experiment_id = request.form.get("experimentId")
+
+    # Handle both bottles used and alcohol amount
+    if bottles_used and alcohol_amount:
+        bottle_abv = float(bottle_abv)
+        bottles_lal = round(float(bottles_used) * 0.7 * float(bottle_abv / 100), 3)
+        alcohol_used_l = round(float(alcohol_amount), 3)
+        abv = float(abv)
+        alcohol_used_lal = round(float(alcohol_amount) * (abv / 100), 3)
+        lal = round(float(alcohol_used_lal) + float(bottles_lal), 3)
+    
+    # Handle empty alcohol_amount
+    if not alcohol_amount or alcohol_amount == "":
+        bottles_used = float(bottles_used) if bottles_used else 0
+        bottle_abv = float(bottle_abv)
+        abv = 0
+        alcohol_used_l = round(float(bottles_used) * 0.7, 3)
+        lal = round(float(alcohol_used_l) * float(bottle_abv / 100), 3)
+
+    if not bottles_used or bottles_used == "":
+        bottles_used = 0
+        bottle_abv = 0
+        abv = float(abv)
+        alcohol_used_l = round(float(alcohol_amount), 3)
+        lal = round(float(alcohol_used_l) * (abv / 100), 3)
+
+    # Set ABV to 93% due to known ABV from T500
+    alcohol_yield_abv = float(93)
+
+    # Determine yield based on 93% and total volume distilled
+    alcohol_yield_l = round(lal / (alcohol_yield_abv / 100), 3)
+
+    # Insert into database
+    insert_data(table_name='product_actions_distillation_experiments', 
+                audit_action='Performed distillation experiment using existing product', 
+                alcohol_used_l=alcohol_used_l, 
+                bottles_used=bottles_used,
+                bottle_abv=bottle_abv,
+                abv=abv, 
+                alcohol_yield_l=alcohol_yield_l, 
+                alcohol_yield_abv=alcohol_yield_abv, 
+                notes=notes, 
+                flavor_codes=flavor_codes,
+                lal=lal,
+                experiment_id=experiment_id)
+    
+    return render_template('index.html')
+
+@app.route('/flavor-experiment-form', methods=['POST'])
+def flavor_experiment_form():
+    print("Accessed /flavor-experiment-form route")
+    connection, cursor = db_conn()
+
+    cursor.execute("SELECT DISTINCT flavor_code FROM product_actions_flavor_experiments WHERE flavor_code IS NOT NULL AND flavor_code <> 'None';")
+    previous_flavor_codes = [row[0] for row in cursor.fetchall()]
+    
+    return render_template('flavor_experiment.html', previous_flavor_codes=previous_flavor_codes)
+
+@app.route('/flavor-experiment', methods=['POST'])
+def flavor_experiment():
+    print("Accessed /flavor-experiment route")
+
+    # Get the form data
+    flavor_stored = request.form.get("flavorStored")
+    clearing_amount = request.form.get("clearingAmount")
+    clearing_abv = request.form.get("clearingAbv")
+    flavor_code = request.form.get("flavorCode")
+
+    # Insert data into database
+    insert_data(table_name='product_actions_flavor_experiments', audit_action='Flavor experiment', flavor_stored_ml=flavor_stored, clearing_amount=clearing_amount, clearing_abv=clearing_abv, flavor_code=flavor_code)
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/sample-experiment-form', methods=['POST'])
+def sample_experiment_form():
+    print("Accessed /sample-experiment-form route")
+
+    connection, cursor = db_conn()
+
+    cursor.execute("SELECT DISTINCT flavor_code FROM product_actions_flavor_experiments WHERE flavor_code IS NOT NULL AND flavor_code <> 'None';")
+    previous_flavor_codes = [row[0] for row in cursor.fetchall()]
+
+    return render_template('sample_experiment.html', previous_flavor_codes=previous_flavor_codes)
+
+@app.route('/sample-experiment', methods=['POST'])
+def sample_experiment():
+    print("Accessed /sample-experiment route")
+
+    # Get the form data
+    flavor_code = request.form.get("flavorCode")
+    abv = float(request.form.get("abv", 0))  # Convert to float, default to 0 if None
+    bottle_size_ml = float(request.form.get("bottle_size_ml", 0))  # Convert to float, default to 0 if None
+    number_of_bottles = float(request.form.get("number_of_bottles", 0))  # Convert to float, default to 0 if None
+    notes = request.form.get("notes")
+
+    lal = round(number_of_bottles * (bottle_size_ml / 1000) * (abv / 100), 3)
+
+    # Insert data into database
+    insert_data(table_name='product_actions_samples_consumed', audit_action='Sample used - noting for customs lodgement', flavor_code=flavor_code, abv=abv, bottle_size_ml=bottle_size_ml, number_of_bottles=number_of_bottles, lal=lal, notes=notes)
+
+    return render_template('index.html')
+
+@app.route('/create-sample-form', methods=['POST'])
+def create_sample_form():
+    print("Accessed /create-sample-form route")
+
+    connection, cursor = db_conn()
+
+    cursor.execute("SELECT DISTINCT flavor_code FROM product_actions_flavors WHERE flavor_code IS NOT NULL AND flavor_code <> 'None';")
+    previous_flavor_codes = [row[0] for row in cursor.fetchall()]
+
+    return render_template('create_sample.html', previous_flavor_codes=previous_flavor_codes)
+
+@app.route('/create-sample', methods=['POST'])
+def create_sample():
+    print("Accessed /create-sample route")
+
+    # Get the form data
+    number_of_bottles = float(request.form.get("number_of_bottles"))
+    abv = float(request.form.get("abv"))
+    bottle_size_ml = float(request.form.get("bottle_size_ml"))
+    flavor_code = request.form.get("flavorCode")
+    notes = request.form.get("notes")
+
+    lal = number_of_bottles * (bottle_size_ml / 1000) * (abv / 100)
+
+    # Insert data into database
+    insert_data(table_name='product_actions_samples_created', audit_action='Create sample', number_of_bottles=number_of_bottles, abv=abv, bottle_size_ml=bottle_size_ml, flavor_code=flavor_code, notes=notes, lal=lal)
+
+    return render_template('index.html')
+
+@app.route('/bottled-product-form', methods=['POST'])
+def bottled_production_form():
+    print("Accessed /bottled-production-form route")
+
+    connection, cursor = db_conn()
+
+    cursor.execute("""
+    SELECT DISTINCT bottle_size_ml
+        FROM product_actions_bottling
+        WHERE bottle_size_ml IS NOT NULL AND bottle_size_ml <> 0;
+    """)
+    previous_sizes = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("""
+    SELECT DISTINCT abv
+        FROM product_actions_bottling
+        WHERE abv IS NOT NULL AND abv <> 0;
+    """)
+    previous_abv = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("""
+    SELECT DISTINCT vat_batch
+        FROM product_actions_flavor_vat
+        WHERE vat_batch IS NOT NULL AND vat_batch <> '';
+    """)
+    vat_batches = [row[0] for row in cursor.fetchall()]
+
+    return render_template('bottled_product.html', previous_sizes=previous_sizes, previous_abv=previous_abv, vat_batches=vat_batches)
+
+@app.route('/bottled-product', methods=['POST'])
+def bottled_product():
+    print("Accessed /bottled-product route")
+
+    bottles_stored = request.form.get("bottlesStored")
+    abv = request.form.get("abv")
+    bottle_size_ml = request.form.get("bottle_size_ml")
+    vat_batch = request.form.get("vatBatches")
+    bottle_batch = request.form.get("bottleBatch")
+
+    # Insert data into database
+    insert_data(table_name='product_actions_bottling', audit_action='Add bottled product to inventory', bottles_stored=bottles_stored, abv=abv, bottle_size_ml=bottle_size_ml, vat_batch=vat_batch, bottle_batch=bottle_batch)
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/add-flavor-to-vat-form', methods=['POST'])
+def add_flavor_to_vat_form():
+    print("Accessed /add-flavor-to-vat-form route")
+    
+    connection, cursor = db_conn()
+
+    cursor.execute("""
+    SELECT DISTINCT abv
+        FROM product_actions_flavor_vat
+        WHERE abv IS NOT NULL AND abv <> 0;
+    """)
+    previous_abv = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("SELECT DISTINCT flavor_batch FROM product_actions_flavors WHERE flavor_batch IS NOT NULL AND flavor_batch <> 'None';")
+    flavor_batches = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("""
+    SELECT DISTINCT vat_batch
+        FROM product_actions_flavor_vat
+        WHERE vat_batch IS NOT NULL AND vat_batch <> '';
+    """)
+    vat_batches = [row[0] for row in cursor.fetchall()]
+
+    return render_template('add_flavor_to_vat.html', previous_abv=previous_abv, flavor_batches=flavor_batches, vat_batches=vat_batches)
+
+@app.route('/add-flavor-to-vat', methods=['POST'])
+def add_flavor_to_vat():
+    print("Accessed /add-flavor-to-vat route")
+
+    # fetch values from form above
+    abv = request.form.get("abv")
+    volume_stored = request.form.get("volumeStored")
+    flavor_batches = request.form.getlist("flavorBatches[]")
+    vat_batch = request.form.get("vatBatch")
+
+    # Insert data into database
+    insert_data(table_name='product_actions_flavor_vat', audit_action='Add flavor to vat', abv=abv, volume_amount=volume_stored, vat_batch=vat_batch, flavor_batch=flavor_batches)
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/add-alcohol-form', methods=['POST'])
+def add_alcohol_form():
+    print("Accessed /add-alcohol-form route")
+
+    connection, cursor = db_conn()
+
+    # Fetch existing ABV options
+    cursor.execute("SELECT DISTINCT abv FROM product_actions_ethanol")
+    previous_abv = [row[0] for row in cursor.fetchall()]
+
+    return render_template('add_alcohol.html', previous_abv=previous_abv)
+
+@app.route('/add-alcohol', methods=['POST'])
+def add_alcohol():
+    print("Accessed /add-alcohol route")
+
+    # Fetch form values
+    abv = request.form.get("abv")
+    alcohol_stored_l = request.form.get("alcohol_stored_l")
+    notes = request.form.get("notes")
+
+    print(abv)
+    print(alcohol_stored_l)
+    print(notes)
+
+    # Insert data into database
+    insert_data(table_name='product_actions_ethanol', audit_action='Stored or diluted alcohol', abv=abv, alcohol_stored_l=alcohol_stored_l, notes=notes)
+
+    return render_template('index.html')
+
+@app.route('/bottle-sales-form', methods=['POST'])
+def bottle_sales_form():
+    print("Accessed /bottle-sales-form route")
+    connection, cursor = db_conn()
+
+    cursor.execute("SELECT DISTINCT buyer FROM buyers WHERE buyer is NOT NULL AND buyer <> 'None';")
+    previous_buyers = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("""
+    SELECT DISTINCT abv
+        FROM product_actions_bottling
+        WHERE abv IS NOT NULL AND abv <> 0;
+    """)
+    previous_abv = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("""
+    SELECT DISTINCT bottle_size_ml
+        FROM product_actions_bottling
+        WHERE bottle_size_ml IS NOT NULL AND bottle_size_ml <> 0;
+    """)
+    previous_sizes = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("SELECT DISTINCT bottle_batch FROM product_actions_bottling WHERE (bottle_batch IS NOT NULL OR bottle_batch <> 'None');")
+    bottle_batches = [row[0] for row in cursor.fetchall()]
+
+    return render_template('bottle_sales.html', previous_buyers=previous_buyers, previous_abv=previous_abv, previous_sizes=previous_sizes, bottle_batches=bottle_batches)
+
+@app.route('/bottle-sales', methods=['POST'])
+def bottle_sales():
+    print("Accessed /bottle-sales route")
+    from decimal import Decimal, ROUND_HALF_UP
+    from math import ceil
+
+    # Get the form data
+    buyer = request.form.get("previousBuyers")
+    number_of_bottles = request.form.get("numberOfBottles")
+    abv = request.form.get("abv")
+    bottle_size_ml = request.form.get("bottle_size_ml")
+    bottle_batches = request.form.getlist("bottleBatches")
+    notes = request.form.getlist("notes")
+
+    # Convert variables to numeric types
+    number_of_bottles = int(number_of_bottles)
+    bottle_size_ml = float(bottle_size_ml)
+    abv = float(abv)
+
+    # Calculate lal & duty owed from sale
+    duty_price = 67.22
+    total_alcohol_ml = number_of_bottles * bottle_size_ml * abv
+    lal = total_alcohol_ml / 100000  # Convert mL to L
+    duty_amount = lal * duty_price
+
+    # Use the Decimal class for precise arithmetic and rounding
+    rounded_duty_amount = Decimal(duty_amount).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP)
+    tenths = (rounded_duty_amount * 100) % 10
+    if tenths >= 5:
+        rounded_duty_amount = rounded_duty_amount + Decimal('0.01')
+
+    # Insert data into database
+    insert_data(table_name='sales_product', audit_action='Bottle sales', buyer=buyer, bottles_sold=number_of_bottles, abv=abv, bottle_size_ml=bottle_size_ml, lal=lal, duty_amount=rounded_duty_amount, bottle_batch=bottle_batches, notes=notes)
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/add-sales-product-samples-form', methods=['POST'])
+def add_sales_product_samples_form():
+    print("Accessed /add-sales-product-samples-form route")
+
+    connection, cursor = db_conn()
+
+    cursor.execute("SELECT DISTINCT buyer FROM buyers WHERE buyer is NOT NULL AND buyer <> 'None' ORDER BY buyer;")
+    buyers = [row[0] for row in cursor.fetchall()]
+
+    return render_template('add_sales_product_samples.html', buyers=buyers)
+
+@app.route('/add-sales-product-samples', methods=['POST'])
+def add_sales_product_samples():
+    print("Accessed /add-sales-product-samples route") 
+
+    # Get the form data
+    date = request.form.get("date")
+    action = request.form.get("action")
+    buyer = request.form.get("buyer")
+    samples_provided = float(request.form.get("samplesProvided"))
+    product = request.form.get("product")
+    abv = float(request.form.get("abv"))
+    bottle_size_ml = float(request.form.get("bottleSizeMl"))
+
+    lal = samples_provided * (bottle_size_ml / 1000) * (abv / 100)
+
+    # Insert data into database
+    insert_data(table_name='sales_product_samples', audit_action='Add sales product samples', date=date, action=action, buyer=buyer, samples_provided=samples_provided, product=product, abv=abv, bottle_size_ml=bottle_size_ml, lal=lal)
+
+    # Redirect back to the index page
+    return render_template('index.html')   
+
+@app.route('/add-botanicals-to-inventory-form', methods=["POST"])
+def add_botanicals_to_inventory_form():
+    print("Accessed /add-botanicals-to-iventory-form route")
+
+    connection, cursor = db_conn()
+
+    # Retrieve ingredients from DB
+    cursor.execute("SELECT DISTINCT ingredients FROM purchases_ingredients WHERE ingredients is NOT NULL AND ingredients <> 'None';")
+    previous_ingredients = [row[0] for row in cursor.fetchall()]
+
+    # Retrieve suppliers from DB
+    cursor.execute("SELECT DISTINCT supplier FROM suppliers WHERE supplier_type = 'botanicals/ingredients' AND supplier is NOT NULL AND supplier <> 'None';")
+    previous_suppliers = [row[0] for row in cursor.fetchall()]
+
+    return render_template('add_botanicals_to_inventory.html', previous_ingredients=previous_ingredients, previous_suppliers=previous_suppliers)
+
+@app.route('/get-ingredient-codes', methods=['POST'])
+def get_ingredient_codes():
+    print("Accessed /get-ingredient-codes route")
+    from flask import jsonify
+    connection, cursor = db_conn()
+
+    selected_ingredient = request.form.get('selected_ingredient')
+    # Query the database to retrieve previous ingredient codes based on selected_ingredient
+    # Return the results as JSON
+    cursor.execute("SELECT DISTINCT ingredients_code FROM purchases_ingredients WHERE ingredients = %s;", (selected_ingredient,))
+    ingredient_codes = [row[0] for row in cursor.fetchall()]
+
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
+
+    return jsonify({'ingredient_codes': ingredient_codes})
+
+@app.route('/add-botanicals-to-inventory', methods=["POST"])
+def add_botanicals_to_inventory():
+    print("Accessed /add-botanicals-to-inventory route")
+    connection, cursor = db_conn()
+
+    # Get the form data
+    supplier = request.form.get("supplier")
+    ingredients = request.form.get("ingredients")
+    ingredients_amount = request.form.get("ingredients_amount")
+    ingredients_expiry = request.form.get('ingredients_expiry')
+    ingredient_code = request.form.get("ingredients_code")
+
+    if ingredient_code == "new_ingredient_code":
+        ingredient_code = request.form.get("new_ingredient_code")
+
+    # Call your function to store the data in the database
+    insert_data(table_name='purchases_ingredients', audit_action='Adding botanicals to inventory', supplier=supplier, ingredients=ingredients, ingredients_amount=ingredients_amount, ingredients_expiry=ingredients_expiry, ingredients_code=ingredient_code)
+
+    return render_template('index.html')
+
+@app.route('/add-supplier-form', methods=['POST', 'GET'])
+def add_supplier_form():
+    print("Accessed /add-supplier-form")
+
+    connection, cursor = db_conn()
+
+    # Retrieve suppliers from DB
+    cursor.execute("SELECT DISTINCT supplier FROM suppliers WHERE supplier is NOT NULL AND supplier <> 'None';")
+    previous_suppliers = [row[0] for row in cursor.fetchall()]
+
+    supplier_type = ["gns", "botanicals/ingredients", "bottles"]
+
+    return render_template('add_supplier.html', previous_suppliers=previous_suppliers, supplier_type=supplier_type)
+
+@app.route('/add-supplier', methods=["POST"])
+def add_supplier():
+    print("Accessed /add-supplier route")
+
+    connection, cursor = db_conn()
+
+    # Get the form data
+    supplier = request.form.get("supplier") or request.form.get("new_supplier")
+    supplier_contact = request.form.get("supplierContact", '')
+    supplier_location = request.form.get("supplierLocation", '')
+    supplier_number = request.form.get("supplierNumber", '')
+    supplier_type = request.form.get("supplierType")
+    
+    insert_data(table_name='suppliers', audit_action='Add supplier to suppliers table', supplier=supplier, supplier_contact=supplier_contact, supplier_location=supplier_location, supplier_number=supplier_number, supplier_type=supplier_type)
+
+    connection.close()
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/add-buyer-form', methods=['POST', 'GET'])
+def add_buyer_form():
+    print("Accessed /add-buyer-form route")
+
+    connection, cursor = db_conn()
+
+    # Retrieve buyers from the DB
+    cursor.execute("SELECT DISTINCT buyer FROM buyers WHERE buyer is NOT NULL AND buyer <> 'None';")
+    previous_buyers = [row[0] for row in cursor.fetchall()]
+
+    return render_template('add_buyer.html', previous_buyers=previous_buyers)
+
+@app.route('/add-buyer', methods=["POST"])
+def add_buyer():
+    print("Accessed /add-buyer route")
+
+    connection, cursor = db_conn()
+
+    # Get the form data
+    buyer = request.form.get("buyer") or request.form.get("new_buyer")
+    primary_contact = request.form.get("primaryContact")
+    buyer_address = request.form.get("buyerAddress")
+    buyer_phone = request.form.get("buyerPhone")
+    buyer_email = request.form.get("buyerEmail")
+    
+    insert_data(table_name='buyers', audit_action='Add buyer to buyers table', buyer=buyer, primary_contact=primary_contact, buyer_address=buyer_address, buyer_phone=buyer_phone, buyer_email=buyer_email)
+
+    connection.close()
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/ingredient-tracer-form', methods=["POST"])
+def ingredient_tracer_form():
+    print("Accessed /ingredient-tracer-form route")
+
+    connection, cursor = db_conn()
+
+    # SQL
+    cursor.execute("SELECT DISTINCT ingredients FROM purchases_ingredients;")
+    ingredients = [row[0] for row in cursor.fetchall()]
+
+    return render_template('ingredient_tracer.html', ingredients=ingredients)
+
+@app.route("/audit-data", methods=["POST"])
+def audit_data():
+    print("Accessed /audit-data route")
+
+    connection, cursor = db_conn()
+    from flask import request
+    from flask import jsonify
+    from psycopg2 import sql
+
+    # Fetch form data
+    uuid = request.form.get("auditDataInput")
+    print(uuid)
+
+    query = sql.SQL("SELECT * FROM query_all_tables_by_uid({})").format(sql.Literal(uuid))
+
+    # Execute the query
+    cursor.execute(query)
+    audit_data_data = [row[0] for row in cursor.fetchall()]
+
+    print(audit_data_data)
+
+    return render_template('audit_data.html', audit_data_data=audit_data_data)
+
+@app.route('/customs-lodgements-form', methods=["POST"])
+def customs_lodgements_form():
+    print("Loading customs lodgements form")
+
+    return render_template('customs_lodgements.html')
+
+@app.route('/customs-lodgements', methods=['POST'])
+def customs_lodgements():
+    print("Processing customs lodgements submission")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+    
+    # Get form data
+    date_period = request.form.get("date_period")
+    lodged_volume = float(request.form.get("lodged_volume"))
+    lodged_abv = float(request.form.get("lodged_abv"))
+
+    # Calculate lal
+    lal = lodged_volume * lodged_abv / 100
+    
+    # Calculate the number of bottles - only using Wildflower Gin for now
+    bottles = round(lodged_volume / 0.7, 3)
+    
+    insert_data(table_name='customs_lodgements', audit_action='Adding customs lodgement', date_period=date_period, lodged_volume=lodged_volume, lodged_abv=lodged_abv, lal=lal, bottles=bottles)
+    
+    return render_template('index.html')
+
+@app.route("/view-customs-lodgements", methods=["POST"])
+def view_customs_lodgements():
+    print("Accessed /view-customs-lodgements route")
+
+    connection, cursor = db_conn()
+
+    cursor.execute("SELECT date_period, lodged_volume, lodged_abv, lal, bottles FROM customs_lodgements ORDER BY date_period DESC;")
+    customs_lodgements = cursor.fetchall()
+
+    return render_template('view_customs_lodgements.html', customs_lodgements=customs_lodgements)
+
+@app.route("/ingredient-tracer", methods=["POST"])
+def ingredient_tracer():
+    print("Accessed /ingredient-tracer route")
+
+    connection, cursor = db_conn()
+
+    # Fetch form data
+    ingredient_names = request.form.getlist("ingredients")
+
+    # create a list of dictionaries to store the tracing information
+    trace_results = []
+
+    #if ingredient_name:
+    # Trace the ingredient through flavor batches
+    # Map ingredients to ingredients_code lists
+    if ingredient_names:
+        for ingredient_name in ingredient_names:
+            if ingredient_name:
+                cursor.execute("SELECT DISTINCT ingredients_code FROM purchases_ingredients WHERE ingredients_code IS NOT NULL AND ingredients_code <> 'None' AND ingredients LIKE %s;", ('%' + ingredient_name + '%',))
+                ingredient_codes = [row[0] for row in cursor.fetchall() if row[0] is not None]
+
+                for ingredient_code in ingredient_codes:
+                    if ingredient_code:
+                        # Initialize sets to store unique associated data
+                        flavor_batches = set()
+                        cursor.execute("SELECT DISTINCT flavor_batch FROM product_actions_flavors WHERE flavor_batch IS NOT NULL AND flavor_batch <> 'None' AND ingredient_codes LIKE %s;", ('%' + ingredient_code + '%',))
+                        flavor_batches.update([row[0] for row in cursor.fetchall() if row[0] is not None])
+
+                        # Initialize sets to store unique associated data
+                        vat_batches = set()
+                        bottle_batches = set()
+                        sales = set()
+                        
+                        # Select suppliers
+                        cursor.execute("SELECT DISTINCT supplier FROM purchases_ingredients WHERE ingredients_code IS NOT NULL AND ingredients_code <> 'None' AND ingredients_code LIKE %s;", ('%' + ingredient_code + '%',))
+                        ingredient_supplier = [row[0] for row in cursor.fetchall() if row[0] is not None]
+
+                        # Select order size
+                        cursor.execute("SELECT DISTINCT ingredients_amount FROM purchases_ingredients WHERE ingredients_code IS NOT NULL AND ingredients_code <> 'None' AND ingredients_code LIKE %s;", ('%' + ingredient_code + '%',))
+                        ingredient_size = [row[0] for row in cursor.fetchall() if row[0] is not None]
+
+                        # Select purchase dates - approx
+                        cursor.execute("SELECT DISTINCT date FROM purchases_ingredients WHERE ingredients_code IS NOT NULL AND ingredients_code <> 'None' AND ingredients_code LIKE %s;", ('%' + ingredient_code + '%',))
+                        ingredient_entry_date = [row[0] for row in cursor.fetchall() if row[0] is not None]
+                        formatted_entry_date = ingredient_entry_date[0].strftime("%Y-%m-%d") if ingredient_entry_date else ""
+
+                        # Select expiry dates
+                        cursor.execute("SELECT DISTINCT ingredients_expiry FROM purchases_ingredients WHERE ingredients_code IS NOT NULL AND ingredients_code <> 'None' AND ingredients_code LIKE %s;", ('%' + ingredient_code + '%',))
+                        ingredient_expiry = [row[0] for row in cursor.fetchall() if row[0] is not None]
+                        formatted_expiry = ingredient_expiry[0].strftime("%Y-%m-%d") if ingredient_expiry else ""
+
+                        # Update vat_batch holding flavor_batches
+                        for flavor_batch in flavor_batches:
+                            if flavor_batch:
+                                cursor.execute("SELECT DISTINCT vat_batch FROM product_actions_flavor_vat WHERE vat_batch IS NOT NULL AND vat_batch <> '' AND flavor_batch LIKE %s;", ('%' + flavor_batch + '%',))
+                                vat_batches.update([row[0] for row in cursor.fetchall() if row[0] is not None])
+
+                        # Update bottle_batch holding vat_batch
+                        for vat_batch in vat_batches:
+                            if vat_batch:
+                                cursor.execute("SELECT DISTINCT bottle_batch FROM product_actions_bottling WHERE bottle_batch IS NOT NULL AND bottle_batch <> 'None' AND vat_batch LIKE %s;", ('%' + vat_batch + '%',))
+                                bottle_batches.update([row[0] for row in cursor.fetchall() if row[0] is not None])
+
+                        # Update sales for bottle_batch
+                        for bottle_batch in bottle_batches:
+                            if bottle_batch:
+                                cursor.execute("SELECT DISTINCT buyer FROM sales_product WHERE bottle_batch IS NOT NULL AND bottle_batch <> 'None' AND bottle_batch = %s;", ('{' + bottle_batch + '}',))
+                                sales.update([row[0] for row in cursor.fetchall() if row[0] is not None])
+
+                        # Create a dictionary representing the current data
+                        result_data = {
+                            'ingredient': ingredient_name,
+                            'supplier': str(ingredient_supplier[0]) if ingredient_supplier else "",
+                            'quantity': str(ingredient_size[0]) if ingredient_size else "",
+                            'entry_date': formatted_entry_date,
+                            'expiry': formatted_expiry,
+                            'ingredient_codes': ingredient_code,
+                            'flavor_batches': list(flavor_batches),  # Convert sets to lists
+                            'vat_batches': list(vat_batches),
+                            'bottle_batches': list(bottle_batches),
+                            'sales': list(sales),
+                        }
+
+                        # Append the result_data dictionary to trace_results
+                        trace_results.append(result_data)
+
+    return render_template('ingredient_tracer_rusults.html', trace_results=trace_results)
+
+@app.route('/alcohol-dilution-calc-form', methods=["POST"])
+def alcohol_dilution_calc_form():
+    print("Accessed /alcohol-dilution-calc-form route")
+
+    return render_template('alcohol_dilution_calc.html')
+
+@app.route('/alcohol-dilution-calc', methods=["POST"])
+def alcohol_dilution_calc():
+    print("Accessed /alcohol-dilution-calc route")
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/alcohol-dilution-calc-form-from-volume', methods=["POST"])
+def alcohol_dilution_calc_form_from_volume():
+    print("Accessed /alcohol-dilution-calc-form-from-volume route")
+
+    return render_template('alcohol_dilution_calc_from_volume.html')
+
+@app.route('/alcohol-dilution-calc-from-volume', methods=["POST"])
+def alcohol_dilution_calc_from_volume():
+    print("Accessed /alcohol-dilution-calc-from-volume route")
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/alcohol-starting-abv-form', methods=["POST"])
+def alcohol_starting_abv_form():
+    print("Accessed /alcohol-starting-abv-form route")
+
+    return render_template('alcohol_starting_abv.html')
+
+@app.route('/alcohol-starting-abv', methods=["POST"])
+def alcohol_starting_abv():
+    print("Accessed /alcohol-starting-abv route")
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/alcohol-final-abv-form', methods=["POST"])
+def alcohol_final_abv_form():
+    print("Accessed /alcohol-final-abv-form route")
+
+    return render_template('alcohol_final_abv.html')
+
+@app.route('/alcohol-final-abv', methods=["POST"])
+def alcohol_final_abv():
+    print("Accessed /alcohol-final-abv route")
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/alcohol-mix-abv-form', methods=["POST"])
+def alcohol_mix_abv_form():
+    print("Accessed /alcohol-mix-abv-form route")
+
+    return render_template('alcohol_mix_abv.html')
+
+@app.route('/alcohol-mix-abv', methods=["POST"])
+def alcohol_mix_abv():
+    print("Accessed /alcohol-mix-abv route")
+
+    # Redirect back to the index page
+    return render_template('index.html')
+
+@app.route('/mass-calculations-form', methods=['POST'])
+def mass_calculations_form():
+    print("Accessed /mass-calculations-form route")
+
+    # redirect to mass calc form
+    return render_template('mass_calculations.html')
+
+@app.route('/mass-calculations', methods=['POST'])
+def mass_calculations():
+    print("Accessed /mass-calculations route")
+
+    # redirect to index page
+    return render_template('index.html')
+
+@app.route('/spirits-fortification-form', methods=['POST'])
+def spirits_fortification_form():
+    print("Accessed /spirits-fortification-form route")
+
+    # redirect to spirits foritifcation calc form
+    return render_template('spirits_fortification.html')
+
+@app.route('/spirits-fortification', methods=['POST'])
+def spirits_fortification():
+    print("Accessed /spirits_fortification route")
+
+    # redirect to index page
+    return render_template('index.html')
+
+@app.route('/growth-projection-form', methods=['POST'])
+def growth_projection_form():
+    print("Accessed /growth-projection-form route")
+
+    # Redirect to growth-projection-form form
+    return render_template('growth_projection_form.html')
+
+@app.route('/growth-projection', methods=['POST'])
+def growth_projection():
+    print("Accessed /growth-projection form")
+
+    # redirect to index page
+    return render_template('index.html')
+
+@app.route('/revenue-report', methods=['POST'])
+def revenue_report():
+    print("Accessed /revenue-report route")
+    from datetime import datetime
+    connection, cursor = db_conn()
+
+    # Get all monthly data in a single query for efficiency
+    cursor.execute("""
+        WITH unique_invoices AS (
+            SELECT DISTINCT ON (notes) 
+                date,
+                notes,
+                total_nzd,
+                duty_amount,
+                gst,
+                SUM(bottles_sold) OVER (PARTITION BY notes) as total_bottles
+            FROM sales_product
+            WHERE notes LIKE '%INV%'
+        )
+        SELECT 
+            date_trunc('month', date) as month,
+            SUM(total_bottles) as bottles,
+            SUM(duty_amount) as duty,
+            SUM(total_nzd) as revenue,
+            SUM(gst) as gst
+        FROM unique_invoices
+        GROUP BY date_trunc('month', date)
+        ORDER BY month DESC;
+    """)
+    monthly_data = cursor.fetchall()
+
+    # Define cost dictionaries outside the loop
+    fixed_recurring_costs = {
+        'premise': {
+            'base': 331.86,
+            'gst': 331.86 * 0.15,
+            'frequency': 'weekly'  # weekly or monthly
+        },
+        'gmail': {
+            'base': 25.63,
+            'gst': 25.63 * 0.15,
+            'frequency': 'monthly'
+        },
+        'bank_fees': {
+            'base': 24.35,
+            'gst': 24.35 * 0.15,
+            'frequency': 'monthly'
+        },
+        'website': {
+            'base': 47.828,
+            'gst': 47.828 * 0.15,
+            'frequency': 'monthly'
+        },
+        'upstock': {
+            'base': 50.00,
+            'gst': 50.00 * 0.15,
+            'frequency': 'monthly'
+        },
+        'accountants': {
+            'base': 230.00,
+            'gst': 230.00 * 0.15,
+            'frequency': 'monthly'
+        }
+    }
+
+    fixed_one_off_costs = {
+        'bottles': {
+            'base': 1.10,
+        },
+        'importing_bottles': {
+            'base': 0.73,
+        },
+        'labels': {
+            'base': 0.77,
+        },
+        'case_boxes': {
+            'base': 0.41,
+        },
+        'ethanol': {
+            'base': 2.35,
+        },
+        'heatshrink': {
+            'base': 0.23,
+        },
+        'botanicals': {
+            'base': 0.87,
+        },
+        'corks': {
+            'base': 0.40,
+        }
+    }
+
+    variable_costs = {
+        'power': {
+            'base': 130.00,
+            'gst': 130.00 * 0.15,
+        }
+    }
+
+    monthly_revenue = []
+    total_bottles = 0
+    total_duty = 0
+    total_revenue = 0
+    total_gst = 0
+    total_costs = 0
+    total_profit = 0
+
+    # Process monthly data
+    for row in monthly_data:
+        month, bottles, duty, revenue, gst = row
+        
+        # Handle null values
+        bottles = int(bottles) if bottles else 0
+        duty = float(duty) if duty else 0
+        revenue = float(revenue) if revenue else 0
+        gst = float(gst) if gst else 0
+
+        # Calculate monthly fixed recurring costs
+        monthly_recurring_costs = {}
+        for name, cost in fixed_recurring_costs.items():
+            # Only include premise costs from Feb 2025 onwards
+            if name == 'premise':
+                if month.date() >= datetime(2025, 2, 1).date():
+                    monthly_amount = cost['base'] + cost.get('gst', 0)
+                    if cost.get('frequency') == 'weekly':
+                        monthly_amount *= (52/12)  # Convert weekly to monthly
+                    monthly_recurring_costs[name] = monthly_amount
+                else:
+                    monthly_recurring_costs[name] = 0
+            else:
+                monthly_amount = cost['base'] + cost.get('gst', 0)
+                if cost.get('frequency') == 'weekly':
+                    monthly_amount *= (52/12)  # Convert weekly to monthly
+                monthly_recurring_costs[name] = monthly_amount
+
+        # Calculate one-off costs per bottle
+        one_off_costs_per_bottle = {} 
+        for name, cost in fixed_one_off_costs.items():
+            total_cost = cost['base']  # Calculate per bottle cost
+            cost_per_bottle = total_cost * 1.15  # Add GST
+            one_off_costs_per_bottle[name] = {
+                'cost_per_bottle': cost_per_bottle,
+            }
+
+        # Calculate total fixed costs for this month
+        total_fixed_costs = sum(monthly_recurring_costs.values())
+
+        # Calculate one-off costs based on bottles sold
+        one_off_costs = {}
+        # Add duty
+        duty_per_bottle = duty / bottles if bottles > 0 else 0
+        one_off_costs['duty'] = duty
+
+        # Add other one-off costs based on per-bottle rates
+        for name, cost_info in one_off_costs_per_bottle.items():
+            one_off_costs[name] = cost_info['cost_per_bottle'] * bottles
+
+        # Calculate one-off costs per bottle
+        one_off_costs_per_bottle_no_gst = {} 
+        for name, cost in fixed_one_off_costs.items():
+            total_cost = cost['base']  # Calculate per bottle cost
+            cost_per_bottle = total_cost
+            one_off_costs_per_bottle_no_gst[name] = {
+                'cost_per_bottle': cost_per_bottle,
+            }
+
+        one_off_costs_no_gst = {}
+        one_off_costs_no_gst['duty'] = duty
+
+        # Add other one-off costs based on per-bottle rates
+        for name, cost_info in one_off_costs_per_bottle_no_gst.items():
+            one_off_costs_no_gst[name] = cost_info['cost_per_bottle'] * bottles
+
+        # Calculate variable costs for this month
+        monthly_variable_costs = {}
+        for name, cost in variable_costs.items():
+            # Only include power costs from Feb 2025 onwards
+            if name == 'power':
+                if month.date() >= datetime(2025, 2, 1).date():
+                    base_cost = cost.get('base', 0) + cost.get('gst', 0)
+                    monthly_variable_costs[name] = base_cost
+                else:
+                    monthly_variable_costs[name] = 0
+            else:
+                base_cost = cost.get('base', 0) + cost.get('gst', 0)
+                monthly_variable_costs[name] = base_cost
+
+        # Calculate total costs
+        total_one_off_costs = sum(one_off_costs.values())
+        total_one_off_costs_no_gst = sum(one_off_costs_no_gst.values())
+        total_variable_costs = sum(monthly_variable_costs.values())
+        monthly_costs = total_fixed_costs + total_one_off_costs_no_gst + total_variable_costs
+        monthly_costs_minus_bottle_costs = total_fixed_costs + total_variable_costs
+
+        # Calculate cost breakdown
+        business_costs_one_off = {}
+        # Add duty (duty is already without GST)
+        business_costs_one_off['duty'] = duty
+
+        # Add other one-off costs based on base rates (without GST)
+        for name, cost in fixed_one_off_costs.items():
+            business_costs_one_off[name] = cost['base'] * bottles
+
+        cost_breakdown = {
+            'fixed_costs': monthly_recurring_costs,
+            'one_off_costs': one_off_costs,  # Now includes duty
+            'variable_costs': monthly_variable_costs,
+            'duty_per_bottle': duty_per_bottle,
+            'one_off_costs_no_gst': one_off_costs_no_gst,
+            'one_off_costs_per_bottle_no_gst': one_off_costs_per_bottle_no_gst,
+            'total_one_off_costs_no_gst': total_one_off_costs_no_gst,
+            'business_costs_one_off': business_costs_one_off  # New field for Business Costs & Profitability table
+        }
+
+        # Calculate profit (no need to subtract duty again since it's in costs)
+        monthly_profit = revenue - gst - monthly_costs
+
+        # Calculate profit margin
+        profit_margin = (monthly_profit / revenue * 100) if revenue > 0 else 0
+
+        # Update totals
+        total_bottles += bottles
+        total_duty += duty
+        total_revenue += revenue
+        total_gst += gst
+        total_costs += monthly_costs
+        total_profit += monthly_profit
+
+        monthly_revenue.append({
+            'month': month.strftime('%B %Y'),
+            'bottles': bottles,
+            'duty': duty,
+            'revenue': revenue,
+            'gst': gst,
+            'costs': monthly_costs,
+            'cost_breakdown': cost_breakdown,
+            'profit': monthly_profit,
+            'profit_margin': profit_margin
+        })
+
+    # Add total row
+    if monthly_revenue:
+        overall_profit_margin = (total_profit / (total_revenue - total_gst) * 100) if total_revenue > 0 else 0
+        monthly_revenue.append({
+            'month': 'Total',
+            'bottles': total_bottles,
+            'duty': total_duty,
+            'revenue': total_revenue,
+            'gst': total_gst,
+            'costs': total_costs,
+            'profit': total_profit,
+            'profit_margin': overall_profit_margin
+        })
+
+        # Calculate monthly target values
+        # Calculate average revenue per bottle (excluding GST)
+        total_bottles_for_avg = 0
+        total_revenue_for_avg = 0
+        total_gst_for_avg = 0
+        for month in monthly_revenue:
+            if month['month'] != 'Total' and month['bottles'] > 0:
+                total_bottles_for_avg += month['bottles']
+                total_revenue_for_avg += month['revenue']
+                total_gst_for_avg += month['gst']
+        
+        actual_revenue_per_bottle = (total_revenue_for_avg - total_gst_for_avg) / total_bottles_for_avg if total_bottles_for_avg > 0 else 42.95
+
+        # Calculate total monthly fixed costs using the dictionaries
+        print("\n=== Monthly Fixed Costs Breakdown ===")
+        targets_fixed_recurring_costs = 0
+        for name, cost in fixed_recurring_costs.items():
+            monthly_amount = (cost['base'] + cost.get('gst', 0)) * (52/12 if cost.get('frequency') == 'weekly' else 1)
+            targets_fixed_recurring_costs += monthly_amount
+            print(f"{name}: ${monthly_amount:.2f} (Base: ${cost['base']:.2f}, GST: ${cost.get('gst', 0):.2f}, Frequency: {cost.get('frequency', 'monthly')})")
+
+        print("\n=== Variable Costs Breakdown ===")
+        targets_fixed_variable_costs = 0
+        for name, cost in variable_costs.items():
+            monthly_amount = cost.get('base', 0) + cost.get('gst', 0)
+            targets_fixed_variable_costs += monthly_amount
+            print(f"{name}: ${monthly_amount:.2f} (Base: ${cost.get('base', 0):.2f}, GST: ${cost.get('gst', 0):.2f})")
+
+        targets_monthly_costs_minus_bottle_costs = targets_fixed_recurring_costs + targets_fixed_variable_costs
+        print(f"\nTotal Monthly Costs (minus bottle costs): ${targets_monthly_costs_minus_bottle_costs:.2f}")
+        print(f"  - Fixed Recurring Costs: ${targets_fixed_recurring_costs:.2f}")
+        print(f"  - Variable Costs: ${targets_fixed_variable_costs:.2f}")
+
+        # Calculate total variable cost per bottle
+        per_wildflower_bottle_duty_cost = 67.22 * (0.7 * 0.44)
+        total_costs_per_bottle = sum(cost_info['cost_per_bottle'] for cost_info in one_off_costs_per_bottle_no_gst.values()) + per_wildflower_bottle_duty_cost
+        print(f"total_costs_per_bottle: {total_costs_per_bottle}")
+
+        # Calculate profit per bottle
+        profit_per_bottle = actual_revenue_per_bottle - total_costs_per_bottle
+        print(f"profit_per_bottle: {profit_per_bottle}")
+
+        # Calculate required bottles and revenue
+        required_bottles = round(targets_monthly_costs_minus_bottle_costs / profit_per_bottle, 0) if profit_per_bottle > 0 else 0
+        required_revenue = required_bottles * (actual_revenue_per_bottle * 1.15)
+        print(f"required_bottles: {required_bottles}")
+        print(f"required_revenue: {required_revenue}")
+
+        # Add monthly targets to the template context
+        monthly_targets = {
+            'required_bottles': required_bottles,
+            'required_revenue': required_revenue,
+            'revenue_per_bottle': actual_revenue_per_bottle
+        }
+
+        # Calc bottle order savings tracker using the dictionaries
+        order_tracker_per_bottle = fixed_one_off_costs['bottles']['base'] * 1.15
+        order_tracker_per_bottle_importing = fixed_one_off_costs['importing_bottles']['base'] * 1.15
+        cost_of_bottles_for_10k_order_tracker = (order_tracker_per_bottle + order_tracker_per_bottle_importing) * 10000
+        print(f"cost_of_bottles_for_10k_order_tracker: {cost_of_bottles_for_10k_order_tracker}")
+
+        bottle_sales_for_10k_order_tracker = cost_of_bottles_for_10k_order_tracker / profit_per_bottle
+        print(f"bottle_sales_for_10k_order_tracker: {bottle_sales_for_10k_order_tracker}")
+
+        # Calc lease tracker
+
+    cursor.close()
+    return render_template('revenue_reporting.html', monthly_revenue=monthly_revenue, monthly_targets=monthly_targets, bottle_sales_for_10k_order_tracker=bottle_sales_for_10k_order_tracker)
+
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+        print("Scheduler is running...")
+
+if __name__ == '__main__':
+    # Start the scheduler in a separate thread
+    scheduler_thread = threading.Thread(target=run_scheduler)
+    scheduler_thread.start()
+
+    # Run the app on all available network interfaces (0.0.0.0)
+    app.run(host='0.0.0.0', port=5005, ssl_context=('tls/wb_cert.pem', 'tls/wb_cert.key'))
+    app.run(debug=False)

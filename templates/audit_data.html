@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit data</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles_raw_data.css') }}">
+</head>
+<body>
+    <div class="container">
+	<h1>Audit data</h1>
+    </div>
+
+    <div class="container">
+        <h1>Audit Data</h1>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    {% for column in audit_data_data[0][0].keys() %}
+                    <th>{{ column }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for record_list in audit_data_data %}
+                {% for record in record_list %}
+                <tr>
+                    {% for value in record.values() %}
+                    <td>{{ value }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="button-container">
+        <form action="/rawdata" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to Audit logs</button>
+        </form>
+
+    </div>
+
+</body>
+</html>

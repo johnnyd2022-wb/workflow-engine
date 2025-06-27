@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles_raw_data.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to black */
+        }
+        .container {
+            margin-bottom: 20px; /* Add some margin below the container */
+        }
+        .scrollable-table {
+            max-height: 300px; /* Set maximum height for the table container */
+            overflow-y: auto; /* Enable vertical scrolling */
+        }
+        .data-table {
+            width: 100%; /* Set table width to fill container */
+            table-layout: fixed; /* Fix table layout */
+            border-collapse: collapse; /* Collapse table borders */
+        }
+        .data-table th, .data-table td {
+            border: 1px solid #ddd; /* Add border for cells */
+            padding: 8px; /* Add padding for cell content */
+            text-align: left; /* Align cell content to the left */
+        }
+        .query-container {
+            margin-top: 20px; /* Add some margin above the query box */
+        }
+        .query-label {
+            display: block; /* Ensure label is displayed as block element */
+            margin-bottom: 5px; /* Add margin below the label */
+        }
+        .query-textarea {
+            width: 100%; /* Set textarea width to fill container */
+        }
+    </style>
+    <title>Readonly Database Query</title>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Query Result</h1>
+        {% if columns %}
+        <div class="scrollable-table">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        {% for column in columns %}
+                        <th>{{ column }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        {% for cell in row %}
+                        <td>{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="scrollable-table">
+            <table class="data-table">
+                <tbody>
+                    {% for line in query_results %}
+                    <tr><td>{{ line }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="form-container">
+        <form id="databaseQueryForm" method="POST" action="/database-query">
+            <div class="query-container">
+                <label for="databaseQuery" class="query-label">Type database query below</label>
+                <textarea name="sql_query" rows="5" cols="50" class="query-textarea"></textarea>
+            </div>
+            <button type="submit">Run query</button>
+        </form>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-database-query-form" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to database query</button>
+        </form>
+    </div>
+
+</body>
+
+</html>
+

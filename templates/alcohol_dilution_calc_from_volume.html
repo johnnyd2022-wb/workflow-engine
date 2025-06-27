@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+    <title>Alcohol Dilution Calculator from known volume</title>
+
+    <script>
+        function calculateDilutionFromVolume() {
+            // Get user inputs
+            var spiritsVolume = parseFloat(document.getElementById("spirits_volume").value);
+            var strongPercentage = parseFloat(document.getElementById("strong_percentage").value);
+            var weakPercentage = parseFloat(document.getElementById("weak_percentage").value);
+
+            // Check if inputs are valid numbers
+            if (isNaN(spiritsVolume) || isNaN(strongPercentage) || isNaN(weakPercentage)) {
+                alert("Please enter valid numeric values.");
+                return;
+            }
+
+            // Calculate the amount of water to add
+            var waterToAdd = spiritsVolume * ((strongPercentage / weakPercentage) - 1);
+
+            // Display the result on the webpage
+            document.getElementById("result_water_addition").innerHTML = "Amount of Water to Add: " + waterToAdd.toFixed(3) + " liters";
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Alcohol Dilution Calculator from known volume</h1>
+    </div>
+    <div class="form-container">
+        <form>
+            <label for="spirits_volume">Starting Volume (litres): </label>
+            <input type="number" id="spirits_volume" step="0.01" required><br>
+
+            <label for="strong_percentage">Current Alcohol Percentage (%): </label>
+            <input type="number" id="strong_percentage" step="0.01" required><br>
+
+            <label for="weak_percentage">Target Alcohol Percentage (%): </label>
+            <input type="number" id="weak_percentage" step="0.01" required><br>
+
+            <!-- Change the type to "button" to prevent form submission -->
+            <button type="button" onclick="calculateDilutionFromVolume()">Calculate</button>
+
+            <p id="result_water_addition"></p>
+        </form>
+
+        <div class="button-container">
+            <form action="/back-button-calculations" method="post" class="form">
+                <button type="submit" class="top-right-button">Back to calculators</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

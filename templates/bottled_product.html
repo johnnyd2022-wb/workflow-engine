@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add bottled product to inventory</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+    <h1>Add bottled product to inventory</h1>
+    </div>
+    <div class="form-container">
+            <form action="/bottled-product" method="post" id="bottledProductForm">
+                <label for="bottlesStored">Bottles stored: (Required)</label>
+                <input type="number" name="bottlesStored" id="bottlesStored" placeholder="How many bottles stored" required>
+		
+		<label for="bottle_size_ml">Bottle size (ml):</label>
+		<select name="bottle_size_ml" id="selectPreviousSizes">
+			<option value="" selected disabled>Select a bottle size</option>
+			{% for size in previous_sizes %}
+			<option value="{{ size }}">{{ size }} </option>
+			{% endfor %}
+            	</select>
+                <input type="number" id="bottle_size_ml" name="bottle_size_ml" placeholder="Enter new bottle size (ml)">
+		
+		<label for="abv">ABV:</label>
+		<select name="abv" id="selectPreviousABV">
+                        <option value="" selected disabled>Select abv</option>
+                        {% for abv_ in previous_abv %}
+                        <option value="{{ abv_ }}">{{ abv_ }} </option>
+                        {% endfor %}
+                </select>
+		<input type="number" name="abv" placeholder="New ABV" >
+		
+		<label for="vatBatches">Select vat batch used for bottling</label>
+		<div id="vatBatchContainer">
+		    <select name="vatBatches" id="selectVatBatches">
+		        <option value="" selected disabled>Select vat batch</option>
+			{% for vat_batch in vat_batches %}
+			<option value="{{ vat_batch }}">{{ vat_batch }}</option>
+			{% endfor %}
+		    </select>
+		</div>
+		
+		<input for="bottleBatch" name=bottleBatch id="bottleBatch" placeholder="Enter bottle batch" required>
+                <button type="submit"> Add Entry</button>
+        </form>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-product-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to Product tools</button>
+        </form>
+
+    </div>
+
+</body>
+</html>

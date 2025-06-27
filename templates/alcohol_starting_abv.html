@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+    <title>Alcohol starting concentration /abv calc</title>
+    <script>
+        function calculateStartingAbv() {
+            // Get user inputs
+            var startingLitres = parseFloat(document.getElementById("starting_litres").value);
+            var targetABV = parseFloat(document.getElementById("target_abv").value);
+            var targetLitres = parseFloat(document.getElementById("target_litres_of_alcohol").value);
+
+            // Check if inputs are valid numbers
+            if (isNaN(startingLitres) || isNaN(targetABV) || isNaN(targetLitres)) {
+                alert("Please enter valid numeric values.");
+                return;
+            }
+
+            // Calculate starting ABV
+            var startingABV = (targetLitres * targetABV) / startingLitres;
+
+            // Display the results on the webpage
+            document.getElementById("result_startingAbv").innerHTML = "Starting concentration / ABV: " + startingABV.toFixed(3) + " %";
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+    <h1>Alcohol starting concentration /abv calc</h1>
+    </div>
+    <div class="form-container">
+        <form action="/alcohol-starting-abv" method="post" id="alcoholStartingAbvForm">
+            <label for="starting_litres">Starting volume of alcohol (Litres):</label>
+            <input type="number" id="starting_litres" step="0.01" required><br><br>
+
+            <label for="target_abv">Target ABV (%):</label>
+            <input type="number" id="target_abv" step="0.01" required><br><br>
+
+            <label for="target_litres_of_alcohol">Target volume of dilution (Litres):</label>
+            <input type="number" id="target_litres_of_alcohol" step="0.01" required><br><br>
+
+            <input type="button" value="Calculate" onclick="calculateStartingAbv()">
+        </form>
+
+        <div id="result_startingAbv"></div>
+
+	<div class="button-container">
+            <form action="/back-button-calculations" method="post" class="form">
+                <button type="submit" class="top-right-button">Back to calculators</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+

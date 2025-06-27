@@ -1,0 +1,30 @@
+## Define user generated workflows
+
+This file outlines the requirements for user generated workflows in this app
+
+Build a UI that allows users to add elements to a workflow.
+The workflow should be a way to capture a process to input, store and retrieve data in some way depending on the workflow need.
+
+The application uses python flask as the web and application server and postgresql as the database. Connection logic to the database can be found under db_conn() in initialization.py.
+When creating new workflows all new code should be created in the workflows directory.
+ - A new directory should be created inside workflows/ for each new workflow so its encapsulated appropriately.
+ - The flask route(s) for the new workflow created by the user should be added to a new file in the workflows/workflow_name_dir/ directory with the name provided by the user under a flask new blueprint. This blueprint should be imported into app.py which is the main application file.
+ - The workflow logic should be stored in in the new file defined above.
+ - The database table creation code should be mirrored from the existing table creations in initializations.py and can be stored in the same file defined above.
+ - The frontend UI file for the workflow should be stored in a separate file in the new directory for the workflow.
+    - All UI formatting and html/css should match that of the templates/revenue_reporting.html file - use this as a guide when creating the UI - probably best to create a central file and reference this in all created workflows for consistent design. 
+
+## Data storage for workflows
+Database connection can be found by importing db_conn() from initialization.py
+The user should be prompted through a drop down option if they want to store data in the database.
+ - If so, the user should be asked if they need a new table or to use an existing table.
+  - If the user wants to use an existing table then a list of all database tables except for 'audit' should be presented as an option to select.
+  - From this point on in the workflow creation, the options for the workflow regarding data storage should validate and only allow inputs that will work in the respective table i.e inputs should map to table columns and column types.
+ - If a user needs a new database table then a new database table should be created based on the inputs defined in the workflow.
+ - If a user needs to pull data to present it from the workflow then the user should be presented for sql to pull relevant data.
+
+Remember to stick to the existing technologies in this application stack.
+  - python flask
+  - postgresql
+
+ONLY CREATE NEW FILES, DO NOT EDIT EXISTING FILES WITH THIS.

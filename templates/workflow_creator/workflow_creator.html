@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Creator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        /* Base styles */
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Form styles */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        /* Table styles */
+        .data-tables {
+            margin-bottom: 30px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        .table-title {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .data-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+
+        /* Button styles */
+        .button-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        /* Column definition styles */
+        .column-definition {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+
+        .remove-column {
+            background-color: #f44336;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            float: right;
+        }
+
+        .remove-column:hover {
+            background-color: #da190b;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .data-table {
+                display: block;
+                overflow-x: auto;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 8px;
+            }
+
+            input[type="text"],
+            input[type="number"],
+            textarea,
+            select {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Workflow Creator</h1>
+        
+        <div class="data-tables">
+            <h2 class="table-title">Create New Workflow</h2>
+            <form id="workflowForm">
+                <div class="form-group">
+                    <label for="workflowName">Workflow Name</label>
+                    <input type="text" id="workflowName" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="workflowDescription">Description</label>
+                    <textarea id="workflowDescription" name="description" rows="3" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="workflowType">Workflow Type</label>
+                    <select id="workflowType" name="type" required>
+                        <option value="">Select Type</option>
+                        <option value="storage">Data Storage</option>
+                        <option value="retrieval">Data Retrieval</option>
+                    </select>
+                </div>
+                
+                <div id="storageOptions" style="display: none;">
+                    <div class="form-group">
+                        <label for="storageType">Storage Type</label>
+                        <select id="storageType" name="storage_type">
+                            <option value="">Select Storage Type</option>
+                            <option value="new_table">Create New Table</option>
+                            <option value="existing_table">Use Existing Table</option>
+                        </select>
+                    </div>
+                    
+                    <div id="newTableOptions" style="display: none;">
+                        <div class="form-group">
+                            <label for="tableName">Table Name</label>
+                            <input type="text" id="tableName" name="table_name">
+                        </div>
+                        
+                        <div id="columnDefinitions">
+                            <h3>Table Columns</h3>
+                            <button type="button" id="addColumn">Add Column</button>
+                            
+                            <div id="columnsList"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="existingTableOptions" style="display: none;">
+                        <div class="form-group">
+                            <label for="existingTable">Select Table</label>
+                            <select id="existingTable" name="table_name">
+                                <option value="">Select Table</option>
+                                {% for table in existing_tables %}
+                                <option value="{{ table }}">{{ table }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div id="existingColumns"></div>
+                    </div>
+                </div>
+                
+                <div id="retrievalOptions" style="display: none;">
+                    <div class="form-group">
+                        <label for="sqlQuery">SQL Query</label>
+                        <textarea id="sqlQuery" name="sql_query" rows="4" placeholder="Enter your SQL query here..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="button-container">
+                    <button type="submit">Create Workflow</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="data-tables">
+            <h2 class="table-title">Existing Workflows</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Storage Type</th>
+                        <th>Table Name</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="workflowsList">
+                    <!-- Workflows will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('workflowType').addEventListener('change', function() {
+            const storageOptions = document.getElementById('storageOptions');
+            const retrievalOptions = document.getElementById('retrievalOptions');
+            
+            if (this.value === 'storage') {
+                storageOptions.style.display = 'block';
+                retrievalOptions.style.display = 'none';
+            } else if (this.value === 'retrieval') {
+                storageOptions.style.display = 'none';
+                retrievalOptions.style.display = 'block';
+            } else {
+                storageOptions.style.display = 'none';
+                retrievalOptions.style.display = 'none';
+            }
+        });
+        
+        document.getElementById('storageType').addEventListener('change', function() {
+            const newTableOptions = document.getElementById('newTableOptions');
+            const existingTableOptions = document.getElementById('existingTableOptions');
+            
+            if (this.value === 'new_table') {
+                newTableOptions.style.display = 'block';
+                existingTableOptions.style.display = 'none';
+            } else if (this.value === 'existing_table') {
+                newTableOptions.style.display = 'none';
+                existingTableOptions.style.display = 'block';
+            } else {
+                newTableOptions.style.display = 'none';
+                existingTableOptions.style.display = 'none';
+            }
+        });
+        
+        document.getElementById('addColumn').addEventListener('click', function() {
+            const columnsList = document.getElementById('columnsList');
+            const columnDiv = document.createElement('div');
+            columnDiv.className = 'column-definition';
+            columnDiv.innerHTML = `
+                <button type="button" class="remove-column" onclick="this.parentElement.remove()">Remove</button>
+                <div class="form-group">
+                    <label>Column Name</label>
+                    <input type="text" name="columns[][name]" required>
+                </div>
+                <div class="form-group">
+                    <label>Data Type</label>
+                    <select name="columns[][type]" required>
+                        <option value="VARCHAR(255)">Text</option>
+                        <option value="INTEGER">Integer</option>
+                        <option value="NUMERIC">Decimal</option>
+                        <option value="TIMESTAMP">Date/Time</option>
+                        <option value="BOOLEAN">Boolean</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Input Type</label>
+                    <select name="columns[][input_type]" required>
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                        <option value="datetime-local">Date/Time</option>
+                        <option value="checkbox">Checkbox</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Label</label>
+                    <input type="text" name="columns[][label]" required>
+                </div>
+            `;
+            columnsList.appendChild(columnDiv);
+        });
+        
+        document.getElementById('existingTable').addEventListener('change', async function() {
+            if (this.value) {
+                try {
+                    const response = await fetch(`/get-table-columns/${this.value}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        const columnsDiv = document.getElementById('existingColumns');
+                        columnsDiv.innerHTML = '<h3>Table Columns</h3>';
+                        
+                        data.columns.forEach(column => {
+                            const columnDiv = document.createElement('div');
+                            columnDiv.className = 'form-group';
+                            columnDiv.innerHTML = `
+                                <label for="${column.name}">${column.name} (${column.type})</label>
+                                <input type="text" id="${column.name}" name="values[${column.name}]" required>
+                            `;
+                            columnsDiv.appendChild(columnDiv);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error fetching table columns:', error);
+                }
+            }
+        });
+        
+        document.getElementById('workflowForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = {};
+            
+            // Handle regular form fields
+            for (let [key, value] of formData.entries()) {
+                if (key.startsWith('columns[')) {
+                    // Handle column definitions
+                    const match = key.match(/columns\[(\d+)\]\[(\w+)\]/);
+                    if (match) {
+                        const index = match[1];
+                        const field = match[2];
+                        if (!data.columns) data.columns = [];
+                        if (!data.columns[index]) data.columns[index] = {};
+                        data.columns[index][field] = value;
+                    }
+                } else if (key.startsWith('values[')) {
+                    // Handle existing table values
+                    const field = key.match(/values\[(.*?)\]/)[1];
+                    if (!data.values) data.values = {};
+                    data.values[field] = value;
+                } else {
+                    data[key] = value;
+                }
+            }
+            
+            // Convert columns array to proper format
+            if (data.columns) {
+                data.columns = Object.values(data.columns);
+            }
+            
+            try {
+                const response = await fetch('/create-workflow', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Workflow created successfully!');
+                    window.location.href = '/';
+                } else {
+                    alert(`Error creating workflow: ${result.error}`);
+                }
+            } catch (error) {
+                alert(`Error creating workflow: ${error.message}`);
+            }
+        });
+
+        // Load existing workflows
+        async function loadWorkflows() {
+            try {
+                const response = await fetch('/list-workflows');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const workflowsList = document.getElementById('workflowsList');
+                    workflowsList.innerHTML = result.workflows.map(workflow => `
+                        <tr>
+                            <td>${workflow.name}</td>
+                            <td>${workflow.description || ''}</td>
+                            <td>${workflow.storage_type}</td>
+                            <td>${workflow.table_name}</td>
+                            <td>
+                                <button onclick="viewWorkflow(${workflow.id})">View</button>
+                                <button onclick="editWorkflow(${workflow.id})">Edit</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading workflows:', error);
+            }
+        }
+
+        // View workflow details
+        async function viewWorkflow(id) {
+            try {
+                const response = await fetch(`/get-workflow/${id}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(JSON.stringify(result.workflow, null, 2));
+                }
+            } catch (error) {
+                console.error('Error viewing workflow:', error);
+            }
+        }
+
+        // Edit workflow
+        function editWorkflow(id) {
+            // TODO: Implement edit functionality
+            alert('Edit functionality coming soon!');
+        }
+
+        // Load workflows on page load
+        document.addEventListener('DOMContentLoaded', loadWorkflows);
+    </script>
+</body>
+</html> 

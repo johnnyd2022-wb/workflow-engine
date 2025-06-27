@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit data</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles_raw_data.css') }}">
+</head>
+<body>
+    <div class="container">
+	<h1>Audit data</h1>
+    </div>
+
+    <div class="form-container">
+        <form action="/audit-data" method="post" class="form" id="auditData">
+            <label for="" class="white-label">Enter UID to see audit action:</label>
+            <input type="text" name="auditDataInput" id="auditDataInput" placeholder="uid value goes here">
+
+            <button type="submit">View audit action</button>
+        </form>
+    </div>
+
+    <div class="container" style="padding: 10px;">
+        <table class="data-table">
+            <thead>
+                <tr>
+		    <th>ID</th>
+		    <th>Date</th>
+		    <th>Action</th>
+		    <th>UID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data %}
+                <tr>
+                    <td>{{ row[0] }}</td>
+                    <td>{{ row[1] }}</td>
+                    <td>{{ row[2] }}</td>
+                    <td>{{ row[3] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-data-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to Data tools</button>
+        </form>
+
+    </div>
+
+</body>
+</html>

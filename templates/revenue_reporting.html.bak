@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whistlebird Revenue Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            background-attachment: fixed;
+            color: var(--text-color);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                circle at 50% 50%,
+                rgba(255, 51, 102, 0.08) 0%,
+                transparent 70%
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+            width: 100%;
+        }
+
+        .nav-bar {
+            background-color: transparent;
+            padding: 2rem 0;
+            width: 100%;
+            margin-bottom: 2rem;
+        }
+
+        .nav-bar h1 {
+            color: var(--text-color);
+            margin: 0;
+            font-size: 2.5rem;
+            background: none;
+            -webkit-text-fill-color: var(--text-color);
+            text-align: center;
+        }
+
+        .main-content {
+            width: 100%;
+            padding-top: 1rem;
+        }
+
+        .data-tables {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 0;
+            background: var(--card-background);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .data-table th {
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            font-weight: 600;
+            padding: 1.25rem;
+            text-align: left;
+            font-size: 1.125rem;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table td {
+            padding: 1rem 1.25rem;
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 1rem;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tbody tr {
+            transition: background-color 0.3s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: var(--table-row-hover);
+        }
+
+        .table-title {
+            color: var(--text-color);
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 1rem 0;
+            letter-spacing: -0.02em;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .back-button {
+            padding: 1.25rem 2.5rem;
+            background-color: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-color);
+            font-size: 1.125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .back-button:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+            background-color: rgba(255, 51, 102, 0.1);
+        }
+
+        .back-button::before {
+            content: '←';
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .back-button:hover::before {
+            transform: translateX(-4px);
+        }
+
+        /* Enhanced mobile styles */
+        @media (max-width: 768px) {
+            .nav-bar {
+                padding: 0.75rem 0;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                margin-bottom: 1rem;
+                background: linear-gradient(to bottom, 
+                    var(--background-color) 0%,
+                    rgba(10, 10, 10, 0.95) 50%,
+                    rgba(10, 10, 10, 0) 100%);
+            }
+
+            .main-content {
+                padding-top: 0.5rem;
+            }
+
+            .container {
+                padding: 0.5rem;
+            }
+
+            .nav-bar h1 {
+                font-size: 2rem;
+            }
+
+            .data-tables {
+                gap: 2.5rem;
+            }
+
+            .table-title {
+                font-size: 1.25rem;
+                position: sticky;
+                top: 3.5rem;
+                background: var(--background-color);
+                padding: 0.5rem 0;
+                margin: 0 0 0.5rem 0;
+                z-index: 90;
+            }
+
+            .data-table {
+                display: block;
+                background: transparent;
+                box-shadow: none;
+            }
+
+            .data-table thead {
+                display: none;
+            }
+
+            .data-table tbody {
+                display: block;
+            }
+
+            .data-table tr {
+                display: block;
+                background: var(--card-background);
+                margin-bottom: 1rem;
+                border-radius: 12px;
+                box-shadow: var(--shadow);
+            }
+
+            .data-table td {
+                display: grid;
+                grid-template-columns: 50% 50%;
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid var(--border-color);
+                white-space: normal;
+            }
+
+            .data-table td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: var(--text-secondary);
+            }
+
+            .data-table tr[style*="bold"] {
+                background: var(--table-header-bg);
+            }
+
+            .data-table tr[style*="bold"] td::before {
+                color: var(--text-color);
+            }
+
+            .data-table td:last-child {
+                border-bottom: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-bar h1 {
+                font-size: 1.75rem;
+            }
+
+            .table-title {
+                font-size: 1.125rem;
+                top: 3rem;
+            }
+
+            .data-table td {
+                padding: 0.625rem 0.875rem;
+                font-size: 0.875rem;
+            }
+
+            .back-button {
+                padding: 0.875rem 1.75rem;
+                font-size: 0.9375rem;
+            }
+        }
+
+        /* Add specific styling for detailed cost breakdown table */
+        .detailed-cost-table {
+            font-size: 0.9rem; /* Slightly smaller font for detailed table */
+            margin: 0 auto; /* Center the table */
+            max-width: 95%; /* Prevent table from touching edges */
+        }
+
+        .detailed-cost-table th,
+        .detailed-cost-table td {
+            padding: 0.75rem 0.5rem; /* Reduce padding */
+            white-space: nowrap; /* Prevent text wrapping */
+        }
+
+        .detailed-cost-table th {
+            font-size: 0.9rem; /* Smaller header text */
+        }
+
+        /* Maintain mobile responsiveness */
+        @media (max-width: 768px) {
+            .detailed-cost-table {
+                max-width: 100%;
+                font-size: 1rem;
+            }
+
+            .detailed-cost-table th,
+            .detailed-cost-table td {
+                padding: 0.75rem 1rem;
+                white-space: normal;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="container">
+            <h1>Revenue Report</h1>
+        </div>
+    </nav>
+    
+    <div class="main-content">
+        <div class="container">
+            <div class="data-tables">
+                <h2 class="table-title">Revenue Trend</h2>
+                <div class="chart-container" style="position: relative; height:400px; width:100%; margin-bottom: 2rem;">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Monthly Targets</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Required Monthly Bottles</th>
+                            <th>Required Monthly Revenue</th>
+                            <th>Average Revenue per Bottle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Calculate monthly fixed recurring costs #}
+                        {% set weekly_premise = 331.86 %}
+                        {% set weekly_premise_gst = weekly_premise * 0.15 %}
+                        {% set monthly_premise = (weekly_premise + weekly_premise_gst) * (52/12) %}
+                        
+                        {# Calculate monthly variable costs base (power) #}
+                        {% set monthly_power_base = 130.00 %}
+                        {% set monthly_power_gst = monthly_power_base * 0.15 %}
+                        {% set monthly_power = monthly_power_base + monthly_power_gst %}
+                        {% set power_per_bottle = 0.50 %}
+                        
+                        {# Calculate average total cost per bottle including duty from recent months #}
+                        {% set total_cost_sum = namespace(total=0, count=0) %}
+                        {% for month in monthly_revenue %}
+                            {% if month.month != 'Total' and month.cost_breakdown is defined and month.bottles > 0 %}
+                                {% set total_cost_sum.total = total_cost_sum.total + (month.cost_breakdown.one_off_costs.duty / month.bottles) %}
+                                {% set total_cost_sum.count = total_cost_sum.count + 1 %}
+                            {% endif %}
+                        {% endfor %}
+                        {% set avg_duty_per_bottle = total_cost_sum.total / total_cost_sum.count if total_cost_sum.count > 0 else 0 %}
+                        
+                        {# Calculate total fixed costs per bottle #}
+                        {% set bottles_cost = 1.10 %}
+                        {% set bottles_gst = bottles_cost * 0.15 %}
+                        {% set total_bottles_cost = bottles_cost + bottles_gst %}
+                        
+                        {% set import_cost = 0.73 %}
+                        {% set import_gst = import_cost * 0.15 %}
+                        {% set total_import_cost = import_cost + import_gst %}
+                        
+                        {% set labels_cost = 1697.00 / 2200 %}
+                        {% set labels_gst = labels_cost * 0.15 %}
+                        {% set total_labels_cost = labels_cost + labels_gst %}
+                        
+                        {% set case_boxes_cost = 366.00 / 900 %}
+                        {% set case_boxes_gst = case_boxes_cost * 0.15 %}
+                        {% set total_case_boxes_cost = case_boxes_cost + case_boxes_gst %}
+                        
+                        {% set ethanol_cost = 733.77 / 312 %}
+                        {% set ethanol_gst = ethanol_cost * 0.15 %}
+                        {% set total_ethanol_cost = ethanol_cost + ethanol_gst %}
+                        
+                        {% set heatshrink_cost = 224.36 / 1000 %}
+                        {% set heatshrink_gst = heatshrink_cost * 0.15 %}
+                        {% set total_heatshrink_cost = heatshrink_cost + heatshrink_gst %}
+                        
+                        {% set corks_cost = 400.00 / 1000 %}
+                        {% set corks_gst = corks_cost * 0.15 %}
+                        {% set total_corks_cost = corks_cost + corks_gst %}
+
+                        {% set botanical_cost = 100.00 / 85 %}
+                        {% set botanical_gst = botanical_cost * 0.15 %}
+                        {% set total_botanical_cost = botanical_cost + botanical_gst %}
+                        
+                        {% set total_fixed_cost_per_bottle = total_bottles_cost + total_import_cost + total_labels_cost + total_case_boxes_cost + total_ethanol_cost + total_heatshrink_cost + total_corks_cost + total_botanical_cost %}
+                        
+                        {# Calculate average revenue per bottle from actual data, excluding GST #}
+                        {% set total_bottles = namespace(count=0) %}
+                        {% set total_revenue = namespace(amount=0) %}
+                        {% set total_gst = namespace(amount=0) %}
+                        {% for month in monthly_revenue %}
+                            {% if month.month != 'Total' and month.bottles > 0 %}
+                                {% set total_bottles.count = total_bottles.count + month.bottles %}
+                                {% set total_revenue.amount = total_revenue.amount + month.revenue %}
+                                {% set total_gst.amount = total_gst.amount + month.gst %}
+                            {% endif %}
+                        {% endfor %}
+                        {% set actual_revenue_per_bottle = (total_revenue.amount - total_gst.amount) / total_bottles.count if total_bottles.count > 0 else 37.35 %}
+                        
+                        {# Calculate required bottles and revenue #}
+                        {% set total_monthly_fixed = monthly_premise + monthly_power %}
+                        {% set total_variable_per_bottle = avg_duty_per_bottle + power_per_bottle %}
+                        {% set actual_revenue_per_bottle = (total_revenue.amount - total_gst.amount) / total_bottles.count if total_bottles.count > 0 else 44.18 %}
+                        {% set profit_per_bottle = actual_revenue_per_bottle - total_variable_per_bottle %}
+                        {% set required_bottles = (total_monthly_fixed / profit_per_bottle)|round(0, 'ceil') %}
+                        {% set required_revenue = required_bottles * actual_revenue_per_bottle %}
+                        {% set monthly_duty_cost = required_bottles * avg_duty_per_bottle %}
+                        {% set monthly_power_variable = required_bottles * power_per_bottle %}
+                        
+                        <tr>
+                            <td data-label="Required Monthly Bottles">{{ required_bottles }} bottles</td>
+                            <td data-label="Required Monthly Revenue">${{ "%.2f"|format(required_revenue) }}</td>
+                            <td data-label="Average Revenue per Bottle (excl. GST)">${{ "%.2f"|format(actual_revenue_per_bottle) }}</td>
+                        </tr>
+                        <tr>
+                            <td data-label="Monthly Fixed Costs">Monthly Premise: ${{ "%.2f"|format(monthly_premise) }}<br>Monthly Fixed Power: ${{ "%.2f"|format(monthly_power) }}</td>
+                            <td data-label="Monthly Variable Costs">Duty Cost: ${{ "%.2f"|format(monthly_duty_cost) }}<br>Power Cost: ${{ "%.2f"|format(monthly_power_variable) }}</td>
+                            <td data-label="Per Bottle">Duty/Bottle: ${{ "%.2f"|format(avg_duty_per_bottle) }}<br>Power/Bottle: ${{ "%.2f"|format(power_per_bottle) }}</td>
+                        </tr>
+                        <tr>
+                            <td data-label="Total Fixed Costs">Total Monthly Fixed: ${{ "%.2f"|format(total_monthly_fixed) }}</td>
+                            <td data-label="Total Variable Costs">Total Monthly Variable: ${{ "%.2f"|format(monthly_duty_cost + monthly_power_variable) }}</td>
+                            <td data-label="Total Required">Total Required: ${{ "%.2f"|format(total_monthly_fixed + monthly_duty_cost + monthly_power_variable) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Monthly Revenue Summary</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Total Revenue</th>
+                            <th>GST</th>
+                            <th>Duty (LAL)</th>
+                            <th>Bottles Sold</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in monthly_revenue %}
+                            <tr{% if month.month == 'Total' %} style="font-weight: bold;" {% endif %}>
+                                <td data-label="Month">{{ month.month }}</td>
+                                <td data-label="Total Revenue">${{ "%.2f"|format(month.revenue) }}</td>
+                                <td data-label="GST">${{ "%.2f"|format(month.gst) }}</td>
+                                <td data-label="Duty (LAL)">${{ "%.2f"|format(month.duty) }}</td>
+                                <td data-label="Bottles Sold">{{ month.bottles }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Business Costs & Profitability</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Revenue ($)</th>
+                            <th>Recurring Costs ($)</th>
+                            <th>One-off Costs ($)</th>
+                            <th>Variable Costs ($)</th>
+                            <th>Total Costs ($)</th>
+                            <th>Profit ($)</th>
+                            <th>Profit Margin (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in monthly_revenue %}
+                            <tr{% if month.month == 'Total' %} style="font-weight: bold;" {% endif %}>
+                                <td data-label="Month">{{ month.month }}</td>
+                                <td data-label="Revenue ($)">${{ "%.2f"|format(month.revenue) }}</td>
+                                {% if month.cost_breakdown is defined %}
+                                    <td data-label="Recurring Costs ($)">${{ "%.2f"|format(month.cost_breakdown.fixed_costs.values()|sum) }}</td>
+                                    <td data-label="One-off Costs ($)">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.values()|sum) }}</td>
+                                    <td data-label="Variable Costs ($)">${{ "%.2f"|format(month.cost_breakdown.variable_costs.values()|sum) }}</td>
+                                {% else %}
+                                    <td data-label="Recurring Costs ($)">-</td>
+                                    <td data-label="One-off Costs ($)">-</td>
+                                    <td data-label="Variable Costs ($)">-</td>
+                                {% endif %}
+                                <td data-label="Total Costs ($)">${{ "%.2f"|format(month.costs) }}</td>
+                                <td data-label="Profit ($)">${{ "%.2f"|format(month.profit) }}</td>
+                                <td data-label="Profit Margin (%)">{{ "%.1f"|format(month.profit_margin) }}%</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Detailed Cost Breakdown</h2>
+                <table class="data-table detailed-cost-table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Premise (Monthly)</th>
+                            <th>Bottles</th>
+                            <th>Importing Bottles</th>
+                            <th>Corks</th>
+                            <th>Labels</th>
+                            <th>Heatshrink</th>
+                            <th>Case Boxes</th>
+                            <th>Ethanol</th>
+                            <th>Power</th>
+                            <th>Staff</th>
+                            <th>Duty</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in monthly_revenue %}
+                            {% if month.cost_breakdown is defined %}
+                                <tr{% if month.month == 'Total' %} style="font-weight: bold;" {% endif %}>
+                                    <td data-label="Month">{{ month.month }}</td>
+                                    <td data-label="Premise (Monthly)">${{ "%.2f"|format(month.cost_breakdown.fixed_costs.premise) }}</td>
+                                    <td data-label="Bottles">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.bottles|default(0)) }}</td>
+                                    <td data-label="Importing Bottles">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.importing_bottles|default(0)) }}</td>
+                                    <td data-label="Corks">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.corks|default(0)) }}</td>
+                                    <td data-label="Labels">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.labels|default(0)) }}</td>
+                                    <td data-label="Heatshrink">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.heatshrink|default(0)) }}</td>
+                                    <td data-label="Case Boxes">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.case_boxes|default(0)) }}</td>
+                                    <td data-label="Ethanol">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.ethanol|default(0)) }}</td>
+                                    <td data-label="Power">${{ "%.2f"|format(month.cost_breakdown.variable_costs.power|default(0)) }}</td>
+                                    <td data-label="Staff">${{ "%.2f"|format(month.cost_breakdown.variable_costs.staff|default(0)) }}</td>
+                                    <td data-label="Duty">${{ "%.2f"|format(month.cost_breakdown.one_off_costs.duty|default(0)) }}</td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Bottle Order Savings Tracker</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th colspan="3">Target Order Costs (10,000 Bottles)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Calculate per bottle costs from fixed_one_off_costs #}
+                        {% set bottles_cost = 1.16 %}  {# Base cost per bottle #}
+                        {% set bottles_gst = bottles_cost * 0.15 %}
+                        {% set total_bottles_cost = bottles_cost + bottles_gst %}
+                        
+                        {% set import_cost = 0.73 %}  {# Base import cost per bottle #}
+                        {% set import_gst = import_cost * 0.15 %}
+                        {% set total_import_cost = import_cost + import_gst %}
+                        
+                        {% set labels_cost = 1697.00 / 2200 %}  {# Base cost per bottle #}
+                        {% set labels_gst = labels_cost * 0.15 %}
+                        {% set total_labels_cost = labels_cost + labels_gst %}
+                        
+                        {% set case_boxes_cost = 366.00 / 900 %}  {# Base cost per bottle #}
+                        {% set case_boxes_gst = case_boxes_cost * 0.15 %}
+                        {% set total_case_boxes_cost = case_boxes_cost + case_boxes_gst %}
+                        
+                        {% set ethanol_cost = 733.77 / 312 %}  {# Base cost per bottle #}
+                        {% set ethanol_gst = ethanol_cost * 0.15 %}
+                        {% set total_ethanol_cost = ethanol_cost + ethanol_gst %}
+                        
+                        {% set heatshrink_cost = 224.36 / 1000 %}  {# Base cost per bottle #}
+                        {% set heatshrink_gst = heatshrink_cost * 0.15 %}
+                        {% set total_heatshrink_cost = heatshrink_cost + heatshrink_gst %}
+                        
+                        {% set corks_cost = 400.00 / 1000 %}  {# Base cost per bottle #}
+                        {% set corks_gst = corks_cost * 0.15 %}
+                        {% set total_corks_cost = corks_cost + corks_gst %}
+                        
+                        {% set total_fixed_cost_per_bottle = total_bottles_cost + total_import_cost + total_labels_cost + total_case_boxes_cost + total_ethanol_cost + total_heatshrink_cost + total_corks_cost %}
+                        
+                        {# Get average duty per bottle from recent months #}
+                        {% set duty_sum = namespace(total=0, count=0) %}
+                        {% for month in monthly_revenue %}
+                            {% if month.month != 'Total' and month.cost_breakdown is defined and month.bottles > 0 %}
+                                {% set duty_sum.total = duty_sum.total + (month.cost_breakdown.one_off_costs.duty / month.bottles) %}
+                                {% set duty_sum.count = duty_sum.count + 1 %}
+                            {% endif %}
+                        {% endfor %}
+                        {% set avg_duty_per_bottle = duty_sum.total / duty_sum.count if duty_sum.count > 0 else 0 %}
+                        
+                        {# Calculate total cost including duty #}
+                        {% set total_cost_per_bottle = total_fixed_cost_per_bottle + avg_duty_per_bottle %}
+                        {% set total_order_cost = total_cost_per_bottle * 10000 %}
+                        
+                        {# Calculate monthly premise cost #}
+                        {% set weekly_premise = 331.86 %}
+                        {% set weekly_premise_gst = weekly_premise * 0.15 %}
+                        {% set monthly_premise = (weekly_premise + weekly_premise_gst) * (52/12) %}
+                        
+                        {# Calculate break-even bottles at $44.18 per bottle #}
+                        {% set revenue_per_bottle = 44.18 %}
+                        {% set net_revenue = revenue_per_bottle %}
+                        {% set profit_per_bottle = net_revenue - total_cost_per_bottle %}
+                        {% set break_even_bottles = (monthly_premise / profit_per_bottle)|round(0, 'ceil') %}
+                        
+                        <tr>
+                            <td data-label="Fixed Costs/Bottle">Fixed Costs/Bottle (incl. GST): ${{ "%.2f"|format(total_fixed_cost_per_bottle) }}</td>
+                            <td data-label="Duty/Bottle">Average Duty/Bottle: ${{ "%.2f"|format(avg_duty_per_bottle) }}</td>
+                            <td data-label="Total Cost/Bottle">Total Cost/Bottle: ${{ "%.2f"|format(total_cost_per_bottle) }}</td>
+                        </tr>
+                        <tr>
+                            <td data-label="Monthly Fixed">Monthly Premise Cost: ${{ "%.2f"|format(monthly_premise) }}</td>
+                            <td data-label="Break Even">Break-even at $44.18: {{ break_even_bottles }} bottles/month</td>
+                            <td data-label="Target">Target: 10,000 Bottles</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table class="data-table" style="margin-top: 1rem;">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Bottles Sold</th>
+                            <th>Revenue/Bottle ($)</th>
+                            <th>Total Cost/Bottle ($)</th>
+                            <th>Net Savings/Bottle ($)</th>
+                            <th>Monthly Savings ($)</th>
+                            <th>Progress (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set cumulative = namespace(savings=0) %}
+                        {% for month in monthly_revenue %}
+                            {% if month.month != 'Total' and month.cost_breakdown is defined %}
+                                {% set month_parts = month.month.split(' ') %}
+                                {% set month_name = month_parts[0] %}
+                                {% set year = month_parts[1]|int %}
+                                {% if (year > 2025) or (year == 2025 and month_name in ['March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']) %}
+                                    {% set bottles = month.bottles|default(0) %}
+                                    {% if bottles > 0 %}
+                                        {# Calculate total cost per bottle including duty #}
+                                        {% set total_cost_per_bottle = (month.costs) / bottles %}
+                                        
+                                        {# Calculate revenue and savings #}
+                                        {% set revenue_per_bottle = month.revenue / bottles %}
+                                        {% set savings_per_bottle = revenue_per_bottle - total_cost_per_bottle %}
+                                        {% set monthly_savings = savings_per_bottle * bottles %}
+                                        {% set cumulative.savings = cumulative.savings + monthly_savings %}
+                                        {% set progress = (cumulative.savings / total_order_cost * 100) if total_order_cost > 0 else 0 %}
+                                        
+                                        <tr>
+                                            <td data-label="Month">{{ month.month }}</td>
+                                            <td data-label="Bottles Sold">{{ bottles }}</td>
+                                            <td data-label="Revenue/Bottle ($)">${{ "%.2f"|format(revenue_per_bottle) }}</td>
+                                            <td data-label="Total Cost/Bottle ($)">${{ "%.2f"|format(total_cost_per_bottle) }}</td>
+                                            <td data-label="Net Savings/Bottle ($)">${{ "%.2f"|format(savings_per_bottle) }}</td>
+                                            <td data-label="Monthly Savings ($)">${{ "%.2f"|format(monthly_savings) }}</td>
+                                            <td data-label="Progress (%)">{{ "%.1f"|format(progress) }}%</td>
+                                        </tr>
+                                    {% endif %}
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="button-container">
+                <form action="/back-button-data-tools" method="post">
+                    <button type="submit" class="back-button">Back to Data Tools</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Chart.js library and initialize the chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const ctx = document.getElementById('revenueChart');
+        
+        // Extract data from the table
+        const monthlyData = {{ monthly_revenue|tojson|safe }};
+        const months = monthlyData.slice(0, -1).map(item => item.month); // Exclude total row
+        const revenue = monthlyData.slice(0, -1).map(item => item.revenue);
+        const profitMargin = monthlyData.slice(0, -1).map(item => item.profit_margin);
+
+        // Create the chart
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: months.reverse(),
+                datasets: [{
+                    label: 'Monthly Revenue (NZD)',
+                    data: revenue.reverse(),
+                    borderColor: '#FF3366',
+                    backgroundColor: 'rgba(255, 51, 102, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#FF3366',
+                    pointBorderColor: '#FFFFFF',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Profit Margin (%)',
+                    data: profitMargin.reverse(),
+                    borderColor: '#3366FF',
+                    backgroundColor: 'rgba(51, 102, 255, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointBackgroundColor: '#3366FF',
+                    pointBorderColor: '#FFFFFF',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#FFFFFF'
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(26, 26, 26, 0.9)',
+                        titleColor: '#FFFFFF',
+                        bodyColor: '#FFFFFF',
+                        borderColor: '#2A2A2A',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: function(context) {
+                                if (context.dataset.label === 'Monthly Revenue (NZD)') {
+                                    return `Revenue: $${context.raw.toFixed(2)}`;
+                                } else {
+                                    return `Profit Margin: ${context.raw.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#FFFFFF'
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            callback: function(value) {
+                                return '$' + value.toFixed(2);
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            callback: function(value) {
+                                return value.toFixed(1) + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html> 
