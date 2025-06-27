@@ -46,9 +46,9 @@ def extract_sales_pdf_data(directory):
                 invoice_sections = text.split("PAYMENT ADVICE")[1:]  # Ignore the first empty split
 
                 # Print the raw text for debugging
-                #print(f"--- Raw Text from {filename} ---")
-                #print(text)
-                #print("--- End of Text ---\n")
+                print(f"--- Raw Text from {filename} ---")
+                print(text)
+                print("--- End of Text ---\n")
 
                 for section in invoice_sections:
                     # Extract fields using regex

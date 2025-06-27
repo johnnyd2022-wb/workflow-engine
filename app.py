@@ -1194,6 +1194,25 @@ def database_query():
     rows = cursor.fetchall()
     return render_template('database_query_result.html', columns=columns, rows=rows)
 
+@app.route('/add-product-form', methods=['POST'])
+def add_product_form():
+    print("Accessed /add-product-form route")
+
+    return render_template('add_product.html')
+
+@app.route('/add-product', methods=['POST'])
+def add_product():
+    print("Accessed /add-product route")
+    connection, cursor = db_conn()
+
+    product_name = request.form.get("productName")
+    product_size = request.form.get("productSize")
+    product_abv = request.form.get("productAbv")
+
+    insert_data(table_name='products', audit_action='Add product to inventory', product_name=product_name, product_size=product_size, product_abv=product_abv)
+    
+    return render_template('index.html')
+
 @app.route('/add-empty-bottles-form', methods=['GET'])
 def add_empty_bottles_form():
     print("Accessed /add-empty-bottles-form route")

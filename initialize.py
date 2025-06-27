@@ -513,6 +513,20 @@ def create_customs_lodgements_table():
 
     create_table(table_name, columns)
 
+def create_products_table():
+    table_name = "products"
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "action": "TEXT",
+        "date": "DATE",
+        "product_name": "TEXT",
+        "product_size": "TEXT",
+        "product_abv": "DOUBLE PRECISION",
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
 def db_conn():
     db_name = "whistlebird_inventory"
     db_user = "wb_admin"
@@ -727,6 +741,7 @@ def main():
     create_sales_product_samples_table()
     create_product_actions_samples_consumed_table()
     create_product_actions_samples_created_table()
+    create_products_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()
