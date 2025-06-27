@@ -22,10 +22,8 @@ from xml.etree import ElementTree as ET
 import io
 import zipfile
 import math
-from workflows.workflow_creator.workflow_creator import workflow_creator
 
 app = Flask(__name__)
-app.register_blueprint(workflow_creator)
 
 @app.route('/')
 def index():
