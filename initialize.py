@@ -186,6 +186,7 @@ def create_sales_product_table():
         "date": "DATE",
         "action": "TEXT",
         "buyer": "TEXT",
+        "product_name": "TEXT",
         "bottles_sold": "DOUBLE PRECISION",
         "abv": "DOUBLE PRECISION",
         "bottle_size_ml": "DOUBLE PRECISION",
