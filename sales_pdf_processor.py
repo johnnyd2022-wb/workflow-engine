@@ -47,6 +47,8 @@ def extract_products_from_invoice(section):
                 clean_name = 'wildflower'
             elif 'solstice' in clean_name.lower():
                 clean_name = 'solstice'
+            elif 'rosella' in clean_name.lower():
+                clean_name = 'rosella'
             else:
                 # Keep original if neither wildflower nor solstice found
                 clean_name = clean_name.lower().strip()
@@ -207,7 +209,7 @@ def extract_sales_pdf_data(directory):
                         gst = invoice_details['GST']
                         current_date = date.today()
                         bottle_size_ml = 700.0
-                        abv = 44.0 if 'wildflower' in product_name.lower() else 40.0 if 'solstice' in product_name.lower() else 40.0
+                        abv = 44.0 if 'wildflower' in product_name.lower() else 40.0 if 'solstice' in product_name.lower() else 40.0 if 'rosella' in product_name.lower() else 40.0
 
                         # Check for existing entries in the database using notes
                         wildcard_notes = f"%{notes}%"
