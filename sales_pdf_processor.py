@@ -205,8 +205,27 @@ def extract_sales_pdf_data(directory):
                         invoice_date = invoice_details['Invoice Date']
                         unit_price = product["unit_price"]
                         amount_nzd = product["amount"]
-                        total_nzd = invoice_details['Total NZD']  # Invoice total, not product total
-                        gst = invoice_details['GST']
+                        
+                        # Handle total_nzd and gst based on actual line item values
+                        if num_line_items == 1:
+                            # Single line item: use values as-is for both line item and invoice totals
+                            line_item_total = invoice_details['Total NZD']
+                            invoice_total = invoice_details['Total NZD']
+                            line_item_gst = invoice_details['GST']
+                            invoice_gst = invoice_details['GST']
+                        else:
+                            # Multiple line items: calculate line item totals based on actual quantities and prices
+                            line_item_total = product["amount"]  # This is already quantity × unit_price
+                            
+                            # Invoice total remains the full invoice amount
+                            invoice_total = invoice_details['Total NZD']
+                            
+                            # For GST, calculate proportion based on this line item's value relative to invoice total
+                            line_item_gst = (product["amount"] / invoice_details['Total NZD']) * invoice_details['GST']
+                            
+                            # Invoice GST remains the full invoice GST
+                            invoice_gst = invoice_details['GST']
+                        
                         current_date = date.today()
                         bottle_size_ml = 700.0
                         abv = 44.0 if 'wildflower' in product_name.lower() else 40.0 if 'solstice' in product_name.lower() else 40.0 if 'rosella' in product_name.lower() else 40.0
@@ -224,14 +243,14 @@ def extract_sales_pdf_data(directory):
                             
                             # Check each column individually and update if missing
                             check_columns_query = """
-                            SELECT buyer, product_name, bottles_sold, abv, bottle_size_ml, lal, duty_amount, bottle_batch, unit_price, amount_nzd, total_nzd, gst
+                            SELECT buyer, product_name, bottles_sold, abv, bottle_size_ml, lal, duty_amount, bottle_batch, unit_price, amount_nzd, total_nzd, gst, invoice_total, invoice_gst
                             FROM sales_product WHERE notes LIKE %s AND product_name = %s;
                             """
                             cursor.execute(check_columns_query, (wildcard_notes, product_name))
                             existing_data = cursor.fetchone()
                             
                             if existing_data:
-                                existing_buyer, existing_product_name, existing_bottles_sold, existing_abv, existing_bottle_size_ml, existing_lal, existing_duty_amount, existing_bottle_batch, existing_unit_price, existing_amount_nzd, existing_total_nzd, existing_gst = existing_data
+                                existing_buyer, existing_product_name, existing_bottles_sold, existing_abv, existing_bottle_size_ml, existing_lal, existing_duty_amount, existing_bottle_batch, existing_unit_price, existing_amount_nzd, existing_total_nzd, existing_gst, existing_invoice_total, existing_invoice_gst = existing_data
                                 
                                 # Check and update each missing field
                                 updates = {}
@@ -249,9 +268,13 @@ def extract_sales_pdf_data(directory):
                                 if existing_amount_nzd is None:
                                     updates['amount_nzd'] = amount_nzd
                                 if existing_total_nzd is None:
-                                    updates['total_nzd'] = total_nzd
+                                    updates['total_nzd'] = line_item_total
                                 if existing_gst is None:
-                                    updates['gst'] = gst
+                                    updates['gst'] = line_item_gst
+                                if existing_invoice_total is None:
+                                    updates['invoice_total'] = invoice_total
+                                if existing_invoice_gst is None:
+                                    updates['invoice_gst'] = invoice_gst
                                 
                                 # We'll calculate and check these computed fields separately
                                 if existing_lal is None or existing_duty_amount is None or existing_bottle_batch is None:
@@ -385,8 +408,10 @@ def extract_sales_pdf_data(directory):
                             notes=notes,
                             unit_price=unit_price,
                             amount_nzd=amount_nzd,
-                            total_nzd=total_nzd,
-                            gst=gst
+                            total_nzd=line_item_total,
+                            invoice_total=invoice_total,
+                            gst=line_item_gst,
+                            invoice_gst=invoice_gst
                         )
                         update_data(table_name='sales_product', condition={'date': current_date}, date=invoice_date)
 

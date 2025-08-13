@@ -579,6 +579,113 @@ def monthly_totals():
 
     return render_template('monthly_totals.html', data=data)
 
+@app.route('/crm', methods=['GET', 'POST'])
+def crm():
+    print("Accessed /crm route")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+
+    # Get existing customers with sales
+    cursor.execute("""
+        SELECT DISTINCT b.buyer 
+        FROM buyers b
+        INNER JOIN sales_product sp ON b.buyer = sp.buyer 
+        ORDER BY b.buyer
+    """)
+    existing_customers = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT DISTINCT b.buyer, b.buyer_email, b.buyer_phone, b.buyer_address, b.primary_contact
+        FROM buyers b
+        INNER JOIN sales_product sp ON b.buyer = sp.buyer
+        ORDER BY b.buyer
+    """)
+    existing_customer_info = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT COUNT(DISTINCT buyer) FROM sales_product WHERE date_trunc('month', date) = date_trunc('month', CURRENT_DATE)
+    """)
+    active_customers_this_month = cursor.fetchall()
+
+    cursor.execute("""
+        WITH first_purchases AS (
+            SELECT
+                buyer,
+                MIN(date) as first_purchase_date
+            FROM sales_product
+            WHERE notes LIKE '%INV%'
+            GROUP BY buyer
+        )
+        SELECT
+            COUNT(buyer)
+        FROM first_purchases
+        WHERE date_trunc('month', first_purchase_date) = date_trunc('month', CURRENT_DATE)
+        """)
+    new_customers_this_month = cursor.fetchall()
+
+    cursor.execute("""
+        WITH buyer_stats AS (
+                SELECT
+                    buyer,
+                    date,
+                    bottles_sold,
+                    MAX(date) OVER (PARTITION BY buyer) AS latest_date,
+                    SUM(bottles_sold) OVER (PARTITION BY buyer) AS total_bottles_sold,
+                    COUNT(CASE WHEN notes ILIKE '%Sample%' THEN 1 END) OVER (PARTITION BY buyer) AS sample_notes_count,
+                    COUNT(notes) OVER (PARTITION BY buyer) AS total_notes_count,
+                    FIRST_VALUE(bottles_sold) OVER (PARTITION BY buyer ORDER BY date DESC) as recent_bottles_sold,
+                    FIRST_VALUE(unit_price) OVER (PARTITION BY buyer ORDER BY date DESC) as unit_price, product_name
+                FROM sales_product
+                WHERE notes LIKE '%INV%'  -- Only consider invoice sales
+            )
+            SELECT DISTINCT b.buyer, b.buyer_email, b.primary_contact, b.buyer_phone,
+                   bs.latest_date, bs.total_bottles_sold, bs.recent_bottles_sold, bs.unit_price, bs.product_name
+            FROM buyers b
+            JOIN (
+                SELECT DISTINCT ON (buyer)
+                    buyer, latest_date, total_bottles_sold, recent_bottles_sold, unit_price,
+                    sample_notes_count, total_notes_count, product_name
+                FROM buyer_stats
+                ORDER BY buyer, latest_date DESC
+            ) bs ON b.buyer = bs.buyer
+            WHERE (
+                (bs.latest_date < CURRENT_DATE - INTERVAL '1 weeks' AND bs.total_bottles_sold < 2)
+                OR
+                (bs.latest_date < CURRENT_DATE - INTERVAL '2 weeks' AND bs.total_bottles_sold < 3)
+                OR
+                (bs.latest_date < CURRENT_DATE - INTERVAL '3 weeks' AND bs.total_bottles_sold < 4)
+                OR
+                bs.latest_date < CURRENT_DATE - INTERVAL '4 weeks'
+            )
+            AND b.buyer != 'WHISTLEBIRD INTERNAL (Personal)'
+            AND (bs.sample_notes_count < bs.total_notes_count OR bs.sample_notes_count = 0)
+            ORDER BY bs.latest_date
+    """)
+    existing_customer_follow_ups = cursor.fetchall()
+
+    return render_template('crm.html', existing_customers=existing_customers, existing_customer_info=existing_customer_info, active_customers_this_month=active_customers_this_month, new_customers_this_month=new_customers_this_month, existing_customer_follow_ups=existing_customer_follow_ups)
+
+@app.route('/crm-customer-invoices', methods=['POST'])
+def crm_customer_invoices():
+    print("Accessed /crm-customer-invoices route")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+
+    data = request.get_json()
+    customer_name = data.get("customer_name")
+
+    # Example: Match buyer and invoices containing "INV"
+    cursor.execute("""
+        SELECT DISTINCT(notes), date, product_name, bottles_sold, unit_price, total_nzd, invoice_total, invoice_gst
+        FROM sales_product
+        WHERE buyer LIKE %s
+        AND notes LIKE %s
+    """, (f"%{customer_name}%", "%INV%"))
+
+    customer_invoices = [row[0] for row in cursor.fetchall()]  # Flatten list of tuples
+
+    return jsonify({"customer_invoices": customer_invoices})
+
 @app.route('/lal-audit', methods=['POST'])
 def lal_audit():
     print("Accessed /lal-audit route")
@@ -2129,15 +2236,15 @@ def revenue_report():
     from datetime import datetime
     connection, cursor = db_conn()
 
-    # Get all monthly data in a single query for efficiency
+    # This needs fixing, the values are not correct - check the invoice entries in the DB
     cursor.execute("""
         WITH unique_invoices AS (
             SELECT DISTINCT ON (notes) 
                 date,
                 notes,
-                total_nzd,
+                invoice_total,
                 duty_amount,
-                gst,
+                invoice_gst,
                 SUM(bottles_sold) OVER (PARTITION BY notes) as total_bottles
             FROM sales_product
             WHERE notes LIKE '%INV%'
@@ -2146,8 +2253,8 @@ def revenue_report():
             date_trunc('month', date) as month,
             SUM(total_bottles) as bottles,
             SUM(duty_amount) as duty,
-            SUM(total_nzd) as revenue,
-            SUM(gst) as gst
+            SUM(invoice_total) as revenue,
+            SUM(invoice_gst) as gst
         FROM unique_invoices
         GROUP BY date_trunc('month', date)
         ORDER BY month DESC;
@@ -2174,11 +2281,6 @@ def revenue_report():
         'website': {
             'base': 47.828,
             'gst': 47.828 * 0.15,
-            'frequency': 'monthly'
-        },
-        'upstock': {
-            'base': 50.00,
-            'gst': 50.00 * 0.15,
             'frequency': 'monthly'
         },
         'accountants': {
