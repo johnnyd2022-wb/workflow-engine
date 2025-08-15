@@ -821,6 +821,10 @@ def main():
     create_product_actions_samples_consumed_table()
     create_product_actions_samples_created_table()
     create_products_table()
+    create_crm_customer_table()
+    create_crm_follow_ups_table()
+    create_crm_log_table()
+    create_crm_tasks_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()

@@ -113,6 +113,9 @@ def extract_sales_pdf_data(directory):
         "GST": r"TOTAL\s\s+GST\s\s+15%.*?\n\s*([\d,]+\.\d+)", # Matches the value for GST
     }
 
+    # Collect all invoices first, then sort them
+    all_invoices = []
+    
     # Iterate through files in the directory
     for filename in os.listdir(directory):
         if filename.endswith(".pdf"):
@@ -182,12 +185,55 @@ def extract_sales_pdf_data(directory):
                     print(f"  Total bottles: {total_quantity}")
                     print(f"  Total amount: ${file_data['Total NZD']:.2f}")
 
-                    # Store the extracted data
-                    extracted_data.setdefault(filename, []).append(file_data)
+                    # Store the invoice data for sorting
+                    all_invoices.append({
+                        'filename': filename,
+                        'file_data': file_data,
+                        'combination': combination
+                    })
                     processed_combinations.add(combination)
+                    
+                    # Debug logging for specific invoice
+                    if file_data["Invoice Number"] == "INV-0012":
+                        print(f"DEBUG: INV-0012 added to all_invoices list. Current count: {len(all_invoices)}")
 
             except Exception as e:
                 print(f"Error processing {filename}: {e}")
+
+    # Sort invoices by invoice number in descending order (highest first)
+    def extract_invoice_number(invoice_info):
+        """Extract numeric part from invoice number for sorting"""
+        invoice_num = invoice_info['file_data']['Invoice Number']
+        if invoice_num and invoice_num.startswith('INV-'):
+            try:
+                # Extract the numeric part after 'INV-' and convert to int
+                numeric_part = int(invoice_num[4:])
+                return numeric_part
+            except ValueError:
+                # If conversion fails, return 0 to put it at the end
+                return 0
+        return 0
+
+    # Sort in descending order (highest invoice numbers first)
+    all_invoices.sort(key=extract_invoice_number, reverse=True)
+    
+    print(f"\n=== INVOICES SORTED BY NUMBER (DESCENDING) ===")
+    for i, invoice_info in enumerate(all_invoices):
+        invoice_num = invoice_info['file_data']['Invoice Number']
+        numeric_part = extract_invoice_number(invoice_info)
+        print(f"{i+1}. {invoice_num} (numeric: {numeric_part})")
+    print("=== END SORTED LIST ===\n")
+
+    # Now organize the sorted invoices into the extracted_data structure
+    for invoice_info in all_invoices:
+        filename = invoice_info['filename']
+        file_data = invoice_info['file_data']
+        extracted_data.setdefault(filename, []).append(file_data)
+        
+        # Debug logging for specific invoice
+        if file_data["Invoice Number"] == "INV-0012":
+            print(f"DEBUG: INV-0012 added to extracted_data for file: {filename}")
+            print(f"DEBUG: INV-0012 products: {len(file_data.get('products', []))}")
 
     # Insert into the database
     if extracted_data:

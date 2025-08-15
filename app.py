@@ -299,32 +299,82 @@ def invoices():
         }
 
         yield "Fetching invoices from Xero API...<br>\n"
+        yield f"API URL: {url}<br>\n"
+        yield f"Headers: {headers}<br>\n"
+        
         response = requests.get(url, headers=headers)
+        yield f"Response status code: {response.status_code}<br>\n"
+        yield f"Response headers: {dict(response.headers)}<br>\n"
 
         if response.status_code == 200:
             try:
                 # Parse the XML response
+                
                 tree = ET.ElementTree(ET.fromstring(response.text))
                 root = tree.getroot()
+                yield f"Root element tag: {root.tag}<br>\n"
+                yield f"Root element attributes: {root.attrib}<br>\n"
 
                 # Find all invoice elements and filter by status
+                all_invoices = root.findall(".//Invoice")
+                yield f"Total invoices found in XML: {len(all_invoices)}<br>\n"
+                
                 invoices_data = []
-                for invoice in root.findall(".//Invoice"):
-                    status = invoice.find("Status").text
-                    if status not in ["AUTHORISED", "PAID"]:
-                        yield f"Skipping invoice {invoice.find('InvoiceNumber').text} with status {status}.<br>\n"
-                        continue
-                    else:
-                        yield f"{invoice.find('InvoiceNumber').text} valid, adding to list of invoices to process<br>\n"
+                skipped_count = 0
+                added_count = 0
+                
+                for i, invoice in enumerate(all_invoices):
+                    try:
+                        invoice_number = invoice.find("InvoiceNumber")
+                        status = invoice.find("Status")
+                        
+                        if invoice_number is None:
+                            yield f"WARNING: Invoice #{i+1} missing InvoiceNumber element<br>\n"
+                            continue
+                        if status is None:
+                            yield f"WARNING: Invoice {invoice_number.text} missing Status element<br>\n"
+                            continue
+                            
+                        invoice_num = invoice_number.text
+                        invoice_status = status.text
+                        
+                        yield f"Processing invoice #{i+1}: {invoice_num} (Status: {invoice_status})<br>\n"
+                        
+                        if invoice_status not in ["AUTHORISED", "PAID"]:
+                            yield f"SKIPPING: {invoice_num} - Status '{invoice_status}' not in allowed list<br>\n"
+                            skipped_count += 1
+                            continue
+                        else:
+                            yield f"ADDING: {invoice_num} - Status '{invoice_status}' is valid<br>\n"
+                            added_count += 1
 
-                    invoice_data = {
-                        "InvoiceID": invoice.find("InvoiceID").text,
-                        "InvoiceNumber": invoice.find("InvoiceNumber").text,
-                        "AmountDue": invoice.find("AmountDue").text,
-                        "AmountPaid": invoice.find("AmountPaid").text,
-                        "Status": status,
-                    }
-                    invoices_data.append(invoice_data)
+                        # Check for required fields
+                        invoice_id = invoice.find("InvoiceID")
+                        amount_due = invoice.find("AmountDue")
+                        amount_paid = invoice.find("AmountPaid")
+                        
+                        if invoice_id is None or amount_due is None or amount_paid is None:
+                            yield f"WARNING: {invoice_num} missing required fields - InvoiceID: {invoice_id is not None}, AmountDue: {amount_due is not None}, AmountPaid: {amount_paid is not None}<br>\n"
+                            continue
+
+                        invoice_data = {
+                            "InvoiceID": invoice_id.text,
+                            "InvoiceNumber": invoice_num,
+                            "AmountDue": amount_due.text,
+                            "AmountPaid": amount_paid.text,
+                            "Status": invoice_status,
+                        }
+                        invoices_data.append(invoice_data)
+                        
+                    except Exception as e:
+                        yield f"ERROR processing invoice #{i+1}: {str(e)}<br>\n"
+                        continue
+                
+                yield f"<br>\nSUMMARY:<br>\n"
+                yield f"- Total invoices in XML: {len(all_invoices)}<br>\n"
+                yield f"- Invoices skipped: {skipped_count}<br>\n"
+                yield f"- Invoices added: {added_count}<br>\n"
+                yield f"- Final invoices_data list length: {len(invoices_data)}<br>\n"
 
                 # Ensure the invoices directory exists
                 invoices_dir = os.path.join(os.getcwd(), 'invoices')
@@ -665,26 +715,149 @@ def crm():
 
     return render_template('crm.html', existing_customers=existing_customers, existing_customer_info=existing_customer_info, active_customers_this_month=active_customers_this_month, new_customers_this_month=new_customers_this_month, existing_customer_follow_ups=existing_customer_follow_ups)
 
+@app.route('/crm-create-customer', methods=['POST'])
+def crm_create_customer():
+    print("Accessed /crm-create-customer route")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+    
+    data = request.get_json()
+    customer_name = data.get("customer_name")
+    customer_email = data.get("customer_email")
+    customer_phone = data.get("customer_phone")
+    customer_address = data.get("customer_address")
+    primary_contact = data.get("primary_contact")
+    customer_converted = data.get("customer_converted")
+    customer_last_contact = datetime.date.today()
+    customer_notes = data.get("customer_notes")
+
+    # Insert customer into crm_customer table
+    insert_data(table_name='crm_customers', audit_action='Create new CRM Customer', customer=customer_name, primary_contact=primary_contact, customer_address=customer_address, customer_phone=customer_phone, customer_email=customer_email, customer_status=customer_converted, customer_last_contact=customer_last_contact, customer_notes=customer_notes)
+
+    # Fetch and insert follow-up task only if checkbox is checked
+    if data.get("add_follow_up") == "yes":
+        follow_up_task = data.get("follow_up_task")
+        follow_up_date = data.get("follow_up_date")
+        follow_up_priority = data.get("follow_up_priority")
+        follow_up_type = data.get("follow_up_type")
+        follow_up_status = data.get("follow_up_status")
+
+        # Insert follow-up task into crm_follow_ups table
+        insert_data(table_name='crm_follow_ups', audit_action='Create Follow-up Tasks', customer=customer_name, follow_up_date=follow_up_date, follow_up_priority=follow_up_priority, follow_up_status=follow_up_status, follow_up_notes=follow_up_task, follow_up_type=follow_up_type)
+    
+    return jsonify({
+        "success": True,
+        "message": "Customer created successfully",
+        "redirect_url": customer_page_redirect_response(customer_name)
+    })
+
+def customer_page_redirect_response(customer_name):
+    """
+    Helper function to create a standardized redirect URL for customer page.
+    Can be called from multiple places in the CRM.
+    """
+    return f"/crm-customer-page?customer_name={customer_name}"
+
+@app.route('/crm-customer-page', methods=['GET', 'POST'])
+def crm_customer_page():
+    print("Accessed /crm-customer-page route")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+    
+    try:
+        # Handle both GET (from URL) and POST (from form) data
+        if request.method == 'POST':
+            if request.is_json:
+                data = request.get_json()
+                customer_name = data.get("customer_name")
+            else:
+                customer_name = request.form.get("customer_name")
+        else:
+            # GET request - get customer name from URL parameters
+            customer_name = request.args.get("customer_name")
+        
+        print(f"Customer name received: {customer_name}")
+        
+        if not customer_name:
+            print("No customer name provided")
+            return render_template('customer_detail.html', 
+                                customer_info=None, 
+                                follow_up_tasks=None, 
+                                customer_invoice_data=None,
+                                error_message="No customer name provided")
+
+        # Fetch customer information from crm_customers table
+        cursor.execute("""
+            SELECT customer, customer_email, customer_phone,
+            customer_address, primary_contact, customer_status, customer_last_contact, customer_notes
+            FROM crm_customers WHERE customer = %s
+        """, (customer_name,))
+        customer_info = cursor.fetchall()
+        
+        print(f"Customer info found: {len(customer_info)} records")
+
+        # Fetch follow-up tasks from crm_follow_ups table
+        cursor.execute("""
+            SELECT customer, follow_up_date, follow_up_priority, follow_up_status, follow_up_notes, follow_up_type
+            FROM crm_follow_ups WHERE customer = %s
+        """, (customer_name,))
+        follow_up_tasks = cursor.fetchall()
+        
+        print(f"Follow-up tasks found: {len(follow_up_tasks)} records")
+
+        # Fetch customer invoice info
+        customer_invoice_data = crm_customer_invoices(customer_name)
+        
+        print(f"Invoice data found: {len(customer_invoice_data) if customer_invoice_data else 0} records")
+
+        return render_template('customer_detail.html', 
+                            customer_info=customer_info, 
+                            follow_up_tasks=follow_up_tasks, 
+                            customer_invoice_data=customer_invoice_data,
+                            customer_name=customer_name)
+                            
+    except Exception as e:
+        print(f"Error in crm_customer_page: {e}")
+        return render_template('customer_detail.html', 
+                            customer_info=None, 
+                            follow_up_tasks=None, 
+                            customer_invoice_data=None,
+                            error_message=f"Error loading customer data: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
 @app.route('/crm-customer-invoices', methods=['POST'])
-def crm_customer_invoices():
+def crm_customer_invoices(customer_name):
     print("Accessed /crm-customer-invoices route")
     from initialize import db_conn
     connection, cursor = db_conn()
 
-    data = request.get_json()
-    customer_name = data.get("customer_name")
-
-    # Example: Match buyer and invoices containing "INV"
+    # Extract invoice data: Match buyer and invoices containing "INV"
     cursor.execute("""
-        SELECT DISTINCT(notes), date, product_name, bottles_sold, unit_price, total_nzd, invoice_total, invoice_gst
+        SELECT notes, date, product_name, bottles_sold, unit_price, total_nzd, invoice_total, invoice_gst
         FROM sales_product
         WHERE buyer LIKE %s
         AND notes LIKE %s
     """, (f"%{customer_name}%", "%INV%"))
 
-    customer_invoices = [row[0] for row in cursor.fetchall()]  # Flatten list of tuples
+    customer_invoice_data = cursor.fetchall()
 
-    return jsonify({"customer_invoices": customer_invoices})
+    # Extract invoices into a list
+    cursor.execute("""
+        SELECT DISTINCT(notes)
+        FROM sales_product
+        WHERE buyer LIKE %s
+        AND notes LIKE %s
+    """, (f"%{customer_name}%", "%INV%"))
+    customer_invoices = cursor.fetchall()
+
+    # Insert customer invoices into crm_customers table
+    insert_data(table_name='crm_customers', audit_action='Syncing Customer Invoices', invoices=customer_invoices)
+
+    return customer_invoice_data
 
 @app.route('/lal-audit', methods=['POST'])
 def lal_audit():
