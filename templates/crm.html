@@ -233,17 +233,35 @@
         }
 
         .stat-number {
-            font-size: 2rem;
+            font-size: 2.5rem;
             font-weight: 700;
             color: var(--primary-color);
             margin-bottom: 0.5rem;
         }
 
         .stat-label {
-            color: var(--text-secondary);
             font-size: 0.875rem;
+            color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-breakdown {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .existing-count {
+            color: var(--success-color);
+            font-weight: 500;
+        }
+
+        .potential-count {
+            color: var(--warning-color);
+            font-weight: 500;
         }
 
         .clickable-stat {
@@ -417,22 +435,52 @@
         }
 
         .customer-item {
-            padding: 1.5rem;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
             border-radius: 8px;
-            margin-bottom: 0;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
             cursor: pointer;
             transition: all 0.3s ease;
-            border: 1px solid transparent;
             position: relative;
-            overflow: hidden;
-            height: fit-content;
         }
 
         .customer-item:hover {
-            background: var(--table-row-hover);
+            transform: translateY(-2px);
             border-color: var(--primary-color);
-            transform: translateX(4px);
             box-shadow: 0 4px 16px rgba(255, 51, 102, 0.2);
+        }
+
+        .customer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .customer-name {
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 1.1rem;
+        }
+
+        .customer-status {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .customer-status.existing {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .customer-status.potential {
+            background: var(--warning-color);
+            color: var(--secondary-color);
         }
 
         .customer-item::after {
@@ -664,6 +712,41 @@
             line-height: 1.6;
             margin-bottom: 1rem;
             text-align: center;
+        }
+
+        .slide p.left-align {
+            text-align: left !important;
+        }
+
+        .slide p.italic {
+            font-style: italic;
+            color: var(--text-secondary);
+        }
+
+        .slide p.small {
+            font-size: 0.9em;
+        }
+
+        .slide p.blank {
+            height: 1.5rem;
+            margin: 0;
+            padding: 0;
+        }
+
+        .slide ul {
+            text-align: left;
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .slide li {
+            text-align: left;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .slide li.left-align {
+            text-align: left !important;
         }
 
         /* Product Showcase */
@@ -1370,8 +1453,12 @@
             <!-- Quick Stats Section -->
             <div class="quick-stats">
                 <div class="stat-card">
-                    <div class="stat-number">{{ existing_customers|length if existing_customers else 0 }}</div>
+                    <div class="stat-number">{{ existing_customer_info|length if existing_customer_info else 0 }}</div>
                     <div class="stat-label">Total Customers</div>
+                    <div class="stat-breakdown">
+                        <span class="existing-count">{{ existing_customers|length if existing_customers else 0 }} existing</span>
+                        <span class="potential-count">{{ (existing_customer_info|length if existing_customer_info else 0) - (existing_customers|length if existing_customers else 0) }} potential</span>
+                    </div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-number">{{ active_customers_this_month[0][0] if active_customers_this_month else 0 }}</div>
@@ -1415,13 +1502,20 @@
                         <div id="customerList" class="customer-list">
                             {% if existing_customer_info %}
                                 {% for customer in existing_customer_info %}
+                                {% set customer_name = customer[0] %}
+                                {% set has_sales = customer_name in existing_customers|map(attribute=0)|list %}
                                 <div class="customer-item" onclick="selectCustomerFromElement(this)" 
-                                     data-customer-name="{{ customer[0] }}"
+                                     data-customer-name="{{ customer_name }}"
                                      data-customer-email="{{ customer[1] if customer[1] else '' }}"
                                      data-customer-phone="{{ customer[2] if customer[2] else '' }}"
                                      data-customer-company="{{ customer[3] if customer[3] else '' }}"
-                                     data-search-text="{{ customer[0]|lower }} {{ customer[1]|lower if customer[1] else '' }} {{ customer[2]|lower if customer[2] else '' }} {{ customer[3]|lower if customer[3] else '' }}">
-                                    <div class="customer-name">{{ customer[0] }}</div>
+                                     data-search-text="{{ customer_name|lower }} {{ customer[1]|lower if customer[1] else '' }} {{ customer[2]|lower if customer[2] else '' }} {{ customer[3]|lower if customer[3] else '' }}">
+                                    <div class="customer-header">
+                                        <div class="customer-name">{{ customer_name }}</div>
+                                        <div class="customer-status {{ 'existing' if has_sales else 'potential' }}">
+                                            {{ 'Existing Customer' if has_sales else 'Potential Customer' }}
+                                        </div>
+                                    </div>
                                     <div class="customer-details">
                                         {% if customer[1] %}<div class="customer-email">{{ customer[1] }}</div>{% endif %}
                                         {% if customer[2] %}<div class="customer-phone">{{ customer[2] }}</div>{% endif %}
@@ -1431,7 +1525,7 @@
                                 {% endfor %}
                             {% else %}
                                 <div class="no-customers">
-                                    <p>No customers found in database.</p>
+                                    <p>No customers found in CRM system.</p>
                                     <p><a href="#" onclick="addNewCustomer(); closeCustomerSearch();">Add your first customer</a></p>
                                 </div>
                             {% endif %}
@@ -1517,78 +1611,100 @@
                             </div>
                             
                             <div class="sales-deck-content">
+                                <!-- Slide 1 -->
                                 <div class="slide active" id="slide-1">
-                                    <h2>Welcome to Whistlebird Distillery</h2>
-                                    <p>Premium craft spirits crafted with passion and tradition</p>
+                                    <h2>Sales Pitch</h2>
+                                    <p class="left-align">Hey x, I'm Johnny/Niko calling from Whistlebird and I'm hoping to speak to the manager or owner.</p>
+                                    <p class="blank"></p>
+                                    <p class="left-align italic small">manager/owner joins the call..</p>
+                                    
+                                    <p class="left-align"><i class="small">Hey this is Johnny/Niko from Whistlebird</i> - I run a Wellington Distillery called Whistlebird and we specialise in Gin.</p>
+                                        
+                                    <p class="left-align">Our Gin Whistlebird Wildflower recently won a GOLD medal at the Super Spiit Awards and a Bronze medal at the New Zealand Spirit Awards</p>
+                                    <p class="left-align">and we are now stocked in lot of liquorland/super liquor stores nationwide</p>
+                                    <p class="blank"></p>
+                                    <p class="left-align italic small">USP hook</p>
+
+                                    <p class="left-align">What makes us stand out is that we use the practical application of sound in our distllation process - its how we get efficiency and a really clean finish.</p>
+                                    <p class="left-align">We've also crafted a custom bottle and label that wraps our process into a story on the shelf</p>
+                                    <p class="blank"></p>
+                                    <p class="left-align italic small">The ask..</p>
+
+                                    <p class="left-align">The reason I'm calling is because we are expanding distribution in x region now.</p>
+                                    <p class="blank"></p>
+                                    <p class="left-align italic small">Options to ask..</p>
+                                    <ul class="left-align">
+                                        <li>I'd love to chat if you're interested in hearing more</li>
+                                        <li>We've kept it simple: one case minimum, free shipping - would you be open to trying us?</li>
+                                    </ul>
                                     <div class="slide-navigation">
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">1</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">2</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">3</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(4)">4</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">Counters</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">Products</button>
+                                    </div>
+                                </div>
+
+                                <!-- Slide 2 -->
+                                <div class="slide" id="slide-2">
+                                    <h2>Counters</h2>
+                                    <h3>Customer asks for email with info</h3>
+                                    <p class="left-align italic small">micro-commitment options to counter..</p>
+                                    <p class="left-align italic small">Absolutely, I'll send you the info.</p>
+                                    <ul class="left-align">
+                                        <li><b>default</b> - Most stores start with a single case to see how it moves, I can get that ready for you.</li>
+                                        <li><b>low-risk</b> - We typically get new stores started with a single case so they can test without tying up shelf space.</li>
+                                        <li><b>social-proof</b> - Usually stores kick off with a single case, it’s the easiest way to see it sell.</li>
+                                    </ul>
+                                    <p class="left-align italic small">Which email should I send the details to?</p>
+
+                                    <p class="blank"></p>
+                                    <p class="blank"></p>
+
+                                    <h3>Fallback options if above fail</h3>
+                                    <ul class="left-align">
+                                        <li><b>consignment</b> - We're also happy for you to try Whistlebird on a consignment model so there is low risk.</li>
+                                        <li><b>call-back</b> - I'll send the info and we can chat about it. Is there a good time to call you back?</li>
+                                    </ul>
+
+                                    
+                                    <div class="slide-navigation">
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">Counters</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">Products</button>
                                     </div>
                                 </div>
                                 
-                                <div class="slide" id="slide-2">
-                                    <h2>Our Premium Products</h2>
+                                <!-- Slide 3 -->
+                                <div class="slide" id="slide-3">
+                                    <h2>Our Products</h2>
+                                    <p class="left-align">We currently have 2 Gins</p>
                                     <div class="product-showcase">
                                         <div class="product-item">
                                             <h3>Whistlebird Wildflower</h3>
                                             <p>44% ABV • 700ml</p>
-                                            <p>Distinctive wildflower notes with smooth finish</p>
+                                            <p>Citrus forward Gin with floral notes, its dry with a long smooth finish - this is our signature product</p>
                                         </div>
                                         <div class="product-item">
                                             <h3>Whistlebird Solstice</h3>
                                             <p>40% ABV • 700ml</p>
-                                            <p>Bold and complex with rich character</p>
+                                            <p>Crisp Himilayan Juniper foward citrus Gin thats been distilled through native New Zealand Kawakawa</p>
+                                        </div>
+                                        <div class="product-item">
+                                            <h3>Pricing & MoQ</h3>
+                                            <ul>
+                                                <li class="left-align">Both Gins are $46.25 +GST per bottle</li>
+                                                <li class="left-align">We have an MoQ of 1 case of 6 bottles</li>
+                                                <li class="left-align">We provide free shipping</li>
+                                            </ul>
                                         </div>
                                     </div>
                                     <div class="slide-navigation">
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">1</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">2</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">3</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(4)">4</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">Counters</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">Products</button>
                                     </div>
                                 </div>
-                                
-                                <div class="slide" id="slide-3">
-                                    <h2>Quality & Craftsmanship</h2>
-                                    <ul class="quality-points">
-                                        <li>Premium New Zealand ingredients</li>
-                                        <li>Traditional distillation methods</li>
-                                        <li>Small batch production</li>
-                                        <li>Hand-crafted excellence</li>
-                                        <li>Unique flavor profiles</li>
-                                        <li>Premium packaging</li>
-                                    </ul>
-                                    <div class="slide-navigation">
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">1</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">2</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">3</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(4)">4</button>
-                                    </div>
-                                </div>
-                                
-                                <div class="slide" id="slide-4">
-                                    <h2>Pricing & Availability</h2>
-                                    <div class="pricing-info">
-                                        <div class="pricing-item">
-                                            <h3>Whistlebird Wildflower</h3>
-                                            <p class="price">$46.25 per bottle</p>
-                                            <p>Available in cases of 6</p>
-                                        </div>
-                                        <div class="pricing-item">
-                                            <h3>Whistlebird Solstice</h3>
-                                            <p class="price">$46.25 per bottle</p>
-                                            <p>Available in cases of 6</p>
-                                        </div>
-                                    </div>
-                                    <div class="slide-navigation">
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">1</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">2</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">3</button>
-                                        <button type="button" class="slide-nav-btn" onclick="showSlide(4)">4</button>
-                                    </div>
-                                </div>
+
                             </div>
                         </div>
                         
@@ -2042,7 +2158,7 @@
                             document.body.removeChild(successMessage);
                             
                             // Redirect to customer detail page with customer name as URL parameter
-                            window.location.href = `${data.redirect_url}?customer_name=${encodeURIComponent(formData.customer_name)}`;
+                            window.location.href = data.redirect_url;
                         }
                     }, 1000);
                     

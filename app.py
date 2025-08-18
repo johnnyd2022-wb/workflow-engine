@@ -635,85 +635,195 @@ def crm():
     from initialize import db_conn
     connection, cursor = db_conn()
 
-    # Get existing customers with sales
-    cursor.execute("""
-        SELECT DISTINCT b.buyer 
-        FROM buyers b
-        INNER JOIN sales_product sp ON b.buyer = sp.buyer 
-        ORDER BY b.buyer
-    """)
-    existing_customers = cursor.fetchall()
-
-    cursor.execute("""
-        SELECT DISTINCT b.buyer, b.buyer_email, b.buyer_phone, b.buyer_address, b.primary_contact
-        FROM buyers b
-        INNER JOIN sales_product sp ON b.buyer = sp.buyer
-        ORDER BY b.buyer
-    """)
-    existing_customer_info = cursor.fetchall()
-
-    cursor.execute("""
-        SELECT COUNT(DISTINCT buyer) FROM sales_product WHERE date_trunc('month', date) = date_trunc('month', CURRENT_DATE)
-    """)
-    active_customers_this_month = cursor.fetchall()
-
-    cursor.execute("""
-        WITH first_purchases AS (
-            SELECT
-                buyer,
-                MIN(date) as first_purchase_date
-            FROM sales_product
-            WHERE notes LIKE '%INV%'
-            GROUP BY buyer
-        )
-        SELECT
-            COUNT(buyer)
-        FROM first_purchases
-        WHERE date_trunc('month', first_purchase_date) = date_trunc('month', CURRENT_DATE)
+    try:
+        # Auto-sync any missing customers from sales data before loading CRM
+        print("Checking for missing customers and auto-syncing...")
+        auto_sync_missing_customers()
+        
+        # Get all customers from CRM system (existing + potential)
+        cursor.execute("""
+            SELECT DISTINCT customer, customer_email, customer_phone, customer_address, primary_contact
+            FROM crm_customers
+            WHERE customer IS NOT NULL AND customer != ''
+            ORDER BY customer
         """)
-    new_customers_this_month = cursor.fetchall()
+        existing_customer_info = cursor.fetchall()
 
-    cursor.execute("""
-        WITH buyer_stats AS (
+        # Get existing customers with sales (for statistics)
+        cursor.execute("""
+            SELECT DISTINCT b.buyer 
+            FROM buyers b
+            INNER JOIN sales_product sp ON b.buyer = sp.buyer 
+            ORDER BY b.buyer
+        """)
+        existing_customers = cursor.fetchall()
+
+        # Get active customers this month (from sales data)
+        cursor.execute("""
+            SELECT COUNT(DISTINCT buyer) FROM sales_product WHERE date_trunc('month', date) = date_trunc('month', CURRENT_DATE)
+        """)
+        active_customers_this_month = cursor.fetchall()
+
+        # Get new customers this month (from sales data)
+        cursor.execute("""
+            WITH first_purchases AS (
                 SELECT
                     buyer,
-                    date,
-                    bottles_sold,
-                    MAX(date) OVER (PARTITION BY buyer) AS latest_date,
-                    SUM(bottles_sold) OVER (PARTITION BY buyer) AS total_bottles_sold,
-                    COUNT(CASE WHEN notes ILIKE '%Sample%' THEN 1 END) OVER (PARTITION BY buyer) AS sample_notes_count,
-                    COUNT(notes) OVER (PARTITION BY buyer) AS total_notes_count,
-                    FIRST_VALUE(bottles_sold) OVER (PARTITION BY buyer ORDER BY date DESC) as recent_bottles_sold,
-                    FIRST_VALUE(unit_price) OVER (PARTITION BY buyer ORDER BY date DESC) as unit_price, product_name
+                    MIN(date) as first_purchase_date
                 FROM sales_product
-                WHERE notes LIKE '%INV%'  -- Only consider invoice sales
+                WHERE notes LIKE '%INV%'
+                GROUP BY buyer
             )
-            SELECT DISTINCT b.buyer, b.buyer_email, b.primary_contact, b.buyer_phone,
-                   bs.latest_date, bs.total_bottles_sold, bs.recent_bottles_sold, bs.unit_price, bs.product_name
-            FROM buyers b
-            JOIN (
-                SELECT DISTINCT ON (buyer)
-                    buyer, latest_date, total_bottles_sold, recent_bottles_sold, unit_price,
-                    sample_notes_count, total_notes_count, product_name
-                FROM buyer_stats
-                ORDER BY buyer, latest_date DESC
-            ) bs ON b.buyer = bs.buyer
-            WHERE (
-                (bs.latest_date < CURRENT_DATE - INTERVAL '1 weeks' AND bs.total_bottles_sold < 2)
-                OR
-                (bs.latest_date < CURRENT_DATE - INTERVAL '2 weeks' AND bs.total_bottles_sold < 3)
-                OR
-                (bs.latest_date < CURRENT_DATE - INTERVAL '3 weeks' AND bs.total_bottles_sold < 4)
-                OR
-                bs.latest_date < CURRENT_DATE - INTERVAL '4 weeks'
-            )
-            AND b.buyer != 'WHISTLEBIRD INTERNAL (Personal)'
-            AND (bs.sample_notes_count < bs.total_notes_count OR bs.sample_notes_count = 0)
-            ORDER BY bs.latest_date
-    """)
-    existing_customer_follow_ups = cursor.fetchall()
+            SELECT
+                COUNT(buyer)
+            FROM first_purchases
+            WHERE date_trunc('month', first_purchase_date) = date_trunc('month', CURRENT_DATE)
+            """)
+        new_customers_this_month = cursor.fetchall()
 
-    return render_template('crm.html', existing_customers=existing_customers, existing_customer_info=existing_customer_info, active_customers_this_month=active_customers_this_month, new_customers_this_month=new_customers_this_month, existing_customer_follow_ups=existing_customer_follow_ups)
+        # Get customers needing follow-ups (from sales data)
+        cursor.execute("""
+            WITH buyer_stats AS (
+                    SELECT
+                        buyer,
+                        date,
+                        bottles_sold,
+                        MAX(date) OVER (PARTITION BY buyer) AS latest_date,
+                        SUM(bottles_sold) OVER (PARTITION BY buyer) AS total_bottles_sold,
+                        COUNT(CASE WHEN notes ILIKE '%Sample%' THEN 1 END) OVER (PARTITION BY buyer) AS sample_notes_count,
+                        COUNT(notes) OVER (PARTITION BY buyer) AS total_notes_count,
+                        FIRST_VALUE(bottles_sold) OVER (PARTITION BY buyer ORDER BY date DESC) as recent_bottles_sold,
+                        FIRST_VALUE(unit_price) OVER (PARTITION BY buyer ORDER BY date DESC) as unit_price, product_name
+                    FROM sales_product
+                    WHERE notes LIKE '%INV%'  -- Only consider invoice sales
+                )
+                SELECT DISTINCT b.buyer, b.buyer_email, b.primary_contact, b.buyer_phone,
+                       bs.latest_date, bs.total_bottles_sold, bs.recent_bottles_sold, bs.unit_price, bs.product_name
+                FROM buyers b
+                JOIN (
+                    SELECT DISTINCT ON (buyer)
+                        buyer, latest_date, total_bottles_sold, recent_bottles_sold, unit_price,
+                        sample_notes_count, total_notes_count, product_name
+                    FROM buyer_stats
+                    ORDER BY buyer, latest_date DESC
+                ) bs ON b.buyer = bs.buyer
+                WHERE (
+                    (bs.latest_date < CURRENT_DATE - INTERVAL '1 weeks' AND bs.total_bottles_sold < 2)
+                    OR
+                    (bs.latest_date < CURRENT_DATE - INTERVAL '2 weeks' AND bs.total_bottles_sold < 3)
+                    OR
+                    (bs.latest_date < CURRENT_DATE - INTERVAL '3 weeks' AND bs.total_bottles_sold < 4)
+                    OR
+                    bs.latest_date < CURRENT_DATE - INTERVAL '4 weeks'
+                )
+                AND b.buyer != 'WHISTLEBIRD INTERNAL (Personal)'
+                AND (bs.sample_notes_count < bs.total_notes_count OR bs.sample_notes_count = 0)
+                ORDER BY bs.latest_date
+        """)
+        existing_customer_follow_ups = cursor.fetchall()
+
+        print(f"CRM loaded: {len(existing_customer_info)} total customers, {len(existing_customers)} with sales")
+
+        return render_template('crm.html', 
+                            existing_customers=existing_customers, 
+                            existing_customer_info=existing_customer_info, 
+                            active_customers_this_month=active_customers_this_month, 
+                            new_customers_this_month=new_customers_this_month, 
+                            existing_customer_follow_ups=existing_customer_follow_ups)
+    
+    except Exception as e:
+        print(f"Error in CRM route: {e}")
+        return render_template('crm.html', 
+                            existing_customers=[],
+                            existing_customer_info=[],
+                            active_customers_this_month=[],
+                            new_customers_this_month=[],
+                            existing_customer_follow_ups=[])
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+def auto_sync_missing_customers():
+    """Automatically sync any customers that exist in sales data but not in CRM"""
+    print("Starting auto-sync of missing customers...")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+    
+    try:
+        # Get existing customers from CRM
+        cursor.execute("""
+            SELECT DISTINCT customer
+            FROM crm_customers
+            WHERE customer IS NOT NULL AND customer != ''
+        """)
+        crm_customers = cursor.fetchall()
+        crm_customer_names = [customer[0] for customer in crm_customers]
+        print(f"Found {len(crm_customer_names)} existing customers in CRM")
+
+        # Get customers from sales data
+        cursor.execute("""
+            SELECT DISTINCT buyer
+            FROM sales_product
+            WHERE buyer IS NOT NULL AND buyer != '' AND buyer != 'WHISTLEBIRD INTERNAL (Personal)'
+            AND notes LIKE '%INV%'
+        """)
+        sales_customers = cursor.fetchall()
+        sales_customer_names = [customer[0] for customer in sales_customers]
+        print(f"Found {len(sales_customer_names)} customers in sales data")
+
+        # Find missing customers
+        missing_customers = []
+        for customer_name in sales_customer_names:
+            if customer_name not in crm_customer_names:
+                missing_customers.append(customer_name)
+
+        print(f"Found {len(missing_customers)} customers to auto-sync")
+
+        # Sync missing customers
+        synced_count = 0
+        for customer_name in missing_customers:
+            try:
+                # Get customer details from buyers table
+                cursor.execute("""
+                    SELECT buyer, buyer_email, buyer_phone, buyer_address, primary_contact
+                    FROM buyers
+                    WHERE buyer = %s
+                """, (customer_name,))
+                buyer_data = cursor.fetchone()
+                
+                if buyer_data:
+                    buyer, buyer_email, buyer_phone, buyer_address, primary_contact = buyer_data
+                    
+                    # Insert missing customer into crm_customers table
+                    insert_data(table_name='crm_customers',
+                                audit_action='Auto-syncing Customer from Sales Data',
+                                customer=buyer,
+                                customer_email=buyer_email,
+                                customer_phone=buyer_phone,
+                                customer_address=buyer_address,
+                                primary_contact=primary_contact)
+                    
+                    print(f"✓ Auto-synced customer: {buyer}")
+                    synced_count += 1
+                else:
+                    print(f"⚠ Warning: No data found for customer {customer_name} in buyers table")
+            except Exception as e:
+                print(f"❌ Error auto-syncing customer {customer_name}: {e}")
+                continue
+        
+        print(f"Successfully auto-synced {synced_count} out of {len(missing_customers)} customers")
+        
+    except Exception as e:
+        print(f"❌ Error in auto_sync_missing_customers: {e}")
+        if connection:
+            connection.rollback()
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 @app.route('/crm-create-customer', methods=['POST'])
 def crm_create_customer():
@@ -763,8 +873,10 @@ def crm_customer_page():
     print("Accessed /crm-customer-page route")
     from initialize import db_conn
     connection, cursor = db_conn()
-    
+
     try:
+        print("Starting customer page load...")
+        
         # Handle both GET (from URL) and POST (from form) data
         if request.method == 'POST':
             if request.is_json:
@@ -787,6 +899,7 @@ def crm_customer_page():
                                 error_message="No customer name provided")
 
         # Fetch customer information from crm_customers table
+        print(f"Fetching customer info for: {customer_name}")
         cursor.execute("""
             SELECT customer, customer_email, customer_phone,
             customer_address, primary_contact, customer_status, customer_last_contact, customer_notes
@@ -795,8 +908,99 @@ def crm_customer_page():
         customer_info = cursor.fetchall()
         
         print(f"Customer info found: {len(customer_info)} records")
+        
+        # If customer doesn't exist in CRM, try to sync them from sales data
+        if not customer_info:
+            print(f"Customer {customer_name} not found in CRM, attempting to sync from sales data...")
+            try:
+                # Check if customer exists in sales data
+                cursor.execute("""
+                    SELECT DISTINCT buyer
+                    FROM sales_product
+                    WHERE buyer = %s AND notes LIKE '%INV%'
+                """, (customer_name,))
+                sales_customer = cursor.fetchone()
+                
+                if sales_customer:
+                    print(f"Customer {customer_name} found in sales data, syncing to CRM...")
+                    
+                    # Get customer details from buyers table
+                    cursor.execute("""
+                        SELECT buyer, buyer_email, buyer_phone, buyer_address, primary_contact
+                        FROM buyers
+                        WHERE buyer = %s
+                    """, (customer_name,))
+                    buyer_data = cursor.fetchone()
+                    
+                    if buyer_data:
+                        buyer, buyer_email, buyer_phone, buyer_address, primary_contact = buyer_data
+                        
+                        # Insert customer into crm_customers table
+                        insert_data(table_name='crm_customers',
+                                    audit_action='Auto-syncing Customer from Sales Data',
+                                    customer=buyer,
+                                    customer_email=buyer_email,
+                                    customer_phone=buyer_phone,
+                                    customer_address=buyer_address,
+                                    primary_contact=primary_contact)
+                        
+                        print(f"✓ Auto-synced customer: {buyer}")
+                        
+                        # Update the customer with their invoice data
+                        try:
+                            # Get invoice data for this customer
+                            cursor.execute("""
+                                SELECT DISTINCT notes
+                                FROM sales_product
+                                WHERE buyer = %s AND notes LIKE '%%INV%%'
+                            """, (customer_name,))
+                            customer_invoices = cursor.fetchall()
+                            
+                            if customer_invoices:
+                                # Clean invoice numbers and convert to JSON
+                                cleaned_invoices = []
+                                for invoice in customer_invoices:
+                                    if invoice[0]:
+                                        cleaned_number = str(invoice[0]).replace('{', '').replace('}', '').strip()
+                                        cleaned_invoices.append(cleaned_number)
+                                
+                                if cleaned_invoices:
+                                    import json
+                                    invoices_json = json.dumps(cleaned_invoices)
+                                    
+                                    # Update the customer record with invoice data
+                                    cursor.execute("""
+                                        UPDATE crm_customers
+                                        SET invoices = %s
+                                        WHERE customer = %s
+                                    """, (invoices_json, customer_name))
+                                    
+                                    print(f"✓ Updated invoices for auto-synced customer: {customer_name}")
+                        except Exception as e:
+                            print(f"⚠ Warning: Could not update invoices for {customer_name}: {e}")
+                        
+                        # Fetch the newly created customer info
+                        cursor.execute("""
+                            SELECT customer, customer_email, customer_phone,
+                            customer_address, primary_contact, customer_status, customer_last_contact, customer_notes
+                            FROM crm_customers WHERE customer = %s
+                        """, (customer_name,))
+                        customer_info = cursor.fetchall()
+                        
+                        print(f"Customer info now available: {len(customer_info)} records")
+                    else:
+                        print(f"⚠ Warning: Customer {customer_name} not found in buyers table")
+                else:
+                    print(f"⚠ Warning: Customer {customer_name} not found in sales data")
+                    
+            except Exception as e:
+                print(f"❌ Error auto-syncing customer {customer_name}: {e}")
+        
+        if customer_info:
+            print(f"Customer info fields: {len(customer_info[0]) if customer_info[0] else 0}")
 
         # Fetch follow-up tasks from crm_follow_ups table
+        print(f"Fetching follow-up tasks for: {customer_name}")
         cursor.execute("""
             SELECT customer, follow_up_date, follow_up_priority, follow_up_status, follow_up_notes, follow_up_type
             FROM crm_follow_ups WHERE customer = %s
@@ -806,10 +1010,12 @@ def crm_customer_page():
         print(f"Follow-up tasks found: {len(follow_up_tasks)} records")
 
         # Fetch customer invoice info
-        customer_invoice_data = crm_customer_invoices(customer_name)
+        print(f"Fetching invoice data for: {customer_name}")
+        customer_invoice_data = get_customer_invoices(customer_name)
         
         print(f"Invoice data found: {len(customer_invoice_data) if customer_invoice_data else 0} records")
 
+        print("Rendering customer detail template...")
         return render_template('customer_detail.html', 
                             customer_info=customer_info, 
                             follow_up_tasks=follow_up_tasks, 
@@ -817,7 +1023,9 @@ def crm_customer_page():
                             customer_name=customer_name)
                             
     except Exception as e:
-        print(f"Error in crm_customer_page: {e}")
+        print(f"❌ Error in crm_customer_page: {e}")
+        import traceback
+        traceback.print_exc()
         return render_template('customer_detail.html', 
                             customer_info=None, 
                             follow_up_tasks=None, 
@@ -829,35 +1037,259 @@ def crm_customer_page():
         if connection:
             connection.close()
 
-@app.route('/crm-customer-invoices', methods=['POST'])
-def crm_customer_invoices(customer_name):
-    print("Accessed /crm-customer-invoices route")
+@app.route('/crm-sync-existing-customers', methods=['POST'])
+def crm_sync_existing_customers():
+    print("Accessed /crm-sync-existing-customers route")
     from initialize import db_conn
     connection, cursor = db_conn()
+    
+    try:
+        print("Starting customer sync process...")
+        
+        # Fetch existing customers from crm_customers table
+        cursor.execute("""
+            SELECT DISTINCT(customer)
+            FROM crm_customers
+            WHERE customer IS NOT NULL AND customer != ''
+            ORDER BY customer
+        """)
+        crm_customers = cursor.fetchall()
+        crm_customer_names = [customer[0] for customer in crm_customers]
+        print(f"Found {len(crm_customer_names)} existing customers in CRM")
 
-    # Extract invoice data: Match buyer and invoices containing "INV"
-    cursor.execute("""
-        SELECT notes, date, product_name, bottles_sold, unit_price, total_nzd, invoice_total, invoice_gst
-        FROM sales_product
-        WHERE buyer LIKE %s
-        AND notes LIKE %s
-    """, (f"%{customer_name}%", "%INV%"))
+        # Fetch existing customers from sales_product table
+        cursor.execute("""
+            SELECT DISTINCT(buyer)
+            FROM sales_product
+            WHERE notes LIKE '%INV%'
+            ORDER BY buyer
+        """)
+        existing_customers_from_sales = cursor.fetchall()
+        print(f"Found {len(existing_customers_from_sales)} customers in sales data")
 
-    customer_invoice_data = cursor.fetchall()
+        # Compare existing customers from crm_customers and sales_product tables
+        missing_customers = []
+        for customer in existing_customers_from_sales:
+            if customer[0] not in crm_customer_names:
+                missing_customers.append(customer[0])
 
-    # Extract invoices into a list
-    cursor.execute("""
-        SELECT DISTINCT(notes)
-        FROM sales_product
-        WHERE buyer LIKE %s
-        AND notes LIKE %s
-    """, (f"%{customer_name}%", "%INV%"))
-    customer_invoices = cursor.fetchall()
+        print(f"Found {len(missing_customers)} customers to sync")
 
-    # Insert customer invoices into crm_customers table
-    insert_data(table_name='crm_customers', audit_action='Syncing Customer Invoices', invoices=customer_invoices)
+        # Fetch and insert missing customer data from buyers table
+        synced_count = 0
+        for customer_name in missing_customers:
+            try:
+                cursor.execute("""
+                    SELECT buyer, buyer_email, buyer_phone, buyer_address, primary_contact
+                    FROM buyers
+                    WHERE buyer = %s
+                """, (customer_name,))
+                customer_data = cursor.fetchone()
+                
+                if customer_data:
+                    buyer, buyer_email, buyer_phone, buyer_address, primary_contact = customer_data
+                    
+                    # Insert missing customer into crm_customers table
+                    insert_data(table_name='crm_customers',
+                                audit_action='Syncing Existing Customers into CRM',
+                                customer=buyer,
+                                customer_email=buyer_email,
+                                customer_phone=buyer_phone,
+                                customer_address=buyer_address,
+                                primary_contact=primary_contact)
+                    
+                    print(f"✓ Synced customer: {buyer}")
+                    synced_count += 1
+                else:
+                    print(f"⚠ Warning: No data found for customer {customer_name} in buyers table")
+            except Exception as e:
+                print(f"❌ Error syncing customer {customer_name}: {e}")
+                continue
+        
+        print(f"Successfully synced {synced_count} out of {len(missing_customers)} customers")
+        
+        # Update existing customers with their invoice data
+        print("Updating existing customers with invoice data...")
+        update_existing_customers_with_invoices()
+        
+    except Exception as e:
+        print(f"❌ Error in crm_sync_existing_customers: {e}")
+        if connection:
+            connection.rollback()
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
-    return customer_invoice_data
+def update_existing_customers_with_invoices():
+    """Update existing customers in CRM with their invoice data"""
+    print("Updating existing customers with invoice data...")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+    
+    try:
+        # Get all customers from CRM
+        cursor.execute("""
+            SELECT DISTINCT customer
+            FROM crm_customers
+            WHERE customer IS NOT NULL AND customer != ''
+        """)
+        crm_customers = cursor.fetchall()
+        
+        updated_count = 0
+        for customer_record in crm_customers:
+            customer_name = customer_record[0]
+            
+            # Get invoice data for this customer
+            cursor.execute("""
+                SELECT DISTINCT notes
+                FROM sales_product
+                WHERE buyer = %s AND notes LIKE '%%INV%%'
+            """, (customer_name,))
+            customer_invoices = cursor.fetchall()
+            
+            if customer_invoices:
+                # Clean invoice numbers and convert to JSON
+                cleaned_invoices = []
+                for invoice in customer_invoices:
+                    if invoice[0]:
+                        cleaned_number = str(invoice[0]).replace('{', '').replace('}', '').strip()
+                        cleaned_invoices.append(cleaned_number)
+                
+                if cleaned_invoices:
+                    import json
+                    invoices_json = json.dumps(cleaned_invoices)
+                    
+                    # Update the customer record with invoice data
+                    cursor.execute("""
+                        UPDATE crm_customers
+                        SET invoices = %s
+                        WHERE customer = %s
+                    """, (invoices_json, customer_name))
+                    
+                    updated_count += 1
+                    print(f"✓ Updated invoices for customer: {customer_name}")
+        
+        connection.commit()
+        print(f"Successfully updated {updated_count} customers with invoice data")
+        
+    except Exception as e:
+        print(f"❌ Error updating customers with invoices: {e}")
+        if connection:
+            connection.rollback()
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+def get_customer_invoices(customer_name):
+    """Internal function to get customer invoice data"""
+    print(f"Getting invoices for customer: {customer_name}")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+    
+    try:
+        # Extract invoice data: Match buyer and invoices containing "INV"
+        cursor.execute("""
+            SELECT buyer, notes, date, product_name, bottles_sold, unit_price, total_nzd, invoice_total, invoice_gst
+            FROM sales_product
+            WHERE buyer LIKE %s
+            AND notes LIKE %s
+        """, (f"%{customer_name}%", "%INV%"))
+
+        customer_invoice_data = cursor.fetchall()
+
+        # Extract invoices into a list and format as JSON
+        cursor.execute("""
+            SELECT DISTINCT(notes)
+            FROM sales_product
+            WHERE buyer LIKE %s
+            AND notes LIKE %s
+        """, (f"%{customer_name}%", "%INV%"))
+        customer_invoices = cursor.fetchall()
+
+        # Clean invoice numbers - remove curly brackets and other special characters
+        cleaned_invoices = []
+        for invoice in customer_invoices:
+            if invoice[0]:
+                # Clean the invoice number by removing curly brackets and extra whitespace
+                cleaned_number = str(invoice[0]).replace('{', '').replace('}', '').strip()
+                cleaned_invoices.append((cleaned_number,))
+        
+        # Create new list and append customer_invoice_data to customer_invoices to return to the customer_detail.html template
+        customer_invoice_info = []
+        customer_invoice_info.append(cleaned_invoices)  # Use cleaned invoices
+        customer_invoice_info.append(customer_invoice_data)
+        
+        # Convert to a simple list of invoice numbers for JSONB storage
+        invoice_list = [invoice[0] for invoice in cleaned_invoices if invoice[0]]
+
+        # Note: Invoice data is fetched for display only
+        # The invoices field in crm_customers should be updated during customer sync, not here
+
+        return customer_invoice_info
+        
+    except Exception as e:
+        print(f"Error in get_customer_invoices: {e}")
+        if connection:
+            connection.rollback()
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@app.route('/crm-customer-invoices', methods=['POST'])
+def crm_customer_invoices():
+    """Route function to get customer invoices via HTTP request"""
+    print("Accessed /crm-customer-invoices route")
+    
+    try:
+        if request.is_json:
+            data = request.get_json()
+            customer_name = data.get("customer_name")
+        else:
+            customer_name = request.form.get("customer_name")
+        
+        if not customer_name:
+            return jsonify({"error": "No customer name provided"}), 400
+            
+        customer_invoice_data = get_customer_invoices(customer_name)
+        return jsonify({"invoices": customer_invoice_data})
+        
+    except Exception as e:
+        print(f"Error in crm_customer_invoices route: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/crm-customer-invoice-data', methods=['POST'])
+def crm_customer_invoice_data():
+    print("Accessed /crm-customer-invoice-data route")
+    from initialize import db_conn
+    connection, cursor = db_conn()
+    
+    
+    try:
+        
+        if request.is_json:
+            data = request.get_json()
+            customer_name = data.get("customer_name")
+        else:
+            customer_name = request.form.get("customer_name")
+        
+        if not customer_name:
+            return jsonify({"error": "No customer name provided"}), 400
+            
+        customer_invoice_data = get_customer_invoices(customer_name)
+        return jsonify({"invoices": customer_invoice_data})
+        
+    except Exception as e:
+        print(f"Error in crm_customer_invoice_data route: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/lal-audit', methods=['POST'])
 def lal_audit():
@@ -2726,6 +3158,184 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
         print("Scheduler is running...")
+
+@app.route('/download-invoice/<invoice_number>')
+def download_invoice(invoice_number):
+    """Route to download invoice PDF files"""
+    print(f"Download request for invoice: {invoice_number}")
+    
+    try:
+        # Sanitize the invoice number to prevent directory traversal attacks
+        import os
+        from werkzeug.utils import secure_filename
+        
+        # Clean the invoice number
+        safe_invoice_number = secure_filename(invoice_number)
+        
+        # Construct the file path
+        invoice_path = os.path.join('invoices', f"{safe_invoice_number}.pdf")
+        
+        # Check if file exists
+        if not os.path.exists(invoice_path):
+            print(f"Invoice file not found: {invoice_path}")
+            return jsonify({"error": "Invoice file not found"}), 404
+        
+        print(f"Serving invoice file: {invoice_path}")
+        
+        # Serve the PDF file
+        from flask import send_file
+        return send_file(
+            invoice_path,
+            as_attachment=True,
+            download_name=f"{safe_invoice_number}.pdf",
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        print(f"Error downloading invoice {invoice_number}: {e}")
+        return jsonify({"error": f"Error downloading invoice: {str(e)}"}), 500
+
+@app.route('/view-invoice/<invoice_number>')
+def view_invoice(invoice_number):
+    """Route to view invoice PDF files in browser"""
+    print(f"View request for invoice: {invoice_number}")
+    
+    try:
+        # Sanitize the invoice number
+        import os
+        from werkzeug.utils import secure_filename
+        
+        safe_invoice_number = secure_filename(invoice_number)
+        invoice_path = os.path.join('invoices', f"{safe_invoice_number}.pdf")
+        
+        # Check if file exists
+        if not os.path.exists(invoice_path):
+            print(f"Invoice file not found: {invoice_path}")
+            return jsonify({"error": "Invoice file not found"}), 404
+        
+        print(f"Viewing invoice file: {invoice_path}")
+        
+        # Serve the PDF file for viewing (not as download)
+        from flask import send_file
+        return send_file(
+            invoice_path,
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        print(f"Error viewing invoice {invoice_number}: {e}")
+        return jsonify({"error": f"Error viewing invoice: {str(e)}"}), 500
+
+@app.route('/check-invoice/<invoice_number>')
+def check_invoice_exists(invoice_number):
+    """Route to check if an invoice PDF file exists"""
+    print(f"Checking if invoice exists: {invoice_number}")
+    
+    try:
+        # Sanitize the invoice number
+        import os
+        from werkzeug.utils import secure_filename
+        
+        safe_invoice_number = secure_filename(invoice_number)
+        invoice_path = os.path.join('invoices', f"{safe_invoice_number}.pdf")
+        
+        # Check if file exists
+        file_exists = os.path.exists(invoice_path)
+        file_size = os.path.getsize(invoice_path) if file_exists else 0
+        
+        print(f"Invoice {invoice_number} exists: {file_exists}, size: {file_size} bytes")
+        
+        return jsonify({
+            "exists": file_exists,
+            "invoice_number": invoice_number,
+            "file_size": file_size,
+            "file_path": invoice_path if file_exists else None
+        })
+        
+    except Exception as e:
+        print(f"Error checking invoice {invoice_number}: {e}")
+        return jsonify({"error": f"Error checking invoice: {str(e)}"}), 500
+
+@app.route('/crm-update-customer-field', methods=['POST'])
+def crm_update_customer_field():
+    """Update a specific field for a customer in the CRM"""
+    print("Accessed /crm-update-customer-field route")
+    
+    try:
+        data = request.get_json()
+        customer_name = data.get("customer_name")
+        field = data.get("field")
+        value = data.get("value")
+        
+        if not customer_name or not field:
+            return jsonify({
+                "success": False,
+                "message": "Customer name and field are required"
+            }), 400
+        
+        # Validate field names to prevent SQL injection
+        allowed_fields = {
+            'customer_email': 'customer_email',
+            'customer_phone': 'customer_phone', 
+            'customer_address': 'customer_address',
+            'primary_contact': 'primary_contact',
+            'customer_notes': 'customer_notes'
+        }
+        
+        if field not in allowed_fields:
+            return jsonify({
+                "success": False,
+                "message": f"Invalid field: {field}"
+            }), 400
+        
+        db_field = allowed_fields[field]
+        
+        from initialize import db_conn
+        connection, cursor = db_conn()
+        
+        try:
+            # Update the specific field
+            cursor.execute(f"""
+                UPDATE crm_customers 
+                SET {db_field} = %s
+                WHERE customer = %s
+            """, (value, customer_name))
+            
+            if cursor.rowcount == 0:
+                return jsonify({
+                    "success": False,
+                    "message": f"Customer '{customer_name}' not found"
+                }), 404
+            
+            # Field updated successfully - no need for additional audit logging
+            connection.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": f"Successfully updated {field} for {customer_name}",
+                "field": field,
+                "value": value
+            })
+            
+        except Exception as e:
+            connection.rollback()
+            print(f"Database error updating {field}: {e}")
+            return jsonify({
+                "success": False,
+                "message": f"Database error: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+                
+    except Exception as e:
+        print(f"Error in crm_update_customer_field: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Server error: {str(e)}"
+        }), 500
 
 if __name__ == '__main__':
     # Start the scheduler in a separate thread

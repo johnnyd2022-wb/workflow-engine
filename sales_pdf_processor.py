@@ -242,7 +242,15 @@ def extract_sales_pdf_data(directory):
         for file, invoices in extracted_data.items():
             for invoice_details in invoices:
                 try:
+                    # Debug logging for specific invoice
+                    if invoice_details["Invoice Number"] == "INV-0012":
+                        print(f"DEBUG: INV-0012 reached database processing loop")
+                        print(f"DEBUG: INV-0012 file: {file}, products: {len(invoice_details['products'])}")
+                    
                     # Process each product in the invoice
+                    # Get the number of line items in this invoice
+                    num_line_items = len(invoice_details["products"])
+                    
                     for product in invoice_details["products"]:
                         number_of_bottles = product["quantity"]
                         buyer = invoice_details['Company Name']
