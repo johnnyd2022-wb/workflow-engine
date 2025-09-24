@@ -87,7 +87,7 @@ deploy_test() {
 deploy_prod() {
     print_status "Deploying to PRODUCTION environment..."
     check_directory
-    validate_environment "production"
+    validate_environment "prod"
     
     # Make sure we're on the main branch
     git checkout main
