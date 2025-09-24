@@ -3,6 +3,7 @@ import os
 import re
 import fitz  # PyMuPDF
 import sys
+import json
 from datetime import datetime, date
 from initialize import db_conn
 from database_insert import insert_data, update_data
@@ -14,33 +15,102 @@ def extract_products_from_invoice(section):
     """
     products = []
     
+    # Debug: Check if this is INV-0012 or INV-0011
+    is_inv_0012 = "INV-0012" in section
+    is_inv_0011 = "INV-0011" in section
+    
     # Find the products section - starts after "Amount NZD" header and before "Subtotal"
-    products_pattern = r"Amount\s+NZD\s*\n(.*?)(?=Subtotal|TOTAL)"
+    # Updated pattern to handle both formats: "Amount NZD" on its own line OR as part of column headers
+    products_pattern = r"(?:Amount\s+NZD\s*\n|Amount\s+NZD\s+)(.*?)(?=Subtotal|TOTAL)"
     products_match = re.search(products_pattern, section, re.DOTALL)
     
+    # For INV-0011, just track what happened without verbose logging
+    if is_inv_0011:
+        global inv_0011_debug_info
+        inv_0011_debug_info = {
+            "regex_match": products_match is not None,
+            "section_contains_amount_nzd": "Amount NZD" in section,
+            "section_contains_subtotal": "Subtotal" in section,
+            "section_contains_total": "TOTAL" in section
+        }
+        
+        # Add captured text and lines info
+        if products_match:
+            captured_text = products_match.group(1).strip()
+            lines = [line.strip() for line in captured_text.split('\n') if line.strip()]
+            inv_0011_debug_info.update({
+                "captured_text": captured_text,
+                "lines_found": len(lines),
+                "lines": lines
+            })
+    
     if not products_match:
-        print("No products section found in invoice")
+        if is_inv_0012:
+            print(f"DEBUG: INV-0012 - No products section found. Section preview: {section[:200]}...")
+            print(f"DEBUG: INV-0012 - Looking for pattern: 'Amount\\s+NZD\\s*\\n(.*?)(?=Subtotal|TOTAL)'")
+            print(f"DEBUG: INV-0012 - Section contains 'Amount NZD': {'Amount NZD' in section}")
+            print(f"DEBUG: INV-0012 - Section contains 'Subtotal': {'Subtotal' in section}")
+            print(f"DEBUG: INV-0012 - Section contains 'TOTAL': {'TOTAL' in section}")
+        elif is_inv_0011:
+            print(f"DEBUG: INV-0011 - No products section found. Section preview: {section[:300]}...")
+            print(f"DEBUG: INV-0011 - Looking for pattern: 'Amount\\s+NZD\\s*\\n(.*?)(?=Subtotal|TOTAL)'")
+            print(f"DEBUG: INV-0011 - Section contains 'Amount NZD': {'Amount NZD' in section}")
+            print(f"DEBUG: INV-0011 - Section contains 'Subtotal': {'Subtotal' in section}")
+            print(f"DEBUG: INV-0011 - Section contains 'TOTAL': {'TOTAL' in section}")
+            print(f"DEBUG: INV-0011 - Full section text: {section}")
+        else:
+            print("No products section found in invoice")
+            # Add general debugging for all invoices
+            print(f"DEBUG: Section preview: {section[:300]}...")
+            print(f"DEBUG: Section contains 'Amount NZD': {'Amount NZD' in section}")
+            print(f"DEBUG: Section contains 'Subtotal': {'Subtotal' in section}")
+            print(f"DEBUG: Section contains 'TOTAL': {'TOTAL' in section}")
         return products
     
     products_text = products_match.group(1).strip()
     
+    if is_inv_0012:
+        print(f"DEBUG: INV-0012 - Products section found! Text: {products_text[:200]}...")
+    elif is_inv_0011:
+        print(f"DEBUG: INV-0011 - Products section found! Text: {products_text[:300]}...")
+    
     # Split into lines and process
     lines = [line.strip() for line in products_text.split('\n') if line.strip()]
     
-    # Process lines in groups of 4: name, quantity, unit_price, amount
+    if is_inv_0012:
+        print(f"DEBUG: INV-0012 - Total lines found: {len(lines)}")
+        print(f"DEBUG: INV-0012 - Lines: {lines}")
+    elif is_inv_0011:
+        print(f"DEBUG: INV-0011 - Total lines found: {len(lines)}")
+        print(f"DEBUG: INV-0011 - Lines: {lines}")
+    
+    # Process lines more intelligently - look for product patterns
     i = 0
+    
+    # Debug: Track product parsing for INV-0011
+    if is_inv_0011:
+        print(f"DEBUG: INV-0011 - Starting product parsing with {len(lines)} lines")
+        print(f"DEBUG: INV-0011 - Lines to process: {lines}")
+    
     while i < len(lines):
         try:
             # Product name (may span multiple lines, but we'll take the first meaningful one)
             product_name = lines[i]
             
-            # Skip if this looks like a number (not a product name)
-            if re.match(r'^\d+\.?\d*$', product_name):
-                i += 1
-                continue
-                
+            # Debug: Track each step for INV-0011
+            if is_inv_0011:
+                print(f"DEBUG: INV-0011 - Processing line {i}: '{product_name}'")
+            
             # Extract the base product name (remove " - x1" suffix if present)
             clean_name = re.sub(r'\s+-\s+x\d+$', '', product_name)
+            
+            # Skip shipping line items (they are free)
+            if 'shipping' in clean_name.lower():
+                if is_inv_0011:
+                    print(f"DEBUG: INV-0011 - Skipping shipping line item: {clean_name}")
+                # Skip to the next line and continue
+                i += 1
+                continue
             
             # Extract only the core product name (wildflower or solstice) in lowercase
             if 'wildflower' in clean_name.lower():
@@ -53,27 +123,35 @@ def extract_products_from_invoice(section):
                 # Keep original if neither wildflower nor solstice found
                 clean_name = clean_name.lower().strip()
             
-            # Quantity (next line)
-            if i + 1 < len(lines):
-                quantity_str = lines[i + 1]
-                quantity = float(quantity_str)
-            else:
-                break
+            # Look ahead to see if we have a complete product (name, qty, price, amount)
+            if i + 3 >= len(lines):
+                break  # Not enough lines left
                 
-            # Unit price (next line)
-            if i + 2 < len(lines):
-                unit_price_str = lines[i + 2]
-                unit_price = float(unit_price_str)
-            else:
-                break
-                
-            # Amount (next line)
-            if i + 3 < len(lines):
-                amount_str = lines[i + 3]
-                amount = float(amount_str)
-            else:
-                break
+            # Check if the next 3 lines are numeric (quantity, price, amount)
+            if is_inv_0011:
+                print(f"DEBUG: INV-0011 - Checking lines {i+1}, {i+2}, {i+3} for product data")
+                print(f"DEBUG: INV-0011 - Line {i+1}: '{lines[i+1]}'")
+                print(f"DEBUG: INV-0011 - Line {i+2}: '{lines[i+2]}'")
+                print(f"DEBUG: INV-0011 - Line {i+3}: '{lines[i+3]}'")
             
+            try:
+                # Clean numeric strings by removing commas before converting to float
+                quantity = float(lines[i + 1].replace(',', ''))
+                unit_price = float(lines[i + 2].replace(',', ''))
+                amount = float(lines[i + 3].replace(',', ''))
+                
+                if is_inv_0011:
+                    print(f"DEBUG: INV-0011 - Successfully parsed: qty={quantity}, price={unit_price}, amount={amount}")
+                    
+            except (ValueError, IndexError) as e:
+                # Not a complete product, move to next line
+                if is_inv_0011:
+                    print(f"DEBUG: INV-0011 - Line {i} doesn't have complete product data: {e}")
+                    print(f"DEBUG: INV-0011 - Moving to next line")
+                i += 1
+                continue
+            
+            # We have a complete product!
             product = {
                 "name": clean_name,
                 "quantity": int(quantity),
@@ -82,9 +160,9 @@ def extract_products_from_invoice(section):
             }
             
             products.append(product)
-            print(f"Extracted product: {clean_name} - Qty: {quantity}, Price: ${unit_price:.2f}, Amount: ${amount:.2f}")
-            
-            # Move to next product (skip 4 lines: name, qty, price, amount)
+            if is_inv_0011:
+                print(f"DEBUG: INV-0011 - Successfully extracted product: {clean_name} - Qty: {quantity}, Price: ${unit_price:.2f}, Amount: ${amount:.2f}")            
+            # Move to next potential product
             i += 4
             
         except (ValueError, IndexError) as e:
@@ -93,16 +171,132 @@ def extract_products_from_invoice(section):
     
     return products
 
+def create_products_json(products, invoice_details):
+    """
+    Create the JSONB structure for products with all line item information.
+    Structure: {"products": {"product_name": {"quantity": X, "unit_price": Y, ...}}}
+    """
+    products_data = {}
+    
+    for product in products:
+        product_name = product["name"]
+        
+        # Calculate product-specific values
+        number_of_bottles = product["quantity"]
+        unit_price = product["unit_price"]
+        amount_nzd = product["amount"]
+        
+        # Calculate ABV based on product name
+        abv = 44.0 if 'wildflower' in product_name.lower() else 40.0 if 'solstice' in product_name.lower() else 40.0 if 'rosella' in product_name.lower() else 40.0
+        
+        # Calculate LAL and duty
+        bottle_size_ml = 700.0
+        duty_price = 67.22
+        total_alcohol_ml = number_of_bottles * bottle_size_ml * abv
+        lal = total_alcohol_ml / 100000
+        duty_amount = lal * duty_price
+        rounded_duty_amount = Decimal(duty_amount).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP)
+        
+        # Get bottle batch
+        bottle_batch = get_bottle_batch(invoice_details['Invoice Date'])
+        
+        # Calculate GST proportion for this line item
+        num_line_items = len(products)
+        if num_line_items == 1:
+            line_item_total = invoice_details['Total NZD']
+            line_item_gst = invoice_details['GST']
+        else:
+            line_item_total = amount_nzd
+            line_item_gst = (amount_nzd / invoice_details['Total NZD']) * invoice_details['GST']
+        
+        # Store product data under the product name key
+        products_data[product_name] = {
+            "quantity": number_of_bottles,
+            "unit_price": unit_price,
+            "amount_nzd": amount_nzd,
+            "total_nzd": line_item_total,
+            "gst": line_item_gst,
+            "abv": abv,
+            "bottle_size_ml": bottle_size_ml,
+            "lal": lal,
+            "duty_amount": float(rounded_duty_amount),
+            "bottle_batch": bottle_batch
+        }
+    
+    return {"products": products_data}
+
+def get_bottle_batch(invoice_date):
+    """
+    Get the appropriate bottle batch for the given invoice date.
+    """
+    connection, cursor = db_conn()
+    
+    try:
+        query = """
+        SELECT bottle_batch, MIN(date) as earliest_date
+        FROM product_actions_bottling
+        GROUP BY bottle_batch
+        ORDER BY earliest_date;
+        """
+        cursor.execute(query)
+        batch_dates = cursor.fetchall()
+        
+        new_invoice_date = datetime.strptime(invoice_date, '%Y-%m-%d').date()
+        selected_batch = None
+        
+        # Iterate through the batches
+        for i, record in enumerate(batch_dates):
+            bottle_batch, earliest_date = record
+            
+            # Ensure that earliest_date is already a datetime.date object
+            if isinstance(earliest_date, datetime):
+                earliest_date = earliest_date.date()
+            
+            if new_invoice_date >= earliest_date:
+                if i + 1 < len(batch_dates):
+                    next_batch, next_earliest_date = batch_dates[i + 1]
+                    
+                    # Ensure that next_earliest_date is also a datetime.date object
+                    if isinstance(next_earliest_date, datetime):
+                        next_earliest_date = next_earliest_date.date()
+                    
+                    if new_invoice_date < next_earliest_date:
+                        selected_batch = bottle_batch
+                        break
+                else:
+                    # If it's the last batch, select it
+                    selected_batch = bottle_batch
+                    break
+        
+        if selected_batch is None:
+            print("No valid bottle_batch found for the given invoice_date.")
+            return None
+            
+        return f"{{{selected_batch}}}"
+        
+    finally:
+        cursor.close()
+        connection.close()
+
 def extract_sales_pdf_data(directory):
     """
     Processes all PDF files in a directory, extracts specific fields,
     formats the results, and ensures no duplicate invoices are processed
     based on the combination of Company Name, Invoice Date, and Invoice Number.
     Handles files with multiple invoices by splitting text on "PAYMENT ADVICE".
-    Now supports multiple products per invoice.
+    Now supports multiple products per invoice using JSONB structure.
     """
     extracted_data = {}
     processed_combinations = set()  # Set to track processed combinations of (Company Name, Invoice Date, Invoice Number)
+    
+    # Store raw text for INV-0011 debugging
+    inv_0011_raw_text = None
+    
+    # Global variable to store INV-0011 debug info
+    global inv_0011_debug_info
+    inv_0011_debug_info = None
+    
+
 
     # Adjusted regex patterns based on provided raw text
     basic_patterns = {
@@ -120,6 +314,8 @@ def extract_sales_pdf_data(directory):
     for filename in os.listdir(directory):
         if filename.endswith(".pdf"):
             file_path = os.path.join(directory, filename)
+            
+
 
             try:
                 # Read the PDF content using fitz (PyMuPDF)
@@ -128,16 +324,21 @@ def extract_sales_pdf_data(directory):
                 for page in doc:
                     text += page.get_text()
 
-                print(f"Processing {filename}")
+
 
                 # Split the text into sections using "PAYMENT ADVICE"
                 invoice_sections = text.split("PAYMENT ADVICE")[1:]  # Ignore the first empty split
 
                 # Print the raw text for debugging
-                print(f"printing raw invoices")
-                print(f"--- Raw Text from {filename} ---")
-                print(text)
-                print("--- End of Text ---\n")
+                #print(f"printing raw invoices")
+                #print(f"--- Raw Text from {filename} ---")
+                #print(text)
+                #print("--- End of Text ---\n")
+                
+                # Store raw text for INV-0011 debugging
+                if "INV-0011" in text:
+                    inv_0011_raw_text = text
+                    print(f"DEBUG: Captured raw text for INV-0011 from {filename}")
 
                 for section in invoice_sections:
                     # Extract basic invoice fields
@@ -177,6 +378,12 @@ def extract_sales_pdf_data(directory):
                     if combination in processed_combinations:
                         print(f"Skipping duplicate invoice: {file_data['Invoice Number']} from {file_data['Company Name']}")
                         continue
+                    
+                    # Debug logging for specific invoice
+                    if file_data["Invoice Number"] == "INV-0012":
+                        print(f"DEBUG: INV-0012 found - Company: {file_data['Company Name']}, Date: {file_data['Invoice Date']}, Products: {len(products)}")
+                        print(f"DEBUG: INV-0012 combination: {combination}")
+                        print(f"DEBUG: INV-0012 processed_combinations contains: {combination in processed_combinations}")
 
                     # Print product summary
                     print(f"Invoice {file_data['Invoice Number']} contains {len(products)} products:")
@@ -247,227 +454,67 @@ def extract_sales_pdf_data(directory):
                         print(f"DEBUG: INV-0012 reached database processing loop")
                         print(f"DEBUG: INV-0012 file: {file}, products: {len(invoice_details['products'])}")
                     
-                    # Process each product in the invoice
-                    # Get the number of line items in this invoice
-                    num_line_items = len(invoice_details["products"])
+                    # Create the JSONB structure for all products in this invoice
+                    products_json = create_products_json(invoice_details["products"], invoice_details)
                     
-                    for product in invoice_details["products"]:
-                        number_of_bottles = product["quantity"]
-                        buyer = invoice_details['Company Name']
-                        product_name = product["name"]
-                        notes = f"{{{invoice_details['Invoice Number']}}}"
-                        invoice_date = invoice_details['Invoice Date']
-                        unit_price = product["unit_price"]
-                        amount_nzd = product["amount"]
+                    # Check for existing entries in the database using notes
+                    notes = f"{{{invoice_details['Invoice Number']}}}"
+                    wildcard_notes = f"%{notes}%"
+                    
+                    # Check if there's an entry with this specific invoice
+                    check_invoice_query = "SELECT COUNT(*) FROM sales_product WHERE notes LIKE %s;"
+                    cursor.execute(check_invoice_query, (wildcard_notes,))
+                    invoice_exists = cursor.fetchone()[0]
+
+                    if invoice_exists > 0:
+                        print(f"Entry exists for {notes}. Checking for missing column values...")
                         
-                        # Handle total_nzd and gst based on actual line item values
-                        if num_line_items == 1:
-                            # Single line item: use values as-is for both line item and invoice totals
-                            line_item_total = invoice_details['Total NZD']
-                            invoice_total = invoice_details['Total NZD']
-                            line_item_gst = invoice_details['GST']
-                            invoice_gst = invoice_details['GST']
-                        else:
-                            # Multiple line items: calculate line item totals based on actual quantities and prices
-                            line_item_total = product["amount"]  # This is already quantity × unit_price
-                            
-                            # Invoice total remains the full invoice amount
-                            invoice_total = invoice_details['Total NZD']
-                            
-                            # For GST, calculate proportion based on this line item's value relative to invoice total
-                            line_item_gst = (product["amount"] / invoice_details['Total NZD']) * invoice_details['GST']
-                            
-                            # Invoice GST remains the full invoice GST
-                            invoice_gst = invoice_details['GST']
-                        
-                        current_date = date.today()
-                        bottle_size_ml = 700.0
-                        abv = 44.0 if 'wildflower' in product_name.lower() else 40.0 if 'solstice' in product_name.lower() else 40.0 if 'rosella' in product_name.lower() else 40.0
-
-                        # Check for existing entries in the database using notes
-                        wildcard_notes = f"%{notes}%"
-                        
-                        # Check if there's an entry with this specific product in this invoice
-                        check_product_query = "SELECT COUNT(*) FROM sales_product WHERE notes LIKE %s AND product_name = %s;"
-                        cursor.execute(check_product_query, (wildcard_notes, product_name))
-                        product_exists = cursor.fetchone()[0]
-
-                        if product_exists > 0:
-                            print(f"Entry exists for {notes} - {product_name}. Checking for missing column values...")
-                            
-                            # Check each column individually and update if missing
-                            check_columns_query = """
-                            SELECT buyer, product_name, bottles_sold, abv, bottle_size_ml, lal, duty_amount, bottle_batch, unit_price, amount_nzd, total_nzd, gst, invoice_total, invoice_gst
-                            FROM sales_product WHERE notes LIKE %s AND product_name = %s;
-                            """
-                            cursor.execute(check_columns_query, (wildcard_notes, product_name))
-                            existing_data = cursor.fetchone()
-                            
-                            if existing_data:
-                                existing_buyer, existing_product_name, existing_bottles_sold, existing_abv, existing_bottle_size_ml, existing_lal, existing_duty_amount, existing_bottle_batch, existing_unit_price, existing_amount_nzd, existing_total_nzd, existing_gst, existing_invoice_total, existing_invoice_gst = existing_data
-                                
-                                # Check and update each missing field
-                                updates = {}
-                                
-                                if existing_buyer is None:
-                                    updates['buyer'] = buyer
-                                if existing_bottles_sold is None:
-                                    updates['bottles_sold'] = number_of_bottles
-                                if existing_abv is None:
-                                    updates['abv'] = abv
-                                if existing_bottle_size_ml is None:
-                                    updates['bottle_size_ml'] = bottle_size_ml
-                                if existing_unit_price is None:
-                                    updates['unit_price'] = unit_price
-                                if existing_amount_nzd is None:
-                                    updates['amount_nzd'] = amount_nzd
-                                if existing_total_nzd is None:
-                                    updates['total_nzd'] = line_item_total
-                                if existing_gst is None:
-                                    updates['gst'] = line_item_gst
-                                if existing_invoice_total is None:
-                                    updates['invoice_total'] = invoice_total
-                                if existing_invoice_gst is None:
-                                    updates['invoice_gst'] = invoice_gst
-                                
-                                # We'll calculate and check these computed fields separately
-                                if existing_lal is None or existing_duty_amount is None or existing_bottle_batch is None:
-                                    # Calculate these values first
-                                    duty_price = 67.22
-                                    total_alcohol_ml = number_of_bottles * bottle_size_ml * abv
-                                    calculated_lal = total_alcohol_ml / 100000
-                                    calculated_duty_amount = calculated_lal * duty_price
-                                    rounded_duty_amount = Decimal(calculated_duty_amount).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP)
-                                    
-                                    # Get bottle_batch
-                                    batch_query = """
-                                    SELECT bottle_batch, MIN(date) as earliest_date
-                                    FROM product_actions_bottling
-                                    GROUP BY bottle_batch
-                                    ORDER BY earliest_date;
-                                    """
-                                    cursor.execute(batch_query)
-                                    batch_dates = cursor.fetchall()
-                                    new_invoice_date = datetime.strptime(invoice_date, '%Y-%m-%d').date()
-                                    selected_batch = None
-                                    
-                                    for i, record in enumerate(batch_dates):
-                                        bottle_batch_val, earliest_date = record
-                                        if isinstance(earliest_date, datetime):
-                                            earliest_date = earliest_date.date()
-                                        if new_invoice_date >= earliest_date:
-                                            if i + 1 < len(batch_dates):
-                                                next_batch, next_earliest_date = batch_dates[i + 1]
-                                                if isinstance(next_earliest_date, datetime):
-                                                    next_earliest_date = next_earliest_date.date()
-                                                if new_invoice_date < next_earliest_date:
-                                                    selected_batch = bottle_batch_val
-                                                    break
-                                            else:
-                                                selected_batch = bottle_batch_val
-                                                break
-                                    
-                                    if selected_batch is None:
-                                        print("No valid bottle_batch found for the given invoice_date.")
-                                    formatted_batch = f"{{{selected_batch}}}"
-                                    
-                                    if existing_lal is None:
-                                        updates['lal'] = calculated_lal
-                                    if existing_duty_amount is None:
-                                        updates['duty_amount'] = rounded_duty_amount
-                                    if existing_bottle_batch is None:
-                                        updates['bottle_batch'] = formatted_batch
-                                
-                                if updates:
-                                    print(f"Updating missing fields for {notes} - {product_name}: {list(updates.keys())}")
-                                    update_data(table_name='sales_product', condition={'notes': notes, 'product_name': product_name}, **updates)
-                                else:
-                                    print(f"All fields already populated for {notes} - {product_name}")
-                            
-                            continue
-
-                        # Check if there are any entries with this notes but no product_name (old entries)
-                        check_old_query = "SELECT COUNT(*) FROM sales_product WHERE notes LIKE %s AND (product_name IS NULL OR product_name = '');"
-                        cursor.execute(check_old_query, (wildcard_notes,))
-                        old_entry_count = cursor.fetchone()[0]
-
-                        if old_entry_count > 0:
-                            print(f"Found old entry with notes {notes} but missing product_name. Updating with product_name: {product_name}")
-                            update_data(table_name='sales_product', condition={'notes': notes}, product_name=product_name)
-                            continue
-
-                        print(f"Inserting product {product_name} from invoice {invoice_details['Invoice Number']} for {invoice_details['Company Name']}. {number_of_bottles} bottles sold on {invoice_details['Invoice Date']}")
-
-                        # Calculate Duty and insert logic
-                        duty_price = 67.22
-                        total_alcohol_ml = number_of_bottles * bottle_size_ml * abv
-                        lal = total_alcohol_ml / 100000
-                        duty_amount = lal * duty_price
-                        rounded_duty_amount = Decimal(duty_amount).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP)
-
-                        # Fetch the correct bottle_batch
-                        query = """
-                        SELECT bottle_batch, MIN(date) as earliest_date
-                        FROM product_actions_bottling
-                        GROUP BY bottle_batch
-                        ORDER BY earliest_date;
+                        # Check each column individually and update if missing
+                        check_columns_query = """
+                        SELECT buyer, products, invoice_total, invoice_gst
+                        FROM sales_product WHERE notes LIKE %s;
                         """
-                        cursor.execute(query)
+                        cursor.execute(check_columns_query, (wildcard_notes,))
+                        existing_data = cursor.fetchone()
+                        
+                        if existing_data:
+                            existing_buyer, existing_products, existing_invoice_total, existing_invoice_gst = existing_data
+                            
+                            # Check and update each missing field
+                            updates = {}
+                            
+                            if existing_buyer is None:
+                                updates['buyer'] = invoice_details['Company Name']
+                            if existing_products is None:
+                                updates['products'] = json.dumps(products_json)
+                            if existing_invoice_total is None:
+                                updates['invoice_total'] = invoice_details['Total NZD']
+                            if existing_invoice_gst is None:
+                                updates['invoice_gst'] = invoice_details['GST']
+                            
+                            if updates:
+                                print(f"Updating missing fields for {notes}: {list(updates.keys())}")
+                                update_data(table_name='sales_product', condition={'notes': notes}, **updates)
+                            else:
+                                print(f"All fields already populated for {notes}")
+                        
+                        continue
 
-                        # Fetch all the results from the query
-                        batch_dates = cursor.fetchall()
+                    print(f"Inserting invoice {invoice_details['Invoice Number']} for {invoice_details['Company Name']} with {len(invoice_details['products'])} products on {invoice_details['Invoice Date']}")
 
-                        new_invoice_date = datetime.strptime(invoice_date, '%Y-%m-%d').date()
-                        selected_batch = None
-
-                        # Iterate through the batches
-                        for i, record in enumerate(batch_dates):
-                            bottle_batch, earliest_date = record
-
-                            # Ensure that earliest_date is already a datetime.date object
-                            if isinstance(earliest_date, datetime):
-                                earliest_date = earliest_date.date()  # Convert to date if it's a datetime object
-
-                            if new_invoice_date >= earliest_date:
-                                if i + 1 < len(batch_dates):
-                                    next_batch, next_earliest_date = batch_dates[i + 1]
-                                    
-                                    # Ensure that next_earliest_date is also a datetime.date object
-                                    if isinstance(next_earliest_date, datetime):
-                                        next_earliest_date = next_earliest_date.date()  # Convert to date if necessary
-                                    
-                                    if new_invoice_date < next_earliest_date:
-                                        selected_batch = bottle_batch
-                                        break
-                                else:
-                                    # If it's the last batch, select it
-                                    selected_batch = bottle_batch
-                                    break
-
-                        if selected_batch is None:
-                            print("No valid bottle_batch found for the given invoice_date.")
-                        selected_batch = f"{{{selected_batch}}}"
-
-                        insert_data(
-                            table_name='sales_product',
-                            audit_action='Bottle sales',
-                            buyer=buyer,
-                            product_name=product_name,
-                            bottles_sold=number_of_bottles,
-                            abv=abv,
-                            bottle_size_ml=bottle_size_ml,
-                            lal=lal,
-                            duty_amount=rounded_duty_amount,
-                            bottle_batch=selected_batch,
-                            notes=notes,
-                            unit_price=unit_price,
-                            amount_nzd=amount_nzd,
-                            total_nzd=line_item_total,
-                            invoice_total=invoice_total,
-                            gst=line_item_gst,
-                            invoice_gst=invoice_gst
-                        )
-                        update_data(table_name='sales_product', condition={'date': current_date}, date=invoice_date)
+                    # Insert the invoice with the JSONB products structure
+                    insert_data(
+                        table_name='sales_product',
+                        audit_action='Bottle sales',
+                        buyer=invoice_details['Company Name'],
+                        products=json.dumps(products_json),
+                        notes=notes,
+                        invoice_total=invoice_details['Total NZD'],
+                        invoice_gst=invoice_details['GST']
+                    )
+                    
+                    # Update the date to the invoice date
+                    update_data(table_name='sales_product', condition={'notes': notes}, date=invoice_details['Invoice Date'])
 
                 except Exception as e:
                     print(f"Error inserting data for {file}: {e}")
@@ -475,6 +522,86 @@ def extract_sales_pdf_data(directory):
         cursor.close()
         connection.close()
 
+
+    
+    # Debug output for INV-0011
+    print("\n" + "="*50)
+    print("DEBUG: INV-0011 ANALYSIS")
+    print("="*50)
+    
+    # Find INV-0011 in the extracted data
+    inv_0011_found = False
+    for filename, invoices in extracted_data.items():
+        for invoice in invoices:
+            if invoice.get("Invoice Number") == "INV-0011":
+                inv_0011_found = True
+                print(f"INV-0011 found in file: {filename}")
+                print(f"Company: {invoice.get('Company Name')}")
+                print(f"Date: {invoice.get('Invoice Date')}")
+                print(f"Total NZD: {invoice.get('Total NZD')}")
+                print(f"GST: {invoice.get('GST')}")
+                print(f"Products extracted: {len(invoice.get('products', []))}")
+                
+                if invoice.get('products'):
+                    print("Product details:")
+                    for i, product in enumerate(invoice['products']):
+                        print(f"  Product {i+1}: {product}")
+                else:
+                    print("  No products found!")
+                    print("  This suggests the extract_products_from_invoice() function failed")
+                    print("  Check the regex pattern and text structure for this invoice")
+                
+                print(f"Total quantity: {invoice.get('total_quantity')}")
+                
+                # Additional debugging: Show the raw text section that was processed
+                print("\n  Raw text analysis:")
+                for filename, invoices in extracted_data.items():
+                    for invoice_check in invoices:
+                        if invoice_check.get("Invoice Number") == "INV-0011":
+                            # Find the original section text that was processed
+                            print(f"  Invoice section preview: {str(invoice_check)[:300]}...")
+                            break
+                
+                # Print the actual raw text content that was processed for INV-0011
+                print("\n  ACTUAL RAW TEXT CONTENT FOR INV-0011:")
+                print("  " + "="*60)
+                if inv_0011_raw_text:
+                    print("  Raw text from PDF:")
+                    print("  " + inv_0011_raw_text)
+                    print("  " + "="*60)
+                else:
+                    print("  No raw text captured for INV-0011")
+                
+                # Add the debug info from the product extraction function
+                print("\n  PRODUCT EXTRACTION DEBUG INFO:")
+                print("  " + "="*60)
+                if inv_0011_debug_info:
+                    print(f"  Regex match found: {inv_0011_debug_info['regex_match']}")
+                    print(f"  Section contains 'Amount NZD': {inv_0011_debug_info['section_contains_amount_nzd']}")
+                    print(f"  Section contains 'Subtotal': {inv_0011_debug_info['section_contains_subtotal']}")
+                    print(f"  Section contains 'TOTAL': {inv_0011_debug_info['section_contains_total']}")
+                    
+                    # Add more detailed debug info
+                    if inv_0011_debug_info.get('captured_text'):
+                        print(f"  Captured text preview: {inv_0011_debug_info['captured_text'][:200]}...")
+                    if inv_0011_debug_info.get('lines_found'):
+                        print(f"  Lines found: {inv_0011_debug_info['lines_found']}")
+                    if inv_0011_debug_info.get('lines'):
+                        print(f"  Individual lines: {inv_0011_debug_info['lines']}")
+                else:
+                    print("  No debug info available - function may not have been called")
+                print("  " + "="*60)
+                break
+        if inv_0011_found:
+            break
+    
+    if not inv_0011_found:
+        print("INV-0011 NOT FOUND in extracted data!")
+    
+    print("="*50)
+    print("END INV-0011 DEBUG")
+    print("="*50 + "\n")
+    
     # Return extracted data
     return extracted_data
 

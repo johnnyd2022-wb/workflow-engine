@@ -82,29 +82,73 @@
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 1rem;
+            padding: 0.5rem 1rem;
             width: 100%;
         }
 
         .nav-bar {
             background-color: transparent;
-            padding: 2rem 0;
+            padding: 2rem 0 1rem 0;
             width: 100%;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
         }
 
         .nav-bar h1 {
-            color: var(--text-color);
+            background: linear-gradient(135deg, 
+                #ffffff 0%, 
+                #f8f9fa 25%, 
+                #e9ecef 50%, 
+                #f8f9fa 75%, 
+                #ffffff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin: 0;
-            font-size: 2.5rem;
-            background: none;
-            -webkit-text-fill-color: var(--text-color);
+            font-size: 2.8rem;
+            font-weight: 800;
             text-align: center;
+            letter-spacing: -0.03em;
+            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            position: relative;
+            display: block;
+            width: 100%;
+        }
+
+        .nav-bar h1::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: calc(100% + 80px);
+            height: calc(100% + 40px);
+            background: linear-gradient(135deg, 
+                rgba(255, 255, 255, 0.1) 0%, 
+                rgba(255, 255, 255, 0.05) 50%, 
+                rgba(255, 255, 255, 0.1) 100%);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            z-index: -1;
+        }
+
+        .nav-bar h1::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: calc(100% + 120px);
+            height: calc(100% + 60px);
+            background: radial-gradient(ellipse, 
+                rgba(255, 193, 7, 0.1) 0%, 
+                transparent 70%);
+            z-index: -2;
+            animation: titleGlow 4s ease-in-out infinite alternate;
         }
 
         .main-content {
             width: 100%;
-            padding-top: 1rem;
+            padding-top: 0.5rem;
         }
 
         .option-cards {
@@ -518,6 +562,19 @@
             .customer-list {
                 grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             }
+
+            /* Adjust customer table modals for medium screens */
+            .active-customers-modal,
+            .new-customers-modal {
+                width: 96%;
+                max-width: 1200px;
+                min-width: 900px;
+            }
+
+            .active-customers-container .table-container,
+            .new-customers-container .table-container {
+                min-width: 800px;
+            }
         }
 
         @media (max-width: 768px) {
@@ -530,6 +587,25 @@
             .customer-list {
                 grid-template-columns: 1fr;
                 gap: 0.75rem;
+            }
+
+            /* Mobile styles for customer table modals */
+            .active-customers-modal,
+            .new-customers-modal {
+                width: 98%;
+                max-width: 98vw;
+                min-width: 100%;
+                margin: 1% auto;
+            }
+
+            .active-customers-container,
+            .new-customers-container {
+                max-height: 80vh;
+            }
+
+            .active-customers-container .table-container,
+            .new-customers-container .table-container {
+                min-width: 700px;
             }
             
             .customer-item {
@@ -600,6 +676,196 @@
             display: flex;
             gap: 1rem;
             justify-content: flex-end;
+        }
+
+        /* Potential Matches Modal Styles */
+        .potential-matches-modal {
+            max-width: 800px;
+            max-height: 90vh;
+        }
+
+        .potential-matches-list {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 1rem 0;
+        }
+
+        .potential-match-item {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .potential-match-item:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 20px rgba(255, 51, 102, 0.1);
+        }
+
+        .match-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .new-customer-name {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .similarity-score {
+            background: var(--primary-color);
+            color: var(--text-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .match-count {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .match-selection {
+            margin: 1rem 0;
+        }
+
+        .match-selection label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .match-dropdown {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--card-background);
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .match-dropdown:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.1);
+        }
+
+        .match-preview {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--background-secondary);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .match-preview ul {
+            margin: 0.5rem 0 0 0;
+            padding-left: 1.5rem;
+        }
+
+        .match-preview li {
+            margin: 0.25rem 0;
+            color: var(--text-secondary);
+        }
+
+        .process-button {
+            background: var(--primary-color);
+            color: white;
+            border: 2px solid var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            opacity: 0.5;
+        }
+
+        .process-button:hover:not(:disabled) {
+            background: var(--primary-hover);
+            border-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 51, 102, 0.3);
+        }
+
+        .process-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .match-details {
+            margin-bottom: 1.5rem;
+        }
+
+        .existing-customer-info,
+        .common-words,
+        .match-type-info {
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .extended-name-match {
+            color: var(--warning-color);
+            font-weight: 600;
+            background: rgba(255, 193, 7, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--warning-color);
+        }
+
+        .match-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .sync-button,
+        .ignore-button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid;
+            flex: 1;
+        }
+
+        .sync-button {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            border-color: #4CAF50;
+            color: var(--text-color);
+        }
+
+        .sync-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+
+        .ignore-button {
+            background: transparent;
+            border-color: var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .ignore-button:hover {
+            border-color: #dc3545;
+            background: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
         }
 
         .primary-button,
@@ -964,6 +1230,475 @@
             width: 95vw;
         }
 
+        .follow-ups-due-modal {
+            max-width: 95vw;
+            max-height: 90vh;
+            width: 95vw;
+        }
+
+        .follow-ups-due-container {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        /* Priority and Status Badge Styling */
+        .priority-badge, .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: capitalize;
+            display: inline-block;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .priority-urgent {
+            background: #dc3545;
+            color: white;
+        }
+
+        .priority-high {
+            background: #fd7e14;
+            color: white;
+        }
+
+        .priority-medium {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .priority-low {
+            background: #6c757d;
+            color: white;
+        }
+
+        .status-pending {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .status-in-progress {
+            background: #007bff;
+            color: white;
+        }
+
+        .status-completed {
+            background: #28a745;
+            color: white;
+        }
+
+        /* Action Button Styling */
+        .action-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(255, 51, 102, 0.3);
+        }
+
+        /* Follow-up Alert Banner */
+        .follow-up-alert-banner {
+            background: linear-gradient(135deg, 
+                rgba(255, 193, 7, 0.95) 0%, 
+                rgba(255, 213, 79, 0.9) 25%, 
+                rgba(255, 235, 59, 0.85) 50%, 
+                rgba(255, 213, 79, 0.9) 75%, 
+                rgba(255, 193, 7, 0.95) 100%);
+            backdrop-filter: blur(20px) saturate(180%);
+            color: #1a1a1a;
+            padding: 20px 24px;
+            margin: 5px 0 25px 0;
+            border-radius: 16px;
+            box-shadow: 
+                0 20px 40px rgba(255, 193, 7, 0.2),
+                0 8px 16px rgba(255, 152, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+            display: none; /* Hidden by default */
+            animation: slideDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .follow-up-alert-banner::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.6), 
+                transparent);
+        }
+
+        .follow-up-alert-banner::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, 
+                rgba(255, 255, 255, 0.1) 0%, 
+                transparent 70%);
+            animation: shimmer 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .follow-up-alert-banner.show {
+            display: block;
+        }
+
+        .banner-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .banner-title {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            letter-spacing: -0.02em;
+        }
+
+        .banner-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+
+        .banner-close:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .banner-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .banner-stats {
+            display: flex;
+            gap: 32px;
+            flex-wrap: wrap;
+        }
+
+        .banner-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 90px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .banner-stat:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .banner-stat-number {
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            color: #1a1a1a;
+        }
+
+        .banner-stat-label {
+            font-size: 11px;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .banner-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .banner-btn {
+            background: rgba(255, 255, 255, 0.25);
+            color: #1a1a1a;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            display: inline-block;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .banner-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.3), 
+                transparent);
+            transition: left 0.5s ease;
+        }
+
+        .banner-btn:hover::before {
+            left: 100%;
+        }
+
+        .banner-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: rgba(255, 255, 255, 0.6);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .banner-btn.primary {
+            background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+            color: #FFD700;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .banner-btn.primary:hover {
+            background: linear-gradient(135deg, #2d2d2d, #1a1a1a);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%) translateY(-100%) rotate(30deg);
+            }
+            100% {
+                transform: translateX(100%) translateY(100%) rotate(30deg);
+            }
+        }
+
+        @keyframes titleGlow {
+            0% {
+                opacity: 0.3;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            100% {
+                opacity: 0.6;
+                transform: translate(-50%, -50%) scale(1.1);
+            }
+        }
+
+        /* Show Banner Button */
+        .show-banner-btn {
+            margin: 5px 0 25px 0;
+            text-align: center;
+        }
+
+        .show-banner-btn .banner-btn {
+            background: rgba(255, 193, 7, 0.15);
+            color: #B8860B;
+            border: 1px solid rgba(255, 193, 7, 0.4);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .show-banner-btn .banner-btn:hover {
+            background: rgba(255, 193, 7, 0.25);
+            border-color: rgba(255, 193, 7, 0.6);
+            transform: translateY(-1px);
+        }
+
+        /* Mobile responsiveness for banner */
+        @media (max-width: 768px) {
+            .follow-up-alert-banner {
+                margin: 10px 0;
+                padding: 12px 16px;
+            }
+            
+            .banner-content {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .banner-stats {
+                justify-content: space-around;
+                width: 100%;
+            }
+            
+            .banner-actions {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Complete Button Styling */
+        .complete-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin-left: 0.5rem;
+        }
+
+        .complete-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(40, 167, 69, 0.3);
+        }
+
+        /* Confirmation Modal Styling */
+        .confirmation-modal {
+            max-width: 500px !important;
+        }
+
+        .confirmation-content {
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        .confirmation-icon {
+            margin-bottom: 1rem;
+        }
+
+        .confirmation-content h3 {
+            color: var(--text-color);
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .confirmation-content p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            background: var(--card-background);
+        }
+
+        .primary-button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .primary-button:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 51, 102, 0.3);
+        }
+
+        .secondary-button {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .secondary-button:hover {
+            background: var(--border-color);
+            color: var(--text-color);
+        }
+
+        /* Follow-up Task Row Styling */
+        .follow-up-task-row:hover {
+            background: rgba(255, 51, 102, 0.05);
+        }
+
+        .no-follow-ups-due {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .no-follow-ups-due p {
+            margin: 0.5rem 0;
+        }
+
         .customer-form {
             padding: 0;
         }
@@ -1123,6 +1858,24 @@
             padding-right: 40px;
         }
 
+        /* Base date input styling */
+        .date-input {
+            min-width: 150px;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--input-background);
+            color: var(--text-color);
+            font-size: 0.875rem;
+            font-family: inherit;
+        }
+        
+        .date-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.1);
+        }
+        
         /* Ensure date input shows calendar icon */
         .date-input::-webkit-calendar-picker-indicator {
             background: transparent;
@@ -1214,6 +1967,123 @@
 
         .customer-table tbody tr:last-child td {
             border-bottom: none;
+        }
+
+        /* Product information styling */
+        .products-cell {
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+
+        .products-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .product-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            padding: 0.5rem;
+            background: rgba(255, 51, 102, 0.05);
+            border-radius: 4px;
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .product-name {
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 0.875rem;
+        }
+
+        .product-quantity {
+            color: var(--primary-color);
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .product-price {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .no-products {
+            color: var(--text-secondary);
+            font-style: italic;
+            font-size: 0.8rem;
+        }
+
+        /* Specific modal styles for customer tables */
+        .active-customers-modal,
+        .new-customers-modal {
+            width: 98%;
+            max-width: 1400px;
+            min-width: 1000px;
+        }
+
+        .active-customers-container,
+        .new-customers-container {
+            overflow-x: auto;
+            max-height: 70vh;
+        }
+
+        .active-customers-container .table-container,
+        .new-customers-container .table-container {
+            min-width: 1000px;
+        }
+
+        /* Optimize column widths for better visibility */
+        .active-customers-modal .customer-table th,
+        .active-customers-modal .customer-table td,
+        .new-customers-modal .customer-table th,
+        .new-customers-modal .customer-table td {
+            white-space: nowrap;
+        }
+
+        .active-customers-modal .customer-name-cell,
+        .new-customers-modal .customer-name-cell {
+            min-width: 150px;
+        }
+
+        .active-customers-modal .email-cell,
+        .new-customers-modal .email-cell {
+            min-width: 200px;
+        }
+
+        .active-customers-modal .contact-cell,
+        .new-customers-modal .contact-cell {
+            min-width: 120px;
+        }
+
+        .active-customers-modal .phone-cell,
+        .new-customers-modal .phone-cell {
+            min-width: 120px;
+        }
+
+        .active-customers-modal .bottles-cell,
+        .new-customers-modal .bottles-cell {
+            min-width: 80px;
+            text-align: center;
+        }
+
+        .active-customers-modal .first-purchase-cell,
+        .new-customers-modal .first-purchase-cell {
+            min-width: 120px;
+        }
+
+        .active-customers-modal .products-cell,
+        .new-customers-modal .products-cell {
+            min-width: 300px;
+            max-width: 400px;
+            white-space: normal;
+        }
+
+        .active-customers-modal .action-cell,
+        .new-customers-modal .action-cell {
+            min-width: 120px;
+            text-align: center;
+            white-space: nowrap;
         }
 
         /* Cell-specific styling */
@@ -1352,19 +2222,50 @@
             }
 
             .customer-table {
-                min-width: 600px;
+                min-width: 1000px;
+            }
+
+            .products-cell {
+                max-width: 250px;
+            }
+
+            .product-item {
+                padding: 0.25rem;
+                font-size: 0.75rem;
+            }
+
+            .product-name {
+                font-size: 0.75rem;
+            }
+
+            .product-quantity {
+                font-size: 0.7rem;
+            }
+
+            .product-price {
+                font-size: 0.65rem;
             }
         }
 
         /* Mobile styles */
         @media (max-width: 768px) {
             .nav-bar {
-                padding: 1rem 0;
+                padding: 1.5rem 0 1rem 0;
                 margin-bottom: 1rem;
             }
 
             .nav-bar h1 {
-                font-size: 2rem;
+                font-size: 2.2rem;
+            }
+            
+            .nav-bar h1::before {
+                width: calc(100% + 60px);
+                height: calc(100% + 30px);
+            }
+            
+            .nav-bar h1::after {
+                width: calc(100% + 90px);
+                height: calc(100% + 45px);
             }
 
             .container {
@@ -1427,7 +2328,17 @@
 
         @media (max-width: 480px) {
             .nav-bar h1 {
-                font-size: 1.75rem;
+                font-size: 1.8rem;
+            }
+            
+            .nav-bar h1::before {
+                width: calc(100% + 40px);
+                height: calc(100% + 20px);
+            }
+            
+            .nav-bar h1::after {
+                width: calc(100% + 60px);
+                height: calc(100% + 30px);
             }
 
             .option-card {
@@ -1438,6 +2349,239 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .slide li.left-align {
+            text-align: left !important;
+        }
+
+        /* Sales Deck Inline Editing Styles */
+        .sales-deck-editable {
+            position: relative;
+        }
+
+        .edit-deck-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .edit-deck-btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .slide.editing .edit-deck-btn {
+            display: none;
+        }
+
+        .slide.editing .slide-content {
+            display: none;
+        }
+
+        .slide.editing .slide-edit-form {
+            display: block;
+        }
+
+        .slide-edit-form {
+            display: none;
+        }
+
+        .slide-edit-form textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 1rem;
+            border: 1px solid var(--primary-color);
+            border-radius: 8px;
+            background: var(--card-background);
+            color: var(--text-color);
+            font-family: inherit;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            resize: vertical;
+            margin-bottom: 1rem;
+        }
+
+        .slide-edit-form textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.2);
+        }
+
+        .slide-edit-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .slide-edit-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-save-deck {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-cancel-deck {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .slide-edit-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Rich Text Editor Styles */
+        .rich-editor {
+            border: 1px solid var(--primary-color);
+            border-radius: 8px;
+            background: var(--card-background);
+            overflow: hidden;
+        }
+
+        .rich-editor-toolbar {
+            background: var(--border-color);
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--primary-color);
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .rich-editor-btn {
+            padding: 0.25rem 0.5rem;
+            background: var(--card-background);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .rich-editor-btn:hover {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .rich-editor-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .rich-editor-content {
+            min-height: 300px;
+            padding: 1rem;
+            background: var(--card-background);
+            color: var(--text-color);
+            font-family: inherit;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            border: none;
+            outline: none;
+            resize: vertical;
+        }
+
+        .rich-editor-content:focus {
+            outline: none;
+        }
+
+        .rich-editor-content h2 {
+            color: var(--text-color);
+            font-size: 1.5rem;
+            margin: 1rem 0 0.5rem 0;
+            font-weight: 600;
+        }
+
+        .rich-editor-content h3 {
+            color: var(--text-color);
+            font-size: 1.25rem;
+            margin: 1rem 0 0.5rem 0;
+            font-weight: 500;
+        }
+
+        .rich-editor-content p {
+            margin: 0.5rem 0;
+        }
+
+        .rich-editor-content ul {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .rich-editor-content li {
+            margin: 0.25rem 0;
+        }
+
+        .rich-editor-content .blank {
+            height: 1.5rem;
+            margin: 0;
+            padding: 0;
+        }
+
+        .rich-editor-content .left-align {
+            text-align: left;
+        }
+
+        .rich-editor-content .italic {
+            font-style: italic;
+        }
+
+        .rich-editor-content .small {
+            font-size: 0.9em;
+        }
+
+        .rich-editor-content .italic.small {
+            font-style: italic;
+            font-size: 0.9em;
+            color: var(--text-secondary);
+        }
+
+        /* Success Modal Styling */
+        .success-modal {
+            max-width: 500px !important;
+        }
+        .success-content {
+            text-align: center;
+            padding: 1rem 0;
+        }
+        .success-icon {
+            margin-bottom: 1rem;
+        }
+        .success-content h3 {
+            color: var(--text-color);
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+        .success-content p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+
     </style>
 </head>
 <body>
@@ -1449,6 +2593,44 @@
     
     <div class="main-content">
         <div class="container">
+            <!-- Follow-up Alert Banner -->
+            <div id="followUpAlertBanner" class="follow-up-alert-banner">
+                <div class="banner-header">
+                    <div class="banner-title">
+                        <span>⚠️</span>
+                        <span>Follow-up Tasks Due</span>
+                    </div>
+                    <button class="banner-close" onclick="dismissBanner()">&times;</button>
+                </div>
+                <div class="banner-content">
+                    <div class="banner-stats">
+                        <div class="banner-stat">
+                            <div class="banner-stat-number" id="overdueCount">0</div>
+                            <div class="banner-stat-label">Overdue</div>
+                        </div>
+                        <div class="banner-stat">
+                            <div class="banner-stat-number" id="dueTodayCount">0</div>
+                            <div class="banner-stat-label">Due Today</div>
+                        </div>
+                        <div class="banner-stat">
+                            <div class="banner-stat-number" id="totalDueCount">0</div>
+                            <div class="banner-stat-label">Total Due</div>
+                        </div>
+                    </div>
+                    <div class="banner-actions">
+                        <button class="banner-btn primary" onclick="viewFollowUpsDueFromBanner()">View All Tasks</button>
+                        <button class="banner-btn" onclick="dismissBannerForDay()">Dismiss for Today</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Show Banner Button (only visible when banner is hidden) -->
+            <div id="showBannerButton" class="show-banner-btn" style="display: none;">
+                <button class="banner-btn" onclick="showBanner()">
+                    🔔 Show Follow-up Alerts
+                </button>
+            </div>
+
 
             <!-- Quick Stats Section -->
             <div class="quick-stats">
@@ -1460,17 +2642,20 @@
                         <span class="potential-count">{{ (existing_customer_info|length if existing_customer_info else 0) - (existing_customers|length if existing_customers else 0) }} potential</span>
                     </div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card clickable-stat" onclick="viewActiveCustomers()">
                     <div class="stat-number">{{ active_customers_this_month[0][0] if active_customers_this_month else 0 }}</div>
                     <div class="stat-label">Active This Month</div>
+                    <div class="stat-hint">Click to view details</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card clickable-stat" onclick="viewNewCustomers()">
                     <div class="stat-number">{{ new_customers_this_month[0][0] if new_customers_this_month else 0 }}</div>
                     <div class="stat-label">New Customers This Month</div>
+                    <div class="stat-hint">Click to view details</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number">3</div>
-                    <div class="stat-label">Follow-ups Due</div>
+                <div class="stat-card clickable-stat" onclick="viewFollowUpsDue()">
+                    <div class="stat-number" id="followUpsDueCount">{{ follow_ups_due|length if follow_ups_due else 0 }}</div>
+                    <div class="stat-label">Tasks</div>
+                    <div class="stat-hint">Click to view details</div>
                 </div>
                 <div class="stat-card clickable-stat" onclick="viewFollowUps()">
                      <div class="stat-number">{{ existing_customer_follow_ups|length if existing_customer_follow_ups else 0 }}</div>
@@ -1594,6 +2779,266 @@
                 </div>
             </div>
 
+            <!-- Follow-ups Due Modal (Hidden by default) -->
+            <div id="followUpsDueModal" class="modal" style="display: none;">
+                <div class="modal-content follow-ups-due-modal">
+                    <div class="modal-header">
+                        <h2>Follow-ups Due</h2>
+                        <span class="close-button" onclick="closeFollowUpsDueModal()">&times;</span>
+                    </div>
+                    
+                    <div class="follow-ups-due-container">
+                        {% if follow_ups_due %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Due Date</th>
+                                            <th>Type</th>
+                                            <th>Notes</th>
+                                            <th>Priority</th>
+                                            <th>Status</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for task in follow_ups_due %}
+                                        <tr class="follow-up-task-row" data-task-id="{{ task[0] }}">
+                                            <td class="customer-name-cell">{{ task[1] }}</td>
+                                            <td class="due-date-cell">{{ task[2] or 'No date set' }}</td>
+                                            <td class="type-cell">{{ task[6] or 'General' }}</td>
+                                            <td class="notes-cell">{{ task[5] or 'No notes' }}</td>
+                                            <td class="priority-cell">
+                                                <span class="priority-badge priority-{{ task[3] or 'medium' }}">
+                                                    {{ (task[3] or 'medium')|title }}
+                                                </span>
+                                            </td>
+                                            <td class="status-cell">
+                                                <span class="status-badge status-{{ task[4] or 'pending' }}">
+                                                    {{ (task[4] or 'pending')|replace('-', ' ')|title }}
+                                                </span>
+                                            </td>
+                                            <td class="action-cell">
+                                                <button class="action-btn" onclick="viewCustomerProfile('{{ task[1] }}')">
+                                                    View Profile
+                                                </button>
+                                                <button class="complete-btn" onclick="markTaskCompleted('{{ task[0] }}', '{{ task[1] }}')">
+                                                    Mark as Completed
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-follow-ups-due">
+                                <p>No follow-up tasks due at the moment.</p>
+                                <p>All tasks are completed or up to date.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeFollowUpsDueModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Customers This Month Modal (Hidden by default) -->
+            <div id="activeCustomersModal" class="modal" style="display: none;">
+                <div class="modal-content active-customers-modal">
+                    <div class="modal-header">
+                        <h2>Active Customers This Month</h2>
+                        <span class="close-button" onclick="closeActiveCustomersModal()">&times;</span>
+                    </div>
+                    
+                    <div class="active-customers-container">
+                        {% if active_customers_details %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Email</th>
+                                            <th>Primary Contact</th>
+                                            <th>Phone</th>
+                                            <th>Total Bottles</th>
+                                            <th>Products Purchased</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for customer in active_customers_details %}
+                                        <tr class="customer-row">
+                                            <td class="customer-name-cell">{{ customer[0] }}</td>
+                                            <td class="email-cell">{{ customer[1] or 'N/A' }}</td>
+                                            <td class="contact-cell">{{ customer[2] or 'N/A' }}</td>
+                                            <td class="phone-cell">{{ customer[3] or 'N/A' }}</td>
+                                            <td class="bottles-cell">{{ customer[5] }}</td>
+                                            <td class="products-cell">
+                                                {% if customer[8] and customer[8] != '[]' %}
+                                                    <div class="products-list">
+                                                        {% for product in customer[8] %}
+                                                        <div class="product-item">
+                                                            <span class="product-name">{{ product['product_name'] or 'Unknown Product' }}</span>
+                                                            <span class="product-quantity">({{ product['quantity'] }} bottles)</span>
+                                                            <span class="product-price">@ ${{ "%.2f"|format(product['unit_price']) if product['unit_price'] else 'N/A' }}</span>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="no-products">No product details</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="action-cell">
+                                                <button class="action-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
+                                                    View Profile
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-active-customers">
+                                <p>No active customers found for this month.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeActiveCustomersModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Customers This Month Modal (Hidden by default) -->
+            <div id="newCustomersModal" class="modal" style="display: none;">
+                <div class="modal-content new-customers-modal">
+                    <div class="modal-header">
+                        <h2>New Customers This Month</h2>
+                        <span class="close-button" onclick="closeNewCustomersModal()">&times;</span>
+                    </div>
+                    
+                    <div class="new-customers-container">
+                        {% if new_customers_details %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Email</th>
+                                            <th>Primary Contact</th>
+                                            <th>Phone</th>
+                                            <th>First Purchase Date</th>
+                                            <th>Total Bottles</th>
+                                            <th>Products Purchased</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for customer in new_customers_details %}
+                                        <tr class="customer-row">
+                                            <td class="customer-name-cell">{{ customer[0] }}</td>
+                                            <td class="email-cell">{{ customer[1] or 'N/A' }}</td>
+                                            <td class="contact-cell">{{ customer[2] or 'N/A' }}</td>
+                                            <td class="phone-cell">{{ customer[3] or 'N/A' }}</td>
+                                            <td class="first-purchase-cell">{{ customer[4].strftime('%Y-%m-%d') if customer[4] else 'N/A' }}</td>
+                                            <td class="bottles-cell">{{ customer[6] }}</td>
+                                            <td class="products-cell">
+                                                {% if customer[8] and customer[8] != '[]' %}
+                                                    <div class="products-list">
+                                                        {% for product in customer[8] %}
+                                                        <div class="product-item">
+                                                            <span class="product-name">{{ product['product_name'] or 'Unknown Product' }}</span>
+                                                            <span class="product-quantity">({{ product['quantity'] }} bottles)</span>
+                                                            <span class="product-price">@ ${{ "%.2f"|format(product['unit_price']) if product['unit_price'] else 'N/A' }}</span>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="no-products">No product details</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="action-cell">
+                                                <button class="action-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
+                                                    View Profile
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-new-customers">
+                                <p>No new customers found for this month.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeNewCustomersModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Confirmation Modal (Hidden by default) -->
+            <div id="confirmationModal" class="modal" style="display: none;">
+                <div class="modal-content confirmation-modal">
+                    <div class="modal-header">
+                        <h2>Confirm Action</h2>
+                        <span class="close-button" onclick="closeConfirmationModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="confirmation-content">
+                            <div class="confirmation-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4CAF50"/>
+                                </svg>
+                            </div>
+                            <h3 id="confirmationTitle">Mark Task as Completed</h3>
+                            <p id="confirmationMessage">Are you sure you want to mark this task as completed?</p>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeConfirmationModal()">Cancel</button>
+                        <button class="primary-button" id="confirmActionBtn">Confirm</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Success Modal (Hidden by default) -->
+            <div id="successModal" class="modal" style="display: none;">
+                <div class="modal-content success-modal">
+                    <div class="modal-header">
+                        <h2>Success</h2>
+                        <span class="close-button" onclick="closeSuccessModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="success-content">
+                            <div class="success-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4CAF50"/>
+                                </svg>
+                            </div>
+                            <h3 id="successTitle">Task Completed</h3>
+                            <p id="successMessage">Task marked as completed successfully!</p>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="primary-button" onclick="closeSuccessModal()">OK</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- New Customer Profile Modal (Hidden by default) -->
             <div id="newCustomerModal" class="modal" style="display: none;">
                 <div class="modal-content new-customer-modal">
@@ -1612,31 +3057,57 @@
                             
                             <div class="sales-deck-content">
                                 <!-- Slide 1 -->
-                                <div class="slide active" id="slide-1">
-                                    <h2>Sales Pitch</h2>
-                                    <p class="left-align">Hey x, I'm Johnny/Niko calling from Whistlebird and I'm hoping to speak to the manager or owner.</p>
-                                    <p class="blank"></p>
-                                    <p class="left-align italic small">manager/owner joins the call..</p>
-                                    
-                                    <p class="left-align"><i class="small">Hey this is Johnny/Niko from Whistlebird</i> - I run a Wellington Distillery called Whistlebird and we specialise in Gin.</p>
+                                <div class="slide active sales-deck-editable" id="slide-1">
+                                    <button class="edit-deck-btn" onclick="editSlide(1)">Edit</button>
+                                    <div class="slide-content">
+                                        <h2>Sales Pitch</h2>
+                                        <p class="left-align">Hey x, I'm Johnny/Niko calling from Whistlebird and I'm hoping to speak to the manager or owner.</p>
+                                        <p class="blank"></p>
+                                        <p class="left-align italic small">manager/owner joins the call..</p>
                                         
-                                    <p class="left-align">Our Gin Whistlebird Wildflower recently won a GOLD medal at the Super Spiit Awards and a Bronze medal at the New Zealand Spirit Awards</p>
-                                    <p class="left-align">and we are now stocked in lot of liquorland/super liquor stores nationwide</p>
-                                    <p class="blank"></p>
-                                    <p class="left-align italic small">USP hook</p>
-
-                                    <p class="left-align">What makes us stand out is that we use the practical application of sound in our distllation process - its how we get efficiency and a really clean finish.</p>
-                                    <p class="left-align">We've also crafted a custom bottle and label that wraps our process into a story on the shelf</p>
-                                    <p class="blank"></p>
-                                    <p class="left-align italic small">The ask..</p>
-
-                                    <p class="left-align">The reason I'm calling is because we are expanding distribution in x region now.</p>
-                                    <p class="blank"></p>
-                                    <p class="left-align italic small">Options to ask..</p>
-                                    <ul class="left-align">
-                                        <li>I'd love to chat if you're interested in hearing more</li>
-                                        <li>We've kept it simple: one case minimum, free shipping - would you be open to trying us?</li>
-                                    </ul>
+                                        <p class="left-align"><i class="small">Hey this is Johnny/Niko from Whistlebird</i> - I run a Wellington Distillery called Whistlebird and we specialise in Gin.</p>
+                                            
+                                        <p class="left-align">One of our Gins recently won GOLD at the Super Spiit Awards and Bronze medal at the New Zealand Spirit Awards</p>
+                                        <p class="left-align">We distill using the practical application of sound - its a tool for efficiency and how we get out signature taste</p>
+                                        <p class="left-align">A few stores near by have just picked us up so I wanted to see if you'd like to trial a case to see how it moves?</p>
+                                        <p class="blank"></p>
+                                    </div>
+                                    
+                                    <div class="slide-edit-form">
+                                        <div class="rich-editor">
+                                            <div class="rich-editor-toolbar">
+                                                <button class="rich-editor-btn" onclick="formatText('bold')" title="Bold"><strong>B</strong></button>
+                                                <button class="rich-editor-btn" onclick="formatText('italic')" title="Italic"><em>I</em></button>
+                                                <button class="rich-editor-btn" onclick="formatText('underline')" title="Underline"><u>U</u></button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h2')" title="Heading 2">H2</button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h3')" title="Heading 3">H3</button>
+                                                <button class="rich-editor-btn" onclick="addList('ul')" title="Bullet List">•</button>
+                                                <button class="rich-editor-btn" onclick="addList('ol')" title="Numbered List">1.</button>
+                                                <button class="rich-editor-btn" onclick="addListItem()" title="Add List Item">+</button>
+                                                <button class="rich-editor-btn" onclick="addBlankLine()" title="Add Blank Line">␣</button>
+                                                <button class="rich-editor-btn" onclick="addSmallItalic()" title="Small Italic Text">i</button>
+                                                <button class="rich-editor-btn" onclick="addLeftAlign()" title="Left Align">←</button>
+                                            </div>
+                                            <div class="rich-editor-content" id="slide-1-content" contenteditable="true">
+                                                <h2>Sales Pitch</h2>
+                                                <p class="left-align">Hey x, I'm Johnny/Niko calling from Whistlebird and I'm hoping to speak to the manager or owner.</p>
+                                                <p class="blank"></p>
+                                                <p class="left-align italic small">manager/owner joins the call..</p>
+                                                
+                                                <p class="left-align"><i class="small">Hey this is Johnny/Niko from Whistlebird</i> - I run a Wellington Distillery called Whistlebird and we specialise in Gin.</p>
+                                                    
+                                                <p class="left-align">One of our Gins recently won GOLD at the Super Spiit Awards and Bronze medal at the New Zealand Spirit Awards</p>
+                                                <p class="left-align">We distill using the practical application of sound - its a tool for efficiency and how we get out signature taste</p>
+                                                <p class="left-align">A few stores near by have just picked us up so I wanted to see if you'd like to trial a case to see how it moves?</p>
+                                                <p class="blank"></p>
+                                            </div>
+                                        </div>
+                                        <div class="slide-edit-buttons">
+                                            <button class="slide-edit-btn btn-save-deck" onclick="saveSlide(1)">Save</button>
+                                            <button class="slide-edit-btn btn-cancel-deck" onclick="cancelEditSlide(1)">Cancel</button>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="slide-navigation">
                                         <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
                                         <button type="button" class="slide-nav-btn" onclick="showSlide(2)">Counters</button>
@@ -1645,27 +3116,82 @@
                                 </div>
 
                                 <!-- Slide 2 -->
-                                <div class="slide" id="slide-2">
-                                    <h2>Counters</h2>
-                                    <h3>Customer asks for email with info</h3>
-                                    <p class="left-align italic small">micro-commitment options to counter..</p>
-                                    <p class="left-align italic small">Absolutely, I'll send you the info.</p>
-                                    <ul class="left-align">
-                                        <li><b>default</b> - Most stores start with a single case to see how it moves, I can get that ready for you.</li>
-                                        <li><b>low-risk</b> - We typically get new stores started with a single case so they can test without tying up shelf space.</li>
-                                        <li><b>social-proof</b> - Usually stores kick off with a single case, it’s the easiest way to see it sell.</li>
-                                    </ul>
-                                    <p class="left-align italic small">Which email should I send the details to?</p>
+                                <div class="slide sales-deck-editable" id="slide-2">
+                                    <button class="edit-deck-btn" onclick="editSlide(2)">Edit</button>
+                                    <div class="slide-content">
+                                        <h2>Counters</h2>
+                                        <h3>Customer asks for email with info</h3>
+                                        <p class="left-align italic small">micro-commitment options to counter..</p>
+                                        <p class="left-align italic small">Absolutely, I'll send you the info.</p>
+                                        <p class="blank"></p>
+                                        <p class="left-align">Heres the 30 second version that I'll put in the email</p>
+                                        <p class="blank"></p>
+                                        <p class="left-align">We have 2 Gins;</p>
+                                        <p class="left-align">Wildflower - this is our award winning Gin, its contemporary citrus forward with floral notes</p>
+                                        <p class="left-align">Solstice - this is new, Crisp Himilayan Juniper foward with citrus Gin and has been distilled through NZ native Kawakawa</p>
+                                        <p class="left-align">Pricing is $46.25 +GST per bottle, MoQ of 1 case of 6 bottles, free shipping</p>
+                                        <p class="left-align">We also have created a cstom bottle and label that wraps our process into a story on the shelf</p>
+                                        <p class="blank"></p>
 
-                                    <p class="blank"></p>
-                                    <p class="blank"></p>
+                                        <p class="left-align italic small">Which email should I send the details to?</p>
 
-                                    <h3>Fallback options if above fail</h3>
-                                    <ul class="left-align">
-                                        <li><b>consignment</b> - We're also happy for you to try Whistlebird on a consignment model so there is low risk.</li>
-                                        <li><b>call-back</b> - I'll send the info and we can chat about it. Is there a good time to call you back?</li>
-                                    </ul>
+                                        <p class="blank"></p>
+                                        <p class="blank"></p>
 
+                                        <h3>Fallback options if above fail</h3>
+                                        <ul class="left-align">
+                                            <li><b>consignment</b> - We're also happy for you to try Whistlebird on a consignment model so there is low risk.</li>
+                                            <li><b>call-back</b> - I'll send the info and we can chat about it. Is there a good time to call you back?</li>
+                                        </ul>
+                                    </div>
+                                    
+                                    <div class="slide-edit-form">
+                                        <div class="rich-editor">
+                                            <div class="rich-editor-toolbar">
+                                                <button class="rich-editor-btn" onclick="formatText('bold')" title="Bold"><strong>B</strong></button>
+                                                <button class="rich-editor-btn" onclick="formatText('italic')" title="Italic"><em>I</em></button>
+                                                <button class="rich-editor-btn" onclick="formatText('underline')" title="Underline"><u>U</u></button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h2')" title="Heading 2">H2</button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h3')" title="Heading 3">H3</button>
+                                                <button class="rich-editor-btn" onclick="addList('ul')" title="Bullet List">•</button>
+                                                <button class="rich-editor-btn" onclick="addList('ol')" title="Numbered List">1.</button>
+                                                <button class="rich-editor-btn" onclick="addListItem()" title="Add List Item">+</button>
+                                                <button class="rich-editor-btn" onclick="addBlankLine()" title="Add Blank Line">␣</button>
+                                                <button class="rich-editor-btn" onclick="addSmallItalic()" title="Small Italic Text">i</button>
+                                                <button class="rich-editor-btn" onclick="addLeftAlign()" title="Left Align">←</button>
+                                            </div>
+                                            <div class="rich-editor-content" id="slide-2-content" contenteditable="true">
+                                                <h2>Counters</h2>
+                                                <h3>Customer asks for email with info</h3>
+                                                <p class="left-align italic small">micro-commitment options to counter..</p>
+                                                <p class="left-align italic small">Absolutely, I'll send you the info.</p>
+                                                <p class="blank"></p>
+                                                <p class="left-align">Heres the 30 second version that I'll put in the email</p>
+                                                <p class="blank"></p>
+                                                <p class="left-align">We have 2 Gins;</p>
+                                                <p class="left-align">Wildflower - this is our award winning Gin, its contemporary citrus forward with floral notes</p>
+                                                <p class="left-align">Solstice - this is new, Crisp Himilayan Juniper foward with citrus Gin and has been distilled through NZ native Kawakawa</p>
+                                                <p class="left-align">Pricing is $46.25 +GST per bottle, MoQ of 1 case of 6 bottles, free shipping</p>
+                                                <p class="left-align">We also have created a cstom bottle and label that wraps our process into a story on the shelf</p>
+                                                <p class="blank"></p>
+
+                                                <p class="left-align italic small">Which email should I send the details to?</p>
+
+                                                <p class="blank"></p>
+                                                <p class="blank"></p>
+
+                                                <h3>Fallback options if above fail</h3>
+                                                <ul class="left-align">
+                                                    <li><b>consignment</b> - We're also happy for you to try Whistlebird on a consignment model so there is low risk.</li>
+                                                    <li><b>call-back</b> - I'll send the info and we can chat about it. Is there a good time to call you back?</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <div class="slide-edit-buttons">
+                                            <button class="slide-edit-btn btn-save-deck" onclick="saveSlide(2)">Save</button>
+                                            <button class="slide-edit-btn btn-cancel-deck" onclick="cancelEditSlide(2)">Cancel</button>
+                                        </div>
+                                    </div>
                                     
                                     <div class="slide-navigation">
                                         <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
@@ -1675,36 +3201,85 @@
                                 </div>
                                 
                                 <!-- Slide 3 -->
-                                <div class="slide" id="slide-3">
-                                    <h2>Our Products</h2>
-                                    <p class="left-align">We currently have 2 Gins</p>
-                                    <div class="product-showcase">
-                                        <div class="product-item">
-                                            <h3>Whistlebird Wildflower</h3>
-                                            <p>44% ABV • 700ml</p>
-                                            <p>Citrus forward Gin with floral notes, its dry with a long smooth finish - this is our signature product</p>
-                                        </div>
-                                        <div class="product-item">
-                                            <h3>Whistlebird Solstice</h3>
-                                            <p>40% ABV • 700ml</p>
-                                            <p>Crisp Himilayan Juniper foward citrus Gin thats been distilled through native New Zealand Kawakawa</p>
-                                        </div>
-                                        <div class="product-item">
-                                            <h3>Pricing & MoQ</h3>
-                                            <ul>
-                                                <li class="left-align">Both Gins are $46.25 +GST per bottle</li>
-                                                <li class="left-align">We have an MoQ of 1 case of 6 bottles</li>
-                                                <li class="left-align">We provide free shipping</li>
-                                            </ul>
+                                <div class="slide sales-deck-editable" id="slide-3">
+                                    <button class="edit-deck-btn" onclick="editSlide(3)">Edit</button>
+                                    <div class="slide-content">
+                                        <h2>Our Products</h2>
+                                        <p class="left-align">We currently have 2 Gins</p>
+                                        <div class="product-showcase">
+                                            <div class="product-item">
+                                                <h3>Whistlebird Wildflower</h3>
+                                                <p>44% ABV • 700ml</p>
+                                                <p>Citrus forward Gin with floral notes, its dry with a long smooth finish - this is our signature product</p>
+                                            </div>
+                                            <div class="product-item">
+                                                <h3>Whistlebird Solstice</h3>
+                                                <p>40% ABV • 700ml</p>
+                                                <p>Crisp Himilayan Juniper foward citrus Gin thats been distilled through native New Zealand Kawakawa</p>
+                                            </div>
+                                            <div class="product-item">
+                                                <h3>Pricing & MoQ</h3>
+                                                <ul>
+                                                    <li class="left-align">Both Gins are $46.25 +GST per bottle</li>
+                                                    <li class="left-align">We have an MoQ of 1 case of 6 bottles</li>
+                                                    <li class="left-align">We provide free shipping</li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </div>
+                                    
+                                    <div class="slide-edit-form">
+                                        <div class="rich-editor">
+                                            <div class="rich-editor-toolbar">
+                                                <button class="rich-editor-btn" onclick="formatText('bold')" title="Bold"><strong>B</strong></button>
+                                                <button class="rich-editor-btn" onclick="formatText('italic')" title="Italic"><em>I</em></button>
+                                                <button class="rich-editor-btn" onclick="formatText('underline')" title="Underline"><u>U</u></button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h2')" title="Heading 2">H2</button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h3')" title="Heading 3">H3</button>
+                                                <button class="rich-editor-btn" onclick="addList('ul')" title="Bullet List">•</button>
+                                                <button class="rich-editor-btn" onclick="addList('ol')" title="Numbered List">1.</button>
+                                                <button class="rich-editor-btn" onclick="addListItem()" title="Add List Item">+</button>
+                                                <button class="rich-editor-btn" onclick="addBlankLine()" title="Add Blank Line">␣</button>
+                                                <button class="rich-editor-btn" onclick="addSmallItalic()" title="Small Italic Text">i</button>
+                                                <button class="rich-editor-btn" onclick="addLeftAlign()" title="Left Align">←</button>
+                                            </div>
+                                            <div class="rich-editor-content" id="slide-3-content" contenteditable="true">
+                                                <h2>Our Products</h2>
+                                                <p class="left-align">We currently have 2 Gins</p>
+                                                <div class="product-showcase">
+                                                    <div class="product-item">
+                                                        <h3>Whistlebird Wildflower</h3>
+                                                        <p>44% ABV • 700ml</p>
+                                                        <p>Citrus forward Gin with floral notes, its dry with a long smooth finish - this is our signature product</p>
+                                                    </div>
+                                                    <div class="product-item">
+                                                        <h3>Whistlebird Solstice</h3>
+                                                        <p>40% ABV • 700ml</p>
+                                                        <p>Crisp Himilayan Juniper foward citrus Gin thats been distilled through native New Zealand Kawakawa</p>
+                                                    </div>
+                                                    <div class="product-item">
+                                                        <h3>Pricing & MoQ</h3>
+                                                        <ul>
+                                                            <li class="left-align">Both Gins are $46.25 +GST per bottle</li>
+                                                            <li class="left-align">We have an MoQ of 1 case of 6 bottles</li>
+                                                            <li class="left-align">We provide free shipping</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="slide-edit-buttons">
+                                            <button class="slide-edit-btn btn-save-deck" onclick="saveSlide(3)">Save</button>
+                                            <button class="slide-edit-btn btn-cancel-deck" onclick="cancelEditSlide(3)">Cancel</button>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="slide-navigation">
                                         <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
                                         <button type="button" class="slide-nav-btn" onclick="showSlide(2)">Counters</button>
                                         <button type="button" class="slide-nav-btn" onclick="showSlide(3)">Products</button>
                                     </div>
                                 </div>
-
                             </div>
                         </div>
                         
@@ -1759,7 +3334,30 @@
                             <div class="form-group">
                                 <label for="customerNotes">High level notes about the customer that are good to know</label>
                                 <textarea id="customerNotes" name="customerNotes" rows="4" 
-                                          placeholder="Enter details about the customer that will help with future interactions"></textarea>
+                                          placeholder="Enter details about the customer that will help with future interactions e.g Manager is Johnny and he only works Mondays and hates pushy sales"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h3>Call logs</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="callLogType">Call Type</label>
+                                    <select id="callLogType" name="callLogType">
+                                        <option value="call">Call</option>
+                                        <option value="email">Email</option>
+                                        <option value="general note">General Note</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="callLogDate">Date</label>
+                                    <input type="date" id="callLogDate" name="callLogDate" class="date-input" readonly>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="callLogs">Log call notes</label>
+                                <textarea id="callLogs" name="callLogs" rows="4" 
+                                          placeholder="Enter details about the call with the customer"></textarea>
                             </div>
                         </div>
                         
@@ -1905,6 +3503,95 @@
         </div>
     </div>
 
+    <!-- Potential Matches Modal -->
+    {% if potential_matches %}
+    <div id="potentialMatchesModal" class="modal" style="display: block;">
+        <div class="modal-content potential-matches-modal">
+            <div class="modal-header">
+                <h2>⚠️ Potential Duplicate Customers Found</h2>
+                <span class="close-button" onclick="closePotentialMatchesModal()">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <p class="modal-description">
+                    We found some customers that might be duplicates of existing ones. This includes customers with similar names and customers whose names appear to be abbreviated versions of existing customer names. Please review each one and decide whether to sync them or ignore them.
+                </p>
+                
+                <div class="potential-matches-list">
+                    {% for match in potential_matches %}
+                    <div class="potential-match-item" data-new-customer="{{ match.new_customer }}">
+                        <div class="match-header">
+                            <div class="new-customer-name">{{ match.new_customer }}</div>
+                            <div class="match-count">{{ match.matches|length }} potential matches</div>
+                        </div>
+                        <div class="match-details">
+                            <div class="match-selection">
+                                <label for="match-select-{{ loop.index }}">Select existing customer to match with:</label>
+                                <select id="match-select-{{ loop.index }}" class="match-dropdown" onchange="enableProcessButton({{ loop.index }})">
+                                    <option value="">-- Select existing customer --</option>
+                                    {% for potential_match in match.matches %}
+                                    <option value="{{ potential_match.existing_customer }}">
+                                        {{ potential_match.existing_customer }} ({{ "%.0f"|format(potential_match.similarity * 100) }}% match)
+                                    </option>
+                                    {% endfor %}
+                                    <option value="CREATE_NEW">+ Create as new customer</option>
+                                </select>
+                            </div>
+                            {% if match.matches %}
+                            <div class="match-preview">
+                                <small>Top matches found:</small>
+                                <ul>
+                                    {% for potential_match in match.matches[:3] %}
+                                    <li>{{ potential_match.existing_customer }} ({{ "%.0f"|format(potential_match.similarity * 100) }}% similarity)</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="match-actions">
+                            <button class="process-button" id="process-btn-{{ loop.index }}" onclick="processMatch('{{ match.new_customer }}', {{ loop.index }})" disabled>
+                                Process Match
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="secondary-button" onclick="closePotentialMatchesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Process Match Confirmation Modal -->
+    <div id="processMatchConfirmationModal" class="modal" style="display: none;">
+        <div class="modal-content confirmation-modal">
+            <div class="modal-header">
+                <h2>Confirm Customer Match</h2>
+                <span class="close-button" onclick="closeProcessMatchConfirmationModal()">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="confirmation-content">
+                    <div class="confirmation-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4CAF50"/>
+                        </svg>
+                    </div>
+                    <h3 id="processMatchConfirmationTitle">Confirm Action</h3>
+                    <p id="processMatchConfirmationMessage">Are you sure you want to proceed?</p>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="secondary-button" onclick="closeProcessMatchConfirmationModal()">Cancel</button>
+                <button class="primary-button" id="confirmProcessMatchBtn" onclick="confirmProcessMatch()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global variables to store customer data
         let allCustomers = [];
@@ -1914,6 +3601,21 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Customer data will be loaded from the DOM elements
             loadCustomersFromDOM();
+            
+            // Check for follow-up alerts
+            checkFollowUpAlerts();
+        });
+
+        // Also check alerts when page becomes visible (back button, tab switch, etc.)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                checkFollowUpAlerts();
+            }
+        });
+
+        // Check alerts when page is shown (for back button navigation)
+        window.addEventListener('pageshow', function() {
+            checkFollowUpAlerts();
         });
 
         function loadCustomersFromDOM() {
@@ -1996,10 +3698,42 @@
                 dateInput.blur();
                 dateInput.focus();
             }
+            
+            // Initialize call log date field
+            const callLogDateInput = document.getElementById('callLogDate');
+            if (callLogDateInput) {
+                callLogDateInput.value = today;
+                console.log('Call log date set to:', today);
+                
+                // Force the date input to update its display
+                callLogDateInput.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Add visual feedback
+                callLogDateInput.style.borderColor = '#4CAF50';
+                setTimeout(() => {
+                    callLogDateInput.style.borderColor = '';
+                }, 1000);
+            } else {
+                console.error('Call log date input not found in openNewCustomerModal');
+            }
         }
 
         function closeNewCustomerModal() {
             document.getElementById('newCustomerModal').style.display = 'none';
+        }
+        
+        // Debug function to manually set call log date
+        function setCallLogDate() {
+            const callLogDateInput = document.getElementById('callLogDate');
+            if (callLogDateInput) {
+                const today = new Date().toISOString().split('T')[0];
+                callLogDateInput.value = today;
+                console.log('Call log date manually set to:', today);
+                return true;
+            } else {
+                console.error('Call log date input not found');
+                return false;
+            }
         }
 
         // Follow-ups Modal Functions
@@ -2009,6 +3743,209 @@
 
         function closeFollowUpsModal() {
             document.getElementById('followUpsModal').style.display = 'none';
+        }
+
+        // Follow-ups Due Modal Functions
+        function viewFollowUpsDue() {
+            document.getElementById('followUpsDueModal').style.display = 'block';
+        }
+
+        function closeFollowUpsDueModal() {
+            document.getElementById('followUpsDueModal').style.display = 'none';
+        }
+
+        // Follow-up Alert Banner Functions
+        function checkFollowUpAlerts() {
+            // Check if banner was dismissed for today
+            const today = new Date().toDateString();
+            const dismissedToday = localStorage.getItem('bannerDismissedDate');
+            
+            if (dismissedToday === today) {
+                updateShowBannerButton();
+                return; // Don't show banner if dismissed for today
+            }
+
+            // Count overdue and due today tasks
+            const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
+            const todayDate = new Date();
+            todayDate.setHours(0, 0, 0, 0);
+            
+            let overdueCount = 0;
+            let dueTodayCount = 0;
+            
+            followUpsDue.forEach(task => {
+                if (task[2]) { // due_date exists
+                    const dueDate = new Date(task[2]);
+                    dueDate.setHours(0, 0, 0, 0);
+                    
+                    if (dueDate < todayDate) {
+                        overdueCount++;
+                    } else if (dueDate.getTime() === todayDate.getTime()) {
+                        dueTodayCount++;
+                    }
+                }
+            });
+            
+            const totalDueCount = overdueCount + dueTodayCount;
+            
+            // Show banner if there are any due tasks
+            if (totalDueCount > 0) {
+                document.getElementById('overdueCount').textContent = overdueCount;
+                document.getElementById('dueTodayCount').textContent = dueTodayCount;
+                document.getElementById('totalDueCount').textContent = totalDueCount;
+                document.getElementById('followUpAlertBanner').classList.add('show');
+            }
+            
+            // Update show banner button visibility
+            updateShowBannerButton();
+        }
+
+        function dismissBanner() {
+            document.getElementById('followUpAlertBanner').classList.remove('show');
+        }
+
+        function dismissBannerForDay() {
+            const today = new Date().toDateString();
+            localStorage.setItem('bannerDismissedDate', today);
+            document.getElementById('followUpAlertBanner').classList.remove('show');
+            updateShowBannerButton();
+        }
+
+        function showBanner() {
+            // Clear the dismissed date so banner can show again
+            localStorage.removeItem('bannerDismissedDate');
+            checkFollowUpAlerts();
+            updateShowBannerButton();
+        }
+
+        function updateShowBannerButton() {
+            const banner = document.getElementById('followUpAlertBanner');
+            const showButton = document.getElementById('showBannerButton');
+            
+            // Show the button if banner is hidden and there are due tasks
+            const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
+            const hasDueTasks = followUpsDue.length > 0;
+            const bannerVisible = banner.classList.contains('show');
+            
+            if (hasDueTasks && !bannerVisible) {
+                showButton.style.display = 'block';
+            } else {
+                showButton.style.display = 'none';
+            }
+        }
+
+        function viewFollowUpsDueFromBanner() {
+            // Close banner and open modal
+            dismissBanner();
+            document.getElementById('followUpsDueModal').style.display = 'block';
+        }
+
+
+
+        // Active Customers Modal Functions
+        function viewActiveCustomers() {
+            document.getElementById('activeCustomersModal').style.display = 'block';
+        }
+
+        function closeActiveCustomersModal() {
+            document.getElementById('activeCustomersModal').style.display = 'none';
+        }
+
+        // New Customers Modal Functions
+        function viewNewCustomers() {
+            document.getElementById('newCustomersModal').style.display = 'block';
+        }
+
+        function closeNewCustomersModal() {
+            document.getElementById('newCustomersModal').style.display = 'none';
+        }
+
+        function closeConfirmationModal() {
+            document.getElementById('confirmationModal').style.display = 'none';
+        }
+
+        function showConfirmationModal(title, message, onConfirm) {
+            // Set the modal content
+            document.getElementById('confirmationTitle').textContent = title;
+            document.getElementById('confirmationMessage').textContent = message;
+            
+            // Set up the confirm button action
+            const confirmBtn = document.getElementById('confirmActionBtn');
+            confirmBtn.onclick = () => {
+                closeConfirmationModal();
+                onConfirm();
+            };
+            
+            // Show the modal
+            document.getElementById('confirmationModal').style.display = 'block';
+        }
+
+        function viewCustomerProfile(customerName) {
+            // Close the modal and redirect to customer profile
+            closeFollowUpsDueModal();
+            window.location.href = `/crm-customer-page?customer_name=${encodeURIComponent(customerName)}`;
+        }
+
+        function markTaskCompleted(taskId, customerName) {
+            // Show custom confirmation modal
+            showConfirmationModal(
+                'Mark Task as Completed',
+                `Are you sure you want to mark this task as completed for ${customerName}?`,
+                () => {
+                    // Send request to backend to update task status
+                    fetch('/crm-mark-task-completed', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            task_id: taskId,
+                            customer_name: customerName
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Remove the task row from the table
+                            const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
+                            if (taskRow) {
+                                taskRow.remove();
+                                
+                                // Check if there are any remaining tasks
+                                const remainingTasks = document.querySelectorAll('.follow-up-task-row');
+                                
+                                // Update the stats count
+                                const statsCount = document.getElementById('followUpsDueCount');
+                                if (statsCount) {
+                                    statsCount.textContent = remainingTasks.length;
+                                }
+                                
+                                if (remainingTasks.length === 0) {
+                                    // No more tasks, show the "no follow-ups due" message
+                                    const tableContainer = document.querySelector('.table-container');
+                                    if (tableContainer) {
+                                        tableContainer.innerHTML = `
+                                            <div class="no-follow-ups-due">
+                                                <p>No follow-up tasks due at the moment.</p>
+                                                <p>All tasks are completed or up to date.</p>
+                                            </div>
+                                        `;
+                                    }
+                                }
+                            }
+                            
+                            // Show success message using custom modal
+                            showSuccessModal('Task Completed', 'Task marked as completed successfully!');
+                        } else {
+                            showErrorModal('Error', 'Error marking task as completed: ' + (data.error || 'Unknown error'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showErrorModal('Error', 'Error marking task as completed. Please try again.');
+                    });
+                }
+            );
         }
 
         function selectCustomerFromElement(element) {
@@ -2073,6 +4010,12 @@
             const customerSearchModal = document.getElementById('customerSearchModal');
             const newCustomerModal = document.getElementById('newCustomerModal');
             const followUpsModal = document.getElementById('followUpsModal');
+            const followUpsDueModal = document.getElementById('followUpsDueModal');
+            const activeCustomersModal = document.getElementById('activeCustomersModal');
+            const newCustomersModal = document.getElementById('newCustomersModal');
+            const confirmationModal = document.getElementById('confirmationModal');
+            const successModal = document.getElementById('successModal');
+            const processMatchConfirmationModal = document.getElementById('processMatchConfirmationModal');
             
             if (event.target == customerSearchModal) {
                 closeCustomerSearch();
@@ -2083,6 +4026,24 @@
             if (event.target == followUpsModal) {
                 closeFollowUpsModal();
             }
+            if (event.target == followUpsDueModal) {
+                closeFollowUpsDueModal();
+            }
+            if (event.target == activeCustomersModal) {
+                closeActiveCustomersModal();
+            }
+            if (event.target == newCustomersModal) {
+                closeNewCustomersModal();
+            }
+            if (event.target == confirmationModal) {
+                closeConfirmationModal();
+            }
+            if (event.target == successModal) {
+                closeSuccessModal();
+            }
+            if (event.target == processMatchConfirmationModal) {
+                closeProcessMatchConfirmationModal();
+            }
         }
 
         // Close modal with Escape key
@@ -2091,6 +4052,11 @@
                 closeCustomerSearch();
                 closeNewCustomerModal();
                 closeFollowUpsModal();
+                closeFollowUpsDueModal();
+                closeActiveCustomersModal();
+                closeNewCustomersModal();
+                closeConfirmationModal();
+                closeSuccessModal();
             }
         });
 
@@ -2114,6 +4080,25 @@
                 follow_up_type: document.getElementById('followUpType').value,
                 follow_up_status: document.getElementById('followUpStatus').value
             };
+
+            // Collect call log data if notes are provided
+            const callLogDateInput = document.getElementById('callLogDate');
+            const callLogData = {
+                customer: document.getElementById('customerName').value,
+                log_date: callLogDateInput.value || new Date().toISOString().split('T')[0], // Fallback to today if empty
+                log_type: document.getElementById('callLogType').value,
+                log_notes: document.getElementById('callLogs').value.trim()
+            };
+            
+            // Debug logging
+            console.log('Call log date input value:', callLogDateInput.value);
+            console.log('Call log data:', callLogData);
+            
+            // Ensure call log date is set
+            if (!callLogData.log_date) {
+                callLogData.log_date = new Date().toISOString().split('T')[0];
+                console.log('Fallback date set to:', callLogData.log_date);
+            }
             
             // Send data to backend
             fetch('/crm-create-customer', {
@@ -2127,6 +4112,28 @@
             .then(data => {
                 if (data.success) {
                     console.log('Customer created successfully:', data.message);
+                    
+                    // If call log notes were provided, create the call log entry
+                    if (callLogData.log_notes) {
+                        fetch('/crm-create-call-log', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(callLogData)
+                        })
+                        .then(response => response.json())
+                        .then(callLogResult => {
+                            if (callLogResult.success) {
+                                console.log('Call log created successfully');
+                            } else {
+                                console.error('Error creating call log:', callLogResult.message);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error creating call log:', error);
+                        });
+                    }
                     
                     // Show success message
                     const successMessage = document.createElement('div');
@@ -2186,6 +4193,23 @@
                     this.showPicker ? this.showPicker() : this.focus();
                 });
             }
+
+            // Initialize call log date field with current date
+            function initializeCallLogDate() {
+                const callLogDateInput = document.getElementById('callLogDate');
+                if (callLogDateInput) {
+                    const today = new Date().toISOString().split('T')[0];
+                    callLogDateInput.value = today;
+                    console.log('Call log date initialized to:', today);
+                } else {
+                    console.log('Call log date input not found, retrying...');
+                    setTimeout(initializeCallLogDate, 100);
+                }
+            }
+            
+            // Initialize immediately and also after a short delay to ensure DOM is ready
+            initializeCallLogDate();
+            setTimeout(initializeCallLogDate, 500);
         });
 
         // Add hover effects for option cards
@@ -2198,6 +4222,460 @@
                 this.style.transform = 'translateY(0)';
             });
         });
+
+        function showNotification(message, type = 'info') {
+            // Remove existing notifications
+            const existingNotifications = document.querySelectorAll('.notification');
+            existingNotifications.forEach(notification => {
+                notification.remove();
+            });
+
+            // Create new notification
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+
+            // Add to page
+            document.body.appendChild(notification);
+
+            // Show notification
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+
+            // Hide and remove after 3 seconds
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+
+        // Sales Deck Inline Editing Functions
+        function editSlide(slideNumber) {
+            const slide = document.getElementById(`slide-${slideNumber}`);
+            
+            // Show edit mode
+            slide.classList.add('editing');
+        }
+
+        function saveSlide(slideNumber) {
+            const slide = document.getElementById(`slide-${slideNumber}`);
+            const richEditor = slide.querySelector('.rich-editor-content');
+            const slideContent = slide.querySelector('.slide-content');
+            
+            // Get the HTML content directly from the rich editor
+            const newHtml = richEditor.innerHTML;
+            
+            // Update the slide content
+            slideContent.innerHTML = newHtml;
+            
+            // Hide edit mode
+            slide.classList.remove('editing');
+            
+            // Show success notification
+            showNotification('Sales deck content updated successfully!', 'success');
+            
+            // Save to backend (optional - you can implement this later)
+            saveSalesDeckToBackend(slideNumber, newHtml);
+        }
+
+        function cancelEditSlide(slideNumber) {
+            const slide = document.getElementById(`slide-${slideNumber}`);
+            
+            // Hide edit mode without saving changes
+            slide.classList.remove('editing');
+        }
+
+        // Rich Text Editor Formatting Functions
+        function formatText(command) {
+            document.execCommand(command, false, null);
+        }
+
+        function addHeading(level) {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const selectedText = range.toString();
+                
+                if (selectedText) {
+                    const heading = document.createElement(level);
+                    heading.textContent = selectedText;
+                    range.deleteContents();
+                    range.insertNode(heading);
+                } else {
+                    // If no text selected, create a new heading
+                    const heading = document.createElement(level);
+                    heading.textContent = 'New Heading';
+                    heading.className = 'left-align';
+                    range.insertNode(heading);
+                    range.collapse(false);
+                }
+            }
+        }
+
+        function addList(listType) {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const list = document.createElement(listType);
+                list.className = 'left-align';
+                
+                const listItem = document.createElement('li');
+                listItem.textContent = 'New list item';
+                list.appendChild(listItem);
+                
+                range.insertNode(list);
+                range.collapse(false);
+            }
+        }
+
+        function addListItem() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                
+                // Check if we're inside a list
+                let list = range.commonAncestorContainer;
+                while (list && list.nodeName !== 'UL' && list.nodeName !== 'OL') {
+                    list = list.parentNode;
+                }
+                
+                if (list) {
+                    // Add item to existing list
+                    const listItem = document.createElement('li');
+                    listItem.textContent = 'New list item';
+                    list.appendChild(listItem);
+                } else {
+                    // Create new list
+                    const newList = document.createElement('ul');
+                    newList.className = 'left-align';
+                    const listItem = document.createElement('li');
+                    listItem.textContent = 'New list item';
+                    newList.appendChild(listItem);
+                    range.insertNode(newList);
+                }
+                range.collapse(false);
+            }
+        }
+
+        function addBlankLine() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const blankLine = document.createElement('p');
+                blankLine.className = 'blank';
+                range.insertNode(blankLine);
+                range.collapse(false);
+            }
+        }
+
+        function addSmallItalic() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const selectedText = range.toString();
+                
+                if (selectedText) {
+                    const smallItalic = document.createElement('p');
+                    smallItalic.className = 'left-align italic small';
+                    smallItalic.textContent = selectedText;
+                    range.deleteContents();
+                    range.insertNode(smallItalic);
+                } else {
+                    // If no text selected, create a new small italic paragraph
+                    const smallItalic = document.createElement('p');
+                    smallItalic.className = 'left-align italic small';
+                    smallItalic.textContent = 'Small italic text..';
+                    range.insertNode(smallItalic);
+                    range.collapse(false);
+                }
+            }
+        }
+
+        function addLeftAlign() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const selectedText = range.toString();
+                
+                if (selectedText) {
+                    const leftAlign = document.createElement('p');
+                    leftAlign.className = 'left-align';
+                    leftAlign.textContent = selectedText;
+                    range.deleteContents();
+                    range.insertNode(leftAlign);
+                } else {
+                    // If no text selected, create a new left-aligned paragraph
+                    const leftAlign = document.createElement('p');
+                    leftAlign.className = 'left-align';
+                    leftAlign.textContent = 'New left-aligned text';
+                    range.insertNode(leftAlign);
+                    range.collapse(false);
+                }
+            }
+        }
+
+        function convertHtmlToPlainText(html) {
+            // Create a temporary div to parse HTML
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            
+            // Convert to plain text, preserving line breaks
+            let text = tempDiv.textContent || tempDiv.innerText || '';
+            
+            // Clean up extra whitespace
+            text = text.replace(/\n\s*\n/g, '\n\n');
+            text = text.trim();
+            
+            return text;
+        }
+
+        function convertPlainTextToHtml(text) {
+            // Split text into lines
+            const lines = text.split('\n');
+            let html = '';
+            let inList = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
+                if (line === '') {
+                    html += '<p class="blank"></p>';
+                    continue;
+                }
+                
+                // Check for headers (lines that are all caps or start with #)
+                if (line === line.toUpperCase() && line.length > 3 && line.length < 50) {
+                    html += `<h2>${line}</h2>`;
+                    continue;
+                }
+                
+                // Check for sub-headers (lines that start with common patterns)
+                if (line.match(/^(Customer asks|Fallback options|We currently have|Pricing & MoQ)/)) {
+                    html += `<h3>${line}</h3>`;
+                    continue;
+                }
+                
+                // Check for italic small text (lines that end with ..)
+                if (line.endsWith('..')) {
+                    html += `<p class="left-align italic small">${line}</p>`;
+                    continue;
+                }
+                
+                // Check for bullet points (lines that start with •)
+                if (line.startsWith('•')) {
+                    if (!inList) {
+                        html += '<ul class="left-align">';
+                        inList = true;
+                    }
+                    const listItem = line.substring(1).trim();
+                    html += `<li>${listItem}</li>`;
+                    continue;
+                }
+                
+                // Check for list items (lines that start with -)
+                if (line.startsWith('-')) {
+                    if (!inList) {
+                        html += '<ul class="left-align">';
+                        inList = true;
+                    }
+                    const listItem = line.substring(1).trim();
+                    html += `<li>${listItem}</li>`;
+                    continue;
+                }
+                
+                // End list if we were in one
+                if (inList) {
+                    html += '</ul>';
+                    inList = false;
+                }
+                
+                // Check for italic text (lines that are short and descriptive)
+                if (line.length < 100 && (line.includes('hook') || line.includes('ask') || line.includes('Options'))) {
+                    html += `<p class="left-align italic small">${line}</p>`;
+                    continue;
+                }
+                
+                // Default: regular paragraph with left alignment
+                html += `<p class="left-align">${line}</p>`;
+            }
+            
+            // Close any open list
+            if (inList) {
+                html += '</ul>';
+            }
+            
+            return html;
+        }
+
+        function saveSalesDeckToBackend(slideNumber, content) {
+            // This function can be implemented later to save content to the database
+            console.log(`Saving slide ${slideNumber} content:`, content);
+            
+            // Example implementation:
+            // fetch('/save-sales-deck', {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' },
+            //     body: JSON.stringify({ slide: slideNumber, content: content })
+            // });
+        }
+
+        function closeSuccessModal() {
+            document.getElementById('successModal').style.display = 'none';
+        }
+        function showSuccessModal(title, message) {
+            document.getElementById('successTitle').textContent = title;
+            document.getElementById('successMessage').textContent = message;
+            // Ensure icon is green for success messages
+            const icon = document.querySelector('#successModal .success-icon svg path');
+            if (icon) icon.setAttribute('fill', '#4CAF50');
+            document.getElementById('successModal').style.display = 'block';
+        }
+
+        function showErrorModal(title, message) {
+            // For now, use the success modal but with error styling
+            document.getElementById('successTitle').textContent = title;
+            document.getElementById('successMessage').textContent = message;
+            // Change the icon color to red for errors
+            const icon = document.querySelector('#successModal .success-icon svg path');
+            if (icon) icon.setAttribute('fill', '#dc3545');
+            document.getElementById('successModal').style.display = 'block';
+        }
+
+        // Potential Matches Modal Functions
+        function closePotentialMatchesModal() {
+            document.getElementById('potentialMatchesModal').style.display = 'none';
+        }
+
+        function enableProcessButton(index) {
+            const dropdown = document.getElementById(`match-select-${index}`);
+            const button = document.getElementById(`process-btn-${index}`);
+            
+            if (dropdown.value) {
+                button.disabled = false;
+                button.style.opacity = '1';
+            } else {
+                button.disabled = true;
+                button.style.opacity = '0.5';
+            }
+        }
+
+        function processMatch(newCustomerName, index) {
+            const dropdown = document.getElementById(`match-select-${index}`);
+            const selectedValue = dropdown.value;
+            const button = document.getElementById(`process-btn-${index}`);
+            
+            if (!selectedValue) {
+                alert('Please select a customer to match with or choose to create a new customer.');
+                return;
+            }
+            
+            // Store the match data for the confirmation
+            window.pendingMatchData = {
+                newCustomerName: newCustomerName,
+                selectedValue: selectedValue,
+                index: index,
+                button: button
+            };
+            
+            // Show confirmation modal
+            let confirmTitle, confirmMessage;
+            if (selectedValue === 'CREATE_NEW') {
+                confirmTitle = 'Create New Customer';
+                confirmMessage = `Are you sure you want to create "${newCustomerName}" as a new customer?`;
+            } else {
+                confirmTitle = 'Create Customer Alias';
+                confirmMessage = `Are you sure you want to match "${newCustomerName}" with existing customer "${selectedValue}"? This will create an alias relationship.`;
+            }
+            
+            document.getElementById('processMatchConfirmationTitle').textContent = confirmTitle;
+            document.getElementById('processMatchConfirmationMessage').textContent = confirmMessage;
+            document.getElementById('processMatchConfirmationModal').style.display = 'block';
+        }
+
+        function closeProcessMatchConfirmationModal() {
+            document.getElementById('processMatchConfirmationModal').style.display = 'none';
+            window.pendingMatchData = null;
+        }
+
+        function confirmProcessMatch() {
+            if (!window.pendingMatchData) return;
+            
+            const { newCustomerName, selectedValue, index, button } = window.pendingMatchData;
+            
+            console.log(`Processing match: ${newCustomerName} -> ${selectedValue}`);
+            
+            // Close the confirmation modal
+            closeProcessMatchConfirmationModal();
+            
+            // Show loading state
+            const originalText = button.textContent;
+            button.textContent = 'Processing...';
+            button.disabled = true;
+            
+            const action = selectedValue === 'CREATE_NEW' ? 'create_new' : 'alias';
+            const existingCustomerName = selectedValue === 'CREATE_NEW' ? null : selectedValue;
+            
+            fetch('/crm-handle-potential-match', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: action,
+                    new_customer_name: newCustomerName,
+                    existing_customer_name: existingCustomerName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove the match item from the modal
+                    const matchItem = button.closest('.potential-match-item');
+                    matchItem.style.opacity = '0.5';
+                    matchItem.style.pointerEvents = 'none';
+                    
+                    // Update button text
+                    if (action === 'alias') {
+                        button.textContent = '✓ Aliased';
+                        button.style.background = '#4CAF50';
+                        button.style.borderColor = '#4CAF50';
+                    } else {
+                        button.textContent = '✓ Created';
+                        button.style.background = '#2196F3';
+                        button.style.borderColor = '#2196F3';
+                    }
+                    
+                    // Show success message
+                    showSuccessModal(
+                        action === 'alias' ? 'Customer Aliased' : 'Customer Created',
+                        data.message
+                    );
+                    
+                    // Reload the page to re-check aliases and update the CRM
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                    
+                } else {
+                    showErrorModal('Error', data.message);
+                    // Reset button
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showErrorModal('Error', 'An error occurred while processing the request');
+                // Reset button
+                button.textContent = originalText;
+                button.disabled = false;
+            });
+        }
     </script>
 </body>
 </html> 

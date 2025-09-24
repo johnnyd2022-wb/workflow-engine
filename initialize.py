@@ -186,19 +186,20 @@ def create_sales_product_table():
         "date": "DATE",
         "action": "TEXT",
         "buyer": "TEXT",
-        "product_name": "TEXT",
-        "bottles_sold": "DOUBLE PRECISION",
-        "abv": "DOUBLE PRECISION",
-        "bottle_size_ml": "DOUBLE PRECISION",
-        "lal": "DOUBLE PRECISION",
+        "products": "JSONB",
+        #"product_name": "TEXT",
+        #"bottles_sold": "DOUBLE PRECISION",
+        #"abv": "DOUBLE PRECISION",
+        #"bottle_size_ml": "DOUBLE PRECISION",
+        #"lal": "DOUBLE PRECISION",
         "duty_amount": "DOUBLE PRECISION",
-        "bottle_batch": "TEXT",
+        #"bottle_batch": "TEXT",
         "notes": "TEXT",
-        "unit_price": "DOUBLE PRECISION",
-        "amount_nzd": "DOUBLE PRECISION",
-        "total_nzd": "DOUBLE PRECISION",
+        #"unit_price": "DOUBLE PRECISION",
+        #"amount_nzd": "DOUBLE PRECISION",
+        #"total_nzd": "DOUBLE PRECISION",
         "invoice_total": "DOUBLE PRECISION",
-        "gst": "DOUBLE PRECISION",
+        #"gst": "DOUBLE PRECISION",
         "invoice_gst": "DOUBLE PRECISION",
         "uid": "TEXT"
     }
@@ -221,6 +222,7 @@ def create_crm_customer_table():
         "customer_status": "TEXT", # 'active', 'inactive', 'new'
         "customer_last_contact": "DATE", # last date the customer was contacted
         "invoices": "JSONB",  # Stores invoice data as nested JSON with invoice number as key
+        "aliases": "TEXT[]", # list of aliases for the customer
         "uid": "TEXT"
     }
 
