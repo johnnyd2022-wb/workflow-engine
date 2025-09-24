@@ -1,39 +1,53 @@
 #!/bin/bash
 
+current_date=$(date +"%m-%d-%Y")
+
+psql_run_test() {
+        docker run --name whistlebird_db_test -d -p 5401:5432 \
+                -e POSTGRES_DB=whistlebird_inventory \
+                -e POSTGRES_USER=wb_admin \
+                -e POSTGRES_PASSWORD=whistlebird \
+                -d postgres
+
+        echo "Waiting for PostgreSQL to start..."
+        sleep 5
+
+        docker exec -i whistlebird_db_test psql -U wb_admin -d whistlebird_inventory -c \
+                "CREATE ROLE readonly_user LOGIN PASSWORD 'wb_readonly'; \
+                GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_user; \
+                REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM readonly_user; \
+                ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO readonly_user;"
+
+        echo "PostgreSQL and readonly_user created successfully!"
+}
+
 # Database restore script - restores prod DB to test environment
 echo "🔄 Restoring production database to test environment..."
 
 # Stop and remove existing test DB container
-docker stop $(docker ps -aqf "name=wb_inv_test") 2>/dev/null || true
-docker rm $(docker ps -aqf "name=wb_inv_test") 2>/dev/null || true
+docker stop whistlebird_restore && docker rm whistlebird_restore
+docker stop whistlebird_db_test && docker rm whistlebird_db_test
 
-# Stop and remove existing test DB container
-docker stop $(docker ps -aqf "name=whistlebird_db_test") 2>/dev/null || true
-docker rm $(docker ps -aqf "name=whistlebird_db_test") 2>/dev/null || true
+# Take prod backup
+docker exec -t whistlebird_db_prod pg_dump -U wb_admin -d whistlebird_inventory > /home/johnny/wb_db_backups/whistlebird_db_prod-${current_date}.sql
+sleep 5
 
-# Create new test DB container from production backup
-docker run -d \
-    --name whistlebird_db_test \
-    -p 5401:5432 \
-    -e POSTGRES_DB=whistlebird_db_test \
-    -e POSTGRES_USER=postgres \
-    -e POSTGRES_PASSWORD=your_password_here \
-    postgres:13
+# Create restore container
+docker run --name whistlebird_restore -p 5410:5432 -e POSTGRES_USER=wb_admin -e POSTGRES_PASSWORD=whistlebird -e POSTGRES_DB=whistlebird_restore -d postgres
 
-# Wait for container to be ready
-echo "⏳ Waiting for database to be ready..."
-sleep 10
+# Run test container
+psql_run_test
+sleep 5
 
-# Restore production data (you'll need to implement the actual restore logic)
-echo "📥 Restoring production data..."
-# Add your restore logic here - this might involve:
-# 1. Creating a backup of prod DB
-# 2. Restoring it to test DB
-# 3. Running sanitization scripts
+docker cp /home/johnny/wb_db_backups/whistlebird_db_prod-${current_date}.sql whistlebird_restore:/
+docker cp /home/johnny/wb_db_backups/whistlebird_db_prod-${current_date}.sql whistlebird_db_test:/
+docker exec -t whistlebird_restore psql -U wb_admin -d whistlebird_restore -f whistlebird_db_prod-${current_date}.sql
+docker exec -t whistlebird_db_test psql -U wb_admin -d whistlebird_inventory -f whistlebird_db_prod-${current_date}.sql
+sleep 5
 
 # Run sanitization to replace customer emails
 echo "🧹 Sanitizing customer data..."
-# Add sanitization logic here
+python3 /home/johnny/wb_local/sanitize_db.py
 
 echo "✅ Database restore completed!"
 echo "Test environment is ready with sanitized production data"
