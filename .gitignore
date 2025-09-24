@@ -25,6 +25,11 @@ wheels/
 .installed.cfg
 *.egg
 
+# Python cache files
+*.pyc
+*.pyo
+*.pyd
+
 # Virtual environments
 venv/
 env/
