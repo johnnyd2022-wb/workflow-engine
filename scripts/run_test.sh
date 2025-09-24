@@ -22,3 +22,4 @@ docker run -d \
 
 echo "✅ Test environment started on port 5001"
 echo "View logs with: docker logs -f wb_inv_test"
+echo "Browse to: https://test-inventory.whistlebird.co.nz"

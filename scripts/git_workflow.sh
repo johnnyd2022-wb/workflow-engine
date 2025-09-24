@@ -80,7 +80,7 @@ deploy_test() {
     ./scripts/run_test.sh
     
     print_success "Test environment deployed successfully!"
-    print_status "Access your test environment at: http://localhost:5001"
+    print_status "Browse to: https://test-inventory.whistlebird.co.nz"
 }
 
 # Function to deploy to production
@@ -107,7 +107,7 @@ deploy_prod() {
     ./scripts/run_prod.sh
     
     print_success "Production environment deployed successfully!"
-    print_status "Access your production environment at: http://localhost:5000"
+    print_status "Browse to: https://inventory.whistlebird.co.nz"
     print_status "Deployment tagged as: $tag_name"
 }
 

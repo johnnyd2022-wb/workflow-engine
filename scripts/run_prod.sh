@@ -26,3 +26,4 @@ docker run -d \
 
 echo "✅ Production environment started on port 5000"
 echo "View logs with: docker logs -f wb_inv_prod"
+echo "Browse to: https://inventory.whistlebird.co.nz"
