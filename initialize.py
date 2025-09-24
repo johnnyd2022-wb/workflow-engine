@@ -6,6 +6,7 @@ import re
 from sqlalchemy import create_engine
 from io import StringIO  # Add this import statement for StringIO
 import docker
+from config_loader import config
 
 def load_docker_container(image_name, container_name, port):
     docker_host = "unix:///var/run/docker.sock"
@@ -609,11 +610,11 @@ def create_products_table():
     create_table(table_name, columns)
 
 def db_conn():
-    db_name = "whistlebird_inventory"
-    db_user = "wb_admin"
-    db_password = "whistlebird"
-    host = "localhost"
-    port = 5401
+    db_name = config.db_name
+    db_user = config.db_user
+    db_password = config.db_password
+    host = config.db_host
+    port = config.db_port
 
     # Create a connection to the PostgreSQL database
     connection = psycopg2.connect(

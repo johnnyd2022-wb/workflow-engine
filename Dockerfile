@@ -1,8 +1,27 @@
 FROM ubuntu:latest
 LABEL maintainer="johnny@whistlebird.co.nz"
+
+# Set timezone
 RUN ln -snf /usr/share/zoneinfo/Pacific/Auckland /etc/localtime && echo Pacific/Auckland > /etc/timezone
-RUN  apt-get -y update
-COPY wb_temp/ /
+
+# Update and install Python
+RUN apt-get -y update && apt-get install -y python3 python3-pip
+
+# Set working directory
+WORKDIR /app
+
+# Copy application files
+COPY . .
+
+# Install Python dependencies
+RUN pip3 install -r requirements.txt
+
+# Expose ports
 EXPOSE 80
 EXPOSE 443
-CMD ["python", "app.py"]
+
+# Set environment variable
+ENV WB_ENVIRONMENT=production
+
+# Run the application
+CMD ["python3", "app.py"]
