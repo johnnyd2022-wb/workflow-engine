@@ -1,0 +1,4681 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whistlebird CRM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            background-attachment: fixed;
+            color: var(--text-color);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                circle at 50% 50%,
+                rgba(255, 51, 102, 0.08) 0%,
+                transparent 70%
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0.5rem 1rem;
+            width: 100%;
+        }
+
+        .nav-bar {
+            background-color: transparent;
+            padding: 2rem 0 1rem 0;
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        .nav-bar h1 {
+            background: linear-gradient(135deg, 
+                #ffffff 0%, 
+                #f8f9fa 25%, 
+                #e9ecef 50%, 
+                #f8f9fa 75%, 
+                #ffffff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+            font-size: 2.8rem;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: -0.03em;
+            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            position: relative;
+            display: block;
+            width: 100%;
+        }
+
+        .nav-bar h1::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: calc(100% + 80px);
+            height: calc(100% + 40px);
+            background: linear-gradient(135deg, 
+                rgba(255, 255, 255, 0.1) 0%, 
+                rgba(255, 255, 255, 0.05) 50%, 
+                rgba(255, 255, 255, 0.1) 100%);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            z-index: -1;
+        }
+
+        .nav-bar h1::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: calc(100% + 120px);
+            height: calc(100% + 60px);
+            background: radial-gradient(ellipse, 
+                rgba(255, 193, 7, 0.1) 0%, 
+                transparent 70%);
+            z-index: -2;
+            animation: titleGlow 4s ease-in-out infinite alternate;
+        }
+
+        .main-content {
+            width: 100%;
+            padding-top: 0.5rem;
+        }
+
+        .option-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .option-card {
+            background: var(--card-background);
+            border-radius: 16px;
+            padding: 2.5rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .option-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .option-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--primary-color);
+            box-shadow: 0 8px 40px rgba(255, 51, 102, 0.2);
+        }
+
+        .option-card:hover::before {
+            opacity: 1;
+        }
+
+        .option-icon {
+            font-size: 3rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .option-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .option-description {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+
+        .option-button {
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
+            border: none;
+            border-radius: 12px;
+            color: var(--text-color);
+            font-size: 1.125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .option-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .option-button:hover::before {
+            left: 100%;
+        }
+
+        .option-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 51, 102, 0.4);
+        }
+
+        .option-button:active {
+            transform: translateY(0);
+        }
+
+        .section-title {
+            color: var(--text-color);
+            font-size: 2rem;
+            font-weight: 600;
+            margin: 3rem 0 2rem 0;
+            text-align: center;
+            letter-spacing: -0.02em;
+        }
+
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-breakdown {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .existing-count {
+            color: var(--success-color);
+            font-weight: 500;
+        }
+
+        .potential-count {
+            color: var(--warning-color);
+            font-weight: 500;
+        }
+
+        .clickable-stat {
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .clickable-stat:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 16px rgba(255, 51, 102, 0.2);
+            border-color: var(--primary-color);
+        }
+
+        .stat-hint {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .clickable-stat:hover .stat-hint {
+            opacity: 1;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 3rem;
+        }
+
+        .back-button {
+            padding: 1.25rem 2.5rem;
+            background-color: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-color);
+            font-size: 1.125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+        }
+
+        .back-button:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+            background-color: rgba(255, 51, 102, 0.1);
+        }
+
+        .back-button::before {
+            content: '←';
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .back-button:hover::before {
+            transform: translateX(-4px);
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--card-background);
+            margin: 2% auto;
+            padding: 0;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            width: 95%;
+            max-width: 1200px;
+            max-height: 95vh;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--table-header-bg);
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: var(--text-color);
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .modal-body {
+            padding: 0 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-description {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            line-height: 1.5;
+            margin: 0;
+            text-align: center;
+        }
+
+        .close-button {
+            color: var(--text-secondary);
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+            transition: color 0.3s ease;
+        }
+
+        .close-button:hover {
+            color: var(--primary-color);
+        }
+
+        .search-container {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--background-color);
+            color: var(--text-color);
+            font-size: 1rem;
+            font-family: inherit;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.1);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .customer-list-container {
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 1rem 0;
+        }
+
+        .customer-list {
+            padding: 0 2rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1rem;
+        }
+
+        .customer-item {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .customer-item:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 16px rgba(255, 51, 102, 0.2);
+        }
+
+        .customer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .customer-name {
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 1.1rem;
+        }
+
+        .customer-status {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .customer-status.existing {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .customer-status.potential {
+            background: var(--warning-color);
+            color: var(--secondary-color);
+        }
+
+        .customer-item::after {
+            content: '→ View Profile';
+            position: absolute;
+            right: 0.75rem;
+            bottom: 0.75rem;
+            color: var(--primary-color);
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(255, 51, 102, 0.15);
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--primary-color);
+            box-shadow: 0 2px 8px rgba(255, 51, 102, 0.2);
+            backdrop-filter: blur(10px);
+            z-index: 2;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+        }
+
+        .customer-item:hover::after {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Responsive Design for Browse Customers Modal */
+        @media (max-width: 1200px) {
+            .modal-content {
+                max-width: 95vw;
+                width: 95%;
+            }
+            
+            .customer-list {
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            }
+
+            /* Adjust customer table modals for medium screens */
+            .active-customers-modal,
+            .new-customers-modal {
+                width: 96%;
+                max-width: 1200px;
+                min-width: 900px;
+            }
+
+            .active-customers-container .table-container,
+            .new-customers-container .table-container {
+                min-width: 800px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .modal-content {
+                max-width: 98vw;
+                width: 98%;
+                margin: 1% auto;
+            }
+            
+            .customer-list {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+
+            /* Mobile styles for customer table modals */
+            .active-customers-modal,
+            .new-customers-modal {
+                width: 98%;
+                max-width: 98vw;
+                min-width: 100%;
+                margin: 1% auto;
+            }
+
+            .active-customers-container,
+            .new-customers-container {
+                max-height: 80vh;
+            }
+
+            .active-customers-container .table-container,
+            .new-customers-container .table-container {
+                min-width: 700px;
+            }
+            
+            .customer-item {
+                padding: 1rem;
+            }
+        }
+
+        .customer-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .customer-name {
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 1.125rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .customer-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+
+        .customer-email,
+        .customer-phone,
+        .customer-company {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .customer-email::before {
+            content: '📧 ';
+        }
+
+        .customer-phone::before {
+            content: '📞 ';
+        }
+
+        .customer-company::before {
+            content: '🏢 ';
+        }
+
+        .no-customers {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-secondary);
+        }
+
+        .no-customers p {
+            margin-bottom: 1rem;
+        }
+
+        .no-customers a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .no-customers a:hover {
+            text-decoration: underline;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        /* Potential Matches Modal Styles */
+        .potential-matches-modal {
+            max-width: 800px;
+            max-height: 90vh;
+        }
+
+        .potential-matches-list {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 1rem 0;
+        }
+
+        .potential-match-item {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .potential-match-item:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 20px rgba(255, 51, 102, 0.1);
+        }
+
+        .match-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .new-customer-name {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .similarity-score {
+            background: var(--primary-color);
+            color: var(--text-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .match-count {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .match-selection {
+            margin: 1rem 0;
+        }
+
+        .match-selection label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .match-dropdown {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--card-background);
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .match-dropdown:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.1);
+        }
+
+        .match-preview {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--background-secondary);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .match-preview ul {
+            margin: 0.5rem 0 0 0;
+            padding-left: 1.5rem;
+        }
+
+        .match-preview li {
+            margin: 0.25rem 0;
+            color: var(--text-secondary);
+        }
+
+        .process-button {
+            background: var(--primary-color);
+            color: white;
+            border: 2px solid var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            opacity: 0.5;
+        }
+
+        .process-button:hover:not(:disabled) {
+            background: var(--primary-hover);
+            border-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 51, 102, 0.3);
+        }
+
+        .process-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .match-details {
+            margin-bottom: 1.5rem;
+        }
+
+        .existing-customer-info,
+        .common-words,
+        .match-type-info {
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .extended-name-match {
+            color: var(--warning-color);
+            font-weight: 600;
+            background: rgba(255, 193, 7, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--warning-color);
+        }
+
+        .match-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .sync-button,
+        .ignore-button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid;
+            flex: 1;
+        }
+
+        .sync-button {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            border-color: #4CAF50;
+            color: var(--text-color);
+        }
+
+        .sync-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+
+        .ignore-button {
+            background: transparent;
+            border-color: var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .ignore-button:hover {
+            border-color: #dc3545;
+            background: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+        }
+
+        .primary-button,
+        .secondary-button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid;
+        }
+
+        .primary-button {
+            background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
+            border-color: var(--primary-color);
+            color: var(--text-color);
+        }
+
+        .primary-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 51, 102, 0.4);
+        }
+
+        .secondary-button {
+            background: transparent;
+            border-color: var(--border-color);
+            color: var(--text-color);
+        }
+
+        .secondary-button:hover {
+            border-color: var(--primary-color);
+            background: rgba(255, 51, 102, 0.1);
+        }
+
+        /* New Customer Form Styles */
+        .new-customer-modal {
+            max-width: 95vw;
+            width: 95vw;
+            max-height: 95vh;
+            height: 95vh;
+        }
+
+        /* Dual Panel Layout */
+        .dual-panel-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            height: calc(95vh - 120px); /* Account for header and footer */
+            padding: 0 2rem;
+        }
+
+        /* Sales Deck Panel */
+        .sales-deck-panel {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 1.5rem;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .sales-deck-header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        .sales-deck-header h3 {
+            color: var(--primary-color);
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .sales-deck-header p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        /* Sales Deck Content */
+        .sales-deck-content {
+            position: relative;
+            min-height: 400px;
+        }
+
+        .slide {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .slide.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide h2 {
+            color: var(--primary-color);
+            font-size: 1.75rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .slide p {
+            color: var(--text-color);
+            font-size: 1.125rem;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .slide p.left-align {
+            text-align: left !important;
+        }
+
+        .slide p.italic {
+            font-style: italic;
+            color: var(--text-secondary);
+        }
+
+        .slide p.small {
+            font-size: 0.9em;
+        }
+
+        .slide p.blank {
+            height: 1.5rem;
+            margin: 0;
+            padding: 0;
+        }
+
+        .slide ul {
+            text-align: left;
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .slide li {
+            text-align: left;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .slide li.left-align {
+            text-align: left !important;
+        }
+
+        /* Product Showcase */
+        .product-showcase {
+            display: grid;
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .product-item {
+            background: var(--background-color);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .product-item h3 {
+            color: var(--primary-color);
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .product-item p {
+            color: var(--text-color);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Quality Points */
+        .quality-points {
+            list-style: none;
+            padding: 0;
+            margin: 2rem 0;
+        }
+
+        .quality-points li {
+            background: var(--background-color);
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+            color: var(--text-color);
+            font-size: 1rem;
+        }
+
+        /* Pricing Info */
+        .pricing-info {
+            display: grid;
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .pricing-item {
+            background: var(--background-color);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .pricing-item h3 {
+            color: var(--primary-color);
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-item .price {
+            color: var(--success-color);
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Slide Navigation */
+        .slide-navigation {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .slide-nav-btn {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+        }
+
+        .slide-nav-btn:hover {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        /* Customer Form Panel */
+        .customer-form-panel {
+            background: var(--background-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .customer-form-panel h3 {
+            color: var(--primary-color);
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .dual-panel-layout {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            
+            .sales-deck-panel,
+            .customer-form-panel {
+                min-height: 300px;
+            }
+        }
+
+        /* Success Overlay */
+        .success-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .success-content {
+            background: var(--background-color);
+            padding: 3rem;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            animation: slideIn 0.4s ease-out;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            animation: bounce 0.6s ease-in-out;
+        }
+
+        .success-content h3 {
+            color: var(--success-color);
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        .success-content p {
+            color: var(--text-color);
+            font-size: 1.125rem;
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+        }
+
+        .success-content p:last-child {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin-top: 1rem;
+        }
+
+        #countdown {
+            color: var(--primary-color);
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translateY(0);
+            }
+            40% {
+                transform: translateY(-10px);
+            }
+            60% {
+                transform: translateY(-5px);
+            }
+        }
+
+        .follow-ups-modal {
+            max-width: 95vw;
+            max-height: 90vh;
+            width: 95vw;
+        }
+
+        .follow-ups-due-modal {
+            max-width: 95vw;
+            max-height: 90vh;
+            width: 95vw;
+        }
+
+        .follow-ups-due-container {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        /* Priority and Status Badge Styling */
+        .priority-badge, .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: capitalize;
+            display: inline-block;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .priority-urgent {
+            background: #dc3545;
+            color: white;
+        }
+
+        .priority-high {
+            background: #fd7e14;
+            color: white;
+        }
+
+        .priority-medium {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .priority-low {
+            background: #6c757d;
+            color: white;
+        }
+
+        .status-pending {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .status-in-progress {
+            background: #007bff;
+            color: white;
+        }
+
+        .status-completed {
+            background: #28a745;
+            color: white;
+        }
+
+        /* Action Button Styling */
+        .action-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(255, 51, 102, 0.3);
+        }
+
+        /* Follow-up Alert Banner */
+        .follow-up-alert-banner {
+            background: linear-gradient(135deg, 
+                rgba(255, 193, 7, 0.95) 0%, 
+                rgba(255, 213, 79, 0.9) 25%, 
+                rgba(255, 235, 59, 0.85) 50%, 
+                rgba(255, 213, 79, 0.9) 75%, 
+                rgba(255, 193, 7, 0.95) 100%);
+            backdrop-filter: blur(20px) saturate(180%);
+            color: #1a1a1a;
+            padding: 20px 24px;
+            margin: 5px 0 25px 0;
+            border-radius: 16px;
+            box-shadow: 
+                0 20px 40px rgba(255, 193, 7, 0.2),
+                0 8px 16px rgba(255, 152, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+            display: none; /* Hidden by default */
+            animation: slideDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .follow-up-alert-banner::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.6), 
+                transparent);
+        }
+
+        .follow-up-alert-banner::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, 
+                rgba(255, 255, 255, 0.1) 0%, 
+                transparent 70%);
+            animation: shimmer 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .follow-up-alert-banner.show {
+            display: block;
+        }
+
+        .banner-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .banner-title {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            letter-spacing: -0.02em;
+        }
+
+        .banner-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+
+        .banner-close:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .banner-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .banner-stats {
+            display: flex;
+            gap: 32px;
+            flex-wrap: wrap;
+        }
+
+        .banner-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 90px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .banner-stat:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .banner-stat-number {
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            color: #1a1a1a;
+        }
+
+        .banner-stat-label {
+            font-size: 11px;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .banner-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .banner-btn {
+            background: rgba(255, 255, 255, 0.25);
+            color: #1a1a1a;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            display: inline-block;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .banner-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.3), 
+                transparent);
+            transition: left 0.5s ease;
+        }
+
+        .banner-btn:hover::before {
+            left: 100%;
+        }
+
+        .banner-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: rgba(255, 255, 255, 0.6);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .banner-btn.primary {
+            background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+            color: #FFD700;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .banner-btn.primary:hover {
+            background: linear-gradient(135deg, #2d2d2d, #1a1a1a);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%) translateY(-100%) rotate(30deg);
+            }
+            100% {
+                transform: translateX(100%) translateY(100%) rotate(30deg);
+            }
+        }
+
+        @keyframes titleGlow {
+            0% {
+                opacity: 0.3;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            100% {
+                opacity: 0.6;
+                transform: translate(-50%, -50%) scale(1.1);
+            }
+        }
+
+        /* Show Banner Button */
+        .show-banner-btn {
+            margin: 5px 0 25px 0;
+            text-align: center;
+        }
+
+        .show-banner-btn .banner-btn {
+            background: rgba(255, 193, 7, 0.15);
+            color: #B8860B;
+            border: 1px solid rgba(255, 193, 7, 0.4);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .show-banner-btn .banner-btn:hover {
+            background: rgba(255, 193, 7, 0.25);
+            border-color: rgba(255, 193, 7, 0.6);
+            transform: translateY(-1px);
+        }
+
+        /* Mobile responsiveness for banner */
+        @media (max-width: 768px) {
+            .follow-up-alert-banner {
+                margin: 10px 0;
+                padding: 12px 16px;
+            }
+            
+            .banner-content {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .banner-stats {
+                justify-content: space-around;
+                width: 100%;
+            }
+            
+            .banner-actions {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Complete Button Styling */
+        .complete-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin-left: 0.5rem;
+        }
+
+        .complete-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(40, 167, 69, 0.3);
+        }
+
+        /* Confirmation Modal Styling */
+        .confirmation-modal {
+            max-width: 500px !important;
+        }
+
+        .confirmation-content {
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        .confirmation-icon {
+            margin-bottom: 1rem;
+        }
+
+        .confirmation-content h3 {
+            color: var(--text-color);
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .confirmation-content p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            background: var(--card-background);
+        }
+
+        .primary-button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .primary-button:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 51, 102, 0.3);
+        }
+
+        .secondary-button {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .secondary-button:hover {
+            background: var(--border-color);
+            color: var(--text-color);
+        }
+
+        /* Follow-up Task Row Styling */
+        .follow-up-task-row:hover {
+            background: rgba(255, 51, 102, 0.05);
+        }
+
+        .no-follow-ups-due {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .no-follow-ups-due p {
+            margin: 0.5rem 0;
+        }
+
+        .customer-form {
+            padding: 0;
+        }
+
+        .form-section {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .form-section:last-of-type {
+            border-bottom: none;
+        }
+
+        .form-section h3 {
+            margin: 0 0 1rem 0;
+            color: var(--text-color);
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--background-color);
+            color: var(--text-color);
+            font-size: 1rem;
+            font-family: inherit;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.1);
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-group select {
+            cursor: pointer;
+        }
+
+        /* Custom Checkbox Styles */
+        .checkbox-label {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-color);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+            height: 0;
+            width: 0;
+        }
+
+        .checkbox-text {
+            margin-bottom: 16px;
+            font-weight: 500;
+            color: var(--text-color);
+            display: block;
+            line-height: 1.4;
+        }
+
+        .checkmark {
+            height: 36px;
+            width: 36px;
+            background-color: var(--background-color);
+            border: 3px solid var(--border-color);
+            border-radius: 8px;
+            position: relative;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            display: block;
+            margin-top: 0;
+        }
+
+        .checkbox-label:hover .checkmark {
+            border-color: #28a745;
+            background-color: rgba(40, 167, 69, 0.05);
+            transform: scale(1.05);
+        }
+
+        .checkbox-label input:checked ~ .checkmark {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+
+        .checkmark:after {
+            content: "";
+            position: absolute;
+            display: none;
+            left: 50%;
+            top: 50%;
+            width: 10px;
+            height: 18px;
+            border: solid white;
+            border-width: 0 3px 3px 0;
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+
+        .checkbox-label input:checked ~ .checkmark:after {
+            display: block;
+        }
+
+        .checkbox-label:hover input:checked ~ .checkmark {
+            background-color: #218838;
+            border-color: #218838;
+        }
+
+        .form-group input[type="date"] {
+            cursor: pointer;
+            position: relative;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+            padding-right: 40px;
+        }
+
+        /* Base date input styling */
+        .date-input {
+            min-width: 150px;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--input-background);
+            color: var(--text-color);
+            font-size: 0.875rem;
+            font-family: inherit;
+        }
+        
+        .date-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.1);
+        }
+        
+        /* Ensure date input shows calendar icon */
+        .date-input::-webkit-calendar-picker-indicator {
+            background: transparent;
+            bottom: 0;
+            color: transparent;
+            cursor: pointer;
+            height: auto;
+            left: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: auto;
+        }
+
+        /* Fallback for browsers without native date picker */
+        .date-input::-webkit-datetime-edit {
+            padding: 0;
+        }
+
+        .date-input::-webkit-datetime-edit-fields-wrapper {
+            padding: 0;
+        }
+
+        .date-input::-webkit-datetime-edit-text {
+            padding: 0 2px;
+        }
+
+        .date-input::-webkit-datetime-edit-month-field,
+        .date-input::-webkit-datetime-edit-day-field,
+        .date-input::-webkit-datetime-edit-year-field {
+            padding: 0;
+        }
+
+        /* Required field indicator */
+        .form-group label[for="customerName"]::after {
+            content: " *";
+            color: var(--primary-color);
+        }
+
+        /* Customer Table Styles */
+        .follow-ups-container {
+            padding: 1rem 0;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .table-container {
+            padding: 0 2rem;
+        }
+
+        .customer-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--background-color);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .customer-table th {
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-align: left;
+            padding: 1.25rem 1rem;
+            border-bottom: 2px solid var(--border-color);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .customer-table td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.875rem;
+            color: var(--text-color);
+        }
+
+        .customer-table tbody tr {
+            transition: background-color 0.2s ease;
+        }
+
+        .customer-table tbody tr:hover {
+            background-color: rgba(255, 51, 102, 0.05);
+        }
+
+        .customer-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Product information styling */
+        .products-cell {
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+
+        .products-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .product-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            padding: 0.5rem;
+            background: rgba(255, 51, 102, 0.05);
+            border-radius: 4px;
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .product-name {
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 0.875rem;
+        }
+
+        .product-quantity {
+            color: var(--primary-color);
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .product-price {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .no-products {
+            color: var(--text-secondary);
+            font-style: italic;
+            font-size: 0.8rem;
+        }
+
+        /* Specific modal styles for customer tables */
+        .active-customers-modal,
+        .new-customers-modal {
+            width: 98%;
+            max-width: 1400px;
+            min-width: 1000px;
+        }
+
+        .active-customers-container,
+        .new-customers-container {
+            overflow-x: auto;
+            max-height: 70vh;
+        }
+
+        .active-customers-container .table-container,
+        .new-customers-container .table-container {
+            min-width: 1000px;
+        }
+
+        /* Optimize column widths for better visibility */
+        .active-customers-modal .customer-table th,
+        .active-customers-modal .customer-table td,
+        .new-customers-modal .customer-table th,
+        .new-customers-modal .customer-table td {
+            white-space: nowrap;
+        }
+
+        .active-customers-modal .customer-name-cell,
+        .new-customers-modal .customer-name-cell {
+            min-width: 150px;
+        }
+
+        .active-customers-modal .email-cell,
+        .new-customers-modal .email-cell {
+            min-width: 200px;
+        }
+
+        .active-customers-modal .contact-cell,
+        .new-customers-modal .contact-cell {
+            min-width: 120px;
+        }
+
+        .active-customers-modal .phone-cell,
+        .new-customers-modal .phone-cell {
+            min-width: 120px;
+        }
+
+        .active-customers-modal .bottles-cell,
+        .new-customers-modal .bottles-cell {
+            min-width: 80px;
+            text-align: center;
+        }
+
+        .active-customers-modal .first-purchase-cell,
+        .new-customers-modal .first-purchase-cell {
+            min-width: 120px;
+        }
+
+        .active-customers-modal .products-cell,
+        .new-customers-modal .products-cell {
+            min-width: 300px;
+            max-width: 400px;
+            white-space: normal;
+        }
+
+        .active-customers-modal .action-cell,
+        .new-customers-modal .action-cell {
+            min-width: 120px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        /* Cell-specific styling */
+        .customer-name-cell {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .customer-email-cell {
+            color: var(--text-color);
+            word-break: break-word;
+        }
+
+        .primary-contact-cell {
+            color: var(--text-color);
+        }
+
+        .phone-cell {
+            color: var(--text-color);
+        }
+
+        .date-cell {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        .total-bottles-cell,
+        .recent-bottles-cell {
+            text-align: center;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .unit-price-cell {
+            text-align: right;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .product-cell {
+            color: var(--text-color);
+            text-transform: capitalize;
+        }
+
+        .no-follow-ups {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        /* Mobile Modal Styles */
+        @media (max-width: 768px) {
+            .modal-content {
+                margin: 2% auto;
+                width: 95%;
+                max-height: 90vh;
+            }
+
+            .modal-header {
+                padding: 1rem 1.5rem;
+            }
+
+            .modal-header h2 {
+                font-size: 1.25rem;
+            }
+
+            .search-container {
+                padding: 1rem 1.5rem;
+            }
+
+            .customer-list {
+                padding: 0 1.5rem;
+            }
+
+            .customer-item {
+                padding: 0.75rem;
+            }
+
+            .customer-details {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .modal-footer {
+                padding: 1rem 1.5rem;
+                flex-direction: column;
+            }
+
+            .primary-button,
+            .secondary-button {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+
+            /* Mobile form adjustments */
+            .new-customer-modal {
+                max-width: 95%;
+                margin: 1% auto;
+            }
+
+            .follow-ups-modal {
+                max-width: 98vw;
+                width: 98vw;
+                margin: 1% auto;
+            }
+
+            .form-section {
+                padding: 1rem 1.5rem;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+
+            .form-group {
+                margin-bottom: 0.75rem;
+            }
+
+            .table-container {
+                padding: 0 1rem;
+            }
+
+            .customer-table {
+                font-size: 0.75rem;
+            }
+
+            .customer-table th,
+            .customer-table td {
+                padding: 0.5rem 0.25rem;
+            }
+
+            /* Make table scrollable horizontally on mobile */
+            .follow-ups-container {
+                overflow-x: auto;
+            }
+
+            .customer-table {
+                min-width: 1000px;
+            }
+
+            .products-cell {
+                max-width: 250px;
+            }
+
+            .product-item {
+                padding: 0.25rem;
+                font-size: 0.75rem;
+            }
+
+            .product-name {
+                font-size: 0.75rem;
+            }
+
+            .product-quantity {
+                font-size: 0.7rem;
+            }
+
+            .product-price {
+                font-size: 0.65rem;
+            }
+        }
+
+        /* Mobile styles */
+        @media (max-width: 768px) {
+            .nav-bar {
+                padding: 1.5rem 0 1rem 0;
+                margin-bottom: 1rem;
+            }
+
+            .nav-bar h1 {
+                font-size: 2.2rem;
+            }
+            
+            .nav-bar h1::before {
+                width: calc(100% + 60px);
+                height: calc(100% + 30px);
+            }
+            
+            .nav-bar h1::after {
+                width: calc(100% + 90px);
+                height: calc(100% + 45px);
+            }
+
+            .container {
+                padding: 0.5rem;
+            }
+
+            .option-cards {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+                margin-bottom: 2rem;
+            }
+
+            .option-card {
+                padding: 2rem 1.5rem;
+            }
+
+            .option-icon {
+                font-size: 2.5rem;
+                margin-bottom: 1rem;
+            }
+
+            .option-title {
+                font-size: 1.25rem;
+            }
+
+            .option-description {
+                font-size: 0.9375rem;
+                margin-bottom: 1.5rem;
+            }
+
+            .option-button {
+                padding: 0.875rem 1.5rem;
+                font-size: 1rem;
+            }
+
+            .section-title {
+                font-size: 1.5rem;
+                margin: 2rem 0 1.5rem 0;
+            }
+
+            .quick-stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+                margin-bottom: 2rem;
+            }
+
+            .stat-card {
+                padding: 1rem;
+            }
+
+            .stat-number {
+                font-size: 1.5rem;
+            }
+
+            .back-button {
+                padding: 1rem 2rem;
+                font-size: 1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-bar h1 {
+                font-size: 1.8rem;
+            }
+            
+            .nav-bar h1::before {
+                width: calc(100% + 40px);
+                height: calc(100% + 20px);
+            }
+            
+            .nav-bar h1::after {
+                width: calc(100% + 60px);
+                height: calc(100% + 30px);
+            }
+
+            .option-card {
+                padding: 1.5rem 1rem;
+            }
+
+            .quick-stats {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .slide li.left-align {
+            text-align: left !important;
+        }
+
+        /* Sales Deck Inline Editing Styles */
+        .sales-deck-editable {
+            position: relative;
+        }
+
+        .edit-deck-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .edit-deck-btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .slide.editing .edit-deck-btn {
+            display: none;
+        }
+
+        .slide.editing .slide-content {
+            display: none;
+        }
+
+        .slide.editing .slide-edit-form {
+            display: block;
+        }
+
+        .slide-edit-form {
+            display: none;
+        }
+
+        .slide-edit-form textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 1rem;
+            border: 1px solid var(--primary-color);
+            border-radius: 8px;
+            background: var(--card-background);
+            color: var(--text-color);
+            font-family: inherit;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            resize: vertical;
+            margin-bottom: 1rem;
+        }
+
+        .slide-edit-form textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.2);
+        }
+
+        .slide-edit-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .slide-edit-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-save-deck {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-cancel-deck {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .slide-edit-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Rich Text Editor Styles */
+        .rich-editor {
+            border: 1px solid var(--primary-color);
+            border-radius: 8px;
+            background: var(--card-background);
+            overflow: hidden;
+        }
+
+        .rich-editor-toolbar {
+            background: var(--border-color);
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--primary-color);
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .rich-editor-btn {
+            padding: 0.25rem 0.5rem;
+            background: var(--card-background);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .rich-editor-btn:hover {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .rich-editor-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .rich-editor-content {
+            min-height: 300px;
+            padding: 1rem;
+            background: var(--card-background);
+            color: var(--text-color);
+            font-family: inherit;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            border: none;
+            outline: none;
+            resize: vertical;
+        }
+
+        .rich-editor-content:focus {
+            outline: none;
+        }
+
+        .rich-editor-content h2 {
+            color: var(--text-color);
+            font-size: 1.5rem;
+            margin: 1rem 0 0.5rem 0;
+            font-weight: 600;
+        }
+
+        .rich-editor-content h3 {
+            color: var(--text-color);
+            font-size: 1.25rem;
+            margin: 1rem 0 0.5rem 0;
+            font-weight: 500;
+        }
+
+        .rich-editor-content p {
+            margin: 0.5rem 0;
+        }
+
+        .rich-editor-content ul {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .rich-editor-content li {
+            margin: 0.25rem 0;
+        }
+
+        .rich-editor-content .blank {
+            height: 1.5rem;
+            margin: 0;
+            padding: 0;
+        }
+
+        .rich-editor-content .left-align {
+            text-align: left;
+        }
+
+        .rich-editor-content .italic {
+            font-style: italic;
+        }
+
+        .rich-editor-content .small {
+            font-size: 0.9em;
+        }
+
+        .rich-editor-content .italic.small {
+            font-style: italic;
+            font-size: 0.9em;
+            color: var(--text-secondary);
+        }
+
+        /* Success Modal Styling */
+        .success-modal {
+            max-width: 500px !important;
+        }
+        .success-content {
+            text-align: center;
+            padding: 1rem 0;
+        }
+        .success-icon {
+            margin-bottom: 1rem;
+        }
+        .success-content h3 {
+            color: var(--text-color);
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+        .success-content p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="container">
+            <h1>Customer Relationship Management</h1>
+        </div>
+    </nav>
+    
+    <div class="main-content">
+        <div class="container">
+            <!-- Follow-up Alert Banner -->
+            <div id="followUpAlertBanner" class="follow-up-alert-banner">
+                <div class="banner-header">
+                    <div class="banner-title">
+                        <span>⚠️</span>
+                        <span>Follow-up Tasks Due</span>
+                    </div>
+                    <button class="banner-close" onclick="dismissBanner()">&times;</button>
+                </div>
+                <div class="banner-content">
+                    <div class="banner-stats">
+                        <div class="banner-stat">
+                            <div class="banner-stat-number" id="overdueCount">0</div>
+                            <div class="banner-stat-label">Overdue</div>
+                        </div>
+                        <div class="banner-stat">
+                            <div class="banner-stat-number" id="dueTodayCount">0</div>
+                            <div class="banner-stat-label">Due Today</div>
+                        </div>
+                        <div class="banner-stat">
+                            <div class="banner-stat-number" id="totalDueCount">0</div>
+                            <div class="banner-stat-label">Total Due</div>
+                        </div>
+                    </div>
+                    <div class="banner-actions">
+                        <button class="banner-btn primary" onclick="viewFollowUpsDueFromBanner()">View All Tasks</button>
+                        <button class="banner-btn" onclick="dismissBannerForDay()">Dismiss for Today</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Show Banner Button (only visible when banner is hidden) -->
+            <div id="showBannerButton" class="show-banner-btn" style="display: none;">
+                <button class="banner-btn" onclick="showBanner()">
+                    🔔 Show Follow-up Alerts
+                </button>
+            </div>
+
+
+            <!-- Quick Stats Section -->
+            <div class="quick-stats">
+                <div class="stat-card">
+                    <div class="stat-number">{{ existing_customer_info|length if existing_customer_info else 0 }}</div>
+                    <div class="stat-label">Total Customers</div>
+                    <div class="stat-breakdown">
+                        <span class="existing-count">{{ existing_customers|length if existing_customers else 0 }} existing</span>
+                        <span class="potential-count">{{ (existing_customer_info|length if existing_customer_info else 0) - (existing_customers|length if existing_customers else 0) }} potential</span>
+                    </div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="viewActiveCustomers()">
+                    <div class="stat-number">{{ active_customers_this_month[0][0] if active_customers_this_month else 0 }}</div>
+                    <div class="stat-label">Active This Month</div>
+                    <div class="stat-hint">Click to view details</div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="viewNewCustomers()">
+                    <div class="stat-number">{{ new_customers_this_month[0][0] if new_customers_this_month else 0 }}</div>
+                    <div class="stat-label">New Customers This Month</div>
+                    <div class="stat-hint">Click to view details</div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="viewFollowUpsDue()">
+                    <div class="stat-number" id="followUpsDueCount">{{ follow_ups_due|length if follow_ups_due else 0 }}</div>
+                    <div class="stat-label">Tasks</div>
+                    <div class="stat-hint">Click to view details</div>
+                </div>
+                <div class="stat-card clickable-stat" onclick="viewFollowUps()">
+                     <div class="stat-number">{{ existing_customer_follow_ups|length if existing_customer_follow_ups else 0 }}</div>
+                     <div class="stat-label">Existing customer follow-ups</div>
+                     <div class="stat-hint">Click to view details</div>
+                 </div>
+            </div>
+
+            <!-- Customer Search Modal (Hidden by default) -->
+            <div id="customerSearchModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                                    <div class="modal-header">
+                    <h2>Browse & Select Customers</h2>
+                    <span class="close-button" onclick="closeCustomerSearch()">&times;</span>
+                </div>
+                
+                <div class="modal-body">
+                    <p class="modal-description">
+                        Click on any customer to view their full profile page with details, follow-ups, and invoices.
+                    </p>
+                </div>
+                
+                <div class="search-container">
+                        <input type="text" id="customerSearchInput" placeholder="Search customers by name..." 
+                               onkeyup="filterCustomers()" class="search-input">
+                    </div>
+                    
+                    <div class="customer-list-container">
+                        <div id="customerList" class="customer-list">
+                            {% if existing_customer_info %}
+                                {% for customer in existing_customer_info %}
+                                {% set customer_name = customer[0] %}
+                                {% set has_sales = customer_name in existing_customers|map(attribute=0)|list %}
+                                <div class="customer-item" onclick="selectCustomerFromElement(this)" 
+                                     data-customer-name="{{ customer_name }}"
+                                     data-customer-email="{{ customer[1] if customer[1] else '' }}"
+                                     data-customer-phone="{{ customer[2] if customer[2] else '' }}"
+                                     data-customer-company="{{ customer[3] if customer[3] else '' }}"
+                                     data-search-text="{{ customer_name|lower }} {{ customer[1]|lower if customer[1] else '' }} {{ customer[2]|lower if customer[2] else '' }} {{ customer[3]|lower if customer[3] else '' }}">
+                                    <div class="customer-header">
+                                        <div class="customer-name">{{ customer_name }}</div>
+                                        <div class="customer-status {{ 'existing' if has_sales else 'potential' }}">
+                                            {{ 'Existing Customer' if has_sales else 'Potential Customer' }}
+                                        </div>
+                                    </div>
+                                    <div class="customer-details">
+                                        {% if customer[1] %}<div class="customer-email">{{ customer[1] }}</div>{% endif %}
+                                        {% if customer[2] %}<div class="customer-phone">{{ customer[2] }}</div>{% endif %}
+                                        {% if customer[3] %}<div class="customer-company">{{ customer[3] }}</div>{% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="no-customers">
+                                    <p>No customers found in CRM system.</p>
+                                    <p><a href="#" onclick="addNewCustomer(); closeCustomerSearch();">Add your first customer</a></p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeCustomerSearch()">Cancel</button>
+                        <button class="primary-button" onclick="addNewCustomer(); closeCustomerSearch();">Add New Customer Instead</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Follow-ups List Modal (Hidden by default) -->
+            <div id="followUpsModal" class="modal" style="display: none;">
+                <div class="modal-content follow-ups-modal">
+                    <div class="modal-header">
+                        <h2>Customer Information & Sales Data</h2>
+                        <span class="close-button" onclick="closeFollowUpsModal()">&times;</span>
+                    </div>
+                    
+                    <div class="follow-ups-container">
+                        {% if existing_customer_follow_ups %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Email</th>
+                                            <th>Primary Contact</th>
+                                            <th>Phone</th>
+                                            <th>Latest Date</th>
+                                            <th>Total Bottles</th>
+                                            <th>Recent Bottles</th>
+                                            <th>Unit Price</th>
+                                            <th>Product</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for customer in existing_customer_follow_ups %}
+                                        <tr class="customer-row">
+                                            <td class="customer-name-cell">{{ customer[0] }}</td>
+                                            <td class="customer-email-cell">{{ customer[1] or 'N/A' }}</td>
+                                            <td class="primary-contact-cell">{{ customer[2] or 'N/A' }}</td>
+                                            <td class="phone-cell">{{ customer[3] or 'N/A' }}</td>
+                                            <td class="date-cell">{{ customer[4] or 'N/A' }}</td>
+                                            <td class="total-bottles-cell">{{ customer[5] or '0' }}</td>
+                                            <td class="recent-bottles-cell">{{ customer[6] or '0' }}</td>
+                                            <td class="unit-price-cell">${{ "%.2f"|format(customer[7]) if customer[7] else '0.00' }}</td>
+                                            <td class="product-cell">{{ customer[8] or 'N/A' }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-follow-ups">
+                                <p>No customer data found.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeFollowUpsModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Follow-ups Due Modal (Hidden by default) -->
+            <div id="followUpsDueModal" class="modal" style="display: none;">
+                <div class="modal-content follow-ups-due-modal">
+                    <div class="modal-header">
+                        <h2>Follow-ups Due</h2>
+                        <span class="close-button" onclick="closeFollowUpsDueModal()">&times;</span>
+                    </div>
+                    
+                    <div class="follow-ups-due-container">
+                        {% if follow_ups_due %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Due Date</th>
+                                            <th>Type</th>
+                                            <th>Notes</th>
+                                            <th>Priority</th>
+                                            <th>Status</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for task in follow_ups_due %}
+                                        <tr class="follow-up-task-row" data-task-id="{{ task[0] }}">
+                                            <td class="customer-name-cell">{{ task[1] }}</td>
+                                            <td class="due-date-cell">{{ task[2] or 'No date set' }}</td>
+                                            <td class="type-cell">{{ task[6] or 'General' }}</td>
+                                            <td class="notes-cell">{{ task[5] or 'No notes' }}</td>
+                                            <td class="priority-cell">
+                                                <span class="priority-badge priority-{{ task[3] or 'medium' }}">
+                                                    {{ (task[3] or 'medium')|title }}
+                                                </span>
+                                            </td>
+                                            <td class="status-cell">
+                                                <span class="status-badge status-{{ task[4] or 'pending' }}">
+                                                    {{ (task[4] or 'pending')|replace('-', ' ')|title }}
+                                                </span>
+                                            </td>
+                                            <td class="action-cell">
+                                                <button class="action-btn" onclick="viewCustomerProfile('{{ task[1] }}')">
+                                                    View Profile
+                                                </button>
+                                                <button class="complete-btn" onclick="markTaskCompleted('{{ task[0] }}', '{{ task[1] }}')">
+                                                    Mark as Completed
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-follow-ups-due">
+                                <p>No follow-up tasks due at the moment.</p>
+                                <p>All tasks are completed or up to date.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeFollowUpsDueModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Customers This Month Modal (Hidden by default) -->
+            <div id="activeCustomersModal" class="modal" style="display: none;">
+                <div class="modal-content active-customers-modal">
+                    <div class="modal-header">
+                        <h2>Active Customers This Month</h2>
+                        <span class="close-button" onclick="closeActiveCustomersModal()">&times;</span>
+                    </div>
+                    
+                    <div class="active-customers-container">
+                        {% if active_customers_details %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Email</th>
+                                            <th>Primary Contact</th>
+                                            <th>Phone</th>
+                                            <th>Total Bottles</th>
+                                            <th>Products Purchased</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for customer in active_customers_details %}
+                                        <tr class="customer-row">
+                                            <td class="customer-name-cell">{{ customer[0] }}</td>
+                                            <td class="email-cell">{{ customer[1] or 'N/A' }}</td>
+                                            <td class="contact-cell">{{ customer[2] or 'N/A' }}</td>
+                                            <td class="phone-cell">{{ customer[3] or 'N/A' }}</td>
+                                            <td class="bottles-cell">{{ customer[5] }}</td>
+                                            <td class="products-cell">
+                                                {% if customer[8] and customer[8] != '[]' %}
+                                                    <div class="products-list">
+                                                        {% for product in customer[8] %}
+                                                        <div class="product-item">
+                                                            <span class="product-name">{{ product['product_name'] or 'Unknown Product' }}</span>
+                                                            <span class="product-quantity">({{ product['quantity'] }} bottles)</span>
+                                                            <span class="product-price">@ ${{ "%.2f"|format(product['unit_price']) if product['unit_price'] else 'N/A' }}</span>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="no-products">No product details</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="action-cell">
+                                                <button class="action-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
+                                                    View Profile
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-active-customers">
+                                <p>No active customers found for this month.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeActiveCustomersModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Customers This Month Modal (Hidden by default) -->
+            <div id="newCustomersModal" class="modal" style="display: none;">
+                <div class="modal-content new-customers-modal">
+                    <div class="modal-header">
+                        <h2>New Customers This Month</h2>
+                        <span class="close-button" onclick="closeNewCustomersModal()">&times;</span>
+                    </div>
+                    
+                    <div class="new-customers-container">
+                        {% if new_customers_details %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Email</th>
+                                            <th>Primary Contact</th>
+                                            <th>Phone</th>
+                                            <th>First Purchase Date</th>
+                                            <th>Total Bottles</th>
+                                            <th>Products Purchased</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for customer in new_customers_details %}
+                                        <tr class="customer-row">
+                                            <td class="customer-name-cell">{{ customer[0] }}</td>
+                                            <td class="email-cell">{{ customer[1] or 'N/A' }}</td>
+                                            <td class="contact-cell">{{ customer[2] or 'N/A' }}</td>
+                                            <td class="phone-cell">{{ customer[3] or 'N/A' }}</td>
+                                            <td class="first-purchase-cell">{{ customer[4].strftime('%Y-%m-%d') if customer[4] else 'N/A' }}</td>
+                                            <td class="bottles-cell">{{ customer[6] }}</td>
+                                            <td class="products-cell">
+                                                {% if customer[8] and customer[8] != '[]' %}
+                                                    <div class="products-list">
+                                                        {% for product in customer[8] %}
+                                                        <div class="product-item">
+                                                            <span class="product-name">{{ product['product_name'] or 'Unknown Product' }}</span>
+                                                            <span class="product-quantity">({{ product['quantity'] }} bottles)</span>
+                                                            <span class="product-price">@ ${{ "%.2f"|format(product['unit_price']) if product['unit_price'] else 'N/A' }}</span>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="no-products">No product details</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="action-cell">
+                                                <button class="action-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
+                                                    View Profile
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-new-customers">
+                                <p>No new customers found for this month.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeNewCustomersModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Confirmation Modal (Hidden by default) -->
+            <div id="confirmationModal" class="modal" style="display: none;">
+                <div class="modal-content confirmation-modal">
+                    <div class="modal-header">
+                        <h2>Confirm Action</h2>
+                        <span class="close-button" onclick="closeConfirmationModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="confirmation-content">
+                            <div class="confirmation-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4CAF50"/>
+                                </svg>
+                            </div>
+                            <h3 id="confirmationTitle">Mark Task as Completed</h3>
+                            <p id="confirmationMessage">Are you sure you want to mark this task as completed?</p>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeConfirmationModal()">Cancel</button>
+                        <button class="primary-button" id="confirmActionBtn">Confirm</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Success Modal (Hidden by default) -->
+            <div id="successModal" class="modal" style="display: none;">
+                <div class="modal-content success-modal">
+                    <div class="modal-header">
+                        <h2>Success</h2>
+                        <span class="close-button" onclick="closeSuccessModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="success-content">
+                            <div class="success-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4CAF50"/>
+                                </svg>
+                            </div>
+                            <h3 id="successTitle">Task Completed</h3>
+                            <p id="successMessage">Task marked as completed successfully!</p>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="primary-button" onclick="closeSuccessModal()">OK</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Customer Profile Modal (Hidden by default) -->
+            <div id="newCustomerModal" class="modal" style="display: none;">
+                <div class="modal-content new-customer-modal">
+                    <div class="modal-header">
+                        <h2>Sales Call & Customer Profile</h2>
+                        <span class="close-button" onclick="closeNewCustomerModal()">&times;</span>
+                    </div>
+                    
+                    <div class="dual-panel-layout">
+                        <!-- Left Panel: Sales Deck -->
+                        <div class="sales-deck-panel">
+                            <div class="sales-deck-header">
+                                <h3>Sales Deck</h3>
+                                <p>Use this during your customer call to present our products</p>
+                            </div>
+                            
+                            <div class="sales-deck-content">
+                                <!-- Slide 1 -->
+                                <div class="slide active sales-deck-editable" id="slide-1">
+                                    <button class="edit-deck-btn" onclick="editSlide(1)">Edit</button>
+                                    <div class="slide-content">
+                                        <h2>Sales Pitch</h2>
+                                        <p class="left-align">Hey x, I'm Johnny/Niko calling from Whistlebird and I'm hoping to speak to the manager or owner.</p>
+                                        <p class="blank"></p>
+                                        <p class="left-align italic small">manager/owner joins the call..</p>
+                                        
+                                        <p class="left-align"><i class="small">Hey this is Johnny/Niko from Whistlebird</i> - I run a Wellington Distillery called Whistlebird and we specialise in Gin.</p>
+                                            
+                                        <p class="left-align">One of our Gins recently won GOLD at the Super Spiit Awards and Bronze medal at the New Zealand Spirit Awards</p>
+                                        <p class="left-align">We distill using the practical application of sound - its a tool for efficiency and how we get out signature taste</p>
+                                        <p class="left-align">A few stores near by have just picked us up so I wanted to see if you'd like to trial a case to see how it moves?</p>
+                                        <p class="blank"></p>
+                                    </div>
+                                    
+                                    <div class="slide-edit-form">
+                                        <div class="rich-editor">
+                                            <div class="rich-editor-toolbar">
+                                                <button class="rich-editor-btn" onclick="formatText('bold')" title="Bold"><strong>B</strong></button>
+                                                <button class="rich-editor-btn" onclick="formatText('italic')" title="Italic"><em>I</em></button>
+                                                <button class="rich-editor-btn" onclick="formatText('underline')" title="Underline"><u>U</u></button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h2')" title="Heading 2">H2</button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h3')" title="Heading 3">H3</button>
+                                                <button class="rich-editor-btn" onclick="addList('ul')" title="Bullet List">•</button>
+                                                <button class="rich-editor-btn" onclick="addList('ol')" title="Numbered List">1.</button>
+                                                <button class="rich-editor-btn" onclick="addListItem()" title="Add List Item">+</button>
+                                                <button class="rich-editor-btn" onclick="addBlankLine()" title="Add Blank Line">␣</button>
+                                                <button class="rich-editor-btn" onclick="addSmallItalic()" title="Small Italic Text">i</button>
+                                                <button class="rich-editor-btn" onclick="addLeftAlign()" title="Left Align">←</button>
+                                            </div>
+                                            <div class="rich-editor-content" id="slide-1-content" contenteditable="true">
+                                                <h2>Sales Pitch</h2>
+                                                <p class="left-align">Hey x, I'm Johnny/Niko calling from Whistlebird and I'm hoping to speak to the manager or owner.</p>
+                                                <p class="blank"></p>
+                                                <p class="left-align italic small">manager/owner joins the call..</p>
+                                                
+                                                <p class="left-align"><i class="small">Hey this is Johnny/Niko from Whistlebird</i> - I run a Wellington Distillery called Whistlebird and we specialise in Gin.</p>
+                                                    
+                                                <p class="left-align">One of our Gins recently won GOLD at the Super Spiit Awards and Bronze medal at the New Zealand Spirit Awards</p>
+                                                <p class="left-align">We distill using the practical application of sound - its a tool for efficiency and how we get out signature taste</p>
+                                                <p class="left-align">A few stores near by have just picked us up so I wanted to see if you'd like to trial a case to see how it moves?</p>
+                                                <p class="blank"></p>
+                                            </div>
+                                        </div>
+                                        <div class="slide-edit-buttons">
+                                            <button class="slide-edit-btn btn-save-deck" onclick="saveSlide(1)">Save</button>
+                                            <button class="slide-edit-btn btn-cancel-deck" onclick="cancelEditSlide(1)">Cancel</button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="slide-navigation">
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">Counters</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">Products</button>
+                                    </div>
+                                </div>
+
+                                <!-- Slide 2 -->
+                                <div class="slide sales-deck-editable" id="slide-2">
+                                    <button class="edit-deck-btn" onclick="editSlide(2)">Edit</button>
+                                    <div class="slide-content">
+                                        <h2>Counters</h2>
+                                        <h3>Customer asks for email with info</h3>
+                                        <p class="left-align italic small">micro-commitment options to counter..</p>
+                                        <p class="left-align italic small">Absolutely, I'll send you the info.</p>
+                                        <p class="blank"></p>
+                                        <p class="left-align">Heres the 30 second version that I'll put in the email</p>
+                                        <p class="blank"></p>
+                                        <p class="left-align">We have 2 Gins;</p>
+                                        <p class="left-align">Wildflower - this is our award winning Gin, its contemporary citrus forward with floral notes</p>
+                                        <p class="left-align">Solstice - this is new, Crisp Himilayan Juniper foward with citrus Gin and has been distilled through NZ native Kawakawa</p>
+                                        <p class="left-align">Pricing is $46.25 +GST per bottle, MoQ of 1 case of 6 bottles, free shipping</p>
+                                        <p class="left-align">We also have created a cstom bottle and label that wraps our process into a story on the shelf</p>
+                                        <p class="blank"></p>
+
+                                        <p class="left-align italic small">Which email should I send the details to?</p>
+
+                                        <p class="blank"></p>
+                                        <p class="blank"></p>
+
+                                        <h3>Fallback options if above fail</h3>
+                                        <ul class="left-align">
+                                            <li><b>consignment</b> - We're also happy for you to try Whistlebird on a consignment model so there is low risk.</li>
+                                            <li><b>call-back</b> - I'll send the info and we can chat about it. Is there a good time to call you back?</li>
+                                        </ul>
+                                    </div>
+                                    
+                                    <div class="slide-edit-form">
+                                        <div class="rich-editor">
+                                            <div class="rich-editor-toolbar">
+                                                <button class="rich-editor-btn" onclick="formatText('bold')" title="Bold"><strong>B</strong></button>
+                                                <button class="rich-editor-btn" onclick="formatText('italic')" title="Italic"><em>I</em></button>
+                                                <button class="rich-editor-btn" onclick="formatText('underline')" title="Underline"><u>U</u></button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h2')" title="Heading 2">H2</button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h3')" title="Heading 3">H3</button>
+                                                <button class="rich-editor-btn" onclick="addList('ul')" title="Bullet List">•</button>
+                                                <button class="rich-editor-btn" onclick="addList('ol')" title="Numbered List">1.</button>
+                                                <button class="rich-editor-btn" onclick="addListItem()" title="Add List Item">+</button>
+                                                <button class="rich-editor-btn" onclick="addBlankLine()" title="Add Blank Line">␣</button>
+                                                <button class="rich-editor-btn" onclick="addSmallItalic()" title="Small Italic Text">i</button>
+                                                <button class="rich-editor-btn" onclick="addLeftAlign()" title="Left Align">←</button>
+                                            </div>
+                                            <div class="rich-editor-content" id="slide-2-content" contenteditable="true">
+                                                <h2>Counters</h2>
+                                                <h3>Customer asks for email with info</h3>
+                                                <p class="left-align italic small">micro-commitment options to counter..</p>
+                                                <p class="left-align italic small">Absolutely, I'll send you the info.</p>
+                                                <p class="blank"></p>
+                                                <p class="left-align">Heres the 30 second version that I'll put in the email</p>
+                                                <p class="blank"></p>
+                                                <p class="left-align">We have 2 Gins;</p>
+                                                <p class="left-align">Wildflower - this is our award winning Gin, its contemporary citrus forward with floral notes</p>
+                                                <p class="left-align">Solstice - this is new, Crisp Himilayan Juniper foward with citrus Gin and has been distilled through NZ native Kawakawa</p>
+                                                <p class="left-align">Pricing is $46.25 +GST per bottle, MoQ of 1 case of 6 bottles, free shipping</p>
+                                                <p class="left-align">We also have created a cstom bottle and label that wraps our process into a story on the shelf</p>
+                                                <p class="blank"></p>
+
+                                                <p class="left-align italic small">Which email should I send the details to?</p>
+
+                                                <p class="blank"></p>
+                                                <p class="blank"></p>
+
+                                                <h3>Fallback options if above fail</h3>
+                                                <ul class="left-align">
+                                                    <li><b>consignment</b> - We're also happy for you to try Whistlebird on a consignment model so there is low risk.</li>
+                                                    <li><b>call-back</b> - I'll send the info and we can chat about it. Is there a good time to call you back?</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <div class="slide-edit-buttons">
+                                            <button class="slide-edit-btn btn-save-deck" onclick="saveSlide(2)">Save</button>
+                                            <button class="slide-edit-btn btn-cancel-deck" onclick="cancelEditSlide(2)">Cancel</button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="slide-navigation">
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">Counters</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">Products</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Slide 3 -->
+                                <div class="slide sales-deck-editable" id="slide-3">
+                                    <button class="edit-deck-btn" onclick="editSlide(3)">Edit</button>
+                                    <div class="slide-content">
+                                        <h2>Our Products</h2>
+                                        <p class="left-align">We currently have 2 Gins</p>
+                                        <div class="product-showcase">
+                                            <div class="product-item">
+                                                <h3>Whistlebird Wildflower</h3>
+                                                <p>44% ABV • 700ml</p>
+                                                <p>Citrus forward Gin with floral notes, its dry with a long smooth finish - this is our signature product</p>
+                                            </div>
+                                            <div class="product-item">
+                                                <h3>Whistlebird Solstice</h3>
+                                                <p>40% ABV • 700ml</p>
+                                                <p>Crisp Himilayan Juniper foward citrus Gin thats been distilled through native New Zealand Kawakawa</p>
+                                            </div>
+                                            <div class="product-item">
+                                                <h3>Pricing & MoQ</h3>
+                                                <ul>
+                                                    <li class="left-align">Both Gins are $46.25 +GST per bottle</li>
+                                                    <li class="left-align">We have an MoQ of 1 case of 6 bottles</li>
+                                                    <li class="left-align">We provide free shipping</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="slide-edit-form">
+                                        <div class="rich-editor">
+                                            <div class="rich-editor-toolbar">
+                                                <button class="rich-editor-btn" onclick="formatText('bold')" title="Bold"><strong>B</strong></button>
+                                                <button class="rich-editor-btn" onclick="formatText('italic')" title="Italic"><em>I</em></button>
+                                                <button class="rich-editor-btn" onclick="formatText('underline')" title="Underline"><u>U</u></button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h2')" title="Heading 2">H2</button>
+                                                <button class="rich-editor-btn" onclick="addHeading('h3')" title="Heading 3">H3</button>
+                                                <button class="rich-editor-btn" onclick="addList('ul')" title="Bullet List">•</button>
+                                                <button class="rich-editor-btn" onclick="addList('ol')" title="Numbered List">1.</button>
+                                                <button class="rich-editor-btn" onclick="addListItem()" title="Add List Item">+</button>
+                                                <button class="rich-editor-btn" onclick="addBlankLine()" title="Add Blank Line">␣</button>
+                                                <button class="rich-editor-btn" onclick="addSmallItalic()" title="Small Italic Text">i</button>
+                                                <button class="rich-editor-btn" onclick="addLeftAlign()" title="Left Align">←</button>
+                                            </div>
+                                            <div class="rich-editor-content" id="slide-3-content" contenteditable="true">
+                                                <h2>Our Products</h2>
+                                                <p class="left-align">We currently have 2 Gins</p>
+                                                <div class="product-showcase">
+                                                    <div class="product-item">
+                                                        <h3>Whistlebird Wildflower</h3>
+                                                        <p>44% ABV • 700ml</p>
+                                                        <p>Citrus forward Gin with floral notes, its dry with a long smooth finish - this is our signature product</p>
+                                                    </div>
+                                                    <div class="product-item">
+                                                        <h3>Whistlebird Solstice</h3>
+                                                        <p>40% ABV • 700ml</p>
+                                                        <p>Crisp Himilayan Juniper foward citrus Gin thats been distilled through native New Zealand Kawakawa</p>
+                                                    </div>
+                                                    <div class="product-item">
+                                                        <h3>Pricing & MoQ</h3>
+                                                        <ul>
+                                                            <li class="left-align">Both Gins are $46.25 +GST per bottle</li>
+                                                            <li class="left-align">We have an MoQ of 1 case of 6 bottles</li>
+                                                            <li class="left-align">We provide free shipping</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="slide-edit-buttons">
+                                            <button class="slide-edit-btn btn-save-deck" onclick="saveSlide(3)">Save</button>
+                                            <button class="slide-edit-btn btn-cancel-deck" onclick="cancelEditSlide(3)">Cancel</button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="slide-navigation">
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(1)">Sales Pitch</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(2)">Counters</button>
+                                        <button type="button" class="slide-nav-btn" onclick="showSlide(3)">Products</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right Panel: Customer Profile Form -->
+                        <div class="customer-form-panel">
+                            <h3>Customer Profile</h3>
+                            <form id="newCustomerForm" class="customer-form">
+                        <div class="form-section">
+                            <h3>Customer Information</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="customerName">Customer Name *</label>
+                                    <input type="text" id="customerName" name="customerName" required placeholder="Enter customer name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="customerEmail">Email Address</label>
+                                    <input type="email" id="customerEmail" name="customerEmail" placeholder="Enter email address">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="customerPhone">Phone Number</label>
+                                    <input type="tel" id="customerPhone" name="customerPhone" placeholder="Enter phone number">
+                                </div>
+                                <div class="form-group">
+                                    <label for="customerAddress">Address</label>
+                                    <input type="text" id="customerAddress" name="customerAddress" placeholder="Enter address">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="primaryContact">Primary Contact</label>
+                                    <input type="text" id="primaryContact" name="primaryContact" placeholder="Enter primary contact name">
+                                </div>
+                                <div class="form-group">
+                                    <!-- Empty div for layout balance -->
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="customerConverted">Converted to customer</label>
+                                    <select id="customerConverted" name="customerConverted">
+                                        <option value="no">No</option>
+                                        <option value="yes">Yes</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-section">
+                            <h3>Customer Notes</h3>
+                            <div class="form-group">
+                                <label for="customerNotes">High level notes about the customer that are good to know</label>
+                                <textarea id="customerNotes" name="customerNotes" rows="4" 
+                                          placeholder="Enter details about the customer that will help with future interactions e.g Manager is Johnny and he only works Mondays and hates pushy sales"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h3>Call logs</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="callLogType">Call Type</label>
+                                    <select id="callLogType" name="callLogType">
+                                        <option value="call">Call</option>
+                                        <option value="email">Email</option>
+                                        <option value="general note">General Note</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="callLogDate">Date</label>
+                                    <input type="date" id="callLogDate" name="callLogDate" class="date-input" readonly>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="callLogs">Log call notes</label>
+                                <textarea id="callLogs" name="callLogs" rows="4" 
+                                          placeholder="Enter details about the call with the customer"></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="form-section">
+                            <h3>Follow-up Task</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="addFollowUp" class="checkbox-label">
+                                        <span class="checkbox-text">Add follow-up task</span>
+                                        <input type="checkbox" id="addFollowUp" name="addFollowUp" value="yes">
+                                        <span class="checkmark"></span>
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label for="followUpDate">Due Date</label>
+                                    <input type="date" id="followUpDate" name="followUpDate" min="{{ today }}" class="date-input">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="followUpTask">Task Description</label>
+                                <textarea id="followUpTask" name="followUpTask" rows="3" 
+                                          placeholder="e.g., Send quote, Follow up call, Schedule meeting, Detailed notes about what needs to be done..."></textarea>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="followUpPriority">Priority</label>
+                                    <select id="followUpPriority" name="followUpPriority">
+                                        <option value="low">Low</option>
+                                        <option value="medium" selected>Medium</option>
+                                        <option value="high">High</option>
+                                        <option value="urgent">Urgent</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="followUpType">Type</label>
+                                    <select id="followUpType" name="followUpType">
+                                        <option value="email">Email</option>
+                                        <option value="phone">Phone</option>
+                                        <option value="process sales order">Process sales order</option>
+                                        <option value="in-person">In-person</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="followUpStatus">Status</label>
+                                <select id="followUpStatus" name="followUpStatus">
+                                    <option value="pending">Pending</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="in-progress">In progress</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="modal-footer">
+                            <button type="button" class="secondary-button" onclick="closeNewCustomerModal()">Cancel</button>
+                            <button type="submit" class="primary-button">Save Customer Profile</button>
+                        </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Option Cards -->
+            <div class="option-cards">
+                <div class="option-card" onclick="addNewCustomer()">
+                    <div class="option-icon">👤➕</div>
+                    <h2 class="option-title">Add New Customer</h2>
+                    <p class="option-description">
+                        Register a new or potential customer with their contact information, preferences, and initial notes.
+                    </p>
+                    <button class="option-button">
+                        Create Customer Profile
+                    </button>
+                </div>
+
+                <div class="option-card" onclick="logCustomerEntry()">
+                    <div class="option-icon">📝</div>
+                    <h2 class="option-title">Log Entry for Existing Customer</h2>
+                    <p class="option-description">
+                        Add notes, interactions, orders, or follow-up reminders for existing customers.
+                    </p>
+                    <button class="option-button">
+                        Add Customer Log
+                    </button>
+                </div>
+            </div>
+
+            <h2 class="section-title">Additional Options</h2>
+
+            <div class="option-cards">
+                <div class="option-card" onclick="viewCustomers()">
+                    <div class="option-icon">👥</div>
+                    <h2 class="option-title">View All Customers</h2>
+                    <p class="option-description">
+                        Browse and search through your complete customer database with filtering options.
+                    </p>
+                    <button class="option-button">
+                        Browse Customers
+                    </button>
+                </div>
+
+                <div class="option-card" onclick="customerReports()">
+                    <div class="option-icon">📊</div>
+                    <h2 class="option-title">Customer Reports</h2>
+                    <p class="option-description">
+                        Generate insights and analytics about customer behavior, sales trends, and engagement.
+                    </p>
+                    <button class="option-button">
+                        View Reports
+                    </button>
+                </div>
+
+                <div class="option-card" onclick="followUpReminders()">
+                    <div class="option-icon">⏰</div>
+                    <h2 class="option-title">Follow-up Reminders</h2>
+                    <p class="option-description">
+                        Manage scheduled follow-ups, upcoming events, and customer touchpoints.
+                    </p>
+                    <button class="option-button">
+                        Manage Reminders
+                    </button>
+                </div>
+
+                <div class="option-card" onclick="exportData()">
+                    <div class="option-icon">📤</div>
+                    <h2 class="option-title">Export Customer Data</h2>
+                    <p class="option-description">
+                        Export customer lists, interaction logs, and reports for external use or backup.
+                    </p>
+                    <button class="option-button">
+                        Export Data
+                    </button>
+                </div>
+            </div>
+
+            <div class="button-container">
+                <form action="/" method="get">
+                    <button type="submit" class="back-button">Back to Dashboard</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Potential Matches Modal -->
+    {% if potential_matches %}
+    <div id="potentialMatchesModal" class="modal" style="display: block;">
+        <div class="modal-content potential-matches-modal">
+            <div class="modal-header">
+                <h2>⚠️ Potential Duplicate Customers Found</h2>
+                <span class="close-button" onclick="closePotentialMatchesModal()">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <p class="modal-description">
+                    We found some customers that might be duplicates of existing ones. This includes customers with similar names and customers whose names appear to be abbreviated versions of existing customer names. Please review each one and decide whether to sync them or ignore them.
+                </p>
+                
+                <div class="potential-matches-list">
+                    {% for match in potential_matches %}
+                    <div class="potential-match-item" data-new-customer="{{ match.new_customer }}">
+                        <div class="match-header">
+                            <div class="new-customer-name">{{ match.new_customer }}</div>
+                            <div class="match-count">{{ match.matches|length }} potential matches</div>
+                        </div>
+                        <div class="match-details">
+                            <div class="match-selection">
+                                <label for="match-select-{{ loop.index }}">Select existing customer to match with:</label>
+                                <select id="match-select-{{ loop.index }}" class="match-dropdown" onchange="enableProcessButton({{ loop.index }})">
+                                    <option value="">-- Select existing customer --</option>
+                                    {% for potential_match in match.matches %}
+                                    <option value="{{ potential_match.existing_customer }}">
+                                        {{ potential_match.existing_customer }} ({{ "%.0f"|format(potential_match.similarity * 100) }}% match)
+                                    </option>
+                                    {% endfor %}
+                                    <option value="CREATE_NEW">+ Create as new customer</option>
+                                </select>
+                            </div>
+                            {% if match.matches %}
+                            <div class="match-preview">
+                                <small>Top matches found:</small>
+                                <ul>
+                                    {% for potential_match in match.matches[:3] %}
+                                    <li>{{ potential_match.existing_customer }} ({{ "%.0f"|format(potential_match.similarity * 100) }}% similarity)</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="match-actions">
+                            <button class="process-button" id="process-btn-{{ loop.index }}" onclick="processMatch('{{ match.new_customer }}', {{ loop.index }})" disabled>
+                                Process Match
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="secondary-button" onclick="closePotentialMatchesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Process Match Confirmation Modal -->
+    <div id="processMatchConfirmationModal" class="modal" style="display: none;">
+        <div class="modal-content confirmation-modal">
+            <div class="modal-header">
+                <h2>Confirm Customer Match</h2>
+                <span class="close-button" onclick="closeProcessMatchConfirmationModal()">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="confirmation-content">
+                    <div class="confirmation-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4CAF50"/>
+                        </svg>
+                    </div>
+                    <h3 id="processMatchConfirmationTitle">Confirm Action</h3>
+                    <p id="processMatchConfirmationMessage">Are you sure you want to proceed?</p>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="secondary-button" onclick="closeProcessMatchConfirmationModal()">Cancel</button>
+                <button class="primary-button" id="confirmProcessMatchBtn" onclick="confirmProcessMatch()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables to store customer data
+        let allCustomers = [];
+        let selectedCustomer = null;
+
+        // Initialize customers data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Customer data will be loaded from the DOM elements
+            loadCustomersFromDOM();
+            
+            // Check for follow-up alerts
+            checkFollowUpAlerts();
+        });
+
+        // Also check alerts when page becomes visible (back button, tab switch, etc.)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                checkFollowUpAlerts();
+            }
+        });
+
+        // Check alerts when page is shown (for back button navigation)
+        window.addEventListener('pageshow', function() {
+            checkFollowUpAlerts();
+        });
+
+        function loadCustomersFromDOM() {
+            const customerItems = document.querySelectorAll('.customer-item');
+            allCustomers = [];
+            customerItems.forEach(item => {
+                allCustomers.push({
+                    name: item.getAttribute('data-customer-name'),
+                    email: item.getAttribute('data-customer-email'),
+                    phone: item.getAttribute('data-customer-phone'),
+                    company: item.getAttribute('data-customer-company')
+                });
+            });
+        }
+
+        function addNewCustomer() {
+            openNewCustomerModal();
+        }
+
+        function logCustomerEntry() {
+            // Open customer search modal
+            openCustomerSearch();
+        }
+
+        function viewCustomers() {
+            // Show customer search modal for browsing customers
+            // Clicking on a customer will redirect to their profile page
+            openCustomerSearch();
+        }
+
+        function addCustomerLog() {
+            // Show customer search modal for adding log entries
+            // Clicking on a customer will redirect to their profile page
+            openCustomerSearch();
+        }
+
+        function customerReports() {
+            // TODO: Implement customer reports functionality
+            alert('Customer Reports functionality will be implemented here.');
+        }
+
+        function followUpReminders() {
+            // TODO: Implement follow-up reminders functionality
+            alert('Follow-up Reminders functionality will be implemented here.');
+        }
+
+        function exportData() {
+            // TODO: Implement export data functionality
+            alert('Export Data functionality will be implemented here.');
+        }
+
+        // Customer Search Modal Functions
+        function openCustomerSearch() {
+            document.getElementById('customerSearchModal').style.display = 'block';
+            document.getElementById('customerSearchInput').focus();
+            // Reset search
+            document.getElementById('customerSearchInput').value = '';
+            filterCustomers();
+        }
+
+        function closeCustomerSearch() {
+            document.getElementById('customerSearchModal').style.display = 'none';
+            selectedCustomer = null;
+        }
+
+        // New Customer Modal Functions
+        function openNewCustomerModal() {
+            document.getElementById('newCustomerModal').style.display = 'block';
+            // Reset form
+            document.getElementById('newCustomerForm').reset();
+            // Set default date to today
+            const today = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('followUpDate');
+            dateInput.value = today;
+            dateInput.min = today; // Prevent selecting past dates
+            
+            // Ensure date input is properly initialized
+            if (dateInput.type === 'date') {
+                // Force re-render of date input
+                dateInput.blur();
+                dateInput.focus();
+            }
+            
+            // Initialize call log date field
+            const callLogDateInput = document.getElementById('callLogDate');
+            if (callLogDateInput) {
+                callLogDateInput.value = today;
+                console.log('Call log date set to:', today);
+                
+                // Force the date input to update its display
+                callLogDateInput.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Add visual feedback
+                callLogDateInput.style.borderColor = '#4CAF50';
+                setTimeout(() => {
+                    callLogDateInput.style.borderColor = '';
+                }, 1000);
+            } else {
+                console.error('Call log date input not found in openNewCustomerModal');
+            }
+        }
+
+        function closeNewCustomerModal() {
+            document.getElementById('newCustomerModal').style.display = 'none';
+        }
+        
+        // Debug function to manually set call log date
+        function setCallLogDate() {
+            const callLogDateInput = document.getElementById('callLogDate');
+            if (callLogDateInput) {
+                const today = new Date().toISOString().split('T')[0];
+                callLogDateInput.value = today;
+                console.log('Call log date manually set to:', today);
+                return true;
+            } else {
+                console.error('Call log date input not found');
+                return false;
+            }
+        }
+
+        // Follow-ups Modal Functions
+        function viewFollowUps() {
+            document.getElementById('followUpsModal').style.display = 'block';
+        }
+
+        function closeFollowUpsModal() {
+            document.getElementById('followUpsModal').style.display = 'none';
+        }
+
+        // Follow-ups Due Modal Functions
+        function viewFollowUpsDue() {
+            document.getElementById('followUpsDueModal').style.display = 'block';
+        }
+
+        function closeFollowUpsDueModal() {
+            document.getElementById('followUpsDueModal').style.display = 'none';
+        }
+
+        // Follow-up Alert Banner Functions
+        function checkFollowUpAlerts() {
+            // Check if banner was dismissed for today
+            const today = new Date().toDateString();
+            const dismissedToday = localStorage.getItem('bannerDismissedDate');
+            
+            if (dismissedToday === today) {
+                updateShowBannerButton();
+                return; // Don't show banner if dismissed for today
+            }
+
+            // Count overdue and due today tasks
+            const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
+            const todayDate = new Date();
+            todayDate.setHours(0, 0, 0, 0);
+            
+            let overdueCount = 0;
+            let dueTodayCount = 0;
+            
+            followUpsDue.forEach(task => {
+                if (task[2]) { // due_date exists
+                    const dueDate = new Date(task[2]);
+                    dueDate.setHours(0, 0, 0, 0);
+                    
+                    if (dueDate < todayDate) {
+                        overdueCount++;
+                    } else if (dueDate.getTime() === todayDate.getTime()) {
+                        dueTodayCount++;
+                    }
+                }
+            });
+            
+            const totalDueCount = overdueCount + dueTodayCount;
+            
+            // Show banner if there are any due tasks
+            if (totalDueCount > 0) {
+                document.getElementById('overdueCount').textContent = overdueCount;
+                document.getElementById('dueTodayCount').textContent = dueTodayCount;
+                document.getElementById('totalDueCount').textContent = totalDueCount;
+                document.getElementById('followUpAlertBanner').classList.add('show');
+            }
+            
+            // Update show banner button visibility
+            updateShowBannerButton();
+        }
+
+        function dismissBanner() {
+            document.getElementById('followUpAlertBanner').classList.remove('show');
+        }
+
+        function dismissBannerForDay() {
+            const today = new Date().toDateString();
+            localStorage.setItem('bannerDismissedDate', today);
+            document.getElementById('followUpAlertBanner').classList.remove('show');
+            updateShowBannerButton();
+        }
+
+        function showBanner() {
+            // Clear the dismissed date so banner can show again
+            localStorage.removeItem('bannerDismissedDate');
+            checkFollowUpAlerts();
+            updateShowBannerButton();
+        }
+
+        function updateShowBannerButton() {
+            const banner = document.getElementById('followUpAlertBanner');
+            const showButton = document.getElementById('showBannerButton');
+            
+            // Show the button if banner is hidden and there are due tasks
+            const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
+            const hasDueTasks = followUpsDue.length > 0;
+            const bannerVisible = banner.classList.contains('show');
+            
+            if (hasDueTasks && !bannerVisible) {
+                showButton.style.display = 'block';
+            } else {
+                showButton.style.display = 'none';
+            }
+        }
+
+        function viewFollowUpsDueFromBanner() {
+            // Close banner and open modal
+            dismissBanner();
+            document.getElementById('followUpsDueModal').style.display = 'block';
+        }
+
+
+
+        // Active Customers Modal Functions
+        function viewActiveCustomers() {
+            document.getElementById('activeCustomersModal').style.display = 'block';
+        }
+
+        function closeActiveCustomersModal() {
+            document.getElementById('activeCustomersModal').style.display = 'none';
+        }
+
+        // New Customers Modal Functions
+        function viewNewCustomers() {
+            document.getElementById('newCustomersModal').style.display = 'block';
+        }
+
+        function closeNewCustomersModal() {
+            document.getElementById('newCustomersModal').style.display = 'none';
+        }
+
+        function closeConfirmationModal() {
+            document.getElementById('confirmationModal').style.display = 'none';
+        }
+
+        function showConfirmationModal(title, message, onConfirm) {
+            // Set the modal content
+            document.getElementById('confirmationTitle').textContent = title;
+            document.getElementById('confirmationMessage').textContent = message;
+            
+            // Set up the confirm button action
+            const confirmBtn = document.getElementById('confirmActionBtn');
+            confirmBtn.onclick = () => {
+                closeConfirmationModal();
+                onConfirm();
+            };
+            
+            // Show the modal
+            document.getElementById('confirmationModal').style.display = 'block';
+        }
+
+        function viewCustomerProfile(customerName) {
+            // Close the modal and redirect to customer profile
+            closeFollowUpsDueModal();
+            window.location.href = `/crm-customer-page?customer_name=${encodeURIComponent(customerName)}`;
+        }
+
+        function markTaskCompleted(taskId, customerName) {
+            // Show custom confirmation modal
+            showConfirmationModal(
+                'Mark Task as Completed',
+                `Are you sure you want to mark this task as completed for ${customerName}?`,
+                () => {
+                    // Send request to backend to update task status
+                    fetch('/crm-mark-task-completed', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            task_id: taskId,
+                            customer_name: customerName
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Remove the task row from the table
+                            const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
+                            if (taskRow) {
+                                taskRow.remove();
+                                
+                                // Check if there are any remaining tasks
+                                const remainingTasks = document.querySelectorAll('.follow-up-task-row');
+                                
+                                // Update the stats count
+                                const statsCount = document.getElementById('followUpsDueCount');
+                                if (statsCount) {
+                                    statsCount.textContent = remainingTasks.length;
+                                }
+                                
+                                if (remainingTasks.length === 0) {
+                                    // No more tasks, show the "no follow-ups due" message
+                                    const tableContainer = document.querySelector('.table-container');
+                                    if (tableContainer) {
+                                        tableContainer.innerHTML = `
+                                            <div class="no-follow-ups-due">
+                                                <p>No follow-up tasks due at the moment.</p>
+                                                <p>All tasks are completed or up to date.</p>
+                                            </div>
+                                        `;
+                                    }
+                                }
+                            }
+                            
+                            // Show success message using custom modal
+                            showSuccessModal('Task Completed', 'Task marked as completed successfully!');
+                        } else {
+                            showErrorModal('Error', 'Error marking task as completed: ' + (data.error || 'Unknown error'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showErrorModal('Error', 'Error marking task as completed. Please try again.');
+                    });
+                }
+            );
+        }
+
+        function selectCustomerFromElement(element) {
+            const customerName = element.getAttribute('data-customer-name');
+            const customerEmail = element.getAttribute('data-customer-email');
+            const customerPhone = element.getAttribute('data-customer-phone');
+            const customerCompany = element.getAttribute('data-customer-company');
+            
+            selectedCustomer = {
+                name: customerName,
+                email: customerEmail,
+                phone: customerPhone,
+                company: customerCompany
+            };
+            
+            // Redirect to customer profile page
+            closeCustomerSearch();
+            window.location.href = `/crm-customer-page?customer_name=${encodeURIComponent(customerName)}`;
+        }
+
+        function filterCustomers() {
+            const searchTerm = document.getElementById('customerSearchInput').value.toLowerCase();
+            const customerItems = document.querySelectorAll('.customer-item');
+            
+            customerItems.forEach(item => {
+                const searchText = item.getAttribute('data-search-text').toLowerCase();
+                const matches = searchText.includes(searchTerm);
+                
+                item.style.display = matches ? 'block' : 'none';
+            });
+        }
+
+        // Sales Deck Slide Navigation
+        function showSlide(slideNumber) {
+            // Hide all slides
+            const slides = document.querySelectorAll('.slide');
+            slides.forEach(slide => slide.classList.remove('active'));
+            
+            // Show selected slide
+            const selectedSlide = document.getElementById(`slide-${slideNumber}`);
+            if (selectedSlide) {
+                selectedSlide.classList.add('active');
+            }
+            
+            // Update navigation button states
+            const navButtons = document.querySelectorAll('.slide-nav-btn');
+            navButtons.forEach((btn, index) => {
+                if (index + 1 === slideNumber) {
+                    btn.style.background = 'var(--primary-color)';
+                    btn.style.color = 'white';
+                    btn.style.borderColor = 'var(--primary-color)';
+                } else {
+                    btn.style.background = 'var(--card-background)';
+                    btn.style.color = 'var(--text-secondary)';
+                    btn.style.borderColor = 'var(--border-color)';
+                }
+            });
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const customerSearchModal = document.getElementById('customerSearchModal');
+            const newCustomerModal = document.getElementById('newCustomerModal');
+            const followUpsModal = document.getElementById('followUpsModal');
+            const followUpsDueModal = document.getElementById('followUpsDueModal');
+            const activeCustomersModal = document.getElementById('activeCustomersModal');
+            const newCustomersModal = document.getElementById('newCustomersModal');
+            const confirmationModal = document.getElementById('confirmationModal');
+            const successModal = document.getElementById('successModal');
+            const processMatchConfirmationModal = document.getElementById('processMatchConfirmationModal');
+            
+            if (event.target == customerSearchModal) {
+                closeCustomerSearch();
+            }
+            if (event.target == newCustomerModal) {
+                closeNewCustomerModal();
+            }
+            if (event.target == followUpsModal) {
+                closeFollowUpsModal();
+            }
+            if (event.target == followUpsDueModal) {
+                closeFollowUpsDueModal();
+            }
+            if (event.target == activeCustomersModal) {
+                closeActiveCustomersModal();
+            }
+            if (event.target == newCustomersModal) {
+                closeNewCustomersModal();
+            }
+            if (event.target == confirmationModal) {
+                closeConfirmationModal();
+            }
+            if (event.target == successModal) {
+                closeSuccessModal();
+            }
+            if (event.target == processMatchConfirmationModal) {
+                closeProcessMatchConfirmationModal();
+            }
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeCustomerSearch();
+                closeNewCustomerModal();
+                closeFollowUpsModal();
+                closeFollowUpsDueModal();
+                closeActiveCustomersModal();
+                closeNewCustomersModal();
+                closeConfirmationModal();
+                closeSuccessModal();
+            }
+        });
+
+        // Form submission handler
+        document.getElementById('newCustomerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Collect form data
+            const formData = {
+                customer_name: document.getElementById('customerName').value,
+                customer_email: document.getElementById('customerEmail').value,
+                customer_phone: document.getElementById('customerPhone').value,
+                customer_address: document.getElementById('customerAddress').value,
+                primary_contact: document.getElementById('primaryContact').value,
+                customer_notes: document.getElementById('customerNotes').value,
+                follow_up_task: document.getElementById('followUpTask').value,
+                follow_up_date: document.getElementById('followUpDate').value,
+                follow_up_priority: document.getElementById('followUpPriority').value,
+                customer_converted: document.getElementById('customerConverted').value,
+                add_follow_up: document.getElementById('addFollowUp').checked ? 'yes' : 'no',
+                follow_up_type: document.getElementById('followUpType').value,
+                follow_up_status: document.getElementById('followUpStatus').value
+            };
+
+            // Collect call log data if notes are provided
+            const callLogDateInput = document.getElementById('callLogDate');
+            const callLogData = {
+                customer: document.getElementById('customerName').value,
+                log_date: callLogDateInput.value || new Date().toISOString().split('T')[0], // Fallback to today if empty
+                log_type: document.getElementById('callLogType').value,
+                log_notes: document.getElementById('callLogs').value.trim()
+            };
+            
+            // Debug logging
+            console.log('Call log date input value:', callLogDateInput.value);
+            console.log('Call log data:', callLogData);
+            
+            // Ensure call log date is set
+            if (!callLogData.log_date) {
+                callLogData.log_date = new Date().toISOString().split('T')[0];
+                console.log('Fallback date set to:', callLogData.log_date);
+            }
+            
+            // Send data to backend
+            fetch('/crm-create-customer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Customer created successfully:', data.message);
+                    
+                    // If call log notes were provided, create the call log entry
+                    if (callLogData.log_notes) {
+                        fetch('/crm-create-call-log', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(callLogData)
+                        })
+                        .then(response => response.json())
+                        .then(callLogResult => {
+                            if (callLogResult.success) {
+                                console.log('Call log created successfully');
+                            } else {
+                                console.error('Error creating call log:', callLogResult.message);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error creating call log:', error);
+                        });
+                    }
+                    
+                    // Show success message
+                    const successMessage = document.createElement('div');
+                    successMessage.className = 'success-overlay';
+                    successMessage.innerHTML = `
+                        <div class="success-content">
+                            <div class="success-icon">✅</div>
+                            <h3>Customer Created Successfully!</h3>
+                            <p>${formData.customer_name} has been added to your CRM.</p>
+                            <p>Redirecting to CRM page in <span id="countdown">3</span> seconds...</p>
+                        </div>
+                    `;
+                    document.body.appendChild(successMessage);
+                    
+                    // Start countdown
+                    let countdown = 3;
+                    const countdownElement = document.getElementById('countdown');
+                    const countdownInterval = setInterval(() => {
+                        countdown--;
+                        countdownElement.textContent = countdown;
+                        
+                        if (countdown <= 0) {
+                            clearInterval(countdownInterval);
+                            
+                            // Close modal
+                            closeNewCustomerModal();
+                            
+                            // Remove success message
+                            document.body.removeChild(successMessage);
+                            
+                            // Redirect to customer detail page with customer name as URL parameter
+                            window.location.href = data.redirect_url;
+                        }
+                    }, 1000);
+                    
+                } else {
+                    console.error('Error creating customer:', data.message);
+                    alert('Error creating customer: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error creating customer. Please try again.');
+            });
+        });
+
+        // Initialize date input functionality when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            const dateInput = document.getElementById('followUpDate');
+            if (dateInput) {
+                // Set minimum date to today
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.min = today;
+                
+                // Add click handler to ensure date picker opens
+                dateInput.addEventListener('click', function() {
+                    this.showPicker ? this.showPicker() : this.focus();
+                });
+            }
+
+            // Initialize call log date field with current date
+            function initializeCallLogDate() {
+                const callLogDateInput = document.getElementById('callLogDate');
+                if (callLogDateInput) {
+                    const today = new Date().toISOString().split('T')[0];
+                    callLogDateInput.value = today;
+                    console.log('Call log date initialized to:', today);
+                } else {
+                    console.log('Call log date input not found, retrying...');
+                    setTimeout(initializeCallLogDate, 100);
+                }
+            }
+            
+            // Initialize immediately and also after a short delay to ensure DOM is ready
+            initializeCallLogDate();
+            setTimeout(initializeCallLogDate, 500);
+        });
+
+        // Add hover effects for option cards
+        document.querySelectorAll('.option-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-8px)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+            });
+        });
+
+        function showNotification(message, type = 'info') {
+            // Remove existing notifications
+            const existingNotifications = document.querySelectorAll('.notification');
+            existingNotifications.forEach(notification => {
+                notification.remove();
+            });
+
+            // Create new notification
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+
+            // Add to page
+            document.body.appendChild(notification);
+
+            // Show notification
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+
+            // Hide and remove after 3 seconds
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+
+        // Sales Deck Inline Editing Functions
+        function editSlide(slideNumber) {
+            const slide = document.getElementById(`slide-${slideNumber}`);
+            
+            // Show edit mode
+            slide.classList.add('editing');
+        }
+
+        function saveSlide(slideNumber) {
+            const slide = document.getElementById(`slide-${slideNumber}`);
+            const richEditor = slide.querySelector('.rich-editor-content');
+            const slideContent = slide.querySelector('.slide-content');
+            
+            // Get the HTML content directly from the rich editor
+            const newHtml = richEditor.innerHTML;
+            
+            // Update the slide content
+            slideContent.innerHTML = newHtml;
+            
+            // Hide edit mode
+            slide.classList.remove('editing');
+            
+            // Show success notification
+            showNotification('Sales deck content updated successfully!', 'success');
+            
+            // Save to backend (optional - you can implement this later)
+            saveSalesDeckToBackend(slideNumber, newHtml);
+        }
+
+        function cancelEditSlide(slideNumber) {
+            const slide = document.getElementById(`slide-${slideNumber}`);
+            
+            // Hide edit mode without saving changes
+            slide.classList.remove('editing');
+        }
+
+        // Rich Text Editor Formatting Functions
+        function formatText(command) {
+            document.execCommand(command, false, null);
+        }
+
+        function addHeading(level) {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const selectedText = range.toString();
+                
+                if (selectedText) {
+                    const heading = document.createElement(level);
+                    heading.textContent = selectedText;
+                    range.deleteContents();
+                    range.insertNode(heading);
+                } else {
+                    // If no text selected, create a new heading
+                    const heading = document.createElement(level);
+                    heading.textContent = 'New Heading';
+                    heading.className = 'left-align';
+                    range.insertNode(heading);
+                    range.collapse(false);
+                }
+            }
+        }
+
+        function addList(listType) {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const list = document.createElement(listType);
+                list.className = 'left-align';
+                
+                const listItem = document.createElement('li');
+                listItem.textContent = 'New list item';
+                list.appendChild(listItem);
+                
+                range.insertNode(list);
+                range.collapse(false);
+            }
+        }
+
+        function addListItem() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                
+                // Check if we're inside a list
+                let list = range.commonAncestorContainer;
+                while (list && list.nodeName !== 'UL' && list.nodeName !== 'OL') {
+                    list = list.parentNode;
+                }
+                
+                if (list) {
+                    // Add item to existing list
+                    const listItem = document.createElement('li');
+                    listItem.textContent = 'New list item';
+                    list.appendChild(listItem);
+                } else {
+                    // Create new list
+                    const newList = document.createElement('ul');
+                    newList.className = 'left-align';
+                    const listItem = document.createElement('li');
+                    listItem.textContent = 'New list item';
+                    newList.appendChild(listItem);
+                    range.insertNode(newList);
+                }
+                range.collapse(false);
+            }
+        }
+
+        function addBlankLine() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const blankLine = document.createElement('p');
+                blankLine.className = 'blank';
+                range.insertNode(blankLine);
+                range.collapse(false);
+            }
+        }
+
+        function addSmallItalic() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const selectedText = range.toString();
+                
+                if (selectedText) {
+                    const smallItalic = document.createElement('p');
+                    smallItalic.className = 'left-align italic small';
+                    smallItalic.textContent = selectedText;
+                    range.deleteContents();
+                    range.insertNode(smallItalic);
+                } else {
+                    // If no text selected, create a new small italic paragraph
+                    const smallItalic = document.createElement('p');
+                    smallItalic.className = 'left-align italic small';
+                    smallItalic.textContent = 'Small italic text..';
+                    range.insertNode(smallItalic);
+                    range.collapse(false);
+                }
+            }
+        }
+
+        function addLeftAlign() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const selectedText = range.toString();
+                
+                if (selectedText) {
+                    const leftAlign = document.createElement('p');
+                    leftAlign.className = 'left-align';
+                    leftAlign.textContent = selectedText;
+                    range.deleteContents();
+                    range.insertNode(leftAlign);
+                } else {
+                    // If no text selected, create a new left-aligned paragraph
+                    const leftAlign = document.createElement('p');
+                    leftAlign.className = 'left-align';
+                    leftAlign.textContent = 'New left-aligned text';
+                    range.insertNode(leftAlign);
+                    range.collapse(false);
+                }
+            }
+        }
+
+        function convertHtmlToPlainText(html) {
+            // Create a temporary div to parse HTML
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            
+            // Convert to plain text, preserving line breaks
+            let text = tempDiv.textContent || tempDiv.innerText || '';
+            
+            // Clean up extra whitespace
+            text = text.replace(/\n\s*\n/g, '\n\n');
+            text = text.trim();
+            
+            return text;
+        }
+
+        function convertPlainTextToHtml(text) {
+            // Split text into lines
+            const lines = text.split('\n');
+            let html = '';
+            let inList = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
+                if (line === '') {
+                    html += '<p class="blank"></p>';
+                    continue;
+                }
+                
+                // Check for headers (lines that are all caps or start with #)
+                if (line === line.toUpperCase() && line.length > 3 && line.length < 50) {
+                    html += `<h2>${line}</h2>`;
+                    continue;
+                }
+                
+                // Check for sub-headers (lines that start with common patterns)
+                if (line.match(/^(Customer asks|Fallback options|We currently have|Pricing & MoQ)/)) {
+                    html += `<h3>${line}</h3>`;
+                    continue;
+                }
+                
+                // Check for italic small text (lines that end with ..)
+                if (line.endsWith('..')) {
+                    html += `<p class="left-align italic small">${line}</p>`;
+                    continue;
+                }
+                
+                // Check for bullet points (lines that start with •)
+                if (line.startsWith('•')) {
+                    if (!inList) {
+                        html += '<ul class="left-align">';
+                        inList = true;
+                    }
+                    const listItem = line.substring(1).trim();
+                    html += `<li>${listItem}</li>`;
+                    continue;
+                }
+                
+                // Check for list items (lines that start with -)
+                if (line.startsWith('-')) {
+                    if (!inList) {
+                        html += '<ul class="left-align">';
+                        inList = true;
+                    }
+                    const listItem = line.substring(1).trim();
+                    html += `<li>${listItem}</li>`;
+                    continue;
+                }
+                
+                // End list if we were in one
+                if (inList) {
+                    html += '</ul>';
+                    inList = false;
+                }
+                
+                // Check for italic text (lines that are short and descriptive)
+                if (line.length < 100 && (line.includes('hook') || line.includes('ask') || line.includes('Options'))) {
+                    html += `<p class="left-align italic small">${line}</p>`;
+                    continue;
+                }
+                
+                // Default: regular paragraph with left alignment
+                html += `<p class="left-align">${line}</p>`;
+            }
+            
+            // Close any open list
+            if (inList) {
+                html += '</ul>';
+            }
+            
+            return html;
+        }
+
+        function saveSalesDeckToBackend(slideNumber, content) {
+            // This function can be implemented later to save content to the database
+            console.log(`Saving slide ${slideNumber} content:`, content);
+            
+            // Example implementation:
+            // fetch('/save-sales-deck', {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' },
+            //     body: JSON.stringify({ slide: slideNumber, content: content })
+            // });
+        }
+
+        function closeSuccessModal() {
+            document.getElementById('successModal').style.display = 'none';
+        }
+        function showSuccessModal(title, message) {
+            document.getElementById('successTitle').textContent = title;
+            document.getElementById('successMessage').textContent = message;
+            // Ensure icon is green for success messages
+            const icon = document.querySelector('#successModal .success-icon svg path');
+            if (icon) icon.setAttribute('fill', '#4CAF50');
+            document.getElementById('successModal').style.display = 'block';
+        }
+
+        function showErrorModal(title, message) {
+            // For now, use the success modal but with error styling
+            document.getElementById('successTitle').textContent = title;
+            document.getElementById('successMessage').textContent = message;
+            // Change the icon color to red for errors
+            const icon = document.querySelector('#successModal .success-icon svg path');
+            if (icon) icon.setAttribute('fill', '#dc3545');
+            document.getElementById('successModal').style.display = 'block';
+        }
+
+        // Potential Matches Modal Functions
+        function closePotentialMatchesModal() {
+            document.getElementById('potentialMatchesModal').style.display = 'none';
+        }
+
+        function enableProcessButton(index) {
+            const dropdown = document.getElementById(`match-select-${index}`);
+            const button = document.getElementById(`process-btn-${index}`);
+            
+            if (dropdown.value) {
+                button.disabled = false;
+                button.style.opacity = '1';
+            } else {
+                button.disabled = true;
+                button.style.opacity = '0.5';
+            }
+        }
+
+        function processMatch(newCustomerName, index) {
+            const dropdown = document.getElementById(`match-select-${index}`);
+            const selectedValue = dropdown.value;
+            const button = document.getElementById(`process-btn-${index}`);
+            
+            if (!selectedValue) {
+                alert('Please select a customer to match with or choose to create a new customer.');
+                return;
+            }
+            
+            // Store the match data for the confirmation
+            window.pendingMatchData = {
+                newCustomerName: newCustomerName,
+                selectedValue: selectedValue,
+                index: index,
+                button: button
+            };
+            
+            // Show confirmation modal
+            let confirmTitle, confirmMessage;
+            if (selectedValue === 'CREATE_NEW') {
+                confirmTitle = 'Create New Customer';
+                confirmMessage = `Are you sure you want to create "${newCustomerName}" as a new customer?`;
+            } else {
+                confirmTitle = 'Create Customer Alias';
+                confirmMessage = `Are you sure you want to match "${newCustomerName}" with existing customer "${selectedValue}"? This will create an alias relationship.`;
+            }
+            
+            document.getElementById('processMatchConfirmationTitle').textContent = confirmTitle;
+            document.getElementById('processMatchConfirmationMessage').textContent = confirmMessage;
+            document.getElementById('processMatchConfirmationModal').style.display = 'block';
+        }
+
+        function closeProcessMatchConfirmationModal() {
+            document.getElementById('processMatchConfirmationModal').style.display = 'none';
+            window.pendingMatchData = null;
+        }
+
+        function confirmProcessMatch() {
+            if (!window.pendingMatchData) return;
+            
+            const { newCustomerName, selectedValue, index, button } = window.pendingMatchData;
+            
+            console.log(`Processing match: ${newCustomerName} -> ${selectedValue}`);
+            
+            // Close the confirmation modal
+            closeProcessMatchConfirmationModal();
+            
+            // Show loading state
+            const originalText = button.textContent;
+            button.textContent = 'Processing...';
+            button.disabled = true;
+            
+            const action = selectedValue === 'CREATE_NEW' ? 'create_new' : 'alias';
+            const existingCustomerName = selectedValue === 'CREATE_NEW' ? null : selectedValue;
+            
+            fetch('/crm-handle-potential-match', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: action,
+                    new_customer_name: newCustomerName,
+                    existing_customer_name: existingCustomerName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove the match item from the modal
+                    const matchItem = button.closest('.potential-match-item');
+                    matchItem.style.opacity = '0.5';
+                    matchItem.style.pointerEvents = 'none';
+                    
+                    // Update button text
+                    if (action === 'alias') {
+                        button.textContent = '✓ Aliased';
+                        button.style.background = '#4CAF50';
+                        button.style.borderColor = '#4CAF50';
+                    } else {
+                        button.textContent = '✓ Created';
+                        button.style.background = '#2196F3';
+                        button.style.borderColor = '#2196F3';
+                    }
+                    
+                    // Show success message
+                    showSuccessModal(
+                        action === 'alias' ? 'Customer Aliased' : 'Customer Created',
+                        data.message
+                    );
+                    
+                    // Reload the page to re-check aliases and update the CRM
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                    
+                } else {
+                    showErrorModal('Error', data.message);
+                    // Reset button
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showErrorModal('Error', 'An error occurred while processing the request');
+                // Reset button
+                button.textContent = originalText;
+                button.disabled = false;
+            });
+        }
+    </script>
+</body>
+</html> 

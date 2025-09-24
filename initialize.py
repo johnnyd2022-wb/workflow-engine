@@ -186,18 +186,98 @@ def create_sales_product_table():
         "date": "DATE",
         "action": "TEXT",
         "buyer": "TEXT",
-        "product_name": "TEXT",
-        "bottles_sold": "DOUBLE PRECISION",
-        "abv": "DOUBLE PRECISION",
-        "bottle_size_ml": "DOUBLE PRECISION",
-        "lal": "DOUBLE PRECISION",
+        "products": "JSONB",
+        #"product_name": "TEXT",
+        #"bottles_sold": "DOUBLE PRECISION",
+        #"abv": "DOUBLE PRECISION",
+        #"bottle_size_ml": "DOUBLE PRECISION",
+        #"lal": "DOUBLE PRECISION",
         "duty_amount": "DOUBLE PRECISION",
-        "bottle_batch": "TEXT",
+        #"bottle_batch": "TEXT",
         "notes": "TEXT",
-        "unit_price": "DOUBLE PRECISION",
-        "amount_nzd": "DOUBLE PRECISION",
-        "total_nzd": "DOUBLE PRECISION",
-        "gst": "DOUBLE PRECISION",
+        #"unit_price": "DOUBLE PRECISION",
+        #"amount_nzd": "DOUBLE PRECISION",
+        #"total_nzd": "DOUBLE PRECISION",
+        "invoice_total": "DOUBLE PRECISION",
+        #"gst": "DOUBLE PRECISION",
+        "invoice_gst": "DOUBLE PRECISION",
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_crm_customer_table():
+    table_name = "crm_customers"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "customer": "TEXT", # customer name
+        "primary_contact": "TEXT", # primary contact for the customer
+        "customer_address": "TEXT", # customer address
+        "customer_phone": "TEXT", # customer phone number
+        "customer_email": "TEXT", # customer email address
+        "customer_notes": "TEXT", # notes about the customer
+        "customer_status": "TEXT", # 'active', 'inactive', 'new'
+        "customer_last_contact": "DATE", # last date the customer was contacted
+        "invoices": "JSONB",  # Stores invoice data as nested JSON with invoice number as key
+        "aliases": "TEXT[]", # list of aliases for the customer
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_crm_follow_ups_table():
+    table_name = "crm_follow_ups"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "customer": "TEXT", # customer name
+        "follow_up_date": "DATE", # date of the follow-up
+        "follow_up_type": "TEXT", # 'email', 'phone', 'in-person', 'other'
+        "follow_up_notes": "TEXT", # notes about the follow-up
+        "follow_up_priority": "TEXT", # 'low', 'medium', 'high'
+        "follow_up_status": "TEXT", # 'completed', 'pending', 'cancelled'
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_crm_log_table():
+    table_name = "crm_logs"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "customer": "TEXT", # customer name
+        "log_date": "DATE", # date of the log
+        "log_type": "TEXT", # 'email', 'phone', 'in-person', 'other'
+        "log_notes": "TEXT", # notes about the log,
+        "log_status": "TEXT", # 'completed', 'pending', 'cancelled', 'sale', 'in-progress', 'other'
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_crm_tasks_table():
+    table_name = "crm_tasks"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "customer": "TEXT", # customer name
+        "task_date": "DATE", # date of the task
+        "task_type": "TEXT", # 'email', 'phone', 'in-person', 'other'
+        "task_notes": "TEXT", # notes about the task
+        "task_status": "TEXT", # 'completed', 'pending', 'cancelled', 'sale', 'in-progress', 'other', 'follow-up'
+        "task_priority": "TEXT", # 'low', 'medium', 'high'
+        "task_assigned_to": "TEXT", # name of the person assigned to the task
+        "task_notification_type": "TEXT", # 'email', 'popup', 'other'
         "uid": "TEXT"
     }
 
@@ -743,6 +823,10 @@ def main():
     create_product_actions_samples_consumed_table()
     create_product_actions_samples_created_table()
     create_products_table()
+    create_crm_customer_table()
+    create_crm_follow_ups_table()
+    create_crm_log_table()
+    create_crm_tasks_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()

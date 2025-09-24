@@ -554,7 +554,6 @@
                             <th>Gmail</th>
                             <th>Bank Fees</th>
                             <th>Website</th>
-                            <th>Upstock</th>
                             <th>Accountants</th>
                             <th>Total</th>
                         </tr>
@@ -567,7 +566,6 @@
                                 <td data-label="Gmail">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.gmail|default(0)) }}</td>
                                 <td data-label="Bank Fees">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.bank_fees|default(0)) }}</td>
                                 <td data-label="Website">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.website|default(0)) }}</td>
-                                <td data-label="Upstock">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.upstock|default(0)) }}</td>
                                 <td data-label="Accountants">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.accountants|default(0)) }}</td>
                                 <td data-label="Total">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.values()|sum + monthly_revenue[0].cost_breakdown.variable_costs.power|default(0)) }}</td>
                             </tr>
