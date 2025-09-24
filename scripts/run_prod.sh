@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Production environment runner
-export WB_ENVIRONMENT=production
+export WB_ENVIRONMENT=prod
 echo "🏭 Starting WhistleBird app in PRODUCTION environment..."
 echo "Environment: $WB_ENVIRONMENT"
 echo "Config file: config/$WB_ENVIRONMENT.ini"
