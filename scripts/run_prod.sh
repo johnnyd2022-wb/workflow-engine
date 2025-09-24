@@ -21,7 +21,7 @@ docker build --target production -f Dockerfile.multi -t wb_inv:prod .
 docker run -d \
     --name wb_inv_prod \
     -p 5000:5000 \
-    -e WB_ENVIRONMENT=production \
+    -e WB_ENVIRONMENT=prod \
     wb_inv:prod
 
 echo "✅ Production environment started on port 5000"
