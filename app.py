@@ -22,11 +22,12 @@ from xml.etree import ElementTree as ET
 import io
 import zipfile
 import math
+from config_loader import config
 
 app = Flask(__name__)
 
-# Configuration settings
-INVOICE_BUTTON_ENABLED = False  # Set to True to enable the generate invoice button
+# Configuration settings - now loaded from environment-specific config files
+INVOICE_BUTTON_ENABLED = config.invoice_button_enabled
 
 @app.route('/')
 def index():
@@ -69,8 +70,8 @@ openid_config = requests.get(open_id_config_url).json()
 xero = oauth.register(
     name="xero",
     version="2",
-    client_id="40ADFC7B008F4AD1B75EE9D741DFE1F8",  # Replace with your actual Client ID
-    client_secret="SiKz3A-2ramUbm5oqNP_fTnE-cPu7rwIruLN4CYQqgrUmomI",  # Replace with your actual Client Secret
+    client_id=config.xero_client_id,
+    client_secret=config.xero_client_secret,
     endpoint_url="https://api.xero.com/",
     authorize_url="https://login.xero.com/identity/connect/authorize",
     access_token_url="https://identity.xero.com/connect/token",
@@ -2190,8 +2191,8 @@ def send_due_tasks_email_scheduled():
 
         # Email settings
         app_password = 'bglgsnrkbxdynrsm'
-        sender_email = 'sales@whistlebird.co.nz'
-        receiver_email = 'whistlebird@whistlebird.co.nz'
+        sender_email = config.sender_email
+        receiver_email = config.receiver_email
         
         # Create email
         msg = MIMEMultipart('alternative')
@@ -2314,8 +2315,8 @@ def send_weekly_tasks_email_scheduled():
 
         # Email settings
         app_password = 'bglgsnrkbxdynrsm'
-        sender_email = 'sales@whistlebird.co.nz'
-        receiver_email = 'whistlebird@whistlebird.co.nz'
+        sender_email = config.sender_email
+        receiver_email = config.receiver_email
         
         # Create email
         msg = MIMEMultipart('alternative')
@@ -2445,8 +2446,8 @@ def email_due_tasks():
 
         # Email settings
         app_password = 'bglgsnrkbxdynrsm'
-        sender_email = 'sales@whistlebird.co.nz'
-        receiver_email = 'whistlebird@whistlebird.co.nz'
+        sender_email = config.sender_email
+        receiver_email = config.receiver_email
         
         # Create email
         msg = MIMEMultipart('alternative')
@@ -2571,8 +2572,8 @@ def email_weekly_tasks():
 
         # Email settings
         app_password = 'bglgsnrkbxdynrsm'
-        sender_email = 'sales@whistlebird.co.nz'
-        receiver_email = 'whistlebird@whistlebird.co.nz'
+        sender_email = config.sender_email
+        receiver_email = config.receiver_email
         
         # Create email
         msg = MIMEMultipart('alternative')
@@ -4839,5 +4840,10 @@ if __name__ == '__main__':
     scheduler_thread.start()
 
     # Run the app on all available network interfaces (0.0.0.0)
-    app.run(host='0.0.0.0', port=5005, ssl_context=('tls/wb_cert.pem', 'tls/wb_cert.key'))
-    app.run(debug=False)
+    # Use configuration for host, port, and debug settings
+    app.run(
+        host=config.host,
+        port=config.port,
+        debug=config.debug,
+        ssl_context=('tls/wb_cert.pem', 'tls/wb_cert.key')
+    )
