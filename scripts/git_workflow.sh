@@ -79,8 +79,14 @@ deploy_test() {
     chmod +x scripts/run_test.sh
     ./scripts/run_test.sh
     
-    print_success "Test environment deployed successfully!"
-    print_status "Browse to: https://test-inventory.whistlebird.co.nz"
+    # Wait for healthcheck to pass
+    if wait_for_healthcheck 5001; then
+        print_success "Test environment deployed successfully!"
+        print_status "Browse to: https://test-inventory.whistlebird.co.nz"
+    else
+        print_error "Test deployment failed healthcheck. Check logs with: docker logs wb_inv_test"
+        exit 1
+    fi
 }
 
 # Function to deploy to production
@@ -106,19 +112,35 @@ deploy_prod() {
     chmod +x scripts/run_prod.sh
     ./scripts/run_prod.sh
     
-    print_success "Production environment deployed successfully!"
-    print_status "Browse to: https://inventory.whistlebird.co.nz"
-    print_status "Deployment tagged as: $tag_name"
+    # Wait for healthcheck to pass
+    if wait_for_healthcheck 5000; then
+        print_success "Production environment deployed successfully!"
+        print_status "Browse to: https://inventory.whistlebird.co.nz"
+        print_status "Deployment tagged as: $tag_name"
+        
+        # Push the tag to remote only after successful healthcheck
+        print_status "Pushing deployment tag to remote..."
+        if git push origin "$tag_name"; then
+            print_success "Deployment tag pushed successfully: $tag_name"
+        else
+            print_warning "Failed to push tag to remote, but deployment is healthy"
+        fi
+    else
+        print_error "Production deployment failed healthcheck. Check logs with: docker logs wb_inv_prod"
+        print_warning "Removing local tag since deployment failed"
+        git tag -d "$tag_name"
+        exit 1
+    fi
 }
 
 # Function to restore test database
 restore_test_db() {
     print_status "Restoring production database to test environment..."
     check_directory
-    
+
     chmod +x scripts/db_restore.sh
     ./scripts/db_restore.sh
-    
+
     print_success "Test database restored successfully!"
 }
 
@@ -126,21 +148,21 @@ restore_test_db() {
 status() {
     print_status "Environment Status:"
     echo ""
-    
+
     # Check local environment
     if pgrep -f "python3 app.py" > /dev/null; then
         print_success "LOCAL: Running"
     else
         print_warning "LOCAL: Not running"
     fi
-    
+
     # Check test environment
     if docker ps --format "table {{.Names}}" | grep -q "wb_inv_test"; then
         print_success "TEST: Running (Docker)"
     else
         print_warning "TEST: Not running"
     fi
-    
+
     # Check production environment
     if docker ps --format "table {{.Names}}" | grep -q "wb_inv_prod"; then
         print_success "PRODUCTION: Running (Docker)"
@@ -151,6 +173,29 @@ status() {
     echo ""
     print_status "Git Status:"
     git status --short
+}
+
+# Function to wait for healthcheck
+wait_for_healthcheck() {
+    local port=$1
+    local max_attempts=30
+    local attempt=1
+
+    print_status "Waiting for healthcheck to pass on port $port..."
+
+    while [ $attempt -le $max_attempts ]; do
+        if curl -f -k -s "https://localhost:$port/healthcheck" > /dev/null 2>&1; then
+            print_success "Healthcheck passed! Application is healthy."
+            return 0
+        fi
+
+        print_status "Attempt $attempt/$max_attempts: Healthcheck not ready yet, waiting 10 seconds..."
+        sleep 10
+        attempt=$((attempt + 1))
+    done
+
+    print_error "Healthcheck failed after $max_attempts attempts. Application may not be healthy."
+    return 1
 }
 
 # Function to show help

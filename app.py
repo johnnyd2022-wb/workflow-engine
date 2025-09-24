@@ -33,6 +33,38 @@ INVOICE_BUTTON_ENABLED = config.invoice_button_enabled
 def index():
     return render_template('index.html')
 
+@app.route('/healthcheck')
+def healthcheck():
+    """Health check endpoint that verifies database connectivity"""
+    try:
+        # Test database connection
+        connection, cursor = db_conn()
+        
+        # Run a simple PostgreSQL version query
+        cursor.execute("SELECT version();")
+        version = cursor.fetchone()
+        
+        # Close the connection
+        cursor.close()
+        connection.close()
+        
+        return {
+            'status': 'healthy',
+            'database': 'connected',
+            'postgresql_version': version[0] if version else 'unknown',
+            'timestamp': datetime.datetime.now().isoformat(),
+            'environment': config.environment
+        }, 200
+        
+    except Exception as e:
+        return {
+            'status': 'unhealthy',
+            'database': 'disconnected',
+            'error': str(e),
+            'timestamp': datetime.datetime.now().isoformat(),
+            'environment': config.environment
+        }, 503
+
 ## Initialize Database Calls ##
 
 # Function to call the main() function from initialize.py
