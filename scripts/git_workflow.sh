@@ -71,9 +71,8 @@ deploy_test() {
     
     # Check for uncommitted changes
     if [ -n "$(git status --porcelain)" ]; then
-        print_warning "You have uncommitted changes. Committing them..."
-        git add .
-        git commit -m "Auto-commit before test deployment"
+        print_warning "You have uncommitted changes. Stashing them..."
+        git stash push -m "Auto-stash before test deployment"
     fi
     
     # Run the test environment
@@ -95,9 +94,8 @@ deploy_prod() {
     
     # Check for uncommitted changes
     if [ -n "$(git status --porcelain)" ]; then
-        print_warning "You have uncommitted changes. Committing them..."
-        git add .
-        git commit -m "Auto-commit before production deployment"
+        print_warning "You have uncommitted changes. Stashing them..."
+        git stash push -m "Auto-stash before production deployment"
     fi
     
     # Create a production tag
