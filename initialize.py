@@ -224,6 +224,7 @@ def create_crm_customer_table():
         "customer_last_contact": "DATE", # last date the customer was contacted
         "invoices": "JSONB",  # Stores invoice data as nested JSON with invoice number as key
         "aliases": "TEXT[]", # list of aliases for the customer
+        "contacts": "JSONB", # list of contacts & contact details for the customer
         "uid": "TEXT"
     }
 

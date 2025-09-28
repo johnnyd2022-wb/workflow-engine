@@ -842,6 +842,194 @@
             box-shadow: 0 2px 8px rgba(255, 51, 102, 0.1);
         }
 
+        /* Contact Items */
+        .contact-item {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .contact-item:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 8px rgba(255, 51, 102, 0.1);
+        }
+
+        .contact-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .contact-details {
+            flex: 1;
+        }
+
+        .contact-name {
+            font-weight: 500;
+            font-size: 1.1rem;
+            color: var(--text-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .contact-email {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .contact-phone {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .contact-notes {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-style: italic;
+            background: var(--background-color);
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+        }
+
+        .contact-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .contact-actions button {
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
+        }
+
+        .contact-actions button:hover {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .contact-actions .edit-btn:hover {
+            background: var(--info-color);
+            border-color: var(--info-color);
+        }
+
+        .contact-actions .delete-btn:hover {
+            background: var(--danger-color);
+            border-color: var(--danger-color);
+        }
+
+        /* Contact Forms */
+        .contact-form {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .contact-form .form-section h3 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .contact-form .form-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .contact-form .form-group {
+            flex: 1;
+        }
+
+        .contact-form .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .contact-form .form-group input,
+        .contact-form .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--background-color);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+
+        .contact-form .form-group input:focus,
+        .contact-form .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.1);
+        }
+
+        .contact-form .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1rem;
+        }
+
+        /* Primary Contact Section */
+        .primary-contact-section {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .primary-contact-section h3 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .primary-contact-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .primary-contact-field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .primary-contact-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .primary-contact-value {
+            color: var(--text-color);
+            font-size: 1rem;
+        }
+
+        /* Alternative Contacts Section */
+        .alternative-contacts-section h3 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
         .task-header {
             display: flex;
             justify-content: space-between;
@@ -2255,6 +2443,7 @@
             <button class="nav-tab" onclick="showTab('call-logs', event)">Call Logs</button>
             <button class="nav-tab" onclick="showTab('follow-ups', event)">Follow-ups</button>
             <button class="nav-tab" onclick="showTab('invoices', event)">Invoices</button>
+            <button class="nav-tab" onclick="showTab('contacts', event)">Contacts</button>
             <button class="nav-tab" onclick="showTab('aliases', event)">Aliases</button>
         </div>
 
@@ -2721,6 +2910,143 @@
                         <p>This customer doesn't have any invoices yet.</p>
                     </div>
                 {% endif %}
+            </div>
+        </div>
+
+        <!-- Contacts Tab -->
+        <div id="contacts" class="tab-content">
+            <div class="section-card">
+                <div class="section-header">
+                    <h2 class="section-title">Contact Information</h2>
+                    <button class="add-button" onclick="addContact()">+ Add Contact</button>
+                </div>
+                
+                <!-- Primary Contact Display -->
+                <div class="primary-contact-section">
+                    <h3>Primary Contact</h3>
+                    <div class="primary-contact-info">
+                        <div class="primary-contact-field">
+                            <div class="primary-contact-label">Name</div>
+                            <div class="primary-contact-value">{{ customer_info[0][4] if customer_info and customer_info[0][4] else 'Not set' }}</div>
+                        </div>
+                        <div class="primary-contact-field">
+                            <div class="primary-contact-label">Email</div>
+                            <div class="primary-contact-value">{{ customer_info[0][1] if customer_info and customer_info[0][1] else 'Not set' }}</div>
+                        </div>
+                        <div class="primary-contact-field">
+                            <div class="primary-contact-label">Phone</div>
+                            <div class="primary-contact-value">{{ customer_info[0][2] if customer_info and customer_info[0][2] else 'Not set' }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alternative Contacts -->
+                <div class="alternative-contacts-section" style="margin-top: 2rem;">
+                    <h3>Alternative Contacts</h3>
+                    <div id="contactsList" class="contacts-list">
+                        {% if customer_contacts %}
+                            {% for contact in customer_contacts %}
+                            <div class="contact-item" data-contact-id="{{ contact.id }}">
+                                <div class="contact-content">
+                                    <div class="contact-details">
+                                        <div class="contact-name">{{ contact.name }}</div>
+                                        <div class="contact-email">{{ contact.email }}</div>
+                                        <div class="contact-phone">{{ contact.phone }}</div>
+                                        {% if contact.notes %}
+                                        <div class="contact-notes">{{ contact.notes }}</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="contact-actions">
+                                        <button class="edit-btn" onclick="editContact({{ contact.id }})" title="Edit Contact">
+                                            <span>✏️</span>
+                                        </button>
+                                        <button class="delete-btn" onclick="deleteContact({{ contact.id }})" title="Delete Contact">
+                                            <span>🗑️</span>
+                                        </button>
+                                        <button class="move-up-btn" onclick="moveContactUp({{ contact.id }})" title="Move Up">
+                                            <span>⬆️</span>
+                                        </button>
+                                        <button class="move-down-btn" onclick="moveContactDown({{ contact.id }})" title="Move Down">
+                                            <span>⬇️</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📞</div>
+                                <h3>No alternative contacts</h3>
+                                <p>Add alternative contacts to manage multiple points of contact for this customer.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Add Contact Form (initially hidden) -->
+                <div id="add-contact-form" class="contact-form" style="display: none;">
+                    <div class="form-section">
+                        <h3>New Contact</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newContactName">Name</label>
+                                <input type="text" id="newContactName" name="newContactName" placeholder="Contact name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="newContactEmail">Email</label>
+                                <input type="email" id="newContactEmail" name="newContactEmail" placeholder="contact@example.com">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newContactPhone">Phone</label>
+                                <input type="tel" id="newContactPhone" name="newContactPhone" placeholder="+64 21 123 4567">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="newContactNotes">Notes</label>
+                            <textarea id="newContactNotes" name="newContactNotes" rows="2" 
+                                      placeholder="e.g., Manager, Assistant, Preferred contact method, etc."></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="edit-btn btn-cancel" onclick="cancelAddContact()">Cancel</button>
+                            <button type="button" class="edit-btn btn-save" onclick="saveNewContact()">Create Contact</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Edit Contact Form (initially hidden) -->
+                <div id="edit-contact-form" class="contact-form" style="display: none;">
+                    <div class="form-section">
+                        <h3>Edit Contact</h3>
+                        <input type="hidden" id="editContactId" name="editContactId">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="editContactName">Name</label>
+                                <input type="text" id="editContactName" name="editContactName" placeholder="Contact name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="editContactEmail">Email</label>
+                                <input type="email" id="editContactEmail" name="editContactEmail" placeholder="contact@example.com">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="editContactPhone">Phone</label>
+                                <input type="tel" id="editContactPhone" name="editContactPhone" placeholder="+64 21 123 4567">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="editContactNotes">Notes</label>
+                            <textarea id="editContactNotes" name="editContactNotes" rows="2" 
+                                      placeholder="e.g., Manager, Assistant, Preferred contact method, etc."></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="edit-btn btn-cancel" onclick="cancelEditContact()">Cancel</button>
+                            <button type="button" class="edit-btn btn-save" onclick="saveEditedContact()">Update Contact</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -3702,15 +4028,26 @@
             document.getElementById('deleteResultModal').style.display = 'none';
         }
 
-        function showDeleteConfirmationModal(taskId) {
-            document.getElementById('deleteConfirmationTitle').textContent = 'Delete Task';
-            document.getElementById('deleteConfirmationMessage').textContent = 'Are you sure you want to delete this task? This action cannot be undone.';
-            
-            const confirmBtn = document.getElementById('confirmDeleteActionBtn');
-            confirmBtn.onclick = () => {
-                closeDeleteConfirmationModal();
-                performDeleteTask(taskId);
-            };
+        function showDeleteConfirmationModal(itemId, type = 'task') {
+            if (type === 'contact') {
+                document.getElementById('deleteConfirmationTitle').textContent = 'Delete Contact';
+                document.getElementById('deleteConfirmationMessage').textContent = 'Are you sure you want to delete this contact? This action cannot be undone.';
+                
+                const confirmBtn = document.getElementById('confirmDeleteActionBtn');
+                confirmBtn.onclick = () => {
+                    closeDeleteConfirmationModal();
+                    performDeleteContact(itemId);
+                };
+            } else {
+                document.getElementById('deleteConfirmationTitle').textContent = 'Delete Task';
+                document.getElementById('deleteConfirmationMessage').textContent = 'Are you sure you want to delete this task? This action cannot be undone.';
+                
+                const confirmBtn = document.getElementById('confirmDeleteActionBtn');
+                confirmBtn.onclick = () => {
+                    closeDeleteConfirmationModal();
+                    performDeleteTask(itemId);
+                };
+            }
             
             document.getElementById('deleteConfirmationModal').style.display = 'block';
         }
@@ -3726,6 +4063,37 @@
             }
             
             document.getElementById('deleteResultModal').style.display = 'block';
+            
+            // Auto-close after 2 seconds for success messages
+            if (isSuccess) {
+                setTimeout(() => {
+                    closeDeleteResultModal();
+                    // Reload the page to show updated data
+                    window.location.reload();
+                }, 2000);
+            }
+        }
+
+        function showContactSuccessModal(title, message, isSuccess = true) {
+            document.getElementById('deleteResultTitle').textContent = title;
+            document.getElementById('deleteResultMessage').textContent = message;
+            
+            // Set icon color based on success/error
+            const icon = document.querySelector('#deleteResultModal .result-icon svg path');
+            if (icon) {
+                icon.setAttribute('fill', isSuccess ? '#4CAF50' : '#dc3545');
+            }
+            
+            document.getElementById('deleteResultModal').style.display = 'block';
+            
+            // Auto-close after 2 seconds for success messages
+            if (isSuccess) {
+                setTimeout(() => {
+                    closeDeleteResultModal();
+                    // Reload the page to show updated data
+                    window.location.reload();
+                }, 2000);
+            }
         }
 
         function performDeleteTask(taskId) {
@@ -3779,9 +4147,308 @@
             });
         }
 
+        function performDeleteContact(contactId) {
+            const customerName = '{{ customer_name if customer_name else (customer_info[0][0] if customer_info and customer_info[0] else "") }}';
+            
+            if (!customerName) {
+                showNotification('Error: Customer name not found', 'error');
+                return;
+            }
+            
+            fetch('/crm-delete-contact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    customer_name: customerName,
+                    contact_id: contactId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Remove the contact row from the UI
+                    const contactItem = document.querySelector(`[data-contact-id="${contactId}"]`);
+                    if (contactItem) {
+                        contactItem.remove();
+                        
+                        // Check if there are any remaining contacts
+                        const remainingContacts = document.querySelectorAll('.contact-item');
+                        
+                        if (remainingContacts.length === 0) {
+                            // No more contacts, show empty state
+                            const contactsList = document.getElementById('contactsList');
+                            const existingEmptyState = contactsList.querySelector('.empty-state');
+                            
+                            if (!existingEmptyState) {
+                                const emptyState = document.createElement('div');
+                                emptyState.className = 'empty-state';
+                                emptyState.innerHTML = `
+                                    <div class="empty-state-icon">📞</div>
+                                    <h3>No alternative contacts</h3>
+                                    <p>Add alternative contacts to manage multiple points of contact for this customer.</p>
+                                `;
+                                contactsList.appendChild(emptyState);
+                            }
+                        }
+                    }
+                    
+                    showDeleteResultModal('Success', 'Contact deleted successfully!', true);
+                } else {
+                    showDeleteResultModal('Error', 'Error deleting contact: ' + (data.message || 'Unknown error'), false);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showDeleteResultModal('Error', 'Error deleting contact. Please try again.', false);
+            });
+        }
+
         // Update the existing deleteTask function to use the custom modal
         function deleteTask(taskId) {
             showDeleteConfirmationModal(taskId);
+        }
+
+        // Contact Management Functions
+        function addContact() {
+            const form = document.getElementById('add-contact-form');
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+                document.getElementById('newContactName').focus();
+            } else {
+                form.style.display = 'none';
+            }
+        }
+
+        function cancelAddContact() {
+            const form = document.getElementById('add-contact-form');
+            form.style.display = 'none';
+            
+            // Clear form fields
+            document.getElementById('newContactName').value = '';
+            document.getElementById('newContactEmail').value = '';
+            document.getElementById('newContactPhone').value = '';
+            document.getElementById('newContactNotes').value = '';
+        }
+
+        function saveNewContact() {
+            const name = document.getElementById('newContactName').value.trim();
+            const email = document.getElementById('newContactEmail').value.trim();
+            const phone = document.getElementById('newContactPhone').value.trim();
+            const notes = document.getElementById('newContactNotes').value.trim();
+            
+            if (!name) {
+                showNotification('Please enter a contact name', 'error');
+                return;
+            }
+            
+            const customerName = '{{ customer_name if customer_name else (customer_info[0][0] if customer_info and customer_info[0] else "") }}';
+            
+            if (!customerName) {
+                showNotification('Error: Customer name not found', 'error');
+                return;
+            }
+            
+            const saveBtn = document.getElementById('add-contact-form').querySelector('.btn-save');
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = 'Creating...';
+            saveBtn.disabled = true;
+            
+            // Send data to backend
+            const requestData = {
+                customer_name: customerName,
+                contact_name: name,
+                contact_email: email,
+                contact_phone: phone,
+                contact_notes: notes
+            };
+            
+            console.log('Sending contact data:', requestData);
+            
+            fetch('/crm-add-contact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Hide the form
+                    document.getElementById('add-contact-form').style.display = 'none';
+                    
+                    // Clear form fields
+                    document.getElementById('newContactName').value = '';
+                    document.getElementById('newContactEmail').value = '';
+                    document.getElementById('newContactPhone').value = '';
+                    document.getElementById('newContactNotes').value = '';
+                    
+                    // Show success modal
+                    showContactSuccessModal('Success', 'Contact created successfully!', true);
+                } else {
+                    showContactSuccessModal('Error', 'Error creating contact: ' + (data.message || 'Unknown error'), false);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showContactSuccessModal('Error', 'Error creating contact. Please try again.', false);
+            })
+            .finally(() => {
+                // Reset button state
+                saveBtn.textContent = originalText;
+                saveBtn.disabled = false;
+            });
+        }
+
+        function editContact(contactId) {
+            // Find the contact data
+            const contactItem = document.querySelector(`[data-contact-id="${contactId}"]`);
+            if (!contactItem) return;
+            
+            const nameElement = contactItem.querySelector('.contact-name');
+            const emailElement = contactItem.querySelector('.contact-email');
+            const phoneElement = contactItem.querySelector('.contact-phone');
+            const notesElement = contactItem.querySelector('.contact-notes');
+            
+            // Populate edit form
+            document.getElementById('editContactId').value = contactId;
+            document.getElementById('editContactName').value = nameElement.textContent;
+            document.getElementById('editContactEmail').value = emailElement.textContent;
+            document.getElementById('editContactPhone').value = phoneElement.textContent;
+            document.getElementById('editContactNotes').value = notesElement ? notesElement.textContent : '';
+            
+            // Show edit form
+            document.getElementById('edit-contact-form').style.display = 'block';
+            document.getElementById('editContactName').focus();
+        }
+
+        function cancelEditContact() {
+            document.getElementById('edit-contact-form').style.display = 'none';
+            
+            // Clear form fields
+            document.getElementById('editContactId').value = '';
+            document.getElementById('editContactName').value = '';
+            document.getElementById('editContactEmail').value = '';
+            document.getElementById('editContactPhone').value = '';
+            document.getElementById('editContactNotes').value = '';
+        }
+
+        function saveEditedContact() {
+            const contactId = parseInt(document.getElementById('editContactId').value);
+            const name = document.getElementById('editContactName').value.trim();
+            const email = document.getElementById('editContactEmail').value.trim();
+            const phone = document.getElementById('editContactPhone').value.trim();
+            const notes = document.getElementById('editContactNotes').value.trim();
+            
+            if (!name) {
+                showNotification('Please enter a contact name', 'error');
+                return;
+            }
+            
+            const customerName = '{{ customer_name if customer_name else (customer_info[0][0] if customer_info and customer_info[0] else "") }}';
+            
+            if (!customerName) {
+                showNotification('Error: Customer name not found', 'error');
+                return;
+            }
+            
+            const saveBtn = document.getElementById('edit-contact-form').querySelector('.btn-save');
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = 'Updating...';
+            saveBtn.disabled = true;
+            
+            // Send data to backend
+            fetch('/crm-update-contact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    customer_name: customerName,
+                    contact_id: contactId,
+                    contact_name: name,
+                    contact_email: email,
+                    contact_phone: phone,
+                    contact_notes: notes
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Hide the form
+                    document.getElementById('edit-contact-form').style.display = 'none';
+                    
+                    // Clear form fields
+                    document.getElementById('editContactId').value = '';
+                    document.getElementById('editContactName').value = '';
+                    document.getElementById('editContactEmail').value = '';
+                    document.getElementById('editContactPhone').value = '';
+                    document.getElementById('editContactNotes').value = '';
+                    
+                    // Show success modal
+                    showContactSuccessModal('Success', 'Contact updated successfully!', true);
+                } else {
+                    showContactSuccessModal('Error', 'Error updating contact: ' + (data.message || 'Unknown error'), false);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showContactSuccessModal('Error', 'Error updating contact. Please try again.', false);
+            })
+            .finally(() => {
+                // Reset button state
+                saveBtn.textContent = originalText;
+                saveBtn.disabled = false;
+            });
+        }
+
+        function deleteContact(contactId) {
+            // Show confirmation modal
+            showDeleteConfirmationModal(contactId, 'contact');
+        }
+
+        function moveContactUp(contactId) {
+            reorderContact(contactId, 'up');
+        }
+
+        function moveContactDown(contactId) {
+            reorderContact(contactId, 'down');
+        }
+
+        function reorderContact(contactId, direction) {
+            const customerName = '{{ customer_name if customer_name else (customer_info[0][0] if customer_info and customer_info[0] else "") }}';
+            
+            if (!customerName) {
+                showNotification('Error: Customer name not found', 'error');
+                return;
+            }
+            
+            fetch('/crm-reorder-contacts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    customer_name: customerName,
+                    contact_id: contactId,
+                    direction: direction
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success modal
+                    showContactSuccessModal('Success', 'Contact reordered successfully!', true);
+                } else {
+                    showContactSuccessModal('Error', 'Error reordering contact: ' + (data.message || 'Unknown error'), false);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showContactSuccessModal('Error', 'Error reordering contact. Please try again.', false);
+            });
         }
 
         // Alias Management Functions

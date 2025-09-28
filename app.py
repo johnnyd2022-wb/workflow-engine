@@ -1490,7 +1490,7 @@ def crm_customer_page():
         print(f"Fetching customer info for: {customer_name}")
         cursor.execute("""
             SELECT customer, customer_email, customer_phone,
-            customer_address, primary_contact, customer_status, customer_last_contact, customer_notes, aliases
+            customer_address, primary_contact, customer_status, customer_last_contact, customer_notes, aliases, contacts
             FROM crm_customers WHERE customer = %s
         """, (customer_name,))
         customer_info = cursor.fetchall()
@@ -1641,6 +1641,22 @@ def crm_customer_page():
         print(f"Calculated totals - Bottles: {total_bottles}, Revenue: {total_revenue}")
         print(f"Product breakdown: {product_breakdown}")
 
+        # Process contacts data
+        customer_contacts = []
+        if customer_info and customer_info[0] and customer_info[0][9]:  # contacts column (index 9)
+            try:
+                contacts_data = customer_info[0][9]
+                if isinstance(contacts_data, str):
+                    import json
+                    contacts_data = json.loads(contacts_data)
+                
+                if isinstance(contacts_data, list):
+                    customer_contacts = contacts_data
+                print(f"Found {len(customer_contacts)} contacts for customer")
+            except Exception as e:
+                print(f"Error parsing contacts data: {e}")
+                customer_contacts = []
+
         print("Rendering customer detail template...")
         return render_template('customer_detail.html', 
                             customer_info=customer_info, 
@@ -1651,6 +1667,7 @@ def crm_customer_page():
                             total_bottles=total_bottles,
                             total_revenue=total_revenue,
                             product_breakdown=product_breakdown,
+                            customer_contacts=customer_contacts,
                             invoice_button_enabled=INVOICE_BUTTON_ENABLED)
                             
     except Exception as e:
@@ -1666,6 +1683,7 @@ def crm_customer_page():
                             total_bottles=0,
                             total_revenue=0.0,
                             product_breakdown={},
+                            customer_contacts=[],
                             error_message=f"Error loading customer data: {str(e)}")
     finally:
         if cursor:
@@ -4795,6 +4813,386 @@ def crm_create_call_log():
                 
     except Exception as e:
         print(f"❌ Error in crm_create_call_log: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Server error: {str(e)}"
+        }), 500
+
+@app.route('/crm-add-contact', methods=['POST'])
+def crm_add_contact():
+    print("=== CRM ADD CONTACT ROUTE HIT ===")
+    print(f"Request method: {request.method}")
+    print(f"Request content type: {request.content_type}")
+    print(f"Request data: {request.get_data()}")
+    
+    try:
+        data = request.get_json()
+        print(f"Parsed JSON data: {data}")
+        
+        customer_name = data.get('customer_name')
+        contact_name = data.get('contact_name')
+        contact_email = data.get('contact_email')
+        contact_phone = data.get('contact_phone')
+        contact_notes = data.get('contact_notes')
+        
+        print(f"Extracted values - customer_name: {customer_name}, contact_name: {contact_name}")
+        
+        if not customer_name:
+            print("ERROR: Missing customer_name")
+            return jsonify({
+                "success": False,
+                "message": "Missing customer_name"
+            }), 400
+        
+        if not contact_name:
+            print("ERROR: Missing contact_name")
+            return jsonify({
+                "success": False,
+                "message": "Missing contact_name"
+            }), 400
+        
+        from initialize import db_conn
+        connection, cursor = db_conn()
+        
+        try:
+            # Get current contacts JSONB data
+            print(f"Querying database for customer: {customer_name}")
+            cursor.execute("SELECT contacts FROM crm_customers WHERE customer = %s", (customer_name,))
+            result = cursor.fetchone()
+            print(f"Database result: {result}")
+            
+            if not result:
+                print(f"ERROR: Customer {customer_name} not found in database")
+                return jsonify({
+                    "success": False,
+                    "message": f"Customer {customer_name} not found"
+                }), 404
+            
+            current_contacts = result[0] if result[0] else []
+            print(f"Current contacts: {current_contacts}")
+            
+            # Generate new contact ID (highest existing ID + 1, or 1 if none exist)
+            max_id = max([contact.get('id', 0) for contact in current_contacts], default=0)
+            new_contact_id = max_id + 1
+            print(f"New contact ID: {new_contact_id}")
+            
+            # Create new contact object
+            new_contact = {
+                'id': new_contact_id,
+                'name': contact_name,
+                'email': contact_email or '',
+                'phone': contact_phone or '',
+                'notes': contact_notes or ''
+            }
+            print(f"New contact object: {new_contact}")
+            
+            # Add new contact to the list
+            current_contacts.append(new_contact)
+            print(f"Updated contacts list: {current_contacts}")
+            
+            # Update the contacts JSONB column
+            print(f"Updating database with new contacts data...")
+            cursor.execute("UPDATE crm_customers SET contacts = %s WHERE customer = %s", 
+                         (json.dumps(current_contacts), customer_name))
+            
+            connection.commit()
+            print("Database update successful!")
+            
+            return jsonify({
+                "success": True,
+                "message": "Contact added successfully",
+                "contact_id": new_contact_id
+            })
+            
+        except Exception as e:
+            print(f"❌ Database error: {e}")
+            connection.rollback()
+            return jsonify({
+                "success": False,
+                "message": f"Database error: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+                
+    except Exception as e:
+        print(f"❌ Error in crm_add_contact: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Server error: {str(e)}"
+        }), 500
+
+@app.route('/crm-update-contact', methods=['POST'])
+def crm_update_contact():
+    print("Accessed /crm-update-contact route")
+    
+    try:
+        data = request.get_json()
+        customer_name = data.get('customer_name')
+        contact_id = data.get('contact_id')
+        contact_name = data.get('contact_name')
+        contact_email = data.get('contact_email')
+        contact_phone = data.get('contact_phone')
+        contact_notes = data.get('contact_notes')
+        
+        if not customer_name:
+            return jsonify({
+                "success": False,
+                "message": "Missing customer_name"
+            }), 400
+        
+        if not contact_id:
+            return jsonify({
+                "success": False,
+                "message": "Missing contact_id"
+            }), 400
+        
+        from initialize import db_conn
+        connection, cursor = db_conn()
+        
+        try:
+            # Get current contacts JSONB data
+            cursor.execute("SELECT contacts FROM crm_customers WHERE customer = %s", (customer_name,))
+            result = cursor.fetchone()
+            
+            if not result:
+                return jsonify({
+                    "success": False,
+                    "message": f"Customer {customer_name} not found"
+                }), 404
+            
+            current_contacts = result[0] if result[0] else []
+            
+            # Find and update the contact
+            contact_found = False
+            for contact in current_contacts:
+                if contact.get('id') == contact_id:
+                    contact['name'] = contact_name
+                    contact['email'] = contact_email or ''
+                    contact['phone'] = contact_phone or ''
+                    contact['notes'] = contact_notes or ''
+                    contact_found = True
+                    break
+            
+            if not contact_found:
+                return jsonify({
+                    "success": False,
+                    "message": f"Contact with id {contact_id} not found"
+                }), 404
+            
+            # Update the contacts JSONB column
+            cursor.execute("UPDATE crm_customers SET contacts = %s WHERE customer = %s", 
+                         (json.dumps(current_contacts), customer_name))
+            
+            connection.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": "Contact updated successfully"
+            })
+            
+        except Exception as e:
+            print(f"❌ Database error: {e}")
+            connection.rollback()
+            return jsonify({
+                "success": False,
+                "message": f"Database error: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+                
+    except Exception as e:
+        print(f"❌ Error in crm_update_contact: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Server error: {str(e)}"
+        }), 500
+
+@app.route('/crm-delete-contact', methods=['POST'])
+def crm_delete_contact():
+    print("Accessed /crm-delete-contact route")
+    
+    try:
+        data = request.get_json()
+        customer_name = data.get('customer_name')
+        contact_id = data.get('contact_id')
+        
+        if not customer_name:
+            return jsonify({
+                "success": False,
+                "message": "Missing customer_name"
+            }), 400
+        
+        if not contact_id:
+            return jsonify({
+                "success": False,
+                "message": "Missing contact_id"
+            }), 400
+        
+        from initialize import db_conn
+        connection, cursor = db_conn()
+        
+        try:
+            # Get current contacts JSONB data
+            cursor.execute("SELECT contacts FROM crm_customers WHERE customer = %s", (customer_name,))
+            result = cursor.fetchone()
+            
+            if not result:
+                return jsonify({
+                    "success": False,
+                    "message": f"Customer {customer_name} not found"
+                }), 404
+            
+            current_contacts = result[0] if result[0] else []
+            
+            # Remove the contact and reorder remaining contacts
+            updated_contacts = []
+            for i, contact in enumerate(current_contacts):
+                if contact.get('id') != contact_id:
+                    # Reorder contacts with sequential IDs starting from 1
+                    contact['id'] = len(updated_contacts) + 1
+                    updated_contacts.append(contact)
+            
+            # Update the contacts JSONB column
+            cursor.execute("UPDATE crm_customers SET contacts = %s WHERE customer = %s", 
+                         (json.dumps(updated_contacts), customer_name))
+            
+            connection.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": "Contact deleted successfully"
+            })
+            
+        except Exception as e:
+            print(f"❌ Database error: {e}")
+            connection.rollback()
+            return jsonify({
+                "success": False,
+                "message": f"Database error: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+                
+    except Exception as e:
+        print(f"❌ Error in crm_delete_contact: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Server error: {str(e)}"
+        }), 500
+
+@app.route('/crm-reorder-contacts', methods=['POST'])
+def crm_reorder_contacts():
+    print("Accessed /crm-reorder-contacts route")
+    
+    try:
+        data = request.get_json()
+        customer_name = data.get('customer_name')
+        contact_id = data.get('contact_id')
+        direction = data.get('direction')  # 'up' or 'down'
+        
+        if not customer_name:
+            return jsonify({
+                "success": False,
+                "message": "Missing customer_name"
+            }), 400
+        
+        if not contact_id:
+            return jsonify({
+                "success": False,
+                "message": "Missing contact_id"
+            }), 400
+        
+        if direction not in ['up', 'down']:
+            return jsonify({
+                "success": False,
+                "message": "Invalid direction. Must be 'up' or 'down'"
+            }), 400
+        
+        from initialize import db_conn
+        connection, cursor = db_conn()
+        
+        try:
+            # Get current contacts JSONB data
+            cursor.execute("SELECT contacts FROM crm_customers WHERE customer = %s", (customer_name,))
+            result = cursor.fetchone()
+            
+            if not result:
+                return jsonify({
+                    "success": False,
+                    "message": f"Customer {customer_name} not found"
+                }), 404
+            
+            current_contacts = result[0] if result[0] else []
+            
+            # Find the contact index
+            contact_index = None
+            for i, contact in enumerate(current_contacts):
+                if contact.get('id') == contact_id:
+                    contact_index = i
+                    break
+            
+            if contact_index is None:
+                return jsonify({
+                    "success": False,
+                    "message": f"Contact with id {contact_id} not found"
+                }), 404
+            
+            # Check if move is valid
+            if direction == 'up' and contact_index == 0:
+                return jsonify({
+                    "success": False,
+                    "message": "Contact is already at the top"
+                }), 400
+            
+            if direction == 'down' and contact_index == len(current_contacts) - 1:
+                return jsonify({
+                    "success": False,
+                    "message": "Contact is already at the bottom"
+                }), 400
+            
+            # Swap contacts
+            if direction == 'up':
+                current_contacts[contact_index], current_contacts[contact_index - 1] = \
+                    current_contacts[contact_index - 1], current_contacts[contact_index]
+            else:  # down
+                current_contacts[contact_index], current_contacts[contact_index + 1] = \
+                    current_contacts[contact_index + 1], current_contacts[contact_index]
+            
+            # Update the contacts JSONB column
+            cursor.execute("UPDATE crm_customers SET contacts = %s WHERE customer = %s", 
+                         (json.dumps(current_contacts), customer_name))
+            
+            connection.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": "Contact reordered successfully"
+            })
+            
+        except Exception as e:
+            print(f"❌ Database error: {e}")
+            connection.rollback()
+            return jsonify({
+                "success": False,
+                "message": f"Database error: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+                
+    except Exception as e:
+        print(f"❌ Error in crm_reorder_contacts: {e}")
         return jsonify({
             "success": False,
             "message": f"Server error: {str(e)}"
