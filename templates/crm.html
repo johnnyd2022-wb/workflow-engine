@@ -2604,15 +2604,15 @@
                 </div>
                 <div class="banner-content">
                     <div class="banner-stats">
-                        <div class="banner-stat">
+                        <div class="banner-stat clickable-stat" onclick="viewOverdueTasks()">
                             <div class="banner-stat-number" id="overdueCount">0</div>
                             <div class="banner-stat-label">Overdue</div>
                         </div>
-                        <div class="banner-stat">
+                        <div class="banner-stat clickable-stat" onclick="viewDueTodayTasks()">
                             <div class="banner-stat-number" id="dueTodayCount">0</div>
                             <div class="banner-stat-label">Due Today</div>
                         </div>
-                        <div class="banner-stat">
+                        <div class="banner-stat clickable-stat" onclick="viewTotalDueTasks()">
                             <div class="banner-stat-number" id="totalDueCount">0</div>
                             <div class="banner-stat-label">Total Due</div>
                         </div>
@@ -2839,9 +2839,125 @@
                             </div>
                         {% endif %}
                     </div>
-                    
+
                     <div class="modal-footer">
                         <button class="secondary-button" onclick="closeFollowUpsDueModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overdue Tasks Modal (Hidden by default) -->
+            <div id="overdueTasksModal" class="modal" style="display: none;">
+                <div class="modal-content follow-ups-due-modal">
+                    <div class="modal-header">
+                        <h2>Overdue Tasks</h2>
+                        <span class="close-button" onclick="closeOverdueTasksModal()">&times;</span>
+                    </div>
+                    
+                    <div class="follow-ups-due-container">
+                        <div id="overdueTasksTable" class="table-container">
+                            <table class="customer-table">
+                                <thead>
+                                    <tr>
+                                        <th>Customer</th>
+                                        <th>Due Date</th>
+                                        <th>Type</th>
+                                        <th>Notes</th>
+                                        <th>Priority</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="overdueTasksBody">
+                                    <!-- Tasks will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="noOverdueTasks" class="no-follow-ups-due" style="display: none;">
+                            <p>No overdue tasks at the moment.</p>
+                            <p>All tasks are up to date.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeOverdueTasksModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Due Today Tasks Modal (Hidden by default) -->
+            <div id="dueTodayTasksModal" class="modal" style="display: none;">
+                <div class="modal-content follow-ups-due-modal">
+                    <div class="modal-header">
+                        <h2>Tasks Due Today</h2>
+                        <span class="close-button" onclick="closeDueTodayTasksModal()">&times;</span>
+                    </div>
+                    
+                    <div class="follow-ups-due-container">
+                        <div id="dueTodayTasksTable" class="table-container">
+                            <table class="customer-table">
+                                <thead>
+                                    <tr>
+                                        <th>Customer</th>
+                                        <th>Due Date</th>
+                                        <th>Type</th>
+                                        <th>Notes</th>
+                                        <th>Priority</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dueTodayTasksBody">
+                                    <!-- Tasks will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="noDueTodayTasks" class="no-follow-ups-due" style="display: none;">
+                            <p>No tasks due today - ensure no tasks are overdue.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeDueTodayTasksModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Total Due Tasks Modal (Hidden by default) -->
+            <div id="totalDueTasksModal" class="modal" style="display: none;">
+                <div class="modal-content follow-ups-due-modal">
+                    <div class="modal-header">
+                        <h2>All Due Tasks</h2>
+                        <span class="close-button" onclick="closeTotalDueTasksModal()">&times;</span>
+                    </div>
+                    
+                    <div class="follow-ups-due-container">
+                        <div id="totalDueTasksTable" class="table-container">
+                            <table class="customer-table">
+                                <thead>
+                                    <tr>
+                                        <th>Customer</th>
+                                        <th>Due Date</th>
+                                        <th>Type</th>
+                                        <th>Notes</th>
+                                        <th>Priority</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="totalDueTasksBody">
+                                    <!-- Tasks will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="noTotalDueTasks" class="no-follow-ups-due" style="display: none;">
+                            <p>No tasks due at the moment.</p>
+                            <p>All tasks are completed or up to date.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeTotalDueTasksModal()">Close</button>
                     </div>
                 </div>
             </div>
@@ -3754,12 +3870,204 @@
             document.getElementById('followUpsDueModal').style.display = 'none';
         }
 
+        // Overdue Tasks Modal Functions
+        function viewOverdueTasks() {
+            populateOverdueTasks();
+            document.getElementById('overdueTasksModal').style.display = 'block';
+        }
+
+        function closeOverdueTasksModal() {
+            document.getElementById('overdueTasksModal').style.display = 'none';
+        }
+
+        function populateOverdueTasks() {
+            const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
+            const overdueTodayDate = new Date();
+            overdueTodayDate.setHours(0, 0, 0, 0);
+
+            const overdueTasks = followUpsDue.filter(task => {
+                if (task[2]) { // due_date exists
+                    const dueDate = new Date(task[2]);
+                    dueDate.setHours(0, 0, 0, 0);
+                    return dueDate < overdueTodayDate;
+                }
+                return false;
+            });
+
+            const overdueTbody = document.getElementById('overdueTasksBody');
+            const overdueNoTasksDiv = document.getElementById('noOverdueTasks');
+            const overdueTableDiv = document.getElementById('overdueTasksTable');
+
+            if (overdueTasks.length === 0) {
+                overdueTbody.innerHTML = '';
+                overdueNoTasksDiv.style.display = 'block';
+                overdueTableDiv.style.display = 'none';
+            } else {
+                overdueNoTasksDiv.style.display = 'none';
+                overdueTableDiv.style.display = 'block';
+                overdueTbody.innerHTML = overdueTasks.map(task => `
+                    <tr class="follow-up-task-row" data-task-id="${task[0]}">
+                        <td class="customer-name-cell">${task[1]}</td>
+                        <td class="due-date-cell">${task[2] ? new Date(task[2]).toISOString().split('T')[0] : 'No date set'}</td>
+                        <td class="type-cell">${task[6] || 'General'}</td>
+                        <td class="notes-cell">${task[5] || 'No notes'}</td>
+                        <td class="priority-cell">
+                            <span class="priority-badge priority-${task[3] || 'medium'}">
+                                ${(task[3] || 'medium').charAt(0).toUpperCase() + (task[3] || 'medium').slice(1)}
+                            </span>
+                        </td>
+                        <td class="status-cell">
+                            <span class="status-badge status-${task[4] || 'pending'}">
+                                ${(task[4] || 'pending').replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </span>
+                        </td>
+                        <td class="action-cell">
+                            <button class="action-btn" onclick="viewCustomerProfile('${task[1]}')">
+                                View Profile
+                            </button>
+                            <button class="complete-btn" onclick="markTaskCompleted('${task[0]}', '${task[1]}')">
+                                Mark as Completed
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        // Due Today Tasks Modal Functions
+        function viewDueTodayTasks() {
+            populateDueTodayTasks();
+            document.getElementById('dueTodayTasksModal').style.display = 'block';
+        }
+
+        function closeDueTodayTasksModal() {
+            document.getElementById('dueTodayTasksModal').style.display = 'none';
+        }
+
+        function populateDueTodayTasks() {
+            const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
+            const dueTodayTodayDate = new Date();
+            dueTodayTodayDate.setHours(0, 0, 0, 0);
+
+            const dueTodayTasks = followUpsDue.filter(task => {
+                if (task[2]) { // due_date exists
+                    const dueDate = new Date(task[2]);
+                    dueDate.setHours(0, 0, 0, 0);
+                    return dueDate.getTime() === dueTodayTodayDate.getTime();
+                }
+                return false;
+            });
+
+            const dueTodayTbody = document.getElementById('dueTodayTasksBody');
+            const dueTodayNoTasksDiv = document.getElementById('noDueTodayTasks');
+            const dueTodayTableDiv = document.getElementById('dueTodayTasksTable');
+            
+            if (dueTodayTasks.length === 0) {
+                dueTodayTbody.innerHTML = '';
+                dueTodayNoTasksDiv.style.display = 'block';
+                dueTodayTableDiv.style.display = 'none';
+            } else {
+                dueTodayNoTasksDiv.style.display = 'none';
+                dueTodayTableDiv.style.display = 'block';
+                dueTodayTbody.innerHTML = dueTodayTasks.map(task => `
+                    <tr class="follow-up-task-row" data-task-id="${task[0]}">
+                        <td class="customer-name-cell">${task[1]}</td>
+                        <td class="due-date-cell">${task[2] ? new Date(task[2]).toISOString().split('T')[0] : 'No date set'}</td>
+                        <td class="type-cell">${task[6] || 'General'}</td>
+                        <td class="notes-cell">${task[5] || 'No notes'}</td>
+                        <td class="priority-cell">
+                            <span class="priority-badge priority-${task[3] || 'medium'}">
+                                ${(task[3] || 'medium').charAt(0).toUpperCase() + (task[3] || 'medium').slice(1)}
+                            </span>
+                        </td>
+                        <td class="status-cell">
+                            <span class="status-badge status-${task[4] || 'pending'}">
+                                ${(task[4] || 'pending').replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </span>
+                        </td>
+                        <td class="action-cell">
+                            <button class="action-btn" onclick="viewCustomerProfile('${task[1]}')">
+                                View Profile
+                            </button>
+                            <button class="complete-btn" onclick="markTaskCompleted('${task[0]}', '${task[1]}')">
+                                Mark as Completed
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        // Total Due Tasks Modal Functions
+        function viewTotalDueTasks() {
+            populateTotalDueTasks();
+            document.getElementById('totalDueTasksModal').style.display = 'block';
+        }
+
+        function closeTotalDueTasksModal() {
+            document.getElementById('totalDueTasksModal').style.display = 'none';
+        }
+
+        function populateTotalDueTasks() {
+            const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
+            const totalDueTodayDate = new Date();
+            totalDueTodayDate.setHours(0, 0, 0, 0);
+            
+            const totalDueTasks = followUpsDue.filter(task => {
+                if (task[2]) { // due_date exists
+                    const dueDate = new Date(task[2]);
+                    dueDate.setHours(0, 0, 0, 0);
+                    return dueDate <= totalDueTodayDate;
+                }
+                return false;
+            });
+
+            const totalDueTbody = document.getElementById('totalDueTasksBody');
+            const totalDueNoTasksDiv = document.getElementById('noTotalDueTasks');
+            const totalDueTableDiv = document.getElementById('totalDueTasksTable');
+            
+            if (totalDueTasks.length === 0) {
+                totalDueTbody.innerHTML = '';
+                totalDueNoTasksDiv.style.display = 'block';
+                totalDueTableDiv.style.display = 'none';
+            } else {
+                totalDueNoTasksDiv.style.display = 'none';
+                totalDueTableDiv.style.display = 'block';
+                totalDueTbody.innerHTML = totalDueTasks.map(task => `
+                    <tr class="follow-up-task-row" data-task-id="${task[0]}">
+                        <td class="customer-name-cell">${task[1]}</td>
+                        <td class="due-date-cell">${task[2] ? new Date(task[2]).toISOString().split('T')[0] : 'No date set'}</td>
+                        <td class="type-cell">${task[6] || 'General'}</td>
+                        <td class="notes-cell">${task[5] || 'No notes'}</td>
+                        <td class="priority-cell">
+                            <span class="priority-badge priority-${task[3] || 'medium'}">
+                                ${(task[3] || 'medium').charAt(0).toUpperCase() + (task[3] || 'medium').slice(1)}
+                            </span>
+                        </td>
+                        <td class="status-cell">
+                            <span class="status-badge status-${task[4] || 'pending'}">
+                                ${(task[4] || 'pending').replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </span>
+                        </td>
+                        <td class="action-cell">
+                            <button class="action-btn" onclick="viewCustomerProfile('${task[1]}')">
+                                View Profile
+                            </button>
+                            <button class="complete-btn" onclick="markTaskCompleted('${task[0]}', '${task[1]}')">
+                                Mark as Completed
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
         // Follow-up Alert Banner Functions
         function checkFollowUpAlerts() {
             // Check if banner was dismissed for today
             const today = new Date().toDateString();
             const dismissedToday = localStorage.getItem('bannerDismissedDate');
-            
+
             if (dismissedToday === today) {
                 updateShowBannerButton();
                 return; // Don't show banner if dismissed for today
@@ -3769,10 +4077,10 @@
             const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
             const todayDate = new Date();
             todayDate.setHours(0, 0, 0, 0);
-            
+
             let overdueCount = 0;
             let dueTodayCount = 0;
-            
+
             followUpsDue.forEach(task => {
                 if (task[2]) { // due_date exists
                     const dueDate = new Date(task[2]);
@@ -3785,9 +4093,9 @@
                     }
                 }
             });
-            
+
             const totalDueCount = overdueCount + dueTodayCount;
-            
+
             // Show banner if there are any due tasks
             if (totalDueCount > 0) {
                 document.getElementById('overdueCount').textContent = overdueCount;
@@ -3821,12 +4129,12 @@
         function updateShowBannerButton() {
             const banner = document.getElementById('followUpAlertBanner');
             const showButton = document.getElementById('showBannerButton');
-            
+
             // Show the button if banner is hidden and there are due tasks
             const followUpsDue = {{ follow_ups_due|tojson if follow_ups_due else '[]' }};
             const hasDueTasks = followUpsDue.length > 0;
             const bannerVisible = banner.classList.contains('show');
-            
+
             if (hasDueTasks && !bannerVisible) {
                 showButton.style.display = 'block';
             } else {
@@ -3839,8 +4147,6 @@
             dismissBanner();
             document.getElementById('followUpsDueModal').style.display = 'block';
         }
-
-
 
         // Active Customers Modal Functions
         function viewActiveCustomers() {
@@ -3868,14 +4174,14 @@
             // Set the modal content
             document.getElementById('confirmationTitle').textContent = title;
             document.getElementById('confirmationMessage').textContent = message;
-            
+
             // Set up the confirm button action
             const confirmBtn = document.getElementById('confirmActionBtn');
             confirmBtn.onclick = () => {
                 closeConfirmationModal();
                 onConfirm();
             };
-            
+
             // Show the modal
             document.getElementById('confirmationModal').style.display = 'block';
         }
@@ -3933,7 +4239,7 @@
                                     }
                                 }
                             }
-                            
+
                             // Show success message using custom modal
                             showSuccessModal('Task Completed', 'Task marked as completed successfully!');
                         } else {
@@ -3953,14 +4259,14 @@
             const customerEmail = element.getAttribute('data-customer-email');
             const customerPhone = element.getAttribute('data-customer-phone');
             const customerCompany = element.getAttribute('data-customer-company');
-            
+
             selectedCustomer = {
                 name: customerName,
                 email: customerEmail,
                 phone: customerPhone,
                 company: customerCompany
             };
-            
+
             // Redirect to customer profile page
             closeCustomerSearch();
             window.location.href = `/crm-customer-page?customer_name=${encodeURIComponent(customerName)}`;
@@ -3983,13 +4289,13 @@
             // Hide all slides
             const slides = document.querySelectorAll('.slide');
             slides.forEach(slide => slide.classList.remove('active'));
-            
+
             // Show selected slide
             const selectedSlide = document.getElementById(`slide-${slideNumber}`);
             if (selectedSlide) {
                 selectedSlide.classList.add('active');
             }
-            
+
             // Update navigation button states
             const navButtons = document.querySelectorAll('.slide-nav-btn');
             navButtons.forEach((btn, index) => {
@@ -4011,12 +4317,15 @@
             const newCustomerModal = document.getElementById('newCustomerModal');
             const followUpsModal = document.getElementById('followUpsModal');
             const followUpsDueModal = document.getElementById('followUpsDueModal');
+            const overdueTasksModal = document.getElementById('overdueTasksModal');
+            const dueTodayTasksModal = document.getElementById('dueTodayTasksModal');
+            const totalDueTasksModal = document.getElementById('totalDueTasksModal');
             const activeCustomersModal = document.getElementById('activeCustomersModal');
             const newCustomersModal = document.getElementById('newCustomersModal');
             const confirmationModal = document.getElementById('confirmationModal');
             const successModal = document.getElementById('successModal');
             const processMatchConfirmationModal = document.getElementById('processMatchConfirmationModal');
-            
+
             if (event.target == customerSearchModal) {
                 closeCustomerSearch();
             }
@@ -4028,6 +4337,15 @@
             }
             if (event.target == followUpsDueModal) {
                 closeFollowUpsDueModal();
+            }
+            if (event.target == overdueTasksModal) {
+                closeOverdueTasksModal();
+            }
+            if (event.target == dueTodayTasksModal) {
+                closeDueTodayTasksModal();
+            }
+            if (event.target == totalDueTasksModal) {
+                closeTotalDueTasksModal();
             }
             if (event.target == activeCustomersModal) {
                 closeActiveCustomersModal();
@@ -4063,7 +4381,7 @@
         // Form submission handler
         document.getElementById('newCustomerForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            
+
             // Collect form data
             const formData = {
                 customer_name: document.getElementById('customerName').value,
@@ -4089,17 +4407,17 @@
                 log_type: document.getElementById('callLogType').value,
                 log_notes: document.getElementById('callLogs').value.trim()
             };
-            
+
             // Debug logging
             console.log('Call log date input value:', callLogDateInput.value);
             console.log('Call log data:', callLogData);
-            
+
             // Ensure call log date is set
             if (!callLogData.log_date) {
                 callLogData.log_date = new Date().toISOString().split('T')[0];
                 console.log('Fallback date set to:', callLogData.log_date);
             }
-            
+
             // Send data to backend
             fetch('/crm-create-customer', {
                 method: 'POST',
@@ -4134,7 +4452,7 @@
                             console.error('Error creating call log:', error);
                         });
                     }
-                    
+
                     // Show success message
                     const successMessage = document.createElement('div');
                     successMessage.className = 'success-overlay';
@@ -4147,7 +4465,7 @@
                         </div>
                     `;
                     document.body.appendChild(successMessage);
-                    
+
                     // Start countdown
                     let countdown = 3;
                     const countdownElement = document.getElementById('countdown');
@@ -4168,7 +4486,7 @@
                             window.location.href = data.redirect_url;
                         }
                     }, 1000);
-                    
+
                 } else {
                     console.error('Error creating customer:', data.message);
                     alert('Error creating customer: ' + data.message);
@@ -4206,7 +4524,7 @@
                     setTimeout(initializeCallLogDate, 100);
                 }
             }
-            
+
             // Initialize immediately and also after a short delay to ensure DOM is ready
             initializeCallLogDate();
             setTimeout(initializeCallLogDate, 500);
@@ -4266,26 +4584,26 @@
             const slide = document.getElementById(`slide-${slideNumber}`);
             const richEditor = slide.querySelector('.rich-editor-content');
             const slideContent = slide.querySelector('.slide-content');
-            
+
             // Get the HTML content directly from the rich editor
             const newHtml = richEditor.innerHTML;
-            
+
             // Update the slide content
             slideContent.innerHTML = newHtml;
-            
+
             // Hide edit mode
             slide.classList.remove('editing');
-            
+
             // Show success notification
             showNotification('Sales deck content updated successfully!', 'success');
-            
+
             // Save to backend (optional - you can implement this later)
             saveSalesDeckToBackend(slideNumber, newHtml);
         }
 
         function cancelEditSlide(slideNumber) {
             const slide = document.getElementById(`slide-${slideNumber}`);
-            
+
             // Hide edit mode without saving changes
             slide.classList.remove('editing');
         }
@@ -4300,7 +4618,7 @@
             if (selection.rangeCount > 0) {
                 const range = selection.getRangeAt(0);
                 const selectedText = range.toString();
-                
+
                 if (selectedText) {
                     const heading = document.createElement(level);
                     heading.textContent = selectedText;
@@ -4323,7 +4641,7 @@
                 const range = selection.getRangeAt(0);
                 const list = document.createElement(listType);
                 list.className = 'left-align';
-                
+
                 const listItem = document.createElement('li');
                 listItem.textContent = 'New list item';
                 list.appendChild(listItem);
@@ -4337,13 +4655,13 @@
             const selection = window.getSelection();
             if (selection.rangeCount > 0) {
                 const range = selection.getRangeAt(0);
-                
+
                 // Check if we're inside a list
                 let list = range.commonAncestorContainer;
                 while (list && list.nodeName !== 'UL' && list.nodeName !== 'OL') {
                     list = list.parentNode;
                 }
-                
+
                 if (list) {
                     // Add item to existing list
                     const listItem = document.createElement('li');
@@ -4378,7 +4696,7 @@
             if (selection.rangeCount > 0) {
                 const range = selection.getRangeAt(0);
                 const selectedText = range.toString();
-                
+
                 if (selectedText) {
                     const smallItalic = document.createElement('p');
                     smallItalic.className = 'left-align italic small';
@@ -4401,7 +4719,7 @@
             if (selection.rangeCount > 0) {
                 const range = selection.getRangeAt(0);
                 const selectedText = range.toString();
-                
+
                 if (selectedText) {
                     const leftAlign = document.createElement('p');
                     leftAlign.className = 'left-align';
@@ -4423,10 +4741,10 @@
             // Create a temporary div to parse HTML
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
-            
+
             // Convert to plain text, preserving line breaks
             let text = tempDiv.textContent || tempDiv.innerText || '';
-            
+
             // Clean up extra whitespace
             text = text.replace(/\n\s*\n/g, '\n\n');
             text = text.trim();
@@ -4439,33 +4757,33 @@
             const lines = text.split('\n');
             let html = '';
             let inList = false;
-            
+
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
-                
+
                 if (line === '') {
                     html += '<p class="blank"></p>';
                     continue;
                 }
-                
+
                 // Check for headers (lines that are all caps or start with #)
                 if (line === line.toUpperCase() && line.length > 3 && line.length < 50) {
                     html += `<h2>${line}</h2>`;
                     continue;
                 }
-                
+
                 // Check for sub-headers (lines that start with common patterns)
                 if (line.match(/^(Customer asks|Fallback options|We currently have|Pricing & MoQ)/)) {
                     html += `<h3>${line}</h3>`;
                     continue;
                 }
-                
+
                 // Check for italic small text (lines that end with ..)
                 if (line.endsWith('..')) {
                     html += `<p class="left-align italic small">${line}</p>`;
                     continue;
                 }
-                
+
                 // Check for bullet points (lines that start with •)
                 if (line.startsWith('•')) {
                     if (!inList) {
@@ -4476,7 +4794,7 @@
                     html += `<li>${listItem}</li>`;
                     continue;
                 }
-                
+
                 // Check for list items (lines that start with -)
                 if (line.startsWith('-')) {
                     if (!inList) {
@@ -4487,35 +4805,35 @@
                     html += `<li>${listItem}</li>`;
                     continue;
                 }
-                
+
                 // End list if we were in one
                 if (inList) {
                     html += '</ul>';
                     inList = false;
                 }
-                
+
                 // Check for italic text (lines that are short and descriptive)
                 if (line.length < 100 && (line.includes('hook') || line.includes('ask') || line.includes('Options'))) {
                     html += `<p class="left-align italic small">${line}</p>`;
                     continue;
                 }
-                
+
                 // Default: regular paragraph with left alignment
                 html += `<p class="left-align">${line}</p>`;
             }
-            
+
             // Close any open list
             if (inList) {
                 html += '</ul>';
             }
-            
+
             return html;
         }
 
         function saveSalesDeckToBackend(slideNumber, content) {
             // This function can be implemented later to save content to the database
             console.log(`Saving slide ${slideNumber} content:`, content);
-            
+
             // Example implementation:
             // fetch('/save-sales-deck', {
             //     method: 'POST',
@@ -4568,12 +4886,12 @@
             const dropdown = document.getElementById(`match-select-${index}`);
             const selectedValue = dropdown.value;
             const button = document.getElementById(`process-btn-${index}`);
-            
+
             if (!selectedValue) {
                 alert('Please select a customer to match with or choose to create a new customer.');
                 return;
             }
-            
+
             // Store the match data for the confirmation
             window.pendingMatchData = {
                 newCustomerName: newCustomerName,
@@ -4581,7 +4899,7 @@
                 index: index,
                 button: button
             };
-            
+
             // Show confirmation modal
             let confirmTitle, confirmMessage;
             if (selectedValue === 'CREATE_NEW') {
@@ -4591,7 +4909,7 @@
                 confirmTitle = 'Create Customer Alias';
                 confirmMessage = `Are you sure you want to match "${newCustomerName}" with existing customer "${selectedValue}"? This will create an alias relationship.`;
             }
-            
+
             document.getElementById('processMatchConfirmationTitle').textContent = confirmTitle;
             document.getElementById('processMatchConfirmationMessage').textContent = confirmMessage;
             document.getElementById('processMatchConfirmationModal').style.display = 'block';
@@ -4604,22 +4922,22 @@
 
         function confirmProcessMatch() {
             if (!window.pendingMatchData) return;
-            
+
             const { newCustomerName, selectedValue, index, button } = window.pendingMatchData;
-            
+
             console.log(`Processing match: ${newCustomerName} -> ${selectedValue}`);
             
             // Close the confirmation modal
             closeProcessMatchConfirmationModal();
-            
+
             // Show loading state
             const originalText = button.textContent;
             button.textContent = 'Processing...';
             button.disabled = true;
-            
+
             const action = selectedValue === 'CREATE_NEW' ? 'create_new' : 'alias';
             const existingCustomerName = selectedValue === 'CREATE_NEW' ? null : selectedValue;
-            
+
             fetch('/crm-handle-potential-match', {
                 method: 'POST',
                 headers: {
@@ -4649,18 +4967,18 @@
                         button.style.background = '#2196F3';
                         button.style.borderColor = '#2196F3';
                     }
-                    
+
                     // Show success message
                     showSuccessModal(
                         action === 'alias' ? 'Customer Aliased' : 'Customer Created',
                         data.message
                     );
-                    
+
                     // Reload the page to re-check aliases and update the CRM
                     setTimeout(() => {
                         location.reload();
                     }, 1500);
-                    
+
                 } else {
                     showErrorModal('Error', data.message);
                     // Reset button
