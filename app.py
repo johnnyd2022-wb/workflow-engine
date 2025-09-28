@@ -71,13 +71,26 @@ def healthcheck():
 def initialize_database():
     python_executable = sys.executable
     initialize_script = "initialize.py"
-    subprocess.run([python_executable, initialize_script])
+    result = subprocess.run([python_executable, initialize_script], capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        print(f"❌ Initialize script failed with return code {result.returncode}")
+        print(f"STDOUT: {result.stdout}")
+        print(f"STDERR: {result.stderr}")
+        raise Exception(f"Database initialization failed: {result.stderr}")
+    else:
+        print("✅ Database initialization completed successfully")
+        print(f"Output: {result.stdout}")
 
 @app.route('/initialize', methods=['POST'])
 def initialize():
     print("Accessed /initialize route")
-    initialize_database()
-    return redirect(url_for('index'))
+    try:
+        initialize_database()
+        return redirect(url_for('index'))
+    except Exception as e:
+        print(f"❌ Initialize failed: {e}")
+        return f"Database initialization failed: {str(e)}", 500
 
 # Process sales invoices + Xero routes
 @app.route('/process-sales-invoices', methods=['POST'])

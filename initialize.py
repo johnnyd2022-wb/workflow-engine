@@ -8,7 +8,7 @@ from io import StringIO  # Add this import statement for StringIO
 import docker
 from config_loader import config
 
-def load_docker_container(image_name, container_name, port):
+def load_docker_container(image_name, container_name, port, environment):
     docker_host = "unix:///var/run/docker.sock"
     client = docker.from_env()
 
@@ -48,27 +48,6 @@ def load_docker_container(image_name, container_name, port):
         # Additional operations on the container if needed
         # e.g., container.exec_run("command") or container.stop()
 
-if __name__ == "__main__":
-    # Replace 'your_image_name:tag' with the actual image name and tag
-    image_name = "postgres"
-
-    # Replace 'your_container_name' with the desired container name
-    container_name = "whistlebird_db_test"
-
-    # Replace the ports dictionary with the desired port mappings
-    ports = {
-        5401: 5432,
-        # Add more port mappings as needed
-    }
-
-    environment = {
-        "POSTGRES_DB": "whistlebird_inventory",
-        "POSTGRES_USER": "wb_admin",
-        "POSTGRES_PASSWORD": "whistlebird"
-    }
-
-    load_docker_container(image_name, container_name, ports)
-
 def calculate_numeric_precision_scale(series):
     max_digits = series.apply(lambda x: len(str(x).replace('.', '')) if not pd.isna(x) else 0).max()
     max_decimal_places = series.apply(lambda x: len(str(x).split('.')[1]) if not pd.isna(x) and '.' in str(x) else 0).max()
@@ -78,47 +57,69 @@ def create_table(table_name, columns):
     # Check if the table exists
     connection, cursor = db_conn()
 
-    with connection.cursor() as outer_cursor:
-        outer_cursor.execute(f"SELECT * FROM information_schema.tables WHERE table_name='{table_name}'")
-        table_exists = bool(outer_cursor.rowcount)
+    try:
+        with connection.cursor() as outer_cursor:
+            # Use parameterized query to prevent SQL injection
+            outer_cursor.execute("SELECT * FROM information_schema.tables WHERE table_name=%s", (table_name,))
+            table_exists = bool(outer_cursor.rowcount)
 
-        # If the table exists, get the column names and data types from the existing table
-        if table_exists:
-            with connection.cursor() as inner_cursor:
-                inner_cursor.execute(f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='{table_name}'")
-                existing_columns = {row[0]: row[1] for row in inner_cursor.fetchall()}
-        else:
-            existing_columns = {}
-
-        # Merge existing columns with new columns
-        all_columns = {**existing_columns, **columns}
-
-        # If the table exists, add missing columns
-        if table_exists:
-            missing_columns = {column: data_type for column, data_type in columns.items() if column not in existing_columns}
-
-            if missing_columns:
-                alter_table_query = f"ALTER TABLE {table_name} "
-                for column, data_type in missing_columns.items():
-                    alter_table_query += f"ADD COLUMN {column} {data_type}, "
-                alter_table_query = alter_table_query[:-2]  # Remove the last comma and space
-
-                outer_cursor.execute(alter_table_query)
-                connection.commit()
-                print(f"Missing columns added to table '{table_name}'.")
+            # If the table exists, get the column names and data types from the existing table
+            if table_exists:
+                with connection.cursor() as inner_cursor:
+                    inner_cursor.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name=%s", (table_name,))
+                    existing_columns = {row[0]: row[1] for row in inner_cursor.fetchall()}
             else:
-                print(f"Table '{table_name}' already exists with all specified columns.")
-        else:
-            # Create the table with the provided columns and data types
-            create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ("
-            for column, data_type in all_columns.items():
-                create_table_query += f'"{column}" {data_type}, '
-            create_table_query = create_table_query[:-2]  # Remove the last comma and space
-            create_table_query += ");"
+                existing_columns = {}
 
-            outer_cursor.execute(create_table_query)
-            connection.commit()
-            print(f"Table '{table_name}' created successfully.")
+            # Merge existing columns with new columns
+            all_columns = {**existing_columns, **columns}
+
+            # If the table exists, add missing columns
+            if table_exists:
+                missing_columns = {column: data_type for column, data_type in columns.items() if column not in existing_columns}
+
+                if missing_columns:
+                    print(f"Adding missing columns to table '{table_name}': {list(missing_columns.keys())}")
+                    
+                    # Add columns one by one to get better error reporting
+                    for column, data_type in missing_columns.items():
+                        try:
+                            alter_table_query = f"ALTER TABLE {table_name} ADD COLUMN {column} {data_type}"
+                            print(f"Executing: {alter_table_query}")
+                            outer_cursor.execute(alter_table_query)
+                            print(f"✅ Successfully added column '{column}' to table '{table_name}'")
+                        except Exception as e:
+                            print(f"❌ Error adding column '{column}' to table '{table_name}': {e}")
+                            connection.rollback()
+                            raise e
+                    
+                    connection.commit()
+                    print(f"✅ All missing columns added to table '{table_name}'.")
+                else:
+                    print(f"Table '{table_name}' already exists with all specified columns.")
+            else:
+                # Create the table with the provided columns and data types
+                create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ("
+                for column, data_type in all_columns.items():
+                    create_table_query += f'"{column}" {data_type}, '
+                create_table_query = create_table_query[:-2]  # Remove the last comma and space
+                create_table_query += ");"
+
+                print(f"Creating table '{table_name}' with query: {create_table_query}")
+                outer_cursor.execute(create_table_query)
+                connection.commit()
+                print(f"✅ Table '{table_name}' created successfully.")
+                
+    except Exception as e:
+        print(f"❌ Error in create_table for '{table_name}': {e}")
+        if connection:
+            connection.rollback()
+        raise e
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 def create_audit_table():
     table_name = "audit"
@@ -838,4 +839,30 @@ def main():
     connection.close()
 
 if __name__ == "__main__":
+    # Use environment-specific Docker configuration
+    if config.docker_enabled:
+        print(f"Loading Docker container for {config.environment} environment...")
+        
+        # Get Docker configuration from environment config
+        image_name = config.docker_image_name
+        container_name = config.docker_container_name
+        
+        # Port mapping from config
+        ports = {
+            config.docker_host_port: config.docker_container_port
+        }
+        
+        # Database environment variables
+        environment = {
+            "POSTGRES_DB": config.db_name,
+            "POSTGRES_USER": config.db_user,
+            "POSTGRES_PASSWORD": config.db_password
+        }
+        
+        load_docker_container(image_name, container_name, ports, environment)
+    else:
+        print(f"Docker container disabled for {config.environment} environment")
+    
+    # Run database initialization for all environments
+    print(f"Running database initialization for environment: {config.environment}")
     main()
