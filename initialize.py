@@ -8,7 +8,7 @@ from io import StringIO  # Add this import statement for StringIO
 import docker
 from config_loader import config
 
-def load_docker_container(image_name, container_name, port):
+def load_docker_container(image_name, container_name, port, environment):
     docker_host = "unix:///var/run/docker.sock"
     client = docker.from_env()
 
@@ -47,27 +47,6 @@ def load_docker_container(image_name, container_name, port):
 
         # Additional operations on the container if needed
         # e.g., container.exec_run("command") or container.stop()
-
-if __name__ == "__main__":
-    # Replace 'your_image_name:tag' with the actual image name and tag
-    image_name = "postgres"
-
-    # Replace 'your_container_name' with the desired container name
-    container_name = "whistlebird_db_test"
-
-    # Replace the ports dictionary with the desired port mappings
-    ports = {
-        5401: 5432,
-        # Add more port mappings as needed
-    }
-
-    environment = {
-        "POSTGRES_DB": "whistlebird_inventory",
-        "POSTGRES_USER": "wb_admin",
-        "POSTGRES_PASSWORD": "whistlebird"
-    }
-
-    load_docker_container(image_name, container_name, ports)
 
 def calculate_numeric_precision_scale(series):
     max_digits = series.apply(lambda x: len(str(x).replace('.', '')) if not pd.isna(x) else 0).max()
@@ -860,4 +839,30 @@ def main():
     connection.close()
 
 if __name__ == "__main__":
+    # Use environment-specific Docker configuration
+    if config.docker_enabled:
+        print(f"Loading Docker container for {config.environment} environment...")
+        
+        # Get Docker configuration from environment config
+        image_name = config.docker_image_name
+        container_name = config.docker_container_name
+        
+        # Port mapping from config
+        ports = {
+            config.docker_host_port: config.docker_container_port
+        }
+        
+        # Database environment variables
+        environment = {
+            "POSTGRES_DB": config.db_name,
+            "POSTGRES_USER": config.db_user,
+            "POSTGRES_PASSWORD": config.db_password
+        }
+        
+        load_docker_container(image_name, container_name, ports, environment)
+    else:
+        print(f"Docker container disabled for {config.environment} environment")
+    
+    # Run database initialization for all environments
+    print(f"Running database initialization for environment: {config.environment}")
     main()

@@ -95,6 +95,26 @@ class Config:
     @property
     def schedule_enabled(self) -> bool:
         return self.getboolean('features', 'schedule_enabled', True)
+    
+    @property
+    def docker_enabled(self) -> bool:
+        return self.getboolean('docker', 'enabled', False)
+    
+    @property
+    def docker_container_name(self) -> str:
+        return self.get('docker', 'container_name', 'whistlebird_db')
+    
+    @property
+    def docker_image_name(self) -> str:
+        return self.get('docker', 'image_name', 'postgres')
+    
+    @property
+    def docker_host_port(self) -> int:
+        return self.getint('docker', 'host_port', 5432)
+    
+    @property
+    def docker_container_port(self) -> int:
+        return self.getint('docker', 'container_port', 5432)
 
 # Global config instance
 config = Config()
