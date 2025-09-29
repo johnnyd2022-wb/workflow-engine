@@ -3106,6 +3106,7 @@
             const success = urlParams.get('invoice_success');
             const message = urlParams.get('message');
             const error = urlParams.get('error');
+            const tab = urlParams.get('tab');
             
             if (success === 'true' && message) {
                 showNotification(message, 'success');
@@ -3117,6 +3118,12 @@
                 // Clean up URL
                 const newUrl = window.location.pathname + '?customer_name=' + encodeURIComponent('{{ customer_name }}');
                 window.history.replaceState({}, document.title, newUrl);
+            }
+            
+            // Handle tab parameter
+            if (tab) {
+                console.log('Opening tab from URL parameter:', tab);
+                showTab(tab);
             }
         }
         
@@ -3578,7 +3585,13 @@
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
             // Set default tab
-            showTab('overview');
+            const urlParams = new URLSearchParams(window.location.search);
+            const tabParam = urlParams.get('tab');
+            if (tabParam) {
+                showTab(tabParam);
+            } else {
+                showTab('overview');
+            }
             
             // Check invoice availability for all invoices
             checkAllInvoiceAvailability();

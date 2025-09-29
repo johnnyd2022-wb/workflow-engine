@@ -2581,6 +2581,60 @@
             margin: 0;
         }
 
+        .recent-activity-cell {
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .activity-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .activity-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            text-align: center;
+            white-space: nowrap;
+            cursor: help;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .activity-badge:hover {
+            opacity: 0.8;
+            transform: scale(1.05);
+            text-decoration: none;
+        }
+
+        .activity-badge.logs-badge:hover,
+        .activity-badge.follow-ups-badge:hover {
+            cursor: pointer;
+        }
+
+        .logs-badge {
+            background-color: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .follow-ups-badge {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .no-activity-badge {
+            background-color: rgba(156, 163, 175, 0.2);
+            color: #9ca3af;
+            border: 1px solid rgba(156, 163, 175, 0.3);
+        }
+
 
     </style>
 </head>
@@ -2728,7 +2782,7 @@
             <div id="followUpsModal" class="modal" style="display: none;">
                 <div class="modal-content follow-ups-modal">
                     <div class="modal-header">
-                        <h2>Customer Information & Sales Data</h2>
+                        <h2>Existing customers to follow-up - most recent order data</h2>
                         <span class="close-button" onclick="closeFollowUpsModal()">&times;</span>
                     </div>
                     
@@ -2742,11 +2796,12 @@
                                             <th>Email</th>
                                             <th>Primary Contact</th>
                                             <th>Phone</th>
-                                            <th>Latest Date</th>
-                                            <th>Total Bottles</th>
-                                            <th>Recent Bottles</th>
-                                            <th>Unit Price</th>
-                                            <th>Product</th>
+                                            <th>Last Order Date</th>
+                                            <th>Total Bottles Ordered</th>
+                                            <th>Last Order Quantity</th>
+                                            <th>Last Order Unit Price</th>
+                                            <th>Last Order Products</th>
+                                            <th>Recent Activity</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -2761,6 +2816,29 @@
                                             <td class="recent-bottles-cell">{{ customer[6] or '0' }}</td>
                                             <td class="unit-price-cell">${{ "%.2f"|format(customer[7]) if customer[7] else '0.00' }}</td>
                                             <td class="product-cell">{{ customer[8] or 'N/A' }}</td>
+                                            <td class="recent-activity-cell">
+                                                {% set customer_name = customer[0] %}
+                                                {% if customer_recent_activity and customer_name in customer_recent_activity %}
+                                                    {% set activity = customer_recent_activity[customer_name] %}
+                                                    <div class="activity-summary">
+                                                        {% if activity.logs %}
+                                                            <a href="/crm-customer-page?customer_name={{ customer_name|urlencode }}&tab=call-logs" class="activity-badge logs-badge" title="Recent CRM Logs: {{ activity.logs|length }} - Click to view">
+                                                                📞 {{ activity.logs|length }} call{{ 's' if activity.logs|length != 1 else '' }}
+                                                            </a>
+                                                        {% endif %}
+                                                        {% if activity.follow_ups %}
+                                                            <a href="/crm-customer-page?customer_name={{ customer_name|urlencode }}&tab=follow-ups" class="activity-badge follow-ups-badge" title="Recent Follow-ups: {{ activity.follow_ups|length }} - Click to view">
+                                                                ✅ {{ activity.follow_ups|length }} follow-up{{ 's' if activity.follow_ups|length != 1 else '' }}
+                                                            </a>
+                                                        {% endif %}
+                                                        {% if not activity.logs and not activity.follow_ups %}
+                                                            <span class="activity-badge no-activity-badge">No recent activity</span>
+                                                        {% endif %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="activity-badge no-activity-badge">No recent activity</span>
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
