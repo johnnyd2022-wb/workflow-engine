@@ -998,6 +998,9 @@ def crm():
 
         print(f"CRM loaded: {len(existing_customer_info)} total customers, {len(existing_customers)} with sales, {len(follow_ups_due)} follow-ups due")
 
+        # Get monthly revenue data for CRM dashboard
+        monthly_revenue = get_monthly_revenue_data()
+        
         return render_template('crm.html', 
                             existing_customers=existing_customers, 
                             existing_customer_info=existing_customer_info, 
@@ -1008,7 +1011,8 @@ def crm():
                             existing_customer_follow_ups=existing_customer_follow_ups,
                             customer_recent_activity=customer_recent_activity,
                             follow_ups_due=follow_ups_due,
-                            potential_matches=potential_matches)
+                            potential_matches=potential_matches,
+                            monthly_revenue=monthly_revenue)
     
     except Exception as e:
         print(f"Error in CRM route: {e}")
@@ -1022,7 +1026,8 @@ def crm():
                             existing_customer_follow_ups=[],
                             customer_recent_activity={},
                             follow_ups_due=[],
-                            potential_matches=[])
+                            potential_matches=[],
+                            monthly_revenue=[])
     finally:
         if cursor:
             cursor.close()
@@ -4141,9 +4146,8 @@ def growth_projection():
     # redirect to index page
     return render_template('index.html')
 
-@app.route('/revenue-report', methods=['POST'])
-def revenue_report():
-    print("Accessed /revenue-report route")
+def get_monthly_revenue_data():
+    """Extract and calculate monthly revenue data for reuse across routes"""
     from datetime import datetime
     connection, cursor = db_conn()
 
@@ -4176,6 +4180,10 @@ def revenue_report():
         ORDER BY month DESC;
     """)
     monthly_data = cursor.fetchall()
+    
+    # Close the connection since we're done with the database
+    cursor.close()
+    connection.close()
 
     # Define cost dictionaries
     fixed_recurring_costs = {
@@ -4394,74 +4402,152 @@ def revenue_report():
             'profit': total_profit,
             'profit_margin': overall_profit_margin
         })
+    
+    return monthly_revenue
 
-        # Calculate monthly target values
-        # Calculate average revenue per bottle (excluding GST)
-        total_bottles_for_avg = 0
-        total_revenue_for_avg = 0
-        total_gst_for_avg = 0
-        for month in monthly_revenue:
-            if month['month'] != 'Total' and month['bottles'] > 0:
-                total_bottles_for_avg += month['bottles']
-                total_revenue_for_avg += month['revenue']
-                total_gst_for_avg += month['gst']
-        
-        actual_revenue_per_bottle = (total_revenue_for_avg - total_gst_for_avg) / total_bottles_for_avg if total_bottles_for_avg > 0 else 42.95
+@app.route('/revenue-report', methods=['POST'])
+def revenue_report():
+    print("Accessed /revenue-report route")
+    monthly_revenue = get_monthly_revenue_data()
+    
+    # Define cost dictionaries (needed for target calculations)
+    fixed_recurring_costs = {
+        'premise': {
+            'base': 331.86,
+            'gst': 331.86 * 0.15,
+            'frequency': 'weekly'  # weekly or monthly
+        },
+        'gmail': {
+            'base': 25.63,
+            'gst': 25.63 * 0.15,
+            'frequency': 'monthly'
+        },
+        'bank_fees': {
+            'base': 24.35,
+            'gst': 24.35 * 0.15,
+            'frequency': 'monthly'
+        },
+        'website': {
+            'base': 47.828,
+            'gst': 47.828 * 0.15,
+            'frequency': 'monthly'
+        },
+        'accountants': {
+            'base': 230.00,
+            'gst': 230.00 * 0.15,
+            'frequency': 'monthly'
+        }
+    }
 
-        # Calculate total monthly fixed costs using the dictionaries
-        print("\n=== Monthly Fixed Costs Breakdown ===")
-        targets_fixed_recurring_costs = 0
-        for name, cost in fixed_recurring_costs.items():
-            monthly_amount = (cost['base'] + cost.get('gst', 0)) * (52/12 if cost.get('frequency') == 'weekly' else 1)
-            targets_fixed_recurring_costs += monthly_amount
-            print(f"{name}: ${monthly_amount:.2f} (Base: ${cost['base']:.2f}, GST: ${cost.get('gst', 0):.2f}, Frequency: {cost.get('frequency', 'monthly')})")
+    fixed_one_off_costs = {
+        'bottles': {
+            'base': 1.10,
+        },
+        'importing_bottles': {
+            'base': 0.73,
+        },
+        'labels': {
+            'base': 0.77,
+        },
+        'case_boxes': {
+            'base': 0.41,
+        },
+        'ethanol': {
+            'base': 2.35,
+        },
+        'heatshrink': {
+            'base': 0.23,
+        },
+        'botanicals': {
+            'base': 0.87,
+        },
+        'corks': {
+            'base': 0.40,
+        }
+    }
 
-        print("\n=== Variable Costs Breakdown ===")
-        targets_fixed_variable_costs = 0
-        for name, cost in variable_costs.items():
-            monthly_amount = cost.get('base', 0) + cost.get('gst', 0)
-            targets_fixed_variable_costs += monthly_amount
-            print(f"{name}: ${monthly_amount:.2f} (Base: ${cost.get('base', 0):.2f}, GST: ${cost.get('gst', 0):.2f})")
+    variable_costs = {
+        'power': {
+            'base': 130.00,
+            'gst': 130.00 * 0.15,
+        }
+    }
+    
+    # Calculate monthly target values
+    # Calculate average revenue per bottle (excluding GST)
+    total_bottles_for_avg = 0
+    total_revenue_for_avg = 0
+    total_gst_for_avg = 0
+    for month in monthly_revenue:
+        if month['month'] != 'Total' and month['bottles'] > 0:
+            total_bottles_for_avg += month['bottles']
+            total_revenue_for_avg += month['revenue']
+            total_gst_for_avg += month['gst']
+    
+    actual_revenue_per_bottle = (total_revenue_for_avg - total_gst_for_avg) / total_bottles_for_avg if total_bottles_for_avg > 0 else 42.95
 
-        targets_monthly_costs_minus_bottle_costs = targets_fixed_recurring_costs + targets_fixed_variable_costs
-        print(f"\nTotal Monthly Costs (minus bottle costs): ${targets_monthly_costs_minus_bottle_costs:.2f}")
-        print(f"  - Fixed Recurring Costs: ${targets_fixed_recurring_costs:.2f}")
-        print(f"  - Variable Costs: ${targets_fixed_variable_costs:.2f}")
+    # Calculate total monthly fixed costs using the dictionaries
+    print("\n=== Monthly Fixed Costs Breakdown ===")
+    targets_fixed_recurring_costs = 0
+    for name, cost in fixed_recurring_costs.items():
+        monthly_amount = (cost['base'] + cost.get('gst', 0)) * (52/12 if cost.get('frequency') == 'weekly' else 1)
+        targets_fixed_recurring_costs += monthly_amount
+        print(f"{name}: ${monthly_amount:.2f} (Base: ${cost['base']:.2f}, GST: ${cost.get('gst', 0):.2f}, Frequency: {cost.get('frequency', 'monthly')})")
 
-        # Calculate total variable cost per bottle
-        per_wildflower_bottle_duty_cost = 67.22 * (0.7 * 0.44)
-        total_costs_per_bottle = sum(cost_info['cost_per_bottle'] for cost_info in one_off_costs_per_bottle_no_gst.values()) + per_wildflower_bottle_duty_cost
-        print(f"total_costs_per_bottle: {total_costs_per_bottle}")
+    print("\n=== Variable Costs Breakdown ===")
+    targets_fixed_variable_costs = 0
+    for name, cost in variable_costs.items():
+        monthly_amount = cost.get('base', 0) + cost.get('gst', 0)
+        targets_fixed_variable_costs += monthly_amount
+        print(f"{name}: ${monthly_amount:.2f} (Base: ${cost.get('base', 0):.2f}, GST: ${cost.get('gst', 0):.2f})")
 
-        # Calculate profit per bottle
-        profit_per_bottle = actual_revenue_per_bottle - total_costs_per_bottle
-        print(f"profit_per_bottle: {profit_per_bottle}")
+    targets_monthly_costs_minus_bottle_costs = targets_fixed_recurring_costs + targets_fixed_variable_costs
+    print(f"\nTotal Monthly Costs (minus bottle costs): ${targets_monthly_costs_minus_bottle_costs:.2f}")
+    print(f"  - Fixed Recurring Costs: ${targets_fixed_recurring_costs:.2f}")
+    print(f"  - Variable Costs: ${targets_fixed_variable_costs:.2f}")
 
-        # Calculate required bottles and revenue
-        required_bottles = round(targets_monthly_costs_minus_bottle_costs / profit_per_bottle, 0) if profit_per_bottle > 0 else 0
-        required_revenue = required_bottles * (actual_revenue_per_bottle * 1.15)
-        print(f"required_bottles: {required_bottles}")
-        print(f"required_revenue: {required_revenue}")
-
-        # Add monthly targets to the template context
-        monthly_targets = {
-            'required_bottles': required_bottles,
-            'required_revenue': required_revenue,
-            'revenue_per_bottle': actual_revenue_per_bottle
+    # Calculate one-off costs per bottle (needed for target calculations)
+    one_off_costs_per_bottle_no_gst = {} 
+    for name, cost in fixed_one_off_costs.items():
+        total_cost = cost['base']  # Calculate per bottle cost
+        cost_per_bottle = total_cost
+        one_off_costs_per_bottle_no_gst[name] = {
+            'cost_per_bottle': cost_per_bottle,
         }
 
-        # Calc bottle order savings tracker using the dictionaries
-        order_tracker_per_bottle = fixed_one_off_costs['bottles']['base'] * 1.15
-        order_tracker_per_bottle_importing = fixed_one_off_costs['importing_bottles']['base'] * 1.15
-        cost_of_bottles_for_10k_order_tracker = (order_tracker_per_bottle + order_tracker_per_bottle_importing) * 10000
-        print(f"cost_of_bottles_for_10k_order_tracker: {cost_of_bottles_for_10k_order_tracker}")
+    # Calculate total variable cost per bottle
+    per_wildflower_bottle_duty_cost = 67.22 * (0.7 * 0.44)
+    total_costs_per_bottle = sum(cost_info['cost_per_bottle'] for cost_info in one_off_costs_per_bottle_no_gst.values()) + per_wildflower_bottle_duty_cost
+    print(f"total_costs_per_bottle: {total_costs_per_bottle}")
 
-        bottle_sales_for_10k_order_tracker = cost_of_bottles_for_10k_order_tracker / profit_per_bottle
-        print(f"bottle_sales_for_10k_order_tracker: {bottle_sales_for_10k_order_tracker}")
+    # Calculate profit per bottle
+    profit_per_bottle = actual_revenue_per_bottle - total_costs_per_bottle
+    print(f"profit_per_bottle: {profit_per_bottle}")
 
-        # Calc lease tracker
+    # Calculate required bottles and revenue
+    required_bottles = round(targets_monthly_costs_minus_bottle_costs / profit_per_bottle, 0) if profit_per_bottle > 0 else 0
+    required_revenue = required_bottles * (actual_revenue_per_bottle * 1.15)
+    print(f"required_bottles: {required_bottles}")
+    print(f"required_revenue: {required_revenue}")
 
-    cursor.close()
+    # Add monthly targets to the template context
+    monthly_targets = {
+        'required_bottles': required_bottles,
+        'required_revenue': required_revenue,
+        'revenue_per_bottle': actual_revenue_per_bottle
+    }
+
+    # Calc bottle order savings tracker using the dictionaries
+    order_tracker_per_bottle = fixed_one_off_costs['bottles']['base'] * 1.15
+    order_tracker_per_bottle_importing = fixed_one_off_costs['importing_bottles']['base'] * 1.15
+    cost_of_bottles_for_10k_order_tracker = (order_tracker_per_bottle + order_tracker_per_bottle_importing) * 10000
+    print(f"cost_of_bottles_for_10k_order_tracker: {cost_of_bottles_for_10k_order_tracker}")
+
+    bottle_sales_for_10k_order_tracker = cost_of_bottles_for_10k_order_tracker / profit_per_bottle
+    print(f"bottle_sales_for_10k_order_tracker: {bottle_sales_for_10k_order_tracker}")
+
+    # Calc lease tracker
+
     return render_template('revenue_reporting.html', monthly_revenue=monthly_revenue, monthly_targets=monthly_targets, bottle_sales_for_10k_order_tracker=bottle_sales_for_10k_order_tracker)
 
 def run_scheduler():
