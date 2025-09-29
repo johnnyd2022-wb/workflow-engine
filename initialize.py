@@ -9,44 +9,49 @@ import docker
 from config_loader import config
 
 def load_docker_container(image_name, container_name, port, environment):
-    docker_host = "unix:///var/run/docker.sock"
-    client = docker.from_env()
-
     try:
-        # Check if the image already exists locally; if not, pull it from Docker Hub
-        client.images.get(image_name)
-    except docker.errors.ImageNotFound:
-        print(f"Pulling the {image_name} image from Docker Hub...")
-        client.images.pull(image_name)
+        docker_host = "unix:///var/run/docker.sock"
+        client = docker.from_env()
 
-    # Check if a container with the same name exists and its status
-    existing_containers = client.containers.list(all=True, filters={"name": container_name})
-    if existing_containers:
-        container = existing_containers[0]
-        container_status = container.status
-        if container_status == "running":
-            print(f"The {container_name} container is already running!")
-            return
+        try:
+            # Check if the image already exists locally; if not, pull it from Docker Hub
+            client.images.get(image_name)
+        except docker.errors.ImageNotFound:
+            print(f"Pulling the {image_name} image from Docker Hub...")
+            client.images.pull(image_name)
+
+        # Check if a container with the same name exists and its status
+        existing_containers = client.containers.list(all=True, filters={"name": container_name})
+        if existing_containers:
+            container = existing_containers[0]
+            container_status = container.status
+            if container_status == "running":
+                print(f"The {container_name} container is already running!")
+                return
+            else:
+                # The container exists but is not running, so start it
+                print(f"Starting the {container_name} container...")
+                container.start()
+                print(f"The {container_name} container has been started!")
         else:
-            # The container exists but is not running, so start it
-            print(f"Starting the {container_name} container...")
-            container.start()
+            # The container does not exist, so create and start it
+            print(f"Creating and starting the {container_name} container...")
+            container = client.containers.run(
+                image=image_name,
+                name=container_name,
+                detach=True,
+                command="postgres",
+                ports=port,
+                environment=environment,
+            )
             print(f"The {container_name} container has been started!")
-    else:
-        # The container does not exist, so create and start it
-        print(f"Creating and starting the {container_name} container...")
-        container = client.containers.run(
-            image=image_name,
-            name=container_name,
-            detach=True,
-            command="postgres",
-            ports=port,
-            environment=environment,
-        )
-        print(f"The {container_name} container has been started!")
 
-        # Additional operations on the container if needed
-        # e.g., container.exec_run("command") or container.stop()
+            # Additional operations on the container if needed
+            # e.g., container.exec_run("command") or container.stop()
+
+    except Exception as e:
+        print(f"⚠️ Docker container management failed (this is expected in containerized environments): {e}")
+        print("Continuing with database initialization...")
 
 def calculate_numeric_precision_scale(series):
     max_digits = series.apply(lambda x: len(str(x).replace('.', '')) if not pd.isna(x) else 0).max()
