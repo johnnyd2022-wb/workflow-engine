@@ -527,6 +527,175 @@
             border-top: 2px solid var(--primary-color);
         }
 
+        /* Log Entry Modal Styles */
+        .log-entry-modal {
+            max-width: 600px;
+        }
+
+        .log-form {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .form-section h3 {
+            color: var(--text-color);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--card-background);
+            color: var(--text-color);
+            font-size: 0.875rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.2);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+        }
+
+        .edit-btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-save {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-cancel {
+            background: var(--border-color);
+            color: var(--text-color);
+        }
+
+        .btn-cancel:hover {
+            background: var(--text-secondary);
+        }
+
+        /* Customer Search Container */
+        .customer-search-container {
+            position: relative;
+        }
+
+        .customer-search-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--card-background);
+            color: var(--text-color);
+            font-size: 0.875rem;
+            transition: border-color 0.3s ease;
+            margin-bottom: 0.5rem;
+        }
+
+        .customer-search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.2);
+        }
+
+        .customer-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .customer-dropdown-item {
+            padding: 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.2s ease;
+        }
+
+        .customer-dropdown-item:hover {
+            background: var(--table-row-hover);
+        }
+
+        .customer-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .customer-display {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--card-background);
+            color: var(--text-color);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: border-color 0.3s ease;
+        }
+
+        .customer-display:hover {
+            border-color: var(--primary-color);
+        }
+
         .modal-header {
             padding: 1.5rem 2rem;
             border-bottom: 1px solid var(--border-color);
@@ -3451,6 +3620,141 @@
                 </div>
             </div>
 
+            <!-- Log Entry Modal (Hidden by default) -->
+            <div id="logEntryModal" class="modal" style="display: none;">
+                <div class="modal-content log-entry-modal">
+                    <div class="modal-header">
+                        <h2>Log Entry for Existing Customer</h2>
+                        <span class="close-button" onclick="closeLogEntryModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="log-form">
+                            <div class="form-section">
+                                <h3>New Log Entry</h3>
+                                <div class="form-group">
+                                    <label for="logEntryCustomer">Customer</label>
+                                    <div class="customer-search-container">
+                                        <input type="text" id="logEntryCustomerSearch" placeholder="Search customers..." 
+                                               onkeyup="filterCustomerDropdown()" class="customer-search-input">
+                                        <div id="logEntryCustomerDropdown" class="customer-dropdown" style="display: none;">
+                                            {% if existing_customer_info %}
+                                                {% for customer in existing_customer_info %}
+                                                    <div class="customer-dropdown-item" onclick="selectCustomerForLog('{{ customer[0] }}')">
+                                                        {{ customer[0] }}
+                                                    </div>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </div>
+                                        <input type="hidden" id="logEntryCustomer" name="logEntryCustomer" required>
+                                        <div id="logEntryCustomerDisplay" class="customer-display">Select a customer...</div>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="logEntryDate">Date</label>
+                                        <input type="date" id="logEntryDate" name="logEntryDate" class="date-input" readonly>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="logEntryType">Type</label>
+                                        <select id="logEntryType" name="logEntryType">
+                                            <option value="call">Call</option>
+                                            <option value="email">Email</option>
+                                            <option value="general note">General Note</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logEntryNotes">Notes</label>
+                                    <textarea id="logEntryNotes" name="logEntryNotes" rows="4" 
+                                              placeholder="Enter conversation notes, details, or any information you want to remember..."></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="edit-btn btn-save" onclick="saveLogEntry()">Save Log Entry</button>
+                                    <button type="button" class="edit-btn btn-cancel" onclick="closeLogEntryModal()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Entry Confirmation Modal (Hidden by default) -->
+            <div id="logEntryConfirmModal" class="modal" style="display: none;">
+                <div class="modal-content confirmation-modal">
+                    <div class="modal-header">
+                        <h2 id="logEntryConfirmTitle">Confirm Log Entry</h2>
+                        <span class="close-button" onclick="closeLogEntryConfirmModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="confirmation-content">
+                            <div class="confirmation-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4CAF50"/>
+                                </svg>
+                            </div>
+                            <h3 id="logEntryConfirmMessage">Are you sure you want to log this call?</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeLogEntryConfirmModal()">Cancel</button>
+                        <button class="primary-button" onclick="confirmLogEntry()" style="background: #4CAF50;">Confirm</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Entry Success Modal (Hidden by default) -->
+            <div id="logEntrySuccessModal" class="modal" style="display: none;">
+                <div class="modal-content success-modal">
+                    <div class="modal-header">
+                        <h2 id="logEntrySuccessTitle">Log Entry Saved</h2>
+                        <span class="close-button" onclick="closeLogEntrySuccessModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="success-content">
+                            <div class="success-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4CAF50"/>
+                                </svg>
+                            </div>
+                            <h3 id="logEntrySuccessMessage">Log entry saved successfully!</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="primary-button" onclick="closeLogEntrySuccessModal()" style="background: #4CAF50;">OK</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Entry Error Modal (Hidden by default) -->
+            <div id="logEntryErrorModal" class="modal" style="display: none;">
+                <div class="modal-content error-modal">
+                    <div class="modal-header">
+                        <h2 id="logEntryErrorTitle">Error</h2>
+                        <span class="close-button" onclick="closeLogEntryErrorModal()">&times;</span>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="error-content">
+                            <div class="error-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" fill="#FF3366"/>
+                                </svg>
+                            </div>
+                            <h3 id="logEntryErrorMessage">An error occurred</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="primary-button" onclick="closeLogEntryErrorModal()">OK</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- New Customer Profile Modal (Hidden by default) -->
             <div id="newCustomerModal" class="modal" style="display: none;">
                 <div class="modal-content new-customer-modal">
@@ -4050,8 +4354,17 @@
         }
 
         function logCustomerEntry() {
-            // Open customer search modal
-            openCustomerSearch();
+            document.getElementById('logEntryModal').style.display = 'block';
+            // Set current date in the date field
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('logEntryDate').value = today;
+            // Reset form
+            document.getElementById('logEntryCustomer').value = '';
+            document.getElementById('logEntryCustomerDisplay').textContent = 'Select a customer...';
+            document.getElementById('logEntryCustomerSearch').value = '';
+            document.getElementById('logEntryCustomerDropdown').style.display = 'none';
+            document.getElementById('logEntryType').value = 'call';
+            document.getElementById('logEntryNotes').value = '';
         }
 
         function viewCustomers() {
@@ -4475,6 +4788,146 @@
                 revenueChart.destroy();
                 revenueChart = null;
             }
+        }
+
+        function closeLogEntryModal() {
+            document.getElementById('logEntryModal').style.display = 'none';
+        }
+
+        function saveLogEntry() {
+            const customer = document.getElementById('logEntryCustomer').value.trim();
+            const logNotes = document.getElementById('logEntryNotes').value.trim();
+            const logDate = document.getElementById('logEntryDate').value;
+            const logType = document.getElementById('logEntryType').value;
+
+            // Validation
+            if (!customer) {
+                alert('Please select a customer.');
+                return;
+            }
+
+            if (!logNotes) {
+                alert('Please enter notes for the log entry.');
+                return;
+            }
+
+            if (!logDate) {
+                alert('Please select a date.');
+                return;
+            }
+
+            // Show confirmation prompt
+            showLogEntryConfirmation(customer, logType, logDate, logNotes);
+        }
+
+        function showLogEntryConfirmation(customer, logType, logDate, logNotes) {
+            // Set confirmation modal content
+            document.getElementById('logEntryConfirmTitle').textContent = 'Confirm Log Entry';
+            document.getElementById('logEntryConfirmMessage').innerHTML = 
+                `Are you sure you want to log this <strong>${logType}</strong> for <strong>${customer}</strong>?`;
+            
+            // Store the data for when user confirms
+            window.pendingLogEntry = {
+                customer: customer,
+                logType: logType,
+                logDate: logDate,
+                logNotes: logNotes
+            };
+            
+            // Show confirmation modal
+            document.getElementById('logEntryConfirmModal').style.display = 'block';
+        }
+
+        function confirmLogEntry() {
+            const data = window.pendingLogEntry;
+            if (!data) return;
+            
+            // Save to database
+            fetch('/crm-create-call-log', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    customer_name: data.customer,
+                    log_date: data.logDate,
+                    log_type: data.logType,
+                    log_notes: data.logNotes
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showLogEntrySuccess();
+                    closeLogEntryModal();
+                    closeLogEntryConfirmModal();
+                } else {
+                    showLogEntryError(data.message || 'Unknown error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showLogEntryError('Error saving log entry. Please try again.');
+            });
+            
+            // Clear pending data
+            window.pendingLogEntry = null;
+        }
+
+        function closeLogEntryConfirmModal() {
+            document.getElementById('logEntryConfirmModal').style.display = 'none';
+            window.pendingLogEntry = null;
+        }
+
+        function filterCustomerDropdown() {
+            const searchInput = document.getElementById('logEntryCustomerSearch');
+            const dropdown = document.getElementById('logEntryCustomerDropdown');
+            const searchTerm = searchInput.value.toLowerCase();
+            
+            // Show dropdown when typing
+            if (searchTerm.length > 0) {
+                dropdown.style.display = 'block';
+            } else {
+                dropdown.style.display = 'none';
+            }
+            
+            // Filter dropdown items
+            const items = dropdown.querySelectorAll('.customer-dropdown-item');
+            items.forEach(item => {
+                const itemText = item.textContent.toLowerCase();
+                if (itemText.includes(searchTerm)) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        function selectCustomerForLog(customerName) {
+            document.getElementById('logEntryCustomer').value = customerName;
+            document.getElementById('logEntryCustomerDisplay').textContent = customerName;
+            document.getElementById('logEntryCustomerDropdown').style.display = 'none';
+            document.getElementById('logEntryCustomerSearch').value = '';
+        }
+
+        function showLogEntrySuccess() {
+            document.getElementById('logEntrySuccessTitle').textContent = 'Log Entry Saved';
+            document.getElementById('logEntrySuccessMessage').textContent = 'Log entry saved successfully!';
+            document.getElementById('logEntrySuccessModal').style.display = 'block';
+        }
+
+        function showLogEntryError(message) {
+            document.getElementById('logEntryErrorTitle').textContent = 'Error';
+            document.getElementById('logEntryErrorMessage').textContent = message;
+            document.getElementById('logEntryErrorModal').style.display = 'block';
+        }
+
+        function closeLogEntrySuccessModal() {
+            document.getElementById('logEntrySuccessModal').style.display = 'none';
+        }
+
+        function closeLogEntryErrorModal() {
+            document.getElementById('logEntryErrorModal').style.display = 'none';
         }
 
         function initializeRevenueChart() {

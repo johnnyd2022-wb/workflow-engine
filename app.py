@@ -4936,7 +4936,7 @@ def crm_create_call_log():
     
     try:
         data = request.get_json()
-        customer_name = data.get('customer')
+        customer_name = data.get('customer_name') or data.get('customer')
         log_date = data.get('log_date')
         log_type = data.get('log_type')
         log_notes = data.get('log_notes')
