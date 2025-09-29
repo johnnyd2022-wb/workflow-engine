@@ -848,23 +848,35 @@ def crm():
                     SELECT
                         buyer,
                         date,
-                        bottles_sold,
+                        -- Calculate total bottles from JSONB products column
+                        COALESCE(SUM((value->>'quantity')::int), 0) as bottles_sold,
                         MAX(date) OVER (PARTITION BY buyer) AS latest_date,
-                        SUM(bottles_sold) OVER (PARTITION BY buyer) AS total_bottles_sold,
+                        SUM(COALESCE(SUM((value->>'quantity')::int), 0)) OVER (PARTITION BY buyer) AS total_bottles_sold,
                         COUNT(CASE WHEN notes ILIKE '%Sample%' THEN 1 END) OVER (PARTITION BY buyer) AS sample_notes_count,
                         COUNT(notes) OVER (PARTITION BY buyer) AS total_notes_count,
-                        FIRST_VALUE(bottles_sold) OVER (PARTITION BY buyer ORDER BY date DESC) as recent_bottles_sold,
-                        FIRST_VALUE(unit_price) OVER (PARTITION BY buyer ORDER BY date DESC) as unit_price, product_name
-                    FROM sales_product
+                        -- Get recent product info from JSONB
+                        FIRST_VALUE(
+                            COALESCE(SUM((value->>'quantity')::int), 0)
+                        ) OVER (PARTITION BY buyer ORDER BY date DESC) as recent_bottles_sold,
+                        FIRST_VALUE(
+                            COALESCE(AVG((value->>'unit_price')::numeric), 0)
+                        ) OVER (PARTITION BY buyer ORDER BY date DESC) as unit_price,
+                        -- Get product names from JSONB
+                        FIRST_VALUE(
+                            string_agg(key, ', ' ORDER BY key)
+                        ) OVER (PARTITION BY buyer ORDER BY date DESC) as product_names
+                    FROM sales_product,
+                         jsonb_each(products->'products') AS p(key, value)
                     WHERE notes LIKE '%INV%'  -- Only consider invoice sales
+                    GROUP BY buyer, date, notes
                 )
                 SELECT DISTINCT b.buyer, b.buyer_email, b.primary_contact, b.buyer_phone,
-                       bs.latest_date, bs.total_bottles_sold, bs.recent_bottles_sold, bs.unit_price, bs.product_name
+                       bs.latest_date, bs.total_bottles_sold, bs.recent_bottles_sold, bs.unit_price, bs.product_names
                 FROM buyers b
                 JOIN (
                     SELECT DISTINCT ON (buyer)
                         buyer, latest_date, total_bottles_sold, recent_bottles_sold, unit_price,
-                        sample_notes_count, total_notes_count, product_name
+                        sample_notes_count, total_notes_count, product_names
                     FROM buyer_stats
                     ORDER BY buyer, latest_date DESC
                 ) bs ON b.buyer = bs.buyer
@@ -882,6 +894,67 @@ def crm():
                 ORDER BY bs.latest_date
         """)
         existing_customer_follow_ups = cursor.fetchall()
+
+        # Get call logs & follow-ups that have happened from existing customers to determine customers that need contact
+        if existing_customer_follow_ups:
+            # Extract customer names from existing_customer_follow_ups
+            customer_names = [row[0] for row in existing_customer_follow_ups]  # buyer is first column
+
+            # Query crm_logs for recent activity
+            cursor.execute("""
+                SELECT customer, log_date, log_type, log_notes, log_status
+                FROM crm_logs 
+                WHERE customer = ANY(%s)
+                AND log_date >= CURRENT_DATE - INTERVAL '30 days'
+                ORDER BY customer, log_date DESC
+            """, (customer_names,))
+            recent_crm_logs = cursor.fetchall()
+
+            # Query crm_follow_ups for recent follow-up actions
+            cursor.execute("""
+                SELECT customer, follow_up_date, follow_up_type, follow_up_notes, follow_up_status, follow_up_priority
+                FROM crm_follow_ups 
+                WHERE customer = ANY(%s)
+                AND follow_up_date >= CURRENT_DATE - INTERVAL '30 days'
+                ORDER BY customer, follow_up_date DESC
+            """, (customer_names,))
+            recent_follow_ups = cursor.fetchall()
+
+            # Create a dictionary to track recent activity per customer
+            customer_recent_activity = {}
+
+            # Process CRM logs
+            for log in recent_crm_logs:
+                customer = log[0]
+                if customer not in customer_recent_activity:
+                    customer_recent_activity[customer] = {'logs': [], 'follow_ups': []}
+                customer_recent_activity[customer]['logs'].append({
+                    'date': log[1],
+                    'type': log[2],
+                    'notes': log[3],
+                    'status': log[4]
+                })
+
+            # Process follow-ups
+            for follow_up in recent_follow_ups:
+                customer = follow_up[0]
+                if customer not in customer_recent_activity:
+                    customer_recent_activity[customer] = {'logs': [], 'follow_ups': []}
+                customer_recent_activity[customer]['follow_ups'].append({
+                    'date': follow_up[1],
+                    'type': follow_up[2],
+                    'notes': follow_up[3],
+                    'status': follow_up[4],
+                    'priority': follow_up[5]
+                })
+
+            print(f"Found recent activity for {len(customer_recent_activity)} customers:")
+            for customer, activity in customer_recent_activity.items():
+                print(f"  {customer}: {len(activity['logs'])} logs, {len(activity['follow_ups'])} follow-ups")
+        else:
+            recent_crm_logs = []
+            recent_follow_ups = []
+            customer_recent_activity = {}
 
         # Get follow-ups due from crm_follow_ups table
         cursor.execute("""
@@ -933,6 +1006,7 @@ def crm():
                             new_customers_this_month=new_customers_this_month, 
                             new_customers_details=parsed_new_customers,
                             existing_customer_follow_ups=existing_customer_follow_ups,
+                            customer_recent_activity=customer_recent_activity,
                             follow_ups_due=follow_ups_due,
                             potential_matches=potential_matches)
     
@@ -946,6 +1020,7 @@ def crm():
                             new_customers_this_month=[],
                             new_customers_details=[],
                             existing_customer_follow_ups=[],
+                            customer_recent_activity={},
                             follow_ups_due=[],
                             potential_matches=[])
     finally:
