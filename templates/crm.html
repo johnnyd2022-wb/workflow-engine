@@ -291,6 +291,133 @@
             letter-spacing: -0.02em;
         }
 
+        .total-bottles-section {
+            margin-bottom: 2rem;
+        }
+
+        .total-bottles-card {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+
+        .total-bottles-number {
+            font-size: 4rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .total-bottles-card {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        .bottles-section {
+            flex: 1;
+            text-align: center;
+        }
+
+        .revenue-section {
+            flex: 1;
+            text-align: center;
+            padding-left: 2rem;
+        }
+
+        .card-divider {
+            position: absolute;
+            left: 50%;
+            top: 10%;
+            bottom: 10%;
+            width: 1px;
+            background-color: var(--border-color);
+            transform: translateX(-50%);
+        }
+
+        .total-bottles-number {
+            font-size: 4rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .revenue-number {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .monthly-comparison {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .comparison-arrow {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .comparison-arrow.up {
+            color: #22c55e;
+        }
+
+        .comparison-arrow.down {
+            color: #ef4444;
+        }
+
+        .comparison-arrow.neutral {
+            color: var(--text-secondary);
+        }
+
+        .comparison-text {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .comparison-text.positive {
+            color: #22c55e;
+        }
+
+        .comparison-text.negative {
+            color: #ef4444;
+        }
+
+        .comparison-text.neutral {
+            color: var(--text-secondary);
+        }
+
+        .previous-month-text {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .total-bottles-label {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .revenue-label {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
         .quick-stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -2957,6 +3084,51 @@
             border: 1px solid rgba(156, 163, 175, 0.3);
         }
 
+        /* Action Buttons */
+        .action-cell {
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .log-call-btn {
+            background-color: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .log-call-btn:hover {
+            background-color: rgba(34, 197, 94, 0.3);
+            transform: scale(1.05);
+        }
+
+        .view-profile-btn {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .view-profile-btn:hover {
+            background-color: rgba(59, 130, 246, 0.3);
+            transform: scale(1.05);
+        }
+
 
     </style>
 </head>
@@ -3008,6 +3180,62 @@
             </div>
 
 
+            <!-- Total Bottles Sold Section -->
+            <div class="total-bottles-section">
+                <div class="total-bottles-card clickable-stat" onclick="viewRevenueReport()">
+                    <div class="bottles-section">
+                        <div class="total-bottles-number">
+                            {% if monthly_revenue and monthly_revenue|length > 1 %}
+                                {% set total_bottles = monthly_revenue[-1].bottles if monthly_revenue[-1].month == 'Total' else 0 %}
+                                {{ total_bottles }}
+                            {% else %}
+                                0
+                            {% endif %}
+                        </div>
+                        <div class="total-bottles-label">Total Bottles Sold</div>
+                    </div>
+                    <div class="card-divider"></div>
+                    <div class="revenue-section">
+                        {% if monthly_revenue and monthly_revenue|length > 0 %}
+                        <div class="revenue-number">{{ monthly_revenue[0].bottles if monthly_revenue[0].bottles else 0 }}</div>
+                        <div class="revenue-label">Bottles This Month</div>
+                        {% if monthly_revenue|length > 1 %}
+                            {% set current_bottles = monthly_revenue[0].bottles if monthly_revenue[0].bottles else 0 %}
+                            {% set previous_bottles = monthly_revenue[1].bottles if monthly_revenue[1].bottles else 0 %}
+                            {% set difference = current_bottles - previous_bottles %}
+                            <div class="monthly-comparison">
+                                {% if difference > 0 %}
+                                    <span class="comparison-arrow up">↗</span>
+                                    <span class="comparison-text positive">+{{ difference }}</span>
+                                {% elif difference < 0 %}
+                                    <span class="comparison-arrow down">↘</span>
+                                    <span class="comparison-text negative">{{ difference }}</span>
+                                {% else %}
+                                    <span class="comparison-arrow neutral">→</span>
+                                    <span class="comparison-text neutral">0</span>
+                                {% endif %}
+                                <span class="previous-month-text">vs {{ previous_bottles }} last month</span>
+                            </div>
+                        {% else %}
+                            <div class="monthly-comparison">
+                                <span class="comparison-arrow neutral">→</span>
+                                <span class="comparison-text neutral">No previous data</span>
+                            </div>
+                        {% endif %}
+                        <div class="revenue-hint">Click to view details</div>
+                        {% else %}
+                        <div class="revenue-number">0</div>
+                        <div class="revenue-label">Bottles This Month</div>
+                        <div class="monthly-comparison">
+                            <span class="comparison-arrow neutral">→</span>
+                            <span class="comparison-text neutral">No data available</span>
+                        </div>
+                        <div class="revenue-hint">Click to view details</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
             <!-- Quick Stats Section -->
             <div class="quick-stats">
                 <div class="stat-card">
@@ -3035,20 +3263,9 @@
                 </div>
                 <div class="stat-card clickable-stat" onclick="viewFollowUps()">
                      <div class="stat-number">{{ existing_customer_follow_ups|length if existing_customer_follow_ups else 0 }}</div>
-                     <div class="stat-label">Existing customer follow-ups</div>
+                     <div class="stat-label">Existing customers to follow-up</div>
                      <div class="stat-hint">Click to view details</div>
                  </div>
-                {% if monthly_revenue and monthly_revenue|length > 0 %}
-                <div class="stat-card clickable-stat" onclick="viewRevenueReport()">
-                    <div class="stat-number">${{ "%.0f"|format(monthly_revenue[0].revenue) if monthly_revenue[0].revenue else 0 }}</div>
-                    <div class="stat-label">Revenue This Month</div>
-                    <div class="stat-breakdown">
-                        <span class="existing-count">{{ monthly_revenue[0].bottles if monthly_revenue[0].bottles else 0 }} bottles</span>
-                        <span class="potential-count">{{ "%.1f"|format(monthly_revenue[0].profit_margin) if monthly_revenue[0].profit_margin else 0 }}% margin</span>
-                    </div>
-                    <div class="stat-hint">Click to view details</div>
-                </div>
-                {% endif %}
             </div>
 
             <!-- Customer Search Modal (Hidden by default) -->
@@ -3135,6 +3352,7 @@
                                             <th>Last Order Unit Price</th>
                                             <th>Last Order Products</th>
                                             <th>Recent Activity</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -3171,6 +3389,16 @@
                                                 {% else %}
                                                     <span class="activity-badge no-activity-badge">No recent activity</span>
                                                 {% endif %}
+                                            </td>
+                                            <td class="action-cell">
+                                                <div class="action-buttons">
+                                                    <button class="action-btn log-call-btn" onclick="logCallForCustomer('{{ customer[0] }}')">
+                                                        📞 Log Call
+                                                    </button>
+                                                    <button class="action-btn view-profile-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
+                                                        👤 View Profile
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                         {% endfor %}
@@ -4926,8 +5154,31 @@
             document.getElementById('logEntrySuccessModal').style.display = 'none';
         }
 
-        function closeLogEntryErrorModal() {
-            document.getElementById('logEntryErrorModal').style.display = 'none';
+        function logCallForCustomer(customerName) {
+            // Close the follow-ups modal
+            closeFollowUpsModal();
+            
+            // Open the log entry modal
+            document.getElementById('logEntryModal').style.display = 'block';
+            
+            // Set current date in the date field
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('logEntryDate').value = today;
+            
+            // Pre-select the customer
+            document.getElementById('logEntryCustomer').value = customerName;
+            document.getElementById('logEntryCustomerDisplay').textContent = customerName;
+            document.getElementById('logEntryCustomerSearch').value = '';
+            document.getElementById('logEntryCustomerDropdown').style.display = 'none';
+            
+            // Reset other fields
+            document.getElementById('logEntryType').value = 'call';
+            document.getElementById('logEntryNotes').value = '';
+        }
+
+        function viewCustomerProfile(customerName) {
+            // Navigate to customer profile page
+            window.location.href = `/crm-customer-page?customer_name=${encodeURIComponent(customerName)}`;
         }
 
         function initializeRevenueChart() {
