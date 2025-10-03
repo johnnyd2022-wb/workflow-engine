@@ -115,6 +115,10 @@ class Config:
     @property
     def docker_container_port(self) -> int:
         return self.getint('docker', 'container_port', 5432)
+    
+    @property
+    def crm_enabled(self) -> bool:
+        return self.getboolean('features', 'crm_enabled', True)
 
 # Global config instance
 config = Config()
