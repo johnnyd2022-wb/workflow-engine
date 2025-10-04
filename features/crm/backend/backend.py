@@ -915,6 +915,8 @@ def crm_customer_page():
                                 customer_invoice_data=None,
                                 call_logs=None,
                                 invoice_button_enabled=INVOICE_BUTTON_ENABLED,
+                                customer_trends=None,
+                                customer_growth=None,
                                 error_message="No customer name provided")
 
         # Fetch customer information from crm_customers table
@@ -1088,6 +1090,27 @@ def crm_customer_page():
                 print(f"Error parsing contacts data: {e}")
                 customer_contacts = []
 
+        # Get individual customer sales trends data
+        print(f"Fetching sales trends data for customer: {customer_name}")
+        try:
+            import sys
+            import os
+            # Add the parent directory to the path to import customer_sales_trends
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+            if parent_dir not in sys.path:
+                sys.path.append(parent_dir)
+            
+            from customer_sales_trends import get_individual_customer_trends, get_customer_growth_trends
+            
+            customer_trends = get_individual_customer_trends(customer_name)
+            customer_growth = get_customer_growth_trends(customer_name)
+            print("✓ Sales trends data fetched successfully")
+        except Exception as e:
+            print(f"⚠ Warning: Could not fetch sales trends data: {e}")
+            customer_trends = None
+            customer_growth = None
+
         print("Rendering customer detail template...")
         return render_template('customer_detail.html', 
                             customer_info=customer_info, 
@@ -1099,6 +1122,8 @@ def crm_customer_page():
                             total_revenue=total_revenue,
                             product_breakdown=product_breakdown,
                             customer_contacts=customer_contacts,
+                            customer_trends=customer_trends,
+                            customer_growth=customer_growth,
                             invoice_button_enabled=INVOICE_BUTTON_ENABLED)
                             
     except Exception as e:
@@ -1115,6 +1140,8 @@ def crm_customer_page():
                             total_revenue=0.0,
                             product_breakdown={},
                             customer_contacts=[],
+                            customer_trends=None,
+                            customer_growth=None,
                             error_message=f"Error loading customer data: {str(e)}")
     finally:
         if cursor:

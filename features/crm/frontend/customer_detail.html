@@ -2477,6 +2477,153 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Sales Trends Visualization -->
+            {% if customer_trends %}
+            <div class="section-card">
+                <div class="section-header">
+                    <h2 class="section-title">Sales Trends</h2>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+                    <!-- Monthly Sales Chart -->
+                    <div style="background: var(--card-background); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <h3 style="color: var(--text-color); margin-bottom: 1rem; font-size: 1.1rem;">Monthly Sales (Last 12 Months)</h3>
+                        <div style="max-height: 250px; overflow-y: auto;">
+                            {% if customer_trends.monthly_sales %}
+                                {% for month_data in customer_trends.monthly_sales %}
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">
+                                    <span style="color: var(--text-secondary);">{{ month_data[0].strftime('%b %Y') if month_data[0] else 'Unknown Month' }}</span>
+                                    <div style="display: flex; align-items: center; gap: 1rem;">
+                                        <span style="color: var(--text-color); font-weight: 600;">{{ month_data[1] if month_data[1] else 0 }} bottles</span>
+                                        <span style="color: var(--text-secondary); font-size: 0.9rem;">{{ month_data[2] if month_data[2] else 0 }} orders</span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div style="color: var(--text-secondary); text-align: center; padding: 2rem;">No monthly sales data available</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Growth Metrics -->
+                    <div style="background: var(--card-background); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <h3 style="color: var(--text-color); margin-bottom: 1rem; font-size: 1.1rem;">Growth & Performance</h3>
+                        {% if customer_growth %}
+                        <div style="margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span style="color: var(--text-secondary);">Year-over-Year Growth:</span>
+                                <span style="color: {% if customer_growth.growth_rate > 0 %}{{ 'var(--success-color)' }}{% else %}{{ 'var(--danger-color)' }}{% endif %};">{{ customer_growth.growth_rate }}%</span></div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span style="color: var(--text-secondary);">This Year:</span>
+                                <span style="color: var(--text-color);">{{ customer_growth.current_year_sales }} bottles</span></div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span style="color: var(--text-secondary);">Last Year:</span>
+                                <span style="color: var(--text-color);">{{ customer_growth.last_year_sales }} bottles</span></div>
+                        </div>
+                        {% endif %}
+
+                        {% if customer_trends.purchase_stats %}
+                        <div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span style="color: var(--text-secondary);">Avg. Days Between Orders:</span>
+                                <span style="color: var(--text-color);">
+                                    {% if customer_trends.purchase_stats and customer_trends.purchase_stats | length > 0 and customer_trends.purchase_stats[0] is not none %}
+                                        {{ customer_trends.purchase_stats[0] }} days
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span style="color: var(--text-secondary);">Total Orders:</span>
+                                <span style="color: var(--text-color);">
+                                    {% if customer_trends.purchase_stats and customer_trends.purchase_stats | length > 4 and customer_trends.purchase_stats[4] is not none %}
+                                        {{ customer_trends.purchase_stats[4] }}
+                                    {% else %}
+                                        0
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span style="color: var(--text-secondary);">First Purchase:</span>
+                                <span style="color: var(--text-color);">
+                                    {% if customer_trends.purchase_stats and customer_trends.purchase_stats | length > 2 and customer_trends.purchase_stats[2] is not none %}
+                                        {{ customer_trends.purchase_stats[2].strftime('%Y-%m-%d') }}
+                                    {% else %}
+                                        Unknown
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">Last Purchase:</span>
+                                <span style="color: var(--text-color);">
+                                    {% if customer_trends.purchase_stats and customer_trends.purchase_stats | length > 3 and customer_trends.purchase_stats[3] is not none %}
+                                        {{ customer_trends.purchase_stats[3].strftime('%Y-%m-%d') }}
+                                    {% else %}
+                                        Unknown
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Product Performance Over Time -->
+                {% if customer_trends.product_breakdown_by_month %}
+                <div style="background: var(--card-background); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1rem;">
+                    <h3 style="color: var(--text-color); margin-bottom: 1rem; font-size: 1.1rem;">Product Performance by Month</h3>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        {% for month_data in customer_trends.product_breakdown_by_month %}
+                        <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.03); border-radius: 8px; border: 1px solid var(--border-color);">
+                            <h4 style="color: var(--primary-color); margin-bottom: 0.5rem;">{{ month_data[0].strftime('%B %Y') if month_data[0] else 'Unknown Month' }}</h4>
+                            {% if month_data[1] %}
+                                {% for product, quantity in month_data[1].items() %}
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0;">
+                                    <span style="color: var(--text-secondary);">{{ product }}</span>
+                                    <span style="color: var(--text-color); font-weight: 600;">{{ quantity }} bottles</span>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div style="color: var(--text-secondary);">No products this month</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Monthly Performance vs Overall Market -->
+                {% if customer_trends.monthly_performance %}
+                <div style="background: var(--card-background); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <h3 style="color: var(--text-color); margin-bottom: 1rem; font-size: 1.1rem;">Customer sales vs overall sales each month</h3>
+                    <div style="max-height: 250px; overflow-y: auto;">
+                        {% for performance in customer_trends.monthly_performance %}
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">
+                            <span style="color: var(--text-secondary);">{{ performance[0].strftime('%b %Y') if performance[0] else 'Unknown Month' }}</span>
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <span style="color: var(--text-color);">{{ performance[1] if performance[1] else 0 }} bottles</span>
+                                <span style="color: var(--primary-color); font-weight: 600;">{{ performance[3] if performance[3] else 0 }}% of total</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="section-card">
+                <div class="section-header">
+                    <h2 class="section-title">Sales Trends</h2>
+                </div>
+                <div style="background: var(--card-background); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); text-align: center;">
+                    <div style="color: var(--text-secondary);">
+                        <p>No sales trends data available for this customer.</p>
+                        <p style="font-size: 0.9rem; margin-top: 0.5rem;">This may be because the customer has no sales history or insufficient data for trend analysis.</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
             
             <!-- Recent Invoices Summary -->
             {% if customer_invoice_data and customer_invoice_data[1] %}
