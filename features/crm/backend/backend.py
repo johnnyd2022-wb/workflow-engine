@@ -4,14 +4,18 @@ from database_insert import insert_data
 from config_loader import config
 import json
 import schedule
-from datetime import date, datetime
+import datetime
+from datetime import date
 
 # Create CRM blueprint
-crm_bp = Blueprint('crm', __name__, url_prefix='/crm', template_folder='../frontend')
+crm_bp = Blueprint('crm', __name__, template_folder='../frontend')
+
+# Configuration settings
+INVOICE_BUTTON_ENABLED = config.invoice_button_enabled
 
 ## Manual copied code
 
-@crm_bp.route('/', methods=['GET', 'POST'])
+@crm_bp.route('/crm', methods=['GET', 'POST'])
 def crm():
     print("Accessed /crm route")
     from initialize import db_conn
@@ -628,7 +632,7 @@ def auto_sync_missing_customers():
         if connection:
             connection.close()
 
-@crm_bp.route('/-handle-potential-match', methods=['POST'])
+@crm_bp.route('/crm-handle-potential-match', methods=['POST'])
 def crm_handle_potential_match():
     """Handle potential duplicate customer matches from modal"""
     print("Accessed /crm-handle-potential-match route")
@@ -720,7 +724,7 @@ def crm_handle_potential_match():
         if connection:
             connection.close()
 
-@crm_bp.route('/-add-alias', methods=['POST'])
+@crm_bp.route('/crm-add-alias', methods=['POST'])
 def crm_add_alias():
     """Add an alias to a customer"""
     print("Accessed /crm-add-alias route")
@@ -779,7 +783,7 @@ def crm_add_alias():
         if connection:
             connection.close()
 
-@crm_bp.route('/-remove-alias', methods=['POST'])
+@crm_bp.route('/crm-remove-alias', methods=['POST'])
 def crm_remove_alias():
     """Remove an alias from a customer"""
     print("Accessed /crm-remove-alias route")
@@ -838,7 +842,7 @@ def crm_remove_alias():
         if connection:
             connection.close()
 
-@crm_bp.route('/-create-customer', methods=['POST'])
+@crm_bp.route('/crm-create-customer', methods=['POST'])
 def crm_create_customer():
     print("Accessed /crm-create-customer route")
     from initialize import db_conn
@@ -881,7 +885,7 @@ def customer_page_redirect_response(customer_name):
     """
     return f"/crm-customer-page?customer_name={customer_name}"
 
-@crm_bp.route('/-customer-page', methods=['GET', 'POST'])
+@crm_bp.route('/crm-customer-page', methods=['GET', 'POST'])
 def crm_customer_page():
     print("Accessed /crm-customer-page route")
     from initialize import db_conn
@@ -1118,7 +1122,7 @@ def crm_customer_page():
         if connection:
             connection.close()
 
-@crm_bp.route('/-sync-existing-customers', methods=['POST'])
+@crm_bp.route('/crm-sync-existing-customers', methods=['POST'])
 def crm_sync_existing_customers():
     print("Accessed /crm-sync-existing-customers route")
     from initialize import db_conn
@@ -1344,7 +1348,7 @@ def get_customer_invoices(customer_name):
         if connection:
             connection.close()
 
-@crm_bp.route('/-customer-invoices', methods=['POST'])
+@crm_bp.route('/crm-customer-invoices', methods=['POST'])
 def crm_customer_invoices():
     """Route function to get customer invoices via HTTP request"""
     print("Accessed /crm-customer-invoices route")
@@ -1366,7 +1370,7 @@ def crm_customer_invoices():
         print(f"Error in crm_customer_invoices route: {e}")
         return jsonify({"error": str(e)}), 500
     
-@crm_bp.route('/-customer-invoice-data', methods=['POST'])
+@crm_bp.route('/crm-customer-invoice-data', methods=['POST'])
 def crm_customer_invoice_data():
     print("Accessed /crm-customer-invoice-data route")
     from initialize import db_conn
@@ -1391,7 +1395,7 @@ def crm_customer_invoice_data():
         print(f"Error in crm_customer_invoice_data route: {e}")
         return jsonify({"error": str(e)}), 500
 
-@crm_bp.route('/-update-customer-field', methods=['POST'])
+@crm_bp.route('/crm-update-customer-field', methods=['POST'])
 def crm_update_customer_field():
     print("Accessed /crm-update-customer-field route")
     
@@ -1460,7 +1464,7 @@ def crm_update_customer_field():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-update-follow-up-task', methods=['POST'])
+@crm_bp.route('/crm-update-follow-up-task', methods=['POST'])
 def crm_update_follow_up_task():
     print("Accessed /crm-update-follow-up-task route")
     
@@ -1548,7 +1552,7 @@ def crm_update_follow_up_task():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-delete-follow-up-task', methods=['POST'])
+@crm_bp.route('/crm-delete-follow-up-task', methods=['POST'])
 def crm_delete_follow_up_task():
     print("Accessed /crm-delete-follow-up-task route")
     
@@ -1602,7 +1606,7 @@ def crm_delete_follow_up_task():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-create-follow-up-task', methods=['POST'])
+@crm_bp.route('/crm-create-follow-up-task', methods=['POST'])
 def crm_create_follow_up_task():
     print("Accessed /crm-create-follow-up-task route")
     
@@ -1668,7 +1672,7 @@ def crm_create_follow_up_task():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-create-call-log', methods=['POST'])
+@crm_bp.route('/crm-create-call-log', methods=['POST'])
 def crm_create_call_log():
     print("Accessed /crm-create-call-log route")
     
@@ -1730,7 +1734,7 @@ def crm_create_call_log():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-add-contact', methods=['POST'])
+@crm_bp.route('/crm-add-contact', methods=['POST'])
 def crm_add_contact():
     print("=== CRM ADD CONTACT ROUTE HIT ===")
     print(f"Request method: {request.method}")
@@ -1836,7 +1840,7 @@ def crm_add_contact():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-update-contact', methods=['POST'])
+@crm_bp.route('/crm-update-contact', methods=['POST'])
 def crm_update_contact():
     print("Accessed /crm-update-contact route")
     
@@ -1925,7 +1929,7 @@ def crm_update_contact():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-delete-contact', methods=['POST'])
+@crm_bp.route('/crm-delete-contact', methods=['POST'])
 def crm_delete_contact():
     print("Accessed /crm-delete-contact route")
     
@@ -2001,7 +2005,7 @@ def crm_delete_contact():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-reorder-contacts', methods=['POST'])
+@crm_bp.route('/crm-reorder-contacts', methods=['POST'])
 def crm_reorder_contacts():
     print("Accessed /crm-reorder-contacts route")
     
@@ -2110,7 +2114,7 @@ def crm_reorder_contacts():
             "message": f"Server error: {str(e)}"
         }), 500
 
-@crm_bp.route('/-mark-task-completed', methods=['POST'])
+@crm_bp.route('/crm-mark-task-completed', methods=['POST'])
 def crm_mark_task_completed():
     print("Accessed /crm-mark-task-completed route")
     
