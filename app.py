@@ -1160,176 +1160,20 @@ def delete_entry():
 @app.route('/top-buyers', methods=['POST'])
 def top_buyers():
     print("Accessed /top-buyers-form route")
-    from datetime import datetime, timedelta
-    from initialize import db_conn
-    connection, cursor = db_conn()
-
-    # Get new buyers by month
-    cursor.execute("""
-        WITH first_purchases AS (
-            SELECT 
-                buyer,
-                MIN(date) as first_purchase_date
-            FROM sales_product
-            WHERE notes LIKE '%INV%'
-            GROUP BY buyer
-        )
-        SELECT 
-            date_trunc('month', first_purchase_date) as month,
-            COUNT(*) as count,
-            STRING_AGG(buyer, ', ') as buyers
-        FROM first_purchases
-        GROUP BY date_trunc('month', first_purchase_date)
-        ORDER BY month DESC;
-    """)
-    new_buyers_by_month = cursor.fetchall()
-
-    # Get total unique buyers
-    cursor.execute("""
-        SELECT COUNT(DISTINCT buyer) 
-        FROM sales_product 
-        WHERE notes LIKE '%INV%';
-    """)
-    total_buyers = cursor.fetchone()[0]
-
-    cursor.execute("""
-        SELECT
-            buyer,
-            total_bottles_sold,
-            percentage_of_total,
-            ROUND(
-                CASE
-                    WHEN buyer = 'Total' THEN
-                        (total_bottles_sold / NULLIF((CURRENT_DATE - (SELECT MIN(date) FROM sales_product)::DATE) / 7, 0))::numeric
-                    ELSE
-                        (total_bottles_sold / NULLIF((CURRENT_DATE - first_purchase_date::DATE) / 7, 0))::numeric
-                END,
-                2
-            ) AS overall_rate_per_week,
-            ROUND(
-                CASE
-                    WHEN buyer = 'Total' THEN
-                        ((CURRENT_DATE - (SELECT MIN(date) FROM sales_product)::DATE) / 7)::numeric
-                    ELSE
-                        ((CURRENT_DATE - first_purchase_date::DATE) / 7)::numeric
-                END
-            ) AS total_weeks_since_first_order
-        FROM (
-                    SELECT
-            buyer,
-            -- Sum all bottles from all products JSONB for this buyer
-            SUM((SELECT COALESCE(SUM((value->>'quantity')::int), 0)
-                FROM jsonb_each(products->'products'))) AS total_bottles_sold,
-            -- Calculate percentage of total bottles
-            (SUM((SELECT COALESCE(SUM((value->>'quantity')::int), 0)
-                 FROM jsonb_each(products->'products'))) * 100.0 / 
-             (SELECT COALESCE(SUM((value->>'quantity')::int), 0)
-              FROM sales_product sp, jsonb_each(sp.products->'products') AS p(key, value)
-              WHERE sp.notes LIKE '%INV%')) AS percentage_of_total,
-            MIN(date) AS first_purchase_date
-        FROM sales_product
-        WHERE notes LIKE '%INV%'
-        AND products IS NOT NULL
-        GROUP BY buyer
-
-        UNION ALL
-
-        SELECT
-            'Total' AS buyer,
-            -- Extract total bottles from all products JSONB
-            (SELECT COALESCE(SUM((value->>'quantity')::int), 0)
-             FROM sales_product sp, jsonb_each(sp.products->'products') AS p(key, value)
-             WHERE sp.notes LIKE '%INV%') AS total_bottles_sold,
-            NULL AS percentage_of_total,
-            NULL AS first_purchase_date
-        FROM sales_product
-        ) AS combined_results
-        GROUP BY buyer, total_bottles_sold, percentage_of_total, first_purchase_date
-        ORDER BY
-            CASE
-                WHEN buyer = 'Total' THEN 0
-                ELSE 1
-            END,
-            percentage_of_total DESC NULLS LAST;
-    """)
-    top_buyers = cursor.fetchall()
-
-    # Setting month names dynamically
-    current_month_name = datetime.now().strftime('%B %Y')  # Current month name
-    last_month_name = (datetime.now() - timedelta(days=30)).strftime('%B %Y')  # Last month name
-    two_months_ago_name = (datetime.now() - timedelta(days=60)).strftime('%B %Y')  # Two months ago name
-
-    cursor.execute("""
-        SELECT *
-        FROM (
-            SELECT 
-                buyer,
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0) AS current_month,
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '1 month' 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0) AS last_month,
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '2 months' 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0) AS two_months_ago
-            FROM sales_product
-            WHERE date >= date_trunc('month', CURRENT_DATE) - interval '2 months'
-            AND products IS NOT NULL
-            GROUP BY buyer
-
-            UNION ALL
-
-            SELECT
-                'Total' AS buyer,
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0) AS current_month,
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '1 month' 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0) AS last_month,
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '2 months' 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0) AS two_months_ago
-            FROM sales_product
-            WHERE date >= date_trunc('month', CURRENT_DATE) - interval '2 months'
-            AND products IS NOT NULL
-        ) subquery
-        ORDER BY 
-            CASE WHEN buyer = 'Total' THEN 1 ELSE 0 END,  -- Ensures "Total" appears last
-            buyer;
-    """)
-    three_month_totals = cursor.fetchall()
-
-    cursor.execute("""
-        SELECT
-            buyer,
-            ROUND(
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0)::numeric
-                / EXTRACT(DAY FROM date_trunc('month', CURRENT_DATE + INTERVAL '1 month') - INTERVAL '1 day') * 7, 2
-            ) AS current_month_weekly_rate,
-            ROUND(
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '1 month' 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0)::numeric
-                / EXTRACT(DAY FROM date_trunc('month', CURRENT_DATE) - INTERVAL '1 day') * 7, 2
-            ) AS last_month_weekly_rate,
-            ROUND(
-                COALESCE(SUM(CASE WHEN date_trunc('month', date) = date_trunc('month', CURRENT_DATE) - interval '2 months' 
-                    THEN (SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(products->'products')) END), 0)::numeric
-                / EXTRACT(DAY FROM date_trunc('month', CURRENT_DATE - INTERVAL '1 month') - INTERVAL '1 day') * 7, 2
-            ) AS two_months_ago_weekly_rate
-        FROM sales_product
-        WHERE date >= date_trunc('month', CURRENT_DATE) - interval '2 months'
-        AND products IS NOT NULL
-        GROUP BY buyer
-        ORDER BY buyer;
-    """)
-    weekly_rate_summary = cursor.fetchall()
+    from customer_sales_trends import get_customer_sales_trends
+    
+    # Get comprehensive customer sales trends data using the helper function
+    trends_data = get_customer_sales_trends()
 
     return render_template('top_buyers.html', 
-                         top_buyers=top_buyers, 
-                         three_month_totals=three_month_totals, 
-                         current_month_name=current_month_name, 
-                         last_month_name=last_month_name, 
-                         two_months_ago_name=two_months_ago_name, 
-                         weekly_rate_summary=weekly_rate_summary,
-                         new_buyers_by_month=new_buyers_by_month,
-                         total_buyers=total_buyers)
+                         top_buyers=trends_data['top_buyers'], 
+                         three_month_totals=trends_data['three_month_totals'], 
+                         current_month_name=trends_data['current_month_name'], 
+                         last_month_name=trends_data['last_month_name'], 
+                         two_months_ago_name=trends_data['two_months_ago_name'], 
+                         weekly_rate_summary=trends_data['weekly_rate_summary'],
+                         new_buyers_by_month=trends_data['new_buyers_by_month'],
+                         total_buyers=trends_data['total_buyers'])
 
 @app.route('/database-query-form', methods=['POST'])
 def database_query_form():
