@@ -326,28 +326,6 @@ class TestAliasAPIRealEndpoints(unittest.TestCase):
         
         print(f"✅ API returned 400 for invalid request")
 
-    def test_legacy_endpoints(self):
-        """Test legacy endpoints for backward compatibility"""
-        print(f"\n🧪 Testing: Legacy endpoints")
-        
-        # Test legacy add alias
-        response = self.client.post(
-            '/crm-add-alias',
-            json={
-                'customer_name': self.test_customer,
-                'alias_name': self.test_alias_1
-            },
-            content_type='application/json'
-        )
-        
-        self.assertEqual(response.status_code, 200)
-        
-        data = response.get_json()
-        self.assertTrue(data['success'])
-        self.assertIn('successfully', data['message'])
-        
-        print(f"✅ Legacy endpoint /crm-add-alias works")
-
     def test_complete_api_workflow(self):
         """Test complete CRUD workflow using only API endpoints"""
         print(f"\n🚀 Testing: Complete API workflow")

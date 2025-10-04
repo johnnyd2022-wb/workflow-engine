@@ -75,6 +75,12 @@ deploy_test() {
         git stash push -m "Auto-stash before test deployment"
     fi
     
+    # Run API integration tests before deployment
+    print_status "🚨 Running pre-deployment API tests..."
+    if ! run_api_tests; then
+        exit 1
+    fi
+    
     # Run the test environment
     chmod +x scripts/run_test.sh
     ./scripts/run_test.sh
@@ -102,6 +108,12 @@ deploy_prod() {
     if [ -n "$(git status --porcelain)" ]; then
         print_warning "You have uncommitted changes. Stashing them..."
         git stash push -m "Auto-stash before production deployment"
+    fi
+    
+    # Run API integration tests before deployment
+    print_status "🚨 Running pre-deployment API tests..."
+    if ! run_api_tests; then
+        exit 1
     fi
     
     # Create a production tag
@@ -175,6 +187,39 @@ status() {
     git status --short
 }
 
+# Function to run API integration tests
+run_api_tests() {
+    print_status "Running comprehensive API test suite..."
+    
+    # Check if our centralized test runner exists
+    if [ ! -f "run_all_api_tests.py" ]; then
+        print_error "Centralized test runner not found: run_all_api_tests.py"
+        print_error "Please create run_all_api_tests.py for dynamic test discovery"
+        exit 1
+    fi
+    
+    # Make sure we're in the correct directory for imports
+    export PYTHONPATH="$(pwd):$PYTHONPATH"
+    
+    print_status "🚨 Executing comprehensive API test suite..."
+    
+    # Run the centralized test runner
+    # It will return 0 if all tests pass, 1 if any fail
+    if python3 run_all_api_tests.py; then
+        # Test runner passed - all tests successful
+        print_success "✅ ALL API TESTS PASSED!"
+        print_success "🚀 Deployment approved - all tests green!"
+        return 0
+    else
+        # Test runner failed - tests failed or errors occurred
+        print_error "❌ API tests failed!"
+        print_error "🔒 Deployment BLOCKED - all tests must pass"
+        print_error "💡 See test output above for specific failures"
+        print_error "🔧 Fix failing tests before deploying to production"
+        return 1
+    fi
+}
+
 # Function to wait for healthcheck
 wait_for_healthcheck() {
     local port=$1
@@ -206,17 +251,22 @@ show_help() {
     echo ""
     echo "Commands:"
     echo "  local       Run local environment (python3 app.py)"
-    echo "  test        Deploy to test environment (Docker)"
-    echo "  prod        Deploy to production environment (Docker)"
+    echo "  test        Deploy to test environment (Docker) - includes API tests"
+    echo "  prod        Deploy to production environment (Docker) - includes API tests"
     echo "  restore-db  Restore production DB to test environment"
     echo "  status      Show status of all environments"
+    echo "  tests       Run API integration tests only"
     echo "  help        Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0 local      # Start local development"
-    echo "  $0 test       # Deploy to test"
-    echo "  $0 prod       # Deploy to production"
+    echo "  $0 tests      # Run API tests only"
+    echo "  $0 test       # Deploy to test (with tests)"
+    echo "  $0 prod       # Deploy to production (with tests)"
     echo "  $0 status     # Check all environments"
+    echo ""
+    echo "🚨 Note: Test and production deployments will run API integration tests before deploying."
+    echo "    If tests fail, deployment will be blocked to prevent errors in production."
 }
 
 # Main script logic
@@ -229,6 +279,9 @@ case "${1:-help}" in
         ;;
     "prod")
         deploy_prod
+        ;;
+    "tests")
+        run_api_tests
         ;;
     "restore-db")
         restore_test_db

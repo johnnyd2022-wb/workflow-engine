@@ -4644,30 +4644,30 @@
             addBtn.textContent = 'Adding...';
             addBtn.disabled = true;
             
-            fetch('/crm-add-alias', {
+            fetch(`/api/crm/customers/${encodeURIComponent(customerName)}/aliases`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    customer_name: customerName,
                     alias_name: aliasName
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Add the alias to the UI
-                    addAliasToUI(aliasName);
-                    closeAddAliasModal();
-                    showNotification(data.message, 'success');
-                } else {
-                    showNotification(data.message, 'error');
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => Promise.reject(data));
                 }
+                return response.json();
             })
-            .catch(error => {
-                console.error('Error:', error);
-                showNotification('An error occurred while adding the alias', 'error');
+            .then(data => {
+                // Refresh aliases list from API to show updated count
+                loadAliasesFromAPI();
+                closeAddAliasModal();
+                showNotification(data.message, 'success');
+            })
+            .catch(data => {
+                console.error('Error:', data);
+                showNotification(data.message || 'An error occurred while adding the alias', 'error');
             })
             .finally(() => {
                 addBtn.textContent = originalText;
@@ -4707,29 +4707,26 @@
                 return;
             }
             
-            fetch('/crm-remove-alias', {
-                method: 'POST',
+            fetch(`/api/crm/customers/${encodeURIComponent(customerName)}/aliases/${encodeURIComponent(aliasName)}`, {
+                method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    customer_name: customerName,
-                    alias_name: aliasName
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Remove the alias from the UI
-                    removeAliasFromUI(aliasName);
-                    showNotification(data.message, 'success');
-                } else {
-                    showNotification(data.message, 'error');
                 }
             })
-            .catch(error => {
-                console.error('Error:', error);
-                showNotification('An error occurred while removing the alias', 'error');
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => Promise.reject(data));
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Refresh aliases list from API to show updated count
+                loadAliasesFromAPI();
+                showNotification(data.message, 'success');
+            })
+            .catch(data => {
+                console.error('Error:', data);
+                showNotification(data.message || 'An error occurred while removing the alias', 'error');
             });
         }
 
@@ -5087,6 +5084,59 @@
             }, 1000);
         }
 
+        // Load aliases dynamically from API
+        function loadAliasesFromAPI() {
+            const customerName = '{{ customer_name if customer_name else (customer_info[0][0] if customer_info and customer_info[0] else "") }}';
+            if (!customerName) return;
+            
+            fetch(`/api/crm/customers/${encodeURIComponent(customerName)}/aliases`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => Promise.reject(data));
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Clear current aliases list
+                    const aliasesList = document.getElementById('aliasesList');
+                    aliasesList.innerHTML = '';
+                    
+                    // Add aliases from API response
+                    if (data.data && data.data.aliases && data.data.aliases.length > 0) {
+                        data.data.aliases.forEach(aliasName => {
+                            addAliasToUIfromData(aliasName);
+                        });
+                    } else {
+                        aliasesList.innerHTML = '<div class="no-aliases">No aliases configured for this customer</div>';
+                    }
+                })
+                .catch(data => {
+                    console.error('Error loading aliases:', data);
+                    // Fallback to server-rendered aliases on error
+                });
+        }
+
+        // Helper function to add alias to UI from API data (doesn't show notification)
+        function addAliasToUIfromData(aliasName) {
+            const aliasesList = document.getElementById('aliasesList');
+            const noAliases = aliasesList.querySelector('.no-aliases');
+            
+            if (noAliases) {
+                noAliases.remove();
+            }
+            
+            // Create alias item element
+            const aliasItem = document.createElement('div');
+            aliasItem.className = 'alias-item';
+            aliasItem.setAttribute('data-alias', aliasName);
+            aliasItem.innerHTML = `
+                <span class="alias-name">${aliasName}</span>
+                <button class="remove-alias-btn" onclick="removeAlias('${aliasName}')">×</button>
+            `;
+            
+            aliasesList.appendChild(aliasItem);
+        }
+
         // Close modal when clicking outside
         window.onclick = function(event) {
             const modal = document.getElementById('generateInvoiceModal');
@@ -5094,6 +5144,11 @@
                 closeGenerateInvoiceModal();
             }
         };
+
+        // Load aliases when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAliasesFromAPI();
+        });
     </script>
 
     <!-- Custom Confirmation Modal for Delete Tasks (Hidden by default) -->
