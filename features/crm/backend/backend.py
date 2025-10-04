@@ -724,124 +724,6 @@ def crm_handle_potential_match():
         if connection:
             connection.close()
 
-@crm_bp.route('/crm-add-alias', methods=['POST'])
-def crm_add_alias():
-    """Add an alias to a customer"""
-    print("Accessed /crm-add-alias route")
-    from initialize import db_conn
-    connection, cursor = db_conn()
-    
-    data = request.get_json()
-    customer_name = data.get("customer_name")
-    alias_name = data.get("alias_name")
-    
-    try:
-        if not customer_name or not alias_name:
-            return jsonify({"success": False, "message": "Customer name and alias name are required"})
-        
-        # Get current aliases for the customer
-        cursor.execute("""
-            SELECT aliases FROM crm_customers 
-            WHERE customer = %s
-        """, (customer_name,))
-        result = cursor.fetchone()
-        
-        if not result:
-            return jsonify({"success": False, "message": f"Customer '{customer_name}' not found"})
-        
-        current_aliases = result[0] if result[0] else []
-        
-        # Check if alias already exists
-        if alias_name in current_aliases:
-            return jsonify({"success": False, "message": f"Alias '{alias_name}' already exists for this customer"})
-        
-        # Add the new alias
-        current_aliases.append(alias_name)
-        
-        # Update the aliases array
-        cursor.execute("""
-            UPDATE crm_customers 
-            SET aliases = %s 
-            WHERE customer = %s
-        """, (current_aliases, customer_name))
-        
-        connection.commit()
-        print(f"✓ Added alias '{alias_name}' to customer '{customer_name}'")
-        return jsonify({
-            "success": True, 
-            "message": f"Alias '{alias_name}' added successfully"
-        })
-        
-    except Exception as e:
-        print(f"❌ Error adding alias: {e}")
-        if connection:
-            connection.rollback()
-        return jsonify({"success": False, "message": str(e)})
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-@crm_bp.route('/crm-remove-alias', methods=['POST'])
-def crm_remove_alias():
-    """Remove an alias from a customer"""
-    print("Accessed /crm-remove-alias route")
-    from initialize import db_conn
-    connection, cursor = db_conn()
-    
-    data = request.get_json()
-    customer_name = data.get("customer_name")
-    alias_name = data.get("alias_name")
-    
-    try:
-        if not customer_name or not alias_name:
-            return jsonify({"success": False, "message": "Customer name and alias name are required"})
-        
-        # Get current aliases for the customer
-        cursor.execute("""
-            SELECT aliases FROM crm_customers 
-            WHERE customer = %s
-        """, (customer_name,))
-        result = cursor.fetchone()
-        
-        if not result:
-            return jsonify({"success": False, "message": f"Customer '{customer_name}' not found"})
-        
-        current_aliases = result[0] if result[0] else []
-        
-        # Check if alias exists
-        if alias_name not in current_aliases:
-            return jsonify({"success": False, "message": f"Alias '{alias_name}' not found for this customer"})
-        
-        # Remove the alias
-        current_aliases.remove(alias_name)
-        
-        # Update the aliases array
-        cursor.execute("""
-            UPDATE crm_customers 
-            SET aliases = %s 
-            WHERE customer = %s
-        """, (current_aliases, customer_name))
-        
-        connection.commit()
-        print(f"✓ Removed alias '{alias_name}' from customer '{customer_name}'")
-        return jsonify({
-            "success": True, 
-            "message": f"Alias '{alias_name}' removed successfully"
-        })
-        
-    except Exception as e:
-        print(f"❌ Error removing alias: {e}")
-        if connection:
-            connection.rollback()
-        return jsonify({"success": False, "message": str(e)})
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
 @crm_bp.route('/crm-create-customer', methods=['POST'])
 def crm_create_customer():
     print("Accessed /crm-create-customer route")
@@ -2726,3 +2608,10 @@ schedule.every().day.at("14:30").do(send_due_tasks_email_scheduled)
 
 # Schedule the job to send weekly tasks email every Sunday at 8:30 AM
 schedule.every().sunday.at("08:30").do(send_weekly_tasks_email_scheduled)
+
+# Import support modules to register their routes
+try:
+    from .support import alias  # Import alias routes
+    print("✓ Alias support routes registered")
+except ImportError as e:
+    print(f"❌ Could not import alias support: {e}")
