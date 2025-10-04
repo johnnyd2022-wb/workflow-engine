@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 from initialize import db_conn
+from database_insert import insert_data
 from config_loader import config
 import json
 import schedule
@@ -14,6 +15,7 @@ crm_bp = Blueprint('crm', __name__, url_prefix='/crm', template_folder='../front
 def crm():
     print("Accessed /crm route")
     from initialize import db_conn
+    from app import get_monthly_revenue_data
     connection, cursor = db_conn()
 
     try:
@@ -333,7 +335,7 @@ def crm():
         # Get monthly revenue data for CRM dashboard
         monthly_revenue = get_monthly_revenue_data()
         
-        return render_template('../frontend/crm.html', 
+        return render_template('crm.html', 
                             existing_customers=existing_customers, 
                             existing_customer_info=existing_customer_info, 
                             active_customers_this_month=active_customers_this_month, 
@@ -903,7 +905,7 @@ def crm_customer_page():
         
         if not customer_name:
             print("No customer name provided")
-            return render_template('../frontend/customer_detail.html', 
+            return render_template('/customer_detail.html', 
                                 customer_info=None, 
                                 follow_up_tasks=None, 
                                 customer_invoice_data=None,
