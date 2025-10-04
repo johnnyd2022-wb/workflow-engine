@@ -1,0 +1,7 @@
+rules:
+- id: detect-legacy-route
+  patterns:
+  - pattern: "print"
+  message: "- LEGACY ROUTE DETECTED"
+  languages: [python]
+  severity: ERROR
