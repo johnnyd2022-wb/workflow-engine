@@ -22,3 +22,4 @@ receiver_email = production-email@example.com
 [features]
 invoice_button_enabled = true
 schedule_enabled = true
+crm_enabled = true
