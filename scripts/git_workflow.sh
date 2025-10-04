@@ -192,9 +192,9 @@ run_api_tests() {
     print_status "Running comprehensive API test suite..."
     
     # Check if our centralized test runner exists
-    if [ ! -f "run_all_api_tests.py" ]; then
-        print_error "Centralized test runner not found: run_all_api_tests.py"
-        print_error "Please create run_all_api_tests.py for dynamic test discovery"
+    if [ ! -f "scripts/run_all_api_tests.py" ]; then
+        print_error "Centralized test runner not found: scripts/run_all_api_tests.py"
+        print_error "Please create scripts/run_all_api_tests.py for dynamic test discovery"
         exit 1
     fi
     
@@ -205,7 +205,7 @@ run_api_tests() {
     
     # Run the centralized test runner
     # It will return 0 if all tests pass, 1 if any fail
-    if python3 run_all_api_tests.py; then
+    if python3 scripts/run_all_api_tests.py; then
         # Test runner passed - all tests successful
         print_success "✅ ALL API TESTS PASSED!"
         print_success "🚀 Deployment approved - all tests green!"
