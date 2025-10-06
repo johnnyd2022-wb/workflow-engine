@@ -119,6 +119,10 @@ class Config:
     @property
     def crm_enabled(self) -> bool:
         return self.getboolean('features', 'crm_enabled', True)
+    
+    @property
+    def supply_chain_enabled(self) -> bool:
+        return self.getboolean('features', 'supply_chain_enabled', True)
 
 # Global config instance
 config = Config()

@@ -27,6 +27,9 @@ from config_loader import config
 # Import CRM blueprint
 from features.crm.backend.backend import crm_bp
 
+# Import Supply Chain blueprint
+from features.supply_chain.backend.backend import supply_chain_bp
+
 app = Flask(__name__)
 
 # Configuration settings - now loaded from environment-specific config files
@@ -35,6 +38,9 @@ INVOICE_BUTTON_ENABLED = config.invoice_button_enabled
 # Register blueprints conditionally based on config
 if config.crm_enabled:
     app.register_blueprint(crm_bp)
+
+if config.supply_chain_enabled:
+    app.register_blueprint(supply_chain_bp)
 
 # Log feature status from configuration
 def log_feature_status():

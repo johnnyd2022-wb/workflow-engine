@@ -291,6 +291,106 @@ def create_crm_tasks_table():
 
     create_table(table_name, columns)
 
+def create_supply_chain_processes_table():
+    table_name = "supply_chain_processes"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_name": "TEXT", # name of the process (e.g., "Gin Distillation", "Botanical Mixing")
+        "process_description": "TEXT", # detailed description of the process
+        "process_type": "TEXT", # type of process (e.g., "manufacturing", "packaging", "quality_control")
+        "process_status": "TEXT", # 'active', 'inactive', 'archived'
+        "process_category": "TEXT", # category for grouping processes
+        "process_notes": "TEXT", # additional notes about the process
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_inputs_table():
+    table_name = "supply_chain_inputs"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_id": "INTEGER", # foreign key to supply_chain_processes
+        "input_name": "TEXT", # name of the input (e.g., "Juniper Berries", "Neutral Spirit")
+        "input_type": "TEXT", # type of input (e.g., "raw_material", "intermediate_product", "equipment")
+        "input_quantity": "DOUBLE PRECISION", # quantity of input
+        "input_unit": "TEXT", # unit of measurement (e.g., "kg", "liters", "pieces")
+        "input_specifications": "JSONB", # additional specifications as JSON
+        "input_source": "TEXT", # where the input comes from
+        "input_batch_number": "TEXT", # batch or lot number for traceability
+        "input_expiry_date": "DATE", # expiry date if applicable
+        "input_status": "TEXT", # 'available', 'consumed', 'expired', 'quarantined'
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_outputs_table():
+    table_name = "supply_chain_outputs"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_id": "INTEGER", # foreign key to supply_chain_processes
+        "output_name": "TEXT", # name of the output (e.g., "Gin Batch A", "Bottled Product")
+        "output_type": "TEXT", # type of output (e.g., "finished_product", "intermediate_product", "waste")
+        "output_quantity": "DOUBLE PRECISION", # quantity of output
+        "output_unit": "TEXT", # unit of measurement
+        "output_specifications": "JSONB", # additional specifications as JSON
+        "output_batch_number": "TEXT", # batch or lot number for traceability
+        "output_quality_status": "TEXT", # 'passed', 'failed', 'pending', 'quarantined'
+        "output_destination": "TEXT", # where the output goes next
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_connections_table():
+    table_name = "supply_chain_connections"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "from_process_id": "INTEGER", # source process
+        "to_process_id": "INTEGER", # destination process
+        "from_output_id": "INTEGER", # specific output from source process
+        "to_input_id": "INTEGER", # specific input to destination process
+        "connection_type": "TEXT", # type of connection (e.g., "direct", "storage", "transport")
+        "connection_status": "TEXT", # 'active', 'inactive', 'blocked'
+        "connection_notes": "TEXT", # additional notes about the connection
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_traceability_table():
+    table_name = "supply_chain_traceability"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "trace_id": "TEXT", # unique trace identifier
+        "item_name": "TEXT", # name of the item being traced
+        "item_type": "TEXT", # type of item (e.g., "batch", "product", "ingredient")
+        "current_location": "TEXT", # current location in the supply chain
+        "current_process_id": "INTEGER", # current process
+        "trace_path": "JSONB", # complete path through the supply chain
+        "trace_status": "TEXT", # 'active', 'completed', 'lost'
+        "trace_notes": "TEXT", # additional trace information
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"
 
@@ -835,6 +935,11 @@ def main():
     create_crm_follow_ups_table()
     create_crm_log_table()
     create_crm_tasks_table()
+    create_supply_chain_processes_table()
+    create_supply_chain_inputs_table()
+    create_supply_chain_outputs_table()
+    create_supply_chain_connections_table()
+    create_supply_chain_traceability_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()

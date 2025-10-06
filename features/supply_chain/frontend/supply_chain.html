@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whistlebird Supply Chain</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            background-attachment: fixed;
+            color: var(--text-color);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0.5rem 1rem;
+            width: 100%;
+        }
+
+        .nav-bar {
+            background: linear-gradient(135deg, var(--card-background) 0%, rgba(26, 26, 26, 0.95) 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-bar h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-color);
+            background-color: rgba(255, 51, 102, 0.1);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+            border-color: var(--primary-color);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .main-content {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 0.9rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .processes-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .processes-table th,
+        .processes-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .processes-table th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .processes-table td {
+            color: var(--text-secondary);
+        }
+
+        .processes-table tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-active {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-inactive {
+            background: rgba(156, 163, 175, 0.2);
+            color: #9ca3af;
+            border: 1px solid rgba(156, 163, 175, 0.3);
+        }
+
+        .status-archived {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--card-background);
+            margin: 5% auto;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .close {
+            color: var(--text-secondary);
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover {
+            color: var(--primary-color);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background: rgba(255, 51, 102, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .success-message {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0.5rem;
+            }
+
+            .nav-bar h1 {
+                font-size: 2rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+            }
+
+            .main-content {
+                padding: 1rem;
+            }
+
+            .section-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .processes-table {
+                font-size: 0.8rem;
+            }
+
+            .processes-table th,
+            .processes-table td {
+                padding: 0.5rem;
+            }
+
+            .modal-content {
+                margin: 10% auto;
+                padding: 1rem;
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="container">
+            <h1>Supply Chain Management</h1>
+            <div class="nav-links">
+                <a href="/" class="nav-link">← Back to Home</a>
+                <a href="#" class="nav-link" onclick="openCreateProcessModal()">+ New Process</a>
+                <a href="#" class="nav-link" onclick="openTraceabilityModal()">🔍 Traceability</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% if error %}
+        <div class="error-message">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">{{ total_processes }}</div>
+                <div class="stat-label">Total Processes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ active_processes }}</div>
+                <div class="stat-label">Active Processes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ total_inputs }}</div>
+                <div class="stat-label">Total Inputs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ total_outputs }}</div>
+                <div class="stat-label">Total Outputs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ total_connections }}</div>
+                <div class="stat-label">Connections</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="section-header">
+                <h2 class="section-title">Processes</h2>
+                <button class="btn" onclick="openCreateProcessModal()">+ Add Process</button>
+            </div>
+
+            {% if processes %}
+            <table class="processes-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for process in processes %}
+                    <tr>
+                        <td><strong>{{ process[1] }}</strong></td>
+                        <td>{{ process[3] or 'N/A' }}</td>
+                        <td>{{ process[5] or 'N/A' }}</td>
+                        <td>
+                            <span class="status-badge status-{{ process[4] or 'inactive' }}">
+                                {{ process[4] or 'inactive' }}
+                            </span>
+                        </td>
+                        <td>{{ process[2][:50] + '...' if process[2] and process[2]|length > 50 else process[2] or 'No description' }}</td>
+                        <td>
+                            <a href="/supply-chain/process/{{ process[0] }}" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.8rem;">View Details</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                <h3>No processes found</h3>
+                <p>Create your first process to start building your supply chain.</p>
+                <button class="btn" onclick="openCreateProcessModal()" style="margin-top: 1rem;">+ Create Process</button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Create Process Modal -->
+    <div id="createProcessModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Create New Process</h3>
+                <span class="close" onclick="closeCreateProcessModal()">&times;</span>
+            </div>
+            <form id="createProcessForm">
+                <div class="form-group">
+                    <label class="form-label" for="processName">Process Name *</label>
+                    <input type="text" id="processName" name="process_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="processDescription">Description</label>
+                    <textarea id="processDescription" name="process_description" class="form-textarea"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="processType">Process Type</label>
+                    <select id="processType" name="process_type" class="form-select">
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="packaging">Packaging</option>
+                        <option value="quality_control">Quality Control</option>
+                        <option value="storage">Storage</option>
+                        <option value="transport">Transport</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="processCategory">Category</label>
+                    <input type="text" id="processCategory" name="process_category" class="form-input" placeholder="e.g., Gin Production, Packaging">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="processStatus">Status</label>
+                    <select id="processStatus" name="process_status" class="form-select">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="archived">Archived</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="processNotes">Notes</label>
+                    <textarea id="processNotes" name="process_notes" class="form-textarea"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateProcessModal()">Cancel</button>
+                    <button type="submit" class="btn">Create Process</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Traceability Modal -->
+    <div id="traceabilityModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Traceability Lookup</h3>
+                <span class="close" onclick="closeTraceabilityModal()">&times;</span>
+            </div>
+            <form id="traceabilityForm">
+                <div class="form-group">
+                    <label class="form-label" for="traceId">Trace ID *</label>
+                    <input type="text" id="traceId" name="trace_id" class="form-input" required placeholder="Enter trace ID to lookup">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeTraceabilityModal()">Cancel</button>
+                    <button type="submit" class="btn">Lookup Trace</button>
+                </div>
+            </form>
+            <div id="traceabilityResult" style="margin-top: 2rem;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Modal functions
+        function openCreateProcessModal() {
+            document.getElementById('createProcessModal').style.display = 'block';
+        }
+
+        function closeCreateProcessModal() {
+            document.getElementById('createProcessModal').style.display = 'none';
+            document.getElementById('createProcessForm').reset();
+        }
+
+        function openTraceabilityModal() {
+            document.getElementById('traceabilityModal').style.display = 'block';
+        }
+
+        function closeTraceabilityModal() {
+            document.getElementById('traceabilityModal').style.display = 'none';
+            document.getElementById('traceabilityForm').reset();
+            document.getElementById('traceabilityResult').innerHTML = '';
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const createModal = document.getElementById('createProcessModal');
+            const traceModal = document.getElementById('traceabilityModal');
+            
+            if (event.target === createModal) {
+                closeCreateProcessModal();
+            }
+            if (event.target === traceModal) {
+                closeTraceabilityModal();
+            }
+        }
+
+        // Create Process Form Submission
+        document.getElementById('createProcessForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/processes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    // Show success message
+                    const successDiv = document.createElement('div');
+                    successDiv.className = 'success-message';
+                    successDiv.innerHTML = '<strong>Success!</strong> Process created successfully.';
+                    e.target.parentNode.insertBefore(successDiv, e.target);
+                    
+                    // Close modal and reload page after a short delay
+                    setTimeout(() => {
+                        closeCreateProcessModal();
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to create process');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error creating process: ' + error.message);
+            }
+        });
+
+        // Traceability Form Submission
+        document.getElementById('traceabilityForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const traceId = document.getElementById('traceId').value;
+            const resultDiv = document.getElementById('traceabilityResult');
+            
+            try {
+                const response = await fetch(`/api/traceability/${traceId}`);
+                
+                if (response.ok) {
+                    const traceData = await response.json();
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success-message">
+                            <h4>Traceability Information</h4>
+                            <p><strong>Item:</strong> ${traceData.item_name}</p>
+                            <p><strong>Type:</strong> ${traceData.item_type}</p>
+                            <p><strong>Current Location:</strong> ${traceData.current_location}</p>
+                            <p><strong>Status:</strong> ${traceData.trace_status}</p>
+                            <p><strong>Notes:</strong> ${traceData.trace_notes || 'None'}</p>
+                        </div>
+                    `;
+                } else {
+                    const errorData = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="error-message">
+                            <strong>Error:</strong> ${errorData.error || 'Trace not found'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `
+                    <div class="error-message">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
