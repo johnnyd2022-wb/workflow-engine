@@ -391,6 +391,94 @@ def create_supply_chain_traceability_table():
 
     create_table(table_name, columns)
 
+def create_supply_chain_process_executions_table():
+    """Table to track actual executions of processes with batch data"""
+    table_name = "supply_chain_process_executions"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_id": "INTEGER", # foreign key to supply_chain_processes
+        "execution_batch_number": "TEXT", # unique batch number for this execution
+        "execution_status": "TEXT", # 'planned', 'in_progress', 'completed', 'failed', 'cancelled'
+        "execution_start_time": "TIMESTAMP", # when execution started
+        "execution_end_time": "TIMESTAMP", # when execution completed
+        "execution_notes": "TEXT", # notes about this specific execution
+        "execution_variables": "JSONB", # custom variables (VAT number, operator, etc.)
+        "execution_quality_checks": "JSONB", # quality check results
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_inputs_table():
+    """Table to track actual inputs used in process executions"""
+    table_name = "supply_chain_execution_inputs"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "execution_id": "INTEGER", # foreign key to supply_chain_process_executions
+        "input_template_id": "INTEGER", # foreign key to supply_chain_inputs (template)
+        "actual_input_name": "TEXT", # actual name used (may differ from template)
+        "actual_input_quantity": "DOUBLE PRECISION", # actual quantity used
+        "actual_input_unit": "TEXT", # actual unit used
+        "actual_input_batch_number": "TEXT", # actual batch number of input
+        "actual_input_source": "TEXT", # actual source of input
+        "input_consumption_time": "TIMESTAMP", # when input was consumed
+        "input_quality_status": "TEXT", # quality status of this input
+        "input_notes": "TEXT", # notes about this specific input usage
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_outputs_table():
+    """Table to track actual outputs produced in process executions"""
+    table_name = "supply_chain_execution_outputs"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "execution_id": "INTEGER", # foreign key to supply_chain_process_executions
+        "output_template_id": "INTEGER", # foreign key to supply_chain_outputs (template)
+        "actual_output_name": "TEXT", # actual name produced
+        "actual_output_quantity": "DOUBLE PRECISION", # actual quantity produced
+        "actual_output_unit": "TEXT", # actual unit
+        "actual_output_batch_number": "TEXT", # actual batch number produced
+        "actual_output_quality_status": "TEXT", # actual quality status
+        "actual_output_destination": "TEXT", # where this output actually went
+        "output_production_time": "TIMESTAMP", # when output was produced
+        "output_notes": "TEXT", # notes about this specific output
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_process_templates_table():
+    """Table to store process templates with default inputs/outputs"""
+    table_name = "supply_chain_process_templates"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_id": "INTEGER", # foreign key to supply_chain_processes
+        "template_name": "TEXT", # name of this template version
+        "template_version": "TEXT", # version number
+        "template_status": "TEXT", # 'draft', 'active', 'archived'
+        "default_inputs": "JSONB", # default input specifications
+        "default_outputs": "JSONB", # default output specifications
+        "default_variables": "JSONB", # default variable definitions
+        "template_notes": "TEXT", # notes about this template
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"
 
@@ -940,6 +1028,10 @@ def main():
     create_supply_chain_outputs_table()
     create_supply_chain_connections_table()
     create_supply_chain_traceability_table()
+    create_supply_chain_process_executions_table()
+    create_supply_chain_execution_inputs_table()
+    create_supply_chain_execution_outputs_table()
+    create_supply_chain_process_templates_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()

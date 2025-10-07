@@ -1,10 +1,9 @@
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 from initialize import db_conn
+import json
+from datetime import datetime, date
 from database_insert import insert_data
 from config_loader import config
-import json
-import datetime
-from datetime import date
 
 # Create Supply Chain blueprint
 supply_chain_bp = Blueprint('supply_chain', __name__, template_folder='../frontend')
@@ -145,7 +144,7 @@ def process_detail(process_id):
 
 # API Routes for CRUD operations
 
-@supply_chain_bp.route('/api/processes', methods=['POST'])
+@supply_chain_bp.route('/api/supply-chain/processes', methods=['POST'])
 def create_process():
     """Create a new process"""
     try:
@@ -184,7 +183,7 @@ def create_process():
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/processes/<int:process_id>', methods=['GET'])
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>', methods=['GET'])
 def get_process(process_id):
     """Get a specific process"""
     try:
@@ -221,7 +220,7 @@ def get_process(process_id):
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/processes/<int:process_id>', methods=['PUT'])
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>', methods=['PUT'])
 def update_process(process_id):
     """Update a process"""
     try:
@@ -260,7 +259,7 @@ def update_process(process_id):
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/processes/<int:process_id>', methods=['DELETE'])
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>', methods=['DELETE'])
 def delete_process(process_id):
     """Delete a process"""
     try:
@@ -291,7 +290,161 @@ def delete_process(process_id):
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/inputs', methods=['POST'])
+@supply_chain_bp.route('/api/supply-chain/inputs', methods=['GET'])
+def get_inputs():
+    """Get all inputs"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
+                   i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
+                   i.input_expiry_date, i.input_status, p.process_name
+            FROM supply_chain_inputs i
+            LEFT JOIN supply_chain_processes p ON i.process_id = p.id
+            ORDER BY i.id DESC
+        """)
+        
+        inputs = cursor.fetchall()
+        
+        return jsonify([{
+            'id': inp[0],
+            'process_id': inp[1],
+            'input_name': inp[2],
+            'input_type': inp[3],
+            'input_quantity': inp[4],
+            'input_unit': inp[5],
+            'input_specifications': inp[6],
+            'input_source': inp[7],
+            'input_batch_number': inp[8],
+            'input_expiry_date': inp[9].isoformat() if inp[9] else None,
+            'input_status': inp[10],
+            'process_name': inp[11]
+        } for inp in inputs])
+        
+    except Exception as e:
+        print(f"Error getting inputs: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/inputs/<int:input_id>', methods=['GET'])
+def get_input(input_id):
+    """Get a specific input by ID"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
+                   i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
+                   i.input_expiry_date, i.input_status, p.process_name
+            FROM supply_chain_inputs i
+            LEFT JOIN supply_chain_processes p ON i.process_id = p.id
+            WHERE i.id = %s
+        """, (input_id,))
+        
+        inp = cursor.fetchone()
+        if not inp:
+            return jsonify({'error': 'Input not found'}), 404
+        
+        return jsonify({
+            'id': inp[0],
+            'process_id': inp[1],
+            'input_name': inp[2],
+            'input_type': inp[3],
+            'input_quantity': inp[4],
+            'input_unit': inp[5],
+            'input_specifications': inp[6],
+            'input_source': inp[7],
+            'input_batch_number': inp[8],
+            'input_expiry_date': inp[9].isoformat() if inp[9] else None,
+            'input_status': inp[10],
+            'process_name': inp[11]
+        })
+        
+    except Exception as e:
+        print(f"Error getting input: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/inputs/<int:input_id>', methods=['PUT'])
+def update_input(input_id):
+    """Update an input"""
+    try:
+        connection, cursor = db_conn()
+        data = request.get_json()
+        
+        # Check if input exists
+        cursor.execute("SELECT id FROM supply_chain_inputs WHERE id = %s", (input_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Input not found'}), 404
+        
+        # Update input
+        cursor.execute("""
+            UPDATE supply_chain_inputs 
+            SET input_name = %s, input_type = %s, input_quantity = %s, input_unit = %s,
+                input_specifications = %s, input_source = %s, input_batch_number = %s,
+                input_expiry_date = %s, input_status = %s, date = NOW(), action = 'update'
+            WHERE id = %s
+        """, (
+            data.get('input_name'),
+            data.get('input_type'),
+            data.get('input_quantity'),
+            data.get('input_unit'),
+            data.get('input_specifications'),
+            data.get('input_source'),
+            data.get('input_batch_number'),
+            data.get('input_expiry_date'),
+            data.get('input_status'),
+            input_id
+        ))
+        
+        connection.commit()
+        return jsonify({'message': 'Input updated successfully'})
+        
+    except Exception as e:
+        print(f"Error updating input: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/inputs/<int:input_id>', methods=['DELETE'])
+def delete_input(input_id):
+    """Delete an input"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Check if input exists
+        cursor.execute("SELECT id FROM supply_chain_inputs WHERE id = %s", (input_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Input not found'}), 404
+        
+        # Delete the input
+        cursor.execute("DELETE FROM supply_chain_inputs WHERE id = %s", (input_id,))
+        
+        connection.commit()
+        return jsonify({'message': 'Input deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting input: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/inputs', methods=['POST'])
 def create_input():
     """Create a new input"""
     try:
@@ -335,7 +488,158 @@ def create_input():
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/outputs', methods=['POST'])
+@supply_chain_bp.route('/api/supply-chain/outputs', methods=['GET'])
+def get_outputs():
+    """Get all outputs"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                   o.output_unit, o.output_specifications, o.output_batch_number,
+                   o.output_quality_status, o.output_destination, p.process_name
+            FROM supply_chain_outputs o
+            LEFT JOIN supply_chain_processes p ON o.process_id = p.id
+            ORDER BY o.id DESC
+        """)
+        
+        outputs = cursor.fetchall()
+        
+        return jsonify([{
+            'id': out[0],
+            'process_id': out[1],
+            'output_name': out[2],
+            'output_type': out[3],
+            'output_quantity': out[4],
+            'output_unit': out[5],
+            'output_specifications': out[6],
+            'output_batch_number': out[7],
+            'output_quality_status': out[8],
+            'output_destination': out[9],
+            'process_name': out[10]
+        } for out in outputs])
+        
+    except Exception as e:
+        print(f"Error getting outputs: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/outputs/<int:output_id>', methods=['GET'])
+def get_output(output_id):
+    """Get a specific output by ID"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                   o.output_unit, o.output_specifications, o.output_batch_number,
+                   o.output_quality_status, o.output_destination, p.process_name
+            FROM supply_chain_outputs o
+            LEFT JOIN supply_chain_processes p ON o.process_id = p.id
+            WHERE o.id = %s
+        """, (output_id,))
+        
+        out = cursor.fetchone()
+        if not out:
+            return jsonify({'error': 'Output not found'}), 404
+        
+        return jsonify({
+            'id': out[0],
+            'process_id': out[1],
+            'output_name': out[2],
+            'output_type': out[3],
+            'output_quantity': out[4],
+            'output_unit': out[5],
+            'output_specifications': out[6],
+            'output_batch_number': out[7],
+            'output_quality_status': out[8],
+            'output_destination': out[9],
+            'process_name': out[10]
+        })
+        
+    except Exception as e:
+        print(f"Error getting output: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/outputs/<int:output_id>', methods=['PUT'])
+def update_output(output_id):
+    """Update an output"""
+    try:
+        connection, cursor = db_conn()
+        data = request.get_json()
+        
+        # Check if output exists
+        cursor.execute("SELECT id FROM supply_chain_outputs WHERE id = %s", (output_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Output not found'}), 404
+        
+        # Update output
+        cursor.execute("""
+            UPDATE supply_chain_outputs 
+            SET output_name = %s, output_type = %s, output_quantity = %s, output_unit = %s,
+                output_specifications = %s, output_batch_number = %s,
+                output_quality_status = %s, output_destination = %s, date = NOW(), action = 'update'
+            WHERE id = %s
+        """, (
+            data.get('output_name'),
+            data.get('output_type'),
+            data.get('output_quantity'),
+            data.get('output_unit'),
+            data.get('output_specifications'),
+            data.get('output_batch_number'),
+            data.get('output_quality_status'),
+            data.get('output_destination'),
+            output_id
+        ))
+        
+        connection.commit()
+        return jsonify({'message': 'Output updated successfully'})
+        
+    except Exception as e:
+        print(f"Error updating output: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/outputs/<int:output_id>', methods=['DELETE'])
+def delete_output(output_id):
+    """Delete an output"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Check if output exists
+        cursor.execute("SELECT id FROM supply_chain_outputs WHERE id = %s", (output_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Output not found'}), 404
+        
+        # Delete the output
+        cursor.execute("DELETE FROM supply_chain_outputs WHERE id = %s", (output_id,))
+        
+        connection.commit()
+        return jsonify({'message': 'Output deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting output: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/outputs', methods=['POST'])
 def create_output():
     """Create a new output"""
     try:
@@ -378,7 +682,46 @@ def create_output():
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/connections', methods=['POST'])
+@supply_chain_bp.route('/api/supply-chain/connections', methods=['GET'])
+def get_connections():
+    """Get all connections for visual display"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT c.id, c.from_process_id, c.to_process_id, c.connection_type, 
+                   c.connection_status, c.connection_notes,
+                   fp.process_name as from_process_name,
+                   tp.process_name as to_process_name
+            FROM supply_chain_connections c
+            LEFT JOIN supply_chain_processes fp ON c.from_process_id = fp.id
+            LEFT JOIN supply_chain_processes tp ON c.to_process_id = tp.id
+            ORDER BY c.id
+        """)
+        
+        connections = cursor.fetchall()
+        
+        return jsonify([{
+            'id': conn[0],
+            'from_process_id': conn[1],
+            'to_process_id': conn[2],
+            'connection_type': conn[3],
+            'connection_status': conn[4],
+            'connection_notes': conn[5],
+            'from_process_name': conn[6],
+            'to_process_name': conn[7]
+        } for conn in connections])
+        
+    except Exception as e:
+        print(f"Error getting connections: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/connections', methods=['POST'])
 def create_connection():
     """Create a new connection between processes"""
     try:
@@ -418,7 +761,114 @@ def create_connection():
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/traceability', methods=['POST'])
+@supply_chain_bp.route('/api/supply-chain/traceability', methods=['GET'])
+def get_all_traces():
+    """Get all traceability records"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT t.id, t.trace_id, t.item_name, t.item_type, t.current_location, 
+                   t.current_process_id, t.trace_path, t.trace_status, t.trace_notes,
+                   p.process_name
+            FROM supply_chain_traceability t
+            LEFT JOIN supply_chain_processes p ON t.current_process_id = p.id
+            ORDER BY t.id DESC
+        """)
+        
+        traces = cursor.fetchall()
+        
+        return jsonify([{
+            'id': trace[0],
+            'trace_id': trace[1],
+            'item_name': trace[2],
+            'item_type': trace[3],
+            'current_location': trace[4],
+            'current_process_id': trace[5],
+            'trace_path': trace[6],
+            'trace_status': trace[7],
+            'trace_notes': trace[8],
+            'process_name': trace[9]
+        } for trace in traces])
+        
+    except Exception as e:
+        print(f"Error getting traceability records: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/traceability/<trace_id>', methods=['PUT'])
+def update_trace(trace_id):
+    """Update a traceability record"""
+    try:
+        connection, cursor = db_conn()
+        data = request.get_json()
+        
+        # Check if trace exists
+        cursor.execute("SELECT id FROM supply_chain_traceability WHERE trace_id = %s", (trace_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Traceability record not found'}), 404
+        
+        # Update trace
+        cursor.execute("""
+            UPDATE supply_chain_traceability 
+            SET item_name = %s, item_type = %s, current_location = %s,
+                current_process_id = %s, trace_path = %s, trace_status = %s,
+                trace_notes = %s, date = NOW(), action = 'update'
+            WHERE trace_id = %s
+        """, (
+            data.get('item_name'),
+            data.get('item_type'),
+            data.get('current_location'),
+            data.get('current_process_id'),
+            data.get('trace_path'),
+            data.get('trace_status'),
+            data.get('trace_notes'),
+            trace_id
+        ))
+        
+        connection.commit()
+        return jsonify({'message': 'Traceability record updated successfully'})
+        
+    except Exception as e:
+        print(f"Error updating traceability record: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/traceability/<trace_id>', methods=['DELETE'])
+def delete_trace(trace_id):
+    """Delete a traceability record"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Check if trace exists
+        cursor.execute("SELECT id FROM supply_chain_traceability WHERE trace_id = %s", (trace_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Traceability record not found'}), 404
+        
+        # Delete the trace
+        cursor.execute("DELETE FROM supply_chain_traceability WHERE trace_id = %s", (trace_id,))
+        
+        connection.commit()
+        return jsonify({'message': 'Traceability record deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting traceability record: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/traceability', methods=['POST'])
 def create_trace():
     """Create a new traceability record"""
     try:
@@ -459,7 +909,7 @@ def create_trace():
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/traceability/<trace_id>', methods=['GET'])
+@supply_chain_bp.route('/api/supply-chain/traceability/<trace_id>', methods=['GET'])
 def get_trace(trace_id):
     """Get traceability information for a specific item"""
     try:
@@ -491,6 +941,494 @@ def get_trace(trace_id):
         
     except Exception as e:
         print(f"Error getting trace: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/processes', methods=['GET'])
+def get_all_processes():
+    """Get all processes for connection dropdowns"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT id, process_name, process_type, process_status
+            FROM supply_chain_processes
+            ORDER BY process_name
+        """)
+        
+        processes = cursor.fetchall()
+        
+        return jsonify([{
+            'id': process[0],
+            'name': process[1],
+            'type': process[2],
+            'status': process[3]
+        } for process in processes])
+        
+    except Exception as e:
+        print(f"Error getting processes: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/connections/<int:connection_id>', methods=['GET'])
+def get_connection(connection_id):
+    """Get a specific connection by ID"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT c.id, c.from_process_id, c.to_process_id, c.connection_type, 
+                   c.connection_status, c.connection_notes, c.from_output_id, c.to_input_id,
+                   fp.process_name as from_process_name,
+                   tp.process_name as to_process_name
+            FROM supply_chain_connections c
+            LEFT JOIN supply_chain_processes fp ON c.from_process_id = fp.id
+            LEFT JOIN supply_chain_processes tp ON c.to_process_id = tp.id
+            WHERE c.id = %s
+        """, (connection_id,))
+        
+        conn = cursor.fetchone()
+        if not conn:
+            return jsonify({'error': 'Connection not found'}), 404
+        
+        return jsonify({
+            'id': conn[0],
+            'from_process_id': conn[1],
+            'to_process_id': conn[2],
+            'connection_type': conn[3],
+            'connection_status': conn[4],
+            'connection_notes': conn[5],
+            'from_output_id': conn[6],
+            'to_input_id': conn[7],
+            'from_process_name': conn[8],
+            'to_process_name': conn[9]
+        })
+        
+    except Exception as e:
+        print(f"Error getting connection: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/connections/<int:connection_id>', methods=['PUT'])
+def update_connection(connection_id):
+    """Update a connection"""
+    try:
+        connection, cursor = db_conn()
+        data = request.get_json()
+        
+        # Check if connection exists
+        cursor.execute("SELECT id FROM supply_chain_connections WHERE id = %s", (connection_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Connection not found'}), 404
+        
+        # Update connection
+        cursor.execute("""
+            UPDATE supply_chain_connections 
+            SET connection_type = %s, connection_status = %s, connection_notes = %s,
+                from_output_id = %s, to_input_id = %s, date = NOW(), action = 'update'
+            WHERE id = %s
+        """, (
+            data.get('connection_type'),
+            data.get('connection_status'),
+            data.get('connection_notes'),
+            data.get('from_output_id'),
+            data.get('to_input_id'),
+            connection_id
+        ))
+        
+        connection.commit()
+        return jsonify({'message': 'Connection updated successfully'})
+        
+    except Exception as e:
+        print(f"Error updating connection: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>/activate', methods=['POST'])
+def activate_process(process_id):
+    """Activate a process for batch execution"""
+    try:
+        connection, cursor = db_conn()
+        data = request.get_json()
+        
+        # Check if process exists
+        cursor.execute("SELECT id, process_name FROM supply_chain_processes WHERE id = %s", (process_id,))
+        process = cursor.fetchone()
+        if not process:
+            return jsonify({'error': 'Process not found'}), 404
+        
+        # Create process template if it doesn't exist
+        cursor.execute("""
+            INSERT INTO supply_chain_process_templates 
+            (date, action, process_id, template_name, template_version, template_status, 
+             default_inputs, default_outputs, default_variables, template_notes, uid)
+            VALUES (NOW(), 'create', %s, %s, '1.0', 'active', %s, %s, %s, %s, %s)
+            ON CONFLICT (process_id) DO UPDATE SET
+                template_status = 'active',
+                default_inputs = EXCLUDED.default_inputs,
+                default_outputs = EXCLUDED.default_outputs,
+                default_variables = EXCLUDED.default_variables,
+                date = NOW(),
+                action = 'update'
+        """, (
+            process_id,
+            f"{process[1]} Template",
+            json.dumps(data.get('default_inputs', [])),
+            json.dumps(data.get('default_outputs', [])),
+            json.dumps(data.get('default_variables', {})),
+            data.get('template_notes', ''),
+            data.get('uid', 'system')
+        ))
+        
+        # Update process status to active
+        cursor.execute("""
+            UPDATE supply_chain_processes 
+            SET process_status = 'active', date = NOW(), action = 'activate'
+            WHERE id = %s
+        """, (process_id,))
+        
+        connection.commit()
+        return jsonify({'message': 'Process activated successfully'})
+        
+    except Exception as e:
+        print(f"Error activating process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>/execute', methods=['POST'])
+def execute_process(process_id):
+    """Execute a process with batch data"""
+    try:
+        connection, cursor = db_conn()
+        data = request.get_json()
+        
+        # Check if process exists and is active
+        cursor.execute("""
+            SELECT id, process_name, process_status 
+            FROM supply_chain_processes 
+            WHERE id = %s
+        """, (process_id,))
+        process = cursor.fetchone()
+        if not process:
+            return jsonify({'error': 'Process not found'}), 404
+        if process[2] != 'active':
+            return jsonify({'error': 'Process must be active to execute'}), 400
+        
+        # Generate batch number if not provided
+        batch_number = data.get('execution_batch_number')
+        if not batch_number:
+            batch_number = f"{process[1].replace(' ', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Create execution record
+        cursor.execute("""
+            INSERT INTO supply_chain_process_executions 
+            (date, action, process_id, execution_batch_number, execution_status, 
+             execution_start_time, execution_notes, execution_variables, uid)
+            VALUES (NOW(), 'create', %s, %s, 'in_progress', NOW(), %s, %s, %s)
+            RETURNING id
+        """, (
+            process_id,
+            batch_number,
+            data.get('execution_notes', ''),
+            json.dumps(data.get('execution_variables', {})),
+            data.get('uid', 'system')
+        ))
+        
+        execution_id = cursor.fetchone()[0]
+        
+        # Create execution inputs
+        for input_data in data.get('execution_inputs', []):
+            cursor.execute("""
+                INSERT INTO supply_chain_execution_inputs 
+                (date, action, execution_id, input_template_id, actual_input_name,
+                 actual_input_quantity, actual_input_unit, actual_input_batch_number,
+                 actual_input_source, input_consumption_time, input_quality_status, 
+                 input_notes, uid)
+                VALUES (NOW(), 'create', %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s)
+            """, (
+                execution_id,
+                input_data.get('input_template_id'),
+                input_data.get('actual_input_name'),
+                input_data.get('actual_input_quantity'),
+                input_data.get('actual_input_unit'),
+                input_data.get('actual_input_batch_number'),
+                input_data.get('actual_input_source'),
+                input_data.get('input_quality_status', 'passed'),
+                input_data.get('input_notes', ''),
+                data.get('uid', 'system')
+            ))
+        
+        connection.commit()
+        return jsonify({
+            'message': 'Process execution started successfully',
+            'execution_id': execution_id,
+            'batch_number': batch_number
+        })
+        
+    except Exception as e:
+        print(f"Error executing process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/executions/<int:execution_id>/complete', methods=['POST'])
+def complete_execution(execution_id):
+    """Complete a process execution and record outputs"""
+    try:
+        connection, cursor = db_conn()
+        data = request.get_json()
+        
+        # Check if execution exists
+        cursor.execute("SELECT id, process_id FROM supply_chain_process_executions WHERE id = %s", (execution_id,))
+        execution = cursor.fetchone()
+        if not execution:
+            return jsonify({'error': 'Execution not found'}), 404
+        
+        # Create execution outputs
+        for output_data in data.get('execution_outputs', []):
+            cursor.execute("""
+                INSERT INTO supply_chain_execution_outputs 
+                (date, action, execution_id, output_template_id, actual_output_name,
+                 actual_output_quantity, actual_output_unit, actual_output_batch_number,
+                 actual_output_quality_status, actual_output_destination, 
+                 output_production_time, output_notes, uid)
+                VALUES (NOW(), 'create', %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
+            """, (
+                execution_id,
+                output_data.get('output_template_id'),
+                output_data.get('actual_output_name'),
+                output_data.get('actual_output_quantity'),
+                output_data.get('actual_output_unit'),
+                output_data.get('actual_output_batch_number'),
+                output_data.get('actual_output_quality_status', 'passed'),
+                output_data.get('actual_output_destination'),
+                output_data.get('output_notes', ''),
+                data.get('uid', 'system')
+            ))
+        
+        # Update execution status
+        cursor.execute("""
+            UPDATE supply_chain_process_executions 
+            SET execution_status = 'completed', execution_end_time = NOW(),
+                execution_quality_checks = %s, date = NOW(), action = 'complete'
+            WHERE id = %s
+        """, (
+            json.dumps(data.get('execution_quality_checks', {})),
+            execution_id
+        ))
+        
+        connection.commit()
+        return jsonify({'message': 'Process execution completed successfully'})
+        
+    except Exception as e:
+        print(f"Error completing execution: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/connections/<int:connection_id>/details', methods=['GET'])
+def get_connection_details(connection_id):
+    """Get detailed connection information including linked inputs/outputs"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Get connection details
+        cursor.execute("""
+            SELECT c.id, c.from_process_id, c.to_process_id, c.from_output_id, c.to_input_id,
+                   c.connection_type, c.connection_status, c.connection_notes,
+                   fp.process_name as from_process_name,
+                   tp.process_name as to_process_name
+            FROM supply_chain_connections c
+            LEFT JOIN supply_chain_processes fp ON c.from_process_id = fp.id
+            LEFT JOIN supply_chain_processes tp ON c.to_process_id = tp.id
+            WHERE c.id = %s
+        """, (connection_id,))
+        
+        conn = cursor.fetchone()
+        if not conn:
+            return jsonify({'error': 'Connection not found'}), 404
+        
+        # Get linked output details
+        linked_output = None
+        if conn[4]:  # from_output_id
+            cursor.execute("""
+                SELECT id, output_name, output_type, output_quantity, output_unit, output_specifications
+                FROM supply_chain_outputs
+                WHERE id = %s
+            """, (conn[4],))
+            linked_output = cursor.fetchone()
+        
+        # Get linked input details
+        linked_input = None
+        if conn[5]:  # to_input_id
+            cursor.execute("""
+                SELECT id, input_name, input_type, input_quantity, input_unit, input_specifications
+                FROM supply_chain_inputs
+                WHERE id = %s
+            """, (conn[5],))
+            linked_input = cursor.fetchone()
+        
+        # Get all outputs from source process
+        cursor.execute("""
+            SELECT id, output_name, output_type, output_quantity, output_unit
+            FROM supply_chain_outputs
+            WHERE process_id = %s
+            ORDER BY output_name
+        """, (conn[1],))
+        available_outputs = cursor.fetchall()
+        
+        # Get all inputs from destination process
+        cursor.execute("""
+            SELECT id, input_name, input_type, input_quantity, input_unit
+            FROM supply_chain_inputs
+            WHERE process_id = %s
+            ORDER BY input_name
+        """, (conn[2],))
+        available_inputs = cursor.fetchall()
+        
+        return jsonify({
+            'connection': {
+                'id': conn[0],
+                'from_process_id': conn[1],
+                'to_process_id': conn[2],
+                'from_output_id': conn[4],
+                'to_input_id': conn[5],
+                'connection_type': conn[6],
+                'connection_status': conn[7],
+                'connection_notes': conn[8],
+                'from_process_name': conn[9],
+                'to_process_name': conn[10]
+            },
+            'linked_output': {
+                'id': linked_output[0],
+                'output_name': linked_output[1],
+                'output_type': linked_output[2],
+                'output_quantity': linked_output[3],
+                'output_unit': linked_output[4],
+                'output_specifications': linked_output[5]
+            } if linked_output else None,
+            'linked_input': {
+                'id': linked_input[0],
+                'input_name': linked_input[1],
+                'input_type': linked_input[2],
+                'input_quantity': linked_input[3],
+                'input_unit': linked_input[4],
+                'input_specifications': linked_input[5]
+            } if linked_input else None,
+            'available_outputs': [{
+                'id': out[0],
+                'output_name': out[1],
+                'output_type': out[2],
+                'output_quantity': out[3],
+                'output_unit': out[4]
+            } for out in available_outputs],
+            'available_inputs': [{
+                'id': inp[0],
+                'input_name': inp[1],
+                'input_type': inp[2],
+                'input_quantity': inp[3],
+                'input_unit': inp[4]
+            } for inp in available_inputs]
+        })
+        
+    except Exception as e:
+        print(f"Error getting connection details: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+@supply_chain_bp.route('/api/supply-chain/connections/<int:connection_id>/auto-link', methods=['POST'])
+def auto_link_connection(connection_id):
+    """Automatically link outputs from source process to inputs of destination process"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Get connection details
+        cursor.execute("""
+            SELECT c.from_process_id, c.to_process_id, c.from_output_id, c.to_input_id
+            FROM supply_chain_connections c
+            WHERE c.id = %s
+        """, (connection_id,))
+        conn = cursor.fetchone()
+        if not conn:
+            return jsonify({'error': 'Connection not found'}), 404
+        
+        from_process_id, to_process_id, from_output_id, to_input_id = conn
+        
+        # Get outputs from source process
+        cursor.execute("""
+            SELECT id, output_name, output_type, output_quantity, output_unit
+            FROM supply_chain_outputs
+            WHERE process_id = %s
+        """, (from_process_id,))
+        outputs = cursor.fetchall()
+        
+        # Get inputs for destination process
+        cursor.execute("""
+            SELECT id, input_name, input_type, input_quantity, input_unit
+            FROM supply_chain_inputs
+            WHERE process_id = %s
+        """, (to_process_id,))
+        inputs = cursor.fetchall()
+        
+        # Auto-link matching outputs to inputs
+        linked_count = 0
+        for output in outputs:
+            output_id, output_name, output_type, output_qty, output_unit = output
+            
+            # Find matching input by name or type
+            for input_record in inputs:
+                input_id, input_name, input_type, input_qty, input_unit = input_record
+                
+                # Match by name or type
+                if (output_name.lower() == input_name.lower() or 
+                    output_type.lower() == input_type.lower()):
+                    
+                    # Update connection to link specific output to input
+                    cursor.execute("""
+                        UPDATE supply_chain_connections 
+                        SET from_output_id = %s, to_input_id = %s, date = NOW(), action = 'auto_link'
+                        WHERE id = %s
+                    """, (output_id, input_id, connection_id))
+                    linked_count += 1
+                    break
+        
+        connection.commit()
+        return jsonify({
+            'message': f'Auto-linked {linked_count} output-input pairs',
+            'linked_count': linked_count
+        })
+        
+    except Exception as e:
+        print(f"Error auto-linking connection: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
         if cursor:

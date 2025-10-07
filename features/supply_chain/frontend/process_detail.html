@@ -833,7 +833,7 @@
             const data = Object.fromEntries(formData);
             
             try {
-                const response = await fetch('/api/inputs', {
+                const response = await fetch('/api/supply-chain/inputs', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -861,7 +861,7 @@
             const data = Object.fromEntries(formData);
             
             try {
-                const response = await fetch('/api/outputs', {
+                const response = await fetch('/api/supply-chain/outputs', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -889,7 +889,7 @@
             const data = Object.fromEntries(formData);
             
             try {
-                const response = await fetch('/api/connections', {
+                const response = await fetch('/api/supply-chain/connections', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
