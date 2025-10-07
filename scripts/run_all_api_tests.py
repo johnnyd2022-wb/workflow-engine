@@ -143,7 +143,8 @@ def run_api_tests():
     
     # Add current directory to Python path for imports
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, current_dir)
+    project_root = os.path.dirname(current_dir)  # Go up one level from scripts/ to project root
+    sys.path.insert(0, project_root)
     
     start_time = datetime.now()
     
