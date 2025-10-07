@@ -236,6 +236,25 @@
             border-color: var(--primary-color);
         }
 
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+        }
+
+        .btn-small:last-child {
+            margin-right: 0;
+        }
+
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -496,6 +515,7 @@
                         <th>Source</th>
                         <th>Batch</th>
                         <th>Status</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -511,6 +531,10 @@
                             <span class="status-badge status-{{ input[11] or 'available' }}">
                                 {{ input[11] or 'available' }}
                             </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-secondary btn-small" onclick="editInput({{ input[0] }})">✏️ Edit</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteInput({{ input[0] }}, '{{ input[3] }}')">🗑️ Delete</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -543,6 +567,7 @@
                         <th>Batch</th>
                         <th>Quality</th>
                         <th>Destination</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -559,6 +584,10 @@
                             </span>
                         </td>
                         <td>{{ output[9] or 'N/A' }}</td>
+                        <td>
+                            <button class="btn btn-secondary btn-small" onclick="editOutput({{ output[0] }})">✏️ Edit</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteOutput({{ output[0] }}, '{{ output[3] }}')">🗑️ Delete</button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -588,6 +617,7 @@
                         <th>Type</th>
                         <th>Status</th>
                         <th>Notes</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -602,6 +632,10 @@
                             </span>
                         </td>
                         <td>{{ connection[7] or 'N/A' }}</td>
+                        <td>
+                            <button class="btn btn-secondary btn-small" onclick="editConnection({{ connection[0] }})">✏️ Edit</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteConnection({{ connection[0] }}, '{{ connection[8] }}', '{{ connection[9] }}')">🗑️ Delete</button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -779,6 +813,157 @@
         </div>
     </div>
 
+    <!-- Edit Input Modal -->
+    <div id="editInputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Input</h3>
+                <span class="close" onclick="closeEditInputModal()">&times;</span>
+            </div>
+            <form id="editInputForm">
+                <input type="hidden" id="editInputId" name="input_id">
+                <div class="form-group">
+                    <label class="form-label" for="editInputName">Input Name *</label>
+                    <input type="text" id="editInputName" name="input_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputType">Input Type</label>
+                    <select id="editInputType" name="input_type" class="form-select">
+                        <option value="raw_material">Raw Material</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="energy">Energy</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputQuantity">Quantity</label>
+                    <input type="number" id="editInputQuantity" name="input_quantity" class="form-input" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputUnit">Unit</label>
+                    <input type="text" id="editInputUnit" name="input_unit" class="form-input" placeholder="e.g., kg, liters, pieces">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputSource">Source</label>
+                    <input type="text" id="editInputSource" name="input_source" class="form-input" placeholder="Where does this input come from?">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputBatchNumber">Batch Number</label>
+                    <input type="text" id="editInputBatchNumber" name="input_batch_number" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputStatus">Status</label>
+                    <select id="editInputStatus" name="input_status" class="form-select">
+                        <option value="available">Available</option>
+                        <option value="consumed">Consumed</option>
+                        <option value="expired">Expired</option>
+                        <option value="quarantined">Quarantined</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditInputModal()">Cancel</button>
+                    <button type="submit" class="btn">Update Input</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Output Modal -->
+    <div id="editOutputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Output</h3>
+                <span class="close" onclick="closeEditOutputModal()">&times;</span>
+            </div>
+            <form id="editOutputForm">
+                <input type="hidden" id="editOutputId" name="output_id">
+                <div class="form-group">
+                    <label class="form-label" for="editOutputName">Output Name *</label>
+                    <input type="text" id="editOutputName" name="output_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputType">Output Type</label>
+                    <select id="editOutputType" name="output_type" class="form-select">
+                        <option value="finished_product">Finished Product</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="waste">Waste</option>
+                        <option value="byproduct">Byproduct</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputQuantity">Quantity</label>
+                    <input type="number" id="editOutputQuantity" name="output_quantity" class="form-input" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputUnit">Unit</label>
+                    <input type="text" id="editOutputUnit" name="output_unit" class="form-input" placeholder="e.g., kg, liters, pieces">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputBatchNumber">Batch Number</label>
+                    <input type="text" id="editOutputBatchNumber" name="output_batch_number" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputQualityStatus">Quality Status</label>
+                    <select id="editOutputQualityStatus" name="output_quality_status" class="form-select">
+                        <option value="pending">Pending</option>
+                        <option value="passed">Passed</option>
+                        <option value="failed">Failed</option>
+                        <option value="quarantined">Quarantined</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputDestination">Destination</label>
+                    <input type="text" id="editOutputDestination" name="output_destination" class="form-input" placeholder="Where does this output go next?">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditOutputModal()">Cancel</button>
+                    <button type="submit" class="btn">Update Output</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Connection Modal -->
+    <div id="editConnectionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Connection</h3>
+                <span class="close" onclick="closeEditConnectionModal()">&times;</span>
+            </div>
+            <form id="editConnectionForm">
+                <input type="hidden" id="editConnectionId" name="connection_id">
+                <div class="form-group">
+                    <label class="form-label" for="editConnectionType">Connection Type</label>
+                    <select id="editConnectionType" name="connection_type" class="form-select">
+                        <option value="direct">Direct</option>
+                        <option value="storage">Storage</option>
+                        <option value="transport">Transport</option>
+                        <option value="quality_check">Quality Check</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editConnectionStatus">Status</label>
+                    <select id="editConnectionStatus" name="connection_status" class="form-select">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editConnectionNotes">Notes</label>
+                    <textarea id="editConnectionNotes" name="connection_notes" class="form-textarea"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditConnectionModal()">Cancel</button>
+                    <button type="submit" class="btn">Update Connection</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         // Modal functions
         function openCreateInputModal() {
@@ -909,6 +1094,290 @@
                 alert('Error creating connection: ' + error.message);
             }
         });
+
+        // Edit modal functions
+        function openEditInputModal() {
+            document.getElementById('editInputModal').style.display = 'block';
+        }
+
+        function closeEditInputModal() {
+            document.getElementById('editInputModal').style.display = 'none';
+            document.getElementById('editInputForm').reset();
+        }
+
+        function openEditOutputModal() {
+            document.getElementById('editOutputModal').style.display = 'block';
+        }
+
+        function closeEditOutputModal() {
+            document.getElementById('editOutputModal').style.display = 'none';
+            document.getElementById('editOutputForm').reset();
+        }
+
+        function openEditConnectionModal() {
+            document.getElementById('editConnectionModal').style.display = 'block';
+        }
+
+        function closeEditConnectionModal() {
+            document.getElementById('editConnectionModal').style.display = 'none';
+            document.getElementById('editConnectionForm').reset();
+        }
+
+        // Edit functions
+        async function editInput(inputId) {
+            try {
+                const response = await fetch(`/api/supply-chain/inputs/${inputId}`);
+                if (response.ok) {
+                    const input = await response.json();
+                    
+                    // Populate edit form
+                    document.getElementById('editInputId').value = input.id;
+                    document.getElementById('editInputName').value = input.input_name;
+                    document.getElementById('editInputType').value = input.input_type;
+                    document.getElementById('editInputQuantity').value = input.input_quantity;
+                    document.getElementById('editInputUnit').value = input.input_unit;
+                    document.getElementById('editInputSource').value = input.input_source;
+                    document.getElementById('editInputBatchNumber').value = input.input_batch_number;
+                    document.getElementById('editInputStatus').value = input.input_status;
+                    
+                    openEditInputModal();
+                } else {
+                    alert('Error loading input details');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error loading input details: ' + error.message);
+            }
+        }
+
+        async function editOutput(outputId) {
+            try {
+                const response = await fetch(`/api/supply-chain/outputs/${outputId}`);
+                if (response.ok) {
+                    const output = await response.json();
+                    
+                    // Populate edit form
+                    document.getElementById('editOutputId').value = output.id;
+                    document.getElementById('editOutputName').value = output.output_name;
+                    document.getElementById('editOutputType').value = output.output_type;
+                    document.getElementById('editOutputQuantity').value = output.output_quantity;
+                    document.getElementById('editOutputUnit').value = output.output_unit;
+                    document.getElementById('editOutputBatchNumber').value = output.output_batch_number;
+                    document.getElementById('editOutputQualityStatus').value = output.output_quality_status;
+                    document.getElementById('editOutputDestination').value = output.output_destination;
+                    
+                    openEditOutputModal();
+                } else {
+                    alert('Error loading output details');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error loading output details: ' + error.message);
+            }
+        }
+
+        async function editConnection(connectionId) {
+            try {
+                const response = await fetch(`/api/supply-chain/connections/${connectionId}`);
+                if (response.ok) {
+                    const connection = await response.json();
+                    
+                    // Populate edit form
+                    document.getElementById('editConnectionId').value = connection.id;
+                    document.getElementById('editConnectionType').value = connection.connection_type;
+                    document.getElementById('editConnectionStatus').value = connection.connection_status;
+                    document.getElementById('editConnectionNotes').value = connection.connection_notes;
+                    
+                    openEditConnectionModal();
+                } else {
+                    alert('Error loading connection details');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error loading connection details: ' + error.message);
+            }
+        }
+
+        // Delete functions
+        async function deleteInput(inputId, inputName) {
+            if (confirm(`Are you sure you want to delete the input "${inputName}"?`)) {
+                try {
+                    const response = await fetch(`/api/supply-chain/inputs/${inputId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert('Input deleted successfully!');
+                        window.location.reload();
+                    } else {
+                        const errorData = await response.json();
+                        alert('Error deleting input: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting input: ' + error.message);
+                }
+            }
+        }
+
+        async function deleteOutput(outputId, outputName) {
+            if (confirm(`Are you sure you want to delete the output "${outputName}"?`)) {
+                try {
+                    const response = await fetch(`/api/supply-chain/outputs/${outputId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert('Output deleted successfully!');
+                        window.location.reload();
+                    } else {
+                        const errorData = await response.json();
+                        alert('Error deleting output: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting output: ' + error.message);
+                }
+            }
+        }
+
+        async function deleteConnection(connectionId, fromProcess, toProcess) {
+            if (confirm(`Are you sure you want to delete the connection from "${fromProcess}" to "${toProcess}"?`)) {
+                try {
+                    const response = await fetch(`/api/supply-chain/connections/${connectionId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert('Connection deleted successfully!');
+                        window.location.reload();
+                    } else {
+                        const errorData = await response.json();
+                        alert('Error deleting connection: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting connection: ' + error.message);
+                }
+            }
+        }
+
+        // Edit form submissions
+        document.getElementById('editInputForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const inputId = data.input_id;
+            
+            try {
+                const response = await fetch(`/api/supply-chain/inputs/${inputId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeEditInputModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error updating input: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating input: ' + error.message);
+            }
+        });
+
+        document.getElementById('editOutputForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const outputId = data.output_id;
+            
+            try {
+                const response = await fetch(`/api/supply-chain/outputs/${outputId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeEditOutputModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error updating output: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating output: ' + error.message);
+            }
+        });
+
+        document.getElementById('editConnectionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const connectionId = data.connection_id;
+            
+            try {
+                const response = await fetch(`/api/supply-chain/connections/${connectionId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeEditConnectionModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error updating connection: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating connection: ' + error.message);
+            }
+        });
+
+        // Update modal close handlers
+        window.onclick = function(event) {
+            const inputModal = document.getElementById('createInputModal');
+            const outputModal = document.getElementById('createOutputModal');
+            const connectionModal = document.getElementById('createConnectionModal');
+            const editInputModal = document.getElementById('editInputModal');
+            const editOutputModal = document.getElementById('editOutputModal');
+            const editConnectionModal = document.getElementById('editConnectionModal');
+            
+            if (event.target === inputModal) {
+                closeCreateInputModal();
+            }
+            if (event.target === outputModal) {
+                closeCreateOutputModal();
+            }
+            if (event.target === connectionModal) {
+                closeCreateConnectionModal();
+            }
+            if (event.target === editInputModal) {
+                closeEditInputModal();
+            }
+            if (event.target === editOutputModal) {
+                closeEditOutputModal();
+            }
+            if (event.target === editConnectionModal) {
+                closeEditConnectionModal();
+            }
+        }
     </script>
 </body>
 </html>

@@ -1,330 +1,191 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Whistlebird Supply Chain</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>Supply Chain Management</title>
     <style>
-        :root {
-            --primary-color: #FF3366;
-            --primary-hover: #FF1A4D;
-            --secondary-color: #1A1A1A;
-            --background-color: #0A0A0A;
-            --text-color: #FFFFFF;
-            --text-secondary: #A0A0A0;
-            --border-color: #2A2A2A;
-            --card-background: #1A1A1A;
-            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            --gradient-start: #FF3366;
-            --gradient-end: #FF1A4D;
-            --table-header-bg: rgba(255, 51, 102, 0.1);
-            --table-row-hover: rgba(255, 51, 102, 0.05);
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-
         body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background: 
-                linear-gradient(135deg, 
-                    rgba(0, 0, 0, 0.65) 0%,
-                    rgba(40, 40, 40, 0.65) 100%),
-                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
-                repeating-linear-gradient(
-                    45deg,
-                    rgba(255, 255, 255, 0.05) 0px,
-                    rgba(255, 255, 255, 0.05) 1px,
-                    transparent 1px,
-                    transparent 8px
-                ),
-                repeating-linear-gradient(
-                    -45deg,
-                    rgba(255, 255, 255, 0.05) 0px,
-                    rgba(255, 255, 255, 0.05) 1px,
-                    transparent 1px,
-                    transparent 8px
-                );
-            color: var(--text-color);
-            overflow-x: hidden;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
             padding: 20px;
-            min-height: 100vh;
+            background-color: #f5f5f5;
+            color: #333;
         }
-
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-            padding: 40px 0;
-            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-            border-radius: 20px;
-            box-shadow: var(--shadow);
-            position: relative;
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             overflow: hidden;
         }
-
-        .header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
-            animation: shimmer 3s infinite;
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
         }
-
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-
+        
         .header h1 {
-            font-size: 3rem;
-            font-weight: 700;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-            position: relative;
-            z-index: 1;
+            margin: 0;
+            font-size: 2em;
         }
-
-        .header p {
-            font-size: 1.2rem;
-            opacity: 0.9;
-            position: relative;
-            z-index: 1;
-        }
-
+        
         .controls {
-            background: var(--card-background);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-bottom: 1px solid #eee;
             display: flex;
-            gap: 15px;
+            gap: 10px;
             flex-wrap: wrap;
             align-items: center;
         }
-
+        
         .btn {
-            padding: 12px 24px;
+            padding: 10px 20px;
             border: none;
-            border-radius: 10px;
+            border-radius: 5px;
             cursor: pointer;
             font-size: 14px;
-            font-weight: 600;
             transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            position: relative;
-            overflow: hidden;
         }
-
-        .btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
-        }
-
-        .btn:hover::before {
-            left: 100%;
-        }
-
+        
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+            background: #007bff;
             color: white;
-            box-shadow: 0 4px 15px rgba(255, 51, 102, 0.3);
         }
-
+        
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 51, 102, 0.4);
+            background: #0056b3;
         }
-
+        
         .btn-success {
-            background: linear-gradient(135deg, #28a745, #20c997);
+            background: #28a745;
             color: white;
-            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
         }
-
+        
         .btn-success:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+            background: #1e7e34;
         }
-
+        
         .btn-secondary {
-            background: linear-gradient(135deg, #6c757d, #495057);
+            background: #6c757d;
             color: white;
-            box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
         }
-
+        
         .btn-secondary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4);
+            background: #545b62;
         }
-
+        
         .btn-danger {
-            background: linear-gradient(135deg, #dc3545, #c82333);
+            background: #dc3545;
             color: white;
-            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
         }
-
+        
         .btn-danger:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+            background: #c82333;
         }
-
+        
         .btn-small {
-            padding: 8px 16px;
+            padding: 5px 10px;
             font-size: 12px;
         }
-
+        
         .view-toggle {
             margin-left: auto;
         }
-
+        
         .dag-container {
             position: relative;
-            height: 700px;
-            background: var(--card-background);
-            border-radius: 15px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border-color);
+            height: 600px;
+            border: 1px solid #ddd;
+            background: #fafafa;
             overflow: hidden;
         }
-
+        
         .dag-svg {
             width: 100%;
             height: 100%;
             cursor: grab;
-            background: radial-gradient(circle at 20% 80%, rgba(255, 51, 102, 0.1) 0%, transparent 50%),
-                        radial-gradient(circle at 80% 20%, rgba(255, 51, 102, 0.1) 0%, transparent 50%);
         }
-
+        
         .dag-svg:active {
             cursor: grabbing;
         }
-
+        
         .process-node {
             cursor: grab;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
-
+        
         .process-node:hover {
             filter: brightness(1.1);
         }
-
+        
         .process-node.dragging {
             cursor: grabbing;
             filter: brightness(1.2);
-            /* Remove expensive transforms and filters during drag */
         }
-
+        
         .connection-line {
-            stroke: var(--primary-color);
-            stroke-width: 3;
+            stroke: #666;
+            stroke-width: 2;
             fill: none;
         }
-
+        
         .connection-line:hover {
-            stroke: var(--primary-hover);
-            stroke-width: 4;
+            stroke: #007bff;
+            stroke-width: 3;
         }
-
+        
         .grid-line {
-            stroke: rgba(255, 255, 255, 0.1);
+            stroke: #e0e0e0;
             stroke-width: 0.5;
-            opacity: 0.3;
+            opacity: 0.5;
         }
-
+        
         .grid-line.major {
             stroke-width: 1;
-            opacity: 0.5;
-            stroke: rgba(255, 51, 102, 0.2);
+            opacity: 0.7;
         }
-
+        
         .table-container {
-            background: var(--card-background);
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border-color);
+            padding: 20px;
         }
-
-        .table-container h2 {
-            color: var(--primary-color);
-            margin-bottom: 20px;
-            font-size: 1.8rem;
-            font-weight: 600;
-        }
-
+        
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
-            background: var(--card-background);
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-
+        
         th, td {
-            padding: 15px;
+            padding: 12px;
             text-align: left;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 1px solid #ddd;
         }
-
+        
         th {
-            background: var(--table-header-bg);
+            background-color: #f8f9fa;
             font-weight: 600;
-            color: var(--primary-color);
-            text-transform: uppercase;
-            font-size: 0.9rem;
-            letter-spacing: 0.5px;
         }
-
+        
         tr:hover {
-            background: var(--table-row-hover);
+            background-color: #f5f5f5;
         }
-
-        tr:last-child td {
-            border-bottom: none;
-        }
-
+        
         .status-active {
             color: #28a745;
             font-weight: 600;
-            text-shadow: 0 0 10px rgba(40, 167, 69, 0.3);
         }
-
+        
         .status-inactive {
             color: #dc3545;
             font-weight: 600;
-            text-shadow: 0 0 10px rgba(220, 53, 69, 0.3);
         }
-
+        
         .modal {
             display: none;
             position: fixed;
@@ -333,107 +194,55 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(5px);
+            background-color: rgba(0,0,0,0.5);
         }
-
+        
         .modal-content {
-            background: var(--card-background);
+            background-color: white;
             margin: 5% auto;
-            padding: 30px;
-            border-radius: 20px;
-            width: 90%;
-            max-width: 600px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border-color);
-            position: relative;
-            animation: modalSlideIn 0.3s ease;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
         }
-
-        @keyframes modalSlideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
+        
         .close {
-            color: var(--text-secondary);
+            color: #aaa;
             float: right;
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
-            transition: color 0.3s ease;
         }
-
+        
         .close:hover {
-            color: var(--primary-color);
+            color: black;
         }
-
+        
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
-
+        
         .form-group label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
             font-weight: 600;
-            color: var(--text-color);
         }
-
+        
         .form-group input, .form-group select, .form-group textarea {
             width: 100%;
-            padding: 12px;
-            border: 2px solid var(--border-color);
-            border-radius: 10px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
             font-size: 14px;
-            background: var(--background-color);
-            color: var(--text-color);
-            transition: all 0.3s ease;
         }
-
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.1);
-        }
-
+        
         .form-group textarea {
-            height: 100px;
+            height: 80px;
             resize: vertical;
         }
-
+        
         .hidden {
             display: none !important;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            .controls {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .view-toggle {
-                margin-left: 0;
-                margin-top: 10px;
-            }
-            
-            .dag-container {
-                height: 500px;
-            }
         }
     </style>
 </head>
@@ -441,7 +250,6 @@
     <div class="container">
         <div class="header">
             <h1>Supply Chain Management</h1>
-            <p>Visual Process Flow & Management System</p>
         </div>
         
         <div class="controls">
@@ -514,7 +322,7 @@
         <!-- Visual View -->
         <div id="visualView" class="hidden">
             <div class="dag-container">
-                <svg id="dagSvg" class="dag-svg" viewBox="0 0 1200 700">
+                <svg id="dagSvg" class="dag-svg" viewBox="0 0 800 600">
                     <!-- Grid and nodes will be rendered here -->
                 </svg>
             </div>
@@ -682,24 +490,6 @@
             const svg = document.getElementById('dagSvg');
             svg.innerHTML = '';
             
-            // Add arrow marker definition first
-            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-            marker.setAttribute('id', 'arrowhead');
-            marker.setAttribute('markerWidth', '10');
-            marker.setAttribute('markerHeight', '7');
-            marker.setAttribute('refX', '9');
-            marker.setAttribute('refY', '3.5');
-            marker.setAttribute('orient', 'auto');
-            
-            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
-            polygon.setAttribute('fill', 'var(--primary-color)');
-            
-            marker.appendChild(polygon);
-            defs.appendChild(marker);
-            svg.appendChild(defs);
-            
             // Draw grid if enabled
             if (showGrid) {
                 drawGrid(svg);
@@ -723,9 +513,8 @@
                 text.setAttribute('x', '50%');
                 text.setAttribute('y', '50%');
                 text.setAttribute('text-anchor', 'middle');
-                text.setAttribute('fill', 'var(--text-secondary)');
-                text.setAttribute('font-size', '18');
-                text.setAttribute('font-weight', '600');
+                text.setAttribute('fill', '#666');
+                text.setAttribute('font-size', '16');
                 text.textContent = 'No processes found';
                 svg.appendChild(text);
                 return;
@@ -733,7 +522,7 @@
             
             // Create nodes
             processes.forEach((process, index) => {
-                const x = nodePositions[process.id]?.x || 100 + (index * 250);
+                const x = nodePositions[process.id]?.x || 100 + (index * 200);
                 const y = nodePositions[process.id]?.y || 100;
                 createProcessNode(process, x, y);
             });
@@ -751,70 +540,27 @@
             group.setAttribute('transform', `translate(${x}, ${y})`);
             group.setAttribute('data-process-id', process.id);
             
-            // Create rectangle with gradient
+            // Create rectangle
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            rect.setAttribute('width', '180');
-            rect.setAttribute('height', '100');
-            rect.setAttribute('rx', '12');
-            rect.setAttribute('fill', 'url(#nodeGradient)');
-            rect.setAttribute('stroke', 'var(--primary-color)');
+            rect.setAttribute('width', '150');
+            rect.setAttribute('height', '80');
+            rect.setAttribute('rx', '8');
+            rect.setAttribute('fill', '#4A90E2');
+            rect.setAttribute('stroke', '#357ABD');
             rect.setAttribute('stroke-width', '2');
-            
-            // Create gradient definition
-            const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-            gradient.setAttribute('id', 'nodeGradient');
-            gradient.setAttribute('x1', '0%');
-            gradient.setAttribute('y1', '0%');
-            gradient.setAttribute('x2', '100%');
-            gradient.setAttribute('y2', '100%');
-            
-            const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-            stop1.setAttribute('offset', '0%');
-            stop1.setAttribute('stop-color', 'var(--card-background)');
-            
-            const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-            stop2.setAttribute('offset', '100%');
-            stop2.setAttribute('stop-color', 'var(--secondary-color)');
-            
-            gradient.appendChild(stop1);
-            gradient.appendChild(stop2);
-            
-            // Add gradient to defs if not already there
-            if (!document.getElementById('nodeGradient')) {
-                const defs = svg.querySelector('defs');
-                defs.appendChild(gradient);
-            }
             
             // Create text
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', '90');
+            text.setAttribute('x', '75');
             text.setAttribute('y', '45');
             text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('font-size', '14');
+            text.setAttribute('font-size', '12');
             text.setAttribute('font-weight', '600');
-            text.setAttribute('fill', 'var(--text-color)');
+            text.setAttribute('fill', 'white');
             text.textContent = process.name;
-            
-            // Create type text
-            const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            typeText.setAttribute('x', '90');
-            typeText.setAttribute('y', '65');
-            typeText.setAttribute('text-anchor', 'middle');
-            typeText.setAttribute('font-size', '11');
-            typeText.setAttribute('fill', 'var(--text-secondary)');
-            typeText.textContent = process.type;
-            
-            // Create status indicator
-            const statusCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            statusCircle.setAttribute('cx', '160');
-            statusCircle.setAttribute('cy', '20');
-            statusCircle.setAttribute('r', '6');
-            statusCircle.setAttribute('fill', process.status === 'active' ? '#28a745' : '#dc3545');
             
             group.appendChild(rect);
             group.appendChild(text);
-            group.appendChild(typeText);
-            group.appendChild(statusCircle);
             
             // Add drag handlers
             addDragHandlers(group, process);
@@ -822,7 +568,7 @@
             svg.appendChild(group);
             
             // Store position
-            nodePositions[process.id] = { x, y, width: 180, height: 100 };
+            nodePositions[process.id] = { x, y, width: 150, height: 80 };
         }
         
         function addDragHandlers(group, process) {
@@ -830,9 +576,6 @@
                 e.preventDefault();
                 draggedNode = group;
                 group.classList.add('dragging');
-                
-                // Disable transitions during drag for better performance
-                group.style.transition = 'none';
                 
                 const svgRect = document.getElementById('dagSvg').getBoundingClientRect();
                 const transform = group.getAttribute('transform');
@@ -844,56 +587,40 @@
                     dragOffset.x = e.clientX - svgRect.left - nodeX;
                     dragOffset.y = e.clientY - svgRect.top - nodeY;
                 }
-                
-                // Prevent text selection
-                document.body.style.userSelect = 'none';
             });
             
-            // Use a single global mousemove handler for better performance
-            if (!window.dagMouseMoveHandler) {
-                window.dagMouseMoveHandler = (e) => {
-                    if (!draggedNode) return;
-                    
-                    const svgRect = document.getElementById('dagSvg').getBoundingClientRect();
-                    let x = e.clientX - svgRect.left - dragOffset.x;
-                    let y = e.clientY - svgRect.top - dragOffset.y;
-                    
-                    // Snap to grid if enabled
-                    if (showGrid) {
-                        const gridSize = 20;
-                        x = Math.round(x / gridSize) * gridSize;
-                        y = Math.round(y / gridSize) * gridSize;
-                    }
-                    
-                    draggedNode.setAttribute('transform', `translate(${x}, ${y})`);
-                    
-                    // Update position
-                    const processId = draggedNode.getAttribute('data-process-id');
-                    nodePositions[processId] = { x, y, width: 180, height: 100 };
-                    
-                    // Redraw connections only (much faster than full redraw)
-                    redrawConnectionsOnly();
-                };
+            document.addEventListener('mousemove', (e) => {
+                if (!draggedNode) return;
                 
-                window.dagMouseUpHandler = () => {
-                    if (draggedNode) {
-                        draggedNode.classList.remove('dragging');
-                        // Re-enable transitions after drag
-                        draggedNode.style.transition = '';
-                        draggedNode = null;
-                        document.body.style.userSelect = '';
-                    }
-                };
+                const svgRect = document.getElementById('dagSvg').getBoundingClientRect();
+                let x = e.clientX - svgRect.left - dragOffset.x;
+                let y = e.clientY - svgRect.top - dragOffset.y;
                 
-                document.addEventListener('mousemove', window.dagMouseMoveHandler);
-                document.addEventListener('mouseup', window.dagMouseUpHandler);
-            }
+                // Snap to grid if enabled
+                if (showGrid) {
+                    const gridSize = 20;
+                    x = Math.round(x / gridSize) * gridSize;
+                    y = Math.round(y / gridSize) * gridSize;
+                }
+                
+                draggedNode.setAttribute('transform', `translate(${x}, ${y})`);
+                
+                // Update position
+                nodePositions[process.id] = { x, y, width: 150, height: 80 };
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (draggedNode) {
+                    draggedNode.classList.remove('dragging');
+                    draggedNode = null;
+                }
+            });
         }
         
         function drawGrid(svg) {
             const gridSize = 20;
-            const width = 1200;
-            const height = 700;
+            const width = 800;
+            const height = 600;
             
             for (let x = 0; x <= width; x += gridSize) {
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -916,100 +643,32 @@
             }
         }
         
-        // Calculate connection points on node edges
-        function getConnectionPoints(fromPos, toPos) {
-            const fromCenterX = fromPos.x + 90; // Center of from node (180/2)
-            const fromCenterY = fromPos.y + 50; // Center of from node (100/2)
-            const toCenterX = toPos.x + 90;     // Center of to node
-            const toCenterY = toPos.y + 50;     // Center of to node
-            
-            // Calculate direction vector
-            const dx = toCenterX - fromCenterX;
-            const dy = toCenterY - fromCenterY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance === 0) return { fromX: fromCenterX, fromY: fromCenterY, toX: toCenterX, toY: toCenterY };
-            
-            // Normalize direction vector
-            const unitX = dx / distance;
-            const unitY = dy / distance;
-            
-            // Calculate edge points (90 is half the node width, 50 is half the node height)
-            const fromX = fromCenterX + unitX * 90;
-            const fromY = fromCenterY + unitY * 50;
-            const toX = toCenterX - unitX * 90;
-            const toY = toCenterY - unitY * 50;
-            
-            return { fromX, fromY, toX, toY };
-        }
-        
         async function drawConnections() {
             try {
                 const response = await fetch('/api/supply-chain/connections');
                 if (response.ok) {
                     connections = await response.json();
-                    console.log('Loaded connections:', connections);
                     
                     connections.forEach(connection => {
                         const fromPos = nodePositions[connection.from_process_id];
                         const toPos = nodePositions[connection.to_process_id];
                         
-                        console.log(`Connection ${connection.id}:`, { fromPos, toPos });
-                        
                         if (fromPos && toPos) {
-                            const points = getConnectionPoints(fromPos, toPos);
-                            
                             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                            line.setAttribute('x1', points.fromX);
-                            line.setAttribute('y1', points.fromY);
-                            line.setAttribute('x2', points.toX);
-                            line.setAttribute('y2', points.toY);
+                            line.setAttribute('x1', fromPos.x + 75);
+                            line.setAttribute('y1', fromPos.y + 40);
+                            line.setAttribute('x2', toPos.x + 75);
+                            line.setAttribute('y2', toPos.y + 40);
                             line.setAttribute('class', 'connection-line');
                             line.setAttribute('data-connection-id', connection.id);
-                            line.setAttribute('stroke', 'var(--primary-color)');
-                            line.setAttribute('stroke-width', '3');
-                            line.setAttribute('marker-end', 'url(#arrowhead)');
                             
                             document.getElementById('dagSvg').appendChild(line);
-                            console.log('Added connection line:', line);
-                        } else {
-                            console.log('Missing positions for connection:', connection.id);
                         }
                     });
-                } else {
-                    console.error('Failed to load connections:', response.status);
                 }
             } catch (error) {
                 console.error('Error loading connections:', error);
             }
-        }
-        
-        // Redraw only connections (for better performance during drag)
-        function redrawConnectionsOnly() {
-            // Remove existing connection lines
-            document.querySelectorAll('.connection-line').forEach(line => line.remove());
-            
-            connections.forEach(connection => {
-                const fromPos = nodePositions[connection.from_process_id];
-                const toPos = nodePositions[connection.to_process_id];
-                
-                if (fromPos && toPos) {
-                    const points = getConnectionPoints(fromPos, toPos);
-                    
-                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    line.setAttribute('x1', points.fromX);
-                    line.setAttribute('y1', points.fromY);
-                    line.setAttribute('x2', points.toX);
-                    line.setAttribute('y2', points.toY);
-                    line.setAttribute('class', 'connection-line');
-                    line.setAttribute('data-connection-id', connection.id);
-                    line.setAttribute('stroke', 'var(--primary-color)');
-                    line.setAttribute('stroke-width', '3');
-                    line.setAttribute('marker-end', 'url(#arrowhead)');
-                    
-                    document.getElementById('dagSvg').appendChild(line);
-                }
-            });
         }
         
         // Layout functions

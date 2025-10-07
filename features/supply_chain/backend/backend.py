@@ -1435,3 +1435,96 @@ def auto_link_connection(connection_id):
             cursor.close()
         if connection:
             connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/connections/<int:connection_id>', methods=['DELETE'])
+def delete_connection(connection_id):
+    """Delete a connection"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Check if connection exists
+        cursor.execute("SELECT id FROM supply_chain_connections WHERE id = %s", (connection_id,))
+        if not cursor.fetchone():
+            return jsonify({'error': 'Connection not found'}), 404
+        
+        # Delete the connection
+        cursor.execute("DELETE FROM supply_chain_connections WHERE id = %s", (connection_id,))
+        
+        connection.commit()
+        return jsonify({'message': 'Connection deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting connection: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/dag-layout', methods=['POST'])
+def save_dag_layout():
+    """Save DAG layout positions to database"""
+    try:
+        data = request.get_json()
+        connection, cursor = db_conn()
+        
+        # Store layout data in a simple key-value table
+        # First, clear existing layout data
+        cursor.execute("DELETE FROM supply_chain_dag_layout")
+        
+        # Insert new layout data
+        cursor.execute("""
+            INSERT INTO supply_chain_dag_layout 
+            (date, action, layout_data, layout_timestamp, uid)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            date.today(),
+            'save',
+            json.dumps(data.get('positions', {})),
+            data.get('timestamp'),
+            data.get('uid', 'user')
+        ))
+        
+        connection.commit()
+        return jsonify({'message': 'DAG layout saved successfully'})
+        
+    except Exception as e:
+        print(f"Error saving DAG layout: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/dag-layout', methods=['GET'])
+def get_dag_layout():
+    """Get saved DAG layout positions"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT layout_data, layout_timestamp
+            FROM supply_chain_dag_layout
+            ORDER BY date DESC
+            LIMIT 1
+        """)
+        
+        layout = cursor.fetchone()
+        if layout:
+            return jsonify({
+                'positions': json.loads(layout[0]),
+                'timestamp': layout[1]
+            })
+        else:
+            return jsonify({'positions': {}, 'timestamp': None})
+        
+    except Exception as e:
+        print(f"Error getting DAG layout: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()

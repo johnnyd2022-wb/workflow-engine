@@ -479,6 +479,21 @@ def create_supply_chain_process_templates_table():
     
     create_table(table_name, columns)
 
+def create_supply_chain_dag_layout_table():
+    """Table to store DAG layout positions"""
+    table_name = "supply_chain_dag_layout"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "layout_data": "JSONB", # JSON object containing node positions
+        "layout_timestamp": "TEXT", # timestamp when layout was saved
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"
 
@@ -1032,6 +1047,7 @@ def main():
     create_supply_chain_execution_inputs_table()
     create_supply_chain_execution_outputs_table()
     create_supply_chain_process_templates_table()
+    create_supply_chain_dag_layout_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()
