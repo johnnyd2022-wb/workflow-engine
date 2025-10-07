@@ -264,7 +264,7 @@ run_api_tests() {
     
     # Run the centralized test runner
     # It will return 0 if all tests pass, 1 if any fail
-    if python3 scripts/run_all_api_tests.py; then
+    if wsl python3 scripts/run_all_api_tests.py; then
         # Test runner passed - all tests successful
         print_success "✅ ALL API TESTS PASSED!"
         print_success "🚀 Deployment approved - all tests green!"
