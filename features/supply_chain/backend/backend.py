@@ -292,18 +292,31 @@ def delete_process(process_id):
 
 @supply_chain_bp.route('/api/supply-chain/inputs', methods=['GET'])
 def get_inputs():
-    """Get all inputs"""
+    """Get all inputs or filter by process_id"""
     try:
         connection, cursor = db_conn()
         
-        cursor.execute("""
-            SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
-                   i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
-                   i.input_expiry_date, i.input_status, p.process_name
-            FROM supply_chain_inputs i
-            LEFT JOIN supply_chain_processes p ON i.process_id = p.id
-            ORDER BY i.id DESC
-        """)
+        process_id = request.args.get('process_id')
+        
+        if process_id:
+            cursor.execute("""
+                SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
+                       i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
+                       i.input_expiry_date, i.input_status, p.process_name
+                FROM supply_chain_inputs i
+                LEFT JOIN supply_chain_processes p ON i.process_id = p.id
+                WHERE i.process_id = %s
+                ORDER BY i.id DESC
+            """, (process_id,))
+        else:
+            cursor.execute("""
+                SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
+                       i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
+                       i.input_expiry_date, i.input_status, p.process_name
+                FROM supply_chain_inputs i
+                LEFT JOIN supply_chain_processes p ON i.process_id = p.id
+                ORDER BY i.id DESC
+            """)
         
         inputs = cursor.fetchall()
         
@@ -398,7 +411,7 @@ def update_input(input_id):
             data.get('input_type'),
             data.get('input_quantity'),
             data.get('input_unit'),
-            data.get('input_specifications'),
+            json.dumps(data.get('input_specifications', {})),
             data.get('input_source'),
             data.get('input_batch_number'),
             data.get('input_expiry_date'),
@@ -490,18 +503,31 @@ def create_input():
 
 @supply_chain_bp.route('/api/supply-chain/outputs', methods=['GET'])
 def get_outputs():
-    """Get all outputs"""
+    """Get all outputs or filter by process_id"""
     try:
         connection, cursor = db_conn()
         
-        cursor.execute("""
-            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
-                   o.output_unit, o.output_specifications, o.output_batch_number,
-                   o.output_quality_status, o.output_destination, p.process_name
-            FROM supply_chain_outputs o
-            LEFT JOIN supply_chain_processes p ON o.process_id = p.id
-            ORDER BY o.id DESC
-        """)
+        process_id = request.args.get('process_id')
+        
+        if process_id:
+            cursor.execute("""
+                SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                       o.output_unit, o.output_specifications, o.output_batch_number,
+                       o.output_quality_status, o.output_destination, p.process_name
+                FROM supply_chain_outputs o
+                LEFT JOIN supply_chain_processes p ON o.process_id = p.id
+                WHERE o.process_id = %s
+                ORDER BY o.id DESC
+            """, (process_id,))
+        else:
+            cursor.execute("""
+                SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                       o.output_unit, o.output_specifications, o.output_batch_number,
+                       o.output_quality_status, o.output_destination, p.process_name
+                FROM supply_chain_outputs o
+                LEFT JOIN supply_chain_processes p ON o.process_id = p.id
+                ORDER BY o.id DESC
+            """)
         
         outputs = cursor.fetchall()
         
@@ -594,7 +620,7 @@ def update_output(output_id):
             data.get('output_type'),
             data.get('output_quantity'),
             data.get('output_unit'),
-            data.get('output_specifications'),
+            json.dumps(data.get('output_specifications', {})),
             data.get('output_batch_number'),
             data.get('output_quality_status'),
             data.get('output_destination'),

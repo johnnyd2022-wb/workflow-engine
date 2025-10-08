@@ -336,6 +336,73 @@
             background-color: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(5px);
         }
+        
+        .modal.edit-modal {
+            z-index: 1100;
+        }
+        
+        .modal.notification-modal {
+            z-index: 1200;
+        }
+        
+        .notification-content {
+            background: var(--card-background);
+            margin: 20% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            position: relative;
+            animation: modalSlideIn 0.3s ease;
+            text-align: center;
+        }
+        
+        .notification-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+        
+        .notification-icon.success {
+            color: #28a745;
+        }
+        
+        .notification-icon.error {
+            color: #dc3545;
+        }
+        
+        .notification-icon.warning {
+            color: #ffc107;
+        }
+        
+        .notification-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text-color);
+        }
+        
+        .notification-message {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        
+        .notification-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        
+        .notification-buttons.single {
+            justify-content: center;
+        }
+        
+        .notification-buttons.single .btn {
+            min-width: 120px;
+        }
 
         .modal-content {
             background: var(--card-background);
@@ -485,6 +552,7 @@
                         <td>{{ process[5] or 'N/A' }}</td>
                         <td>
                             <button class="btn btn-primary btn-small" onclick="editProcess({{ process[0] }})">Edit</button>
+                            <button class="btn btn-secondary btn-small" onclick="openProcessDetailsModal({{ process[0] }}, '{{ process[1] }}')">Details</button>
                             <button class="btn btn-danger btn-small" onclick="deleteProcess({{ process[0] }}, '{{ process[1] }}')">Delete</button>
                         </td>
                     </tr>
@@ -641,6 +709,260 @@
             </form>
         </div>
     </div>
+    
+    <!-- Add Input Modal -->
+    <div id="addInputModal" class="modal edit-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddInputModal()">&times;</span>
+            <h2>Add Input</h2>
+            <form id="addInputForm">
+                <input type="hidden" id="addInputProcessId" name="process_id">
+                <div class="form-group">
+                    <label for="inputName">Name:</label>
+                    <input type="text" id="inputName" name="input_name" required placeholder="e.g. Juniper berries">
+                </div>
+                <div class="form-group">
+                    <label for="inputVolume">Volume/Amount:</label>
+                    <input type="number" id="inputVolume" name="input_quantity" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="inputMeasure">Measure:</label>
+                    <select id="inputMeasure" name="input_unit" required>
+                        <option value="">Select unit</option>
+                        <option value="grams">Grams</option>
+                        <option value="kg">Kilograms</option>
+                        <option value="liters">Liters</option>
+                        <option value="ml">Milliliters</option>
+                        <option value="pieces">Pieces</option>
+                        <option value="units">Units</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="inputBatch">Input Batch:</label>
+                    <input type="text" id="inputBatch" name="input_batch_number" placeholder="e.g. internal code or supplier provided batch code">
+                </div>
+                <div class="form-group">
+                    <label for="inputNotes">Notes:</label>
+                    <textarea id="inputNotes" name="input_specifications" placeholder="Additional notes about this input"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="inputType">Type:</label>
+                    <select id="inputType" name="input_type">
+                        <option value="raw_material">Raw Material</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="chemical">Chemical</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="inputSource">Source:</label>
+                    <input type="text" id="inputSource" name="input_source" placeholder="Where does this input come from?">
+                </div>
+                <button type="submit" class="btn btn-primary">Add Input</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit Input Modal -->
+    <div id="editInputModal" class="modal edit-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditInputModal()">&times;</span>
+            <h2>Edit Input</h2>
+            <form id="editInputForm">
+                <input type="hidden" id="editInputId" name="input_id">
+                <div class="form-group">
+                    <label for="editInputName">Name:</label>
+                    <input type="text" id="editInputName" name="input_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="editInputVolume">Volume/Amount:</label>
+                    <input type="number" id="editInputVolume" name="input_quantity" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="editInputMeasure">Measure:</label>
+                    <select id="editInputMeasure" name="input_unit" required>
+                        <option value="grams">Grams</option>
+                        <option value="kg">Kilograms</option>
+                        <option value="liters">Liters</option>
+                        <option value="ml">Milliliters</option>
+                        <option value="pieces">Pieces</option>
+                        <option value="units">Units</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editInputBatch">Input Batch:</label>
+                    <input type="text" id="editInputBatch" name="input_batch_number">
+                </div>
+                <div class="form-group">
+                    <label for="editInputNotes">Notes:</label>
+                    <textarea id="editInputNotes" name="input_specifications"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editInputType">Type:</label>
+                    <select id="editInputType" name="input_type">
+                        <option value="raw_material">Raw Material</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="chemical">Chemical</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editInputSource">Source:</label>
+                    <input type="text" id="editInputSource" name="input_source">
+                </div>
+                <button type="submit" class="btn btn-primary">Update Input</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add Output Modal -->
+    <div id="addOutputModal" class="modal edit-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddOutputModal()">&times;</span>
+            <h2>Add Output</h2>
+            <form id="addOutputForm">
+                <input type="hidden" id="addOutputProcessId" name="process_id">
+                <div class="form-group">
+                    <label for="outputType">Type:</label>
+                    <input type="text" id="outputType" name="output_name" required placeholder="e.g. Gin">
+                </div>
+                <div class="form-group">
+                    <label for="outputVolume">Volume/Amount:</label>
+                    <input type="number" id="outputVolume" name="output_quantity" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="outputMeasure">Measure:</label>
+                    <select id="outputMeasure" name="output_unit" required>
+                        <option value="">Select unit</option>
+                        <option value="grams">Grams</option>
+                        <option value="kg">Kilograms</option>
+                        <option value="liters">Liters</option>
+                        <option value="ml">Milliliters</option>
+                        <option value="pieces">Pieces</option>
+                        <option value="units">Units</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="outputBatch">Batch:</label>
+                    <input type="text" id="outputBatch" name="output_batch_number" placeholder="Internal batch code to trace">
+                </div>
+                <div class="form-group">
+                    <label for="outputNotes">Notes:</label>
+                    <textarea id="outputNotes" name="output_specifications" placeholder="Additional notes about this output"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="outputTypeCategory">Category:</label>
+                    <select id="outputTypeCategory" name="output_type">
+                        <option value="finished_product">Finished Product</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="by_product">By-Product</option>
+                        <option value="waste">Waste</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="outputDestination">Destination:</label>
+                    <input type="text" id="outputDestination" name="output_destination" placeholder="Where is this output going?">
+                </div>
+                <button type="submit" class="btn btn-primary">Add Output</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit Output Modal -->
+    <div id="editOutputModal" class="modal edit-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditOutputModal()">&times;</span>
+            <h2>Edit Output</h2>
+            <form id="editOutputForm">
+                <input type="hidden" id="editOutputId" name="output_id">
+                <div class="form-group">
+                    <label for="editOutputType">Type:</label>
+                    <input type="text" id="editOutputType" name="output_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="editOutputVolume">Volume/Amount:</label>
+                    <input type="number" id="editOutputVolume" name="output_quantity" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="editOutputMeasure">Measure:</label>
+                    <select id="editOutputMeasure" name="output_unit" required>
+                        <option value="grams">Grams</option>
+                        <option value="kg">Kilograms</option>
+                        <option value="liters">Liters</option>
+                        <option value="ml">Milliliters</option>
+                        <option value="pieces">Pieces</option>
+                        <option value="units">Units</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editOutputBatch">Batch:</label>
+                    <input type="text" id="editOutputBatch" name="output_batch_number">
+                </div>
+                <div class="form-group">
+                    <label for="editOutputNotes">Notes:</label>
+                    <textarea id="editOutputNotes" name="output_specifications"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editOutputTypeCategory">Category:</label>
+                    <select id="editOutputTypeCategory" name="output_type">
+                        <option value="finished_product">Finished Product</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="by_product">By-Product</option>
+                        <option value="waste">Waste</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editOutputDestination">Destination:</label>
+                    <input type="text" id="editOutputDestination" name="output_destination">
+                </div>
+                <button type="submit" class="btn btn-primary">Update Output</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Process Details Modal -->
+    <div id="processDetailsModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <span class="close" onclick="closeProcessDetailsModal()">&times;</span>
+            <h2 id="processDetailsModalTitle">Process Details</h2>
+            
+            <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="color: var(--primary-color); margin: 0;">Inputs</h3>
+                        <button class="btn btn-primary btn-small" onclick="openAddInputModalFromDetails()">+ Add Input</button>
+                    </div>
+                    <div id="processDetailsInputs">
+                        <!-- Inputs will be loaded here -->
+                    </div>
+                </div>
+                <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="color: var(--primary-color); margin: 0;">Outputs</h3>
+                        <button class="btn btn-primary btn-small" onclick="openAddOutputModalFromDetails()">+ Add Output</button>
+                    </div>
+                    <div id="processDetailsOutputs">
+                        <!-- Outputs will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            
+            <h3 style="color: var(--primary-color);">Connections</h3>
+            <div id="processDetailsConnections">
+                <!-- Connections will be loaded here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notification Modal -->
+    <div id="notificationModal" class="modal notification-modal">
+        <div class="notification-content">
+            <div id="notificationIcon" class="notification-icon"></div>
+            <div id="notificationTitle" class="notification-title"></div>
+            <div id="notificationMessage" class="notification-message"></div>
+            <div id="notificationButtons" class="notification-buttons"></div>
+        </div>
+    </div>
 
     <script>
         // Global state
@@ -650,6 +972,89 @@
         let connections = [];
         let draggedNode = null;
         let dragOffset = { x: 0, y: 0 };
+        
+        // Custom notification functions
+        function showNotification(type, title, message, buttons = []) {
+            const modal = document.getElementById('notificationModal');
+            const icon = document.getElementById('notificationIcon');
+            const titleEl = document.getElementById('notificationTitle');
+            const messageEl = document.getElementById('notificationMessage');
+            const buttonsEl = document.getElementById('notificationButtons');
+            
+            // Set icon based on type
+            icon.className = `notification-icon ${type}`;
+            switch(type) {
+                case 'success':
+                    icon.textContent = '✓';
+                    break;
+                case 'error':
+                    icon.textContent = '✗';
+                    break;
+                case 'warning':
+                    icon.textContent = '⚠';
+                    break;
+                default:
+                    icon.textContent = 'ℹ';
+            }
+            
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            
+            // Clear and add buttons
+            buttonsEl.innerHTML = '';
+            if (buttons.length === 0) {
+                buttonsEl.className = 'notification-buttons single';
+                buttonsEl.innerHTML = '<button class="btn btn-primary" onclick="closeNotification()">OK</button>';
+            } else {
+                buttonsEl.className = 'notification-buttons';
+                buttons.forEach(button => {
+                    const btn = document.createElement('button');
+                    btn.className = `btn ${button.class || 'btn-primary'}`;
+                    btn.textContent = button.text;
+                    btn.onclick = button.onclick;
+                    buttonsEl.appendChild(btn);
+                });
+            }
+            
+            modal.style.display = 'block';
+        }
+        
+        function closeNotification() {
+            document.getElementById('notificationModal').style.display = 'none';
+        }
+        
+        function showSuccess(title, message) {
+            showNotification('success', title, message);
+        }
+        
+        function showError(title, message) {
+            showNotification('error', title, message);
+        }
+        
+        function showWarning(title, message) {
+            showNotification('warning', title, message);
+        }
+        
+        function showConfirm(title, message, onConfirm, onCancel = null) {
+            showNotification('warning', title, message, [
+                {
+                    text: 'Cancel',
+                    class: 'btn-secondary',
+                    onclick: () => {
+                        closeNotification();
+                        if (onCancel) onCancel();
+                    }
+                },
+                {
+                    text: 'Confirm',
+                    class: 'btn-danger',
+                    onclick: () => {
+                        closeNotification();
+                        onConfirm();
+                    }
+                }
+            ]);
+        }
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -811,10 +1216,45 @@
             statusCircle.setAttribute('r', '6');
             statusCircle.setAttribute('fill', process.status === 'active' ? '#28a745' : '#dc3545');
             
+            // Create view details button
+            const viewButton = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            viewButton.setAttribute('x', '60');
+            viewButton.setAttribute('y', '75');
+            viewButton.setAttribute('width', '60');
+            viewButton.setAttribute('height', '20');
+            viewButton.setAttribute('rx', '4');
+            viewButton.setAttribute('fill', 'var(--secondary-color)');
+            viewButton.setAttribute('stroke', 'var(--primary-color)');
+            viewButton.setAttribute('stroke-width', '1');
+            viewButton.setAttribute('cursor', 'pointer');
+            viewButton.setAttribute('data-process-id', process.id);
+            viewButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openProcessDetailsModal(process.id, process.name);
+            });
+            
+            // Create view text
+            const viewText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            viewText.setAttribute('x', '90');
+            viewText.setAttribute('y', '87');
+            viewText.setAttribute('text-anchor', 'middle');
+            viewText.setAttribute('font-size', '10');
+            viewText.setAttribute('font-weight', '600');
+            viewText.setAttribute('fill', 'var(--primary-color)');
+            viewText.textContent = 'view';
+            viewText.setAttribute('cursor', 'pointer');
+            viewText.setAttribute('data-process-id', process.id);
+            viewText.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openProcessDetailsModal(process.id, process.name);
+            });
+            
             group.appendChild(rect);
             group.appendChild(text);
             group.appendChild(typeText);
             group.appendChild(statusCircle);
+            group.appendChild(viewButton);
+            group.appendChild(viewText);
             
             // Add drag handlers
             addDragHandlers(group, process);
@@ -1024,7 +1464,7 @@
         
         function saveLayout() {
             localStorage.setItem('dagPositions', JSON.stringify(nodePositions));
-            alert('Layout saved!');
+            showSuccess('Layout Saved', 'Your layout has been saved successfully!');
         }
         
         function resetLayout() {
@@ -1153,48 +1593,56 @@
         }
         
         async function deleteProcess(processId, processName) {
-            if (confirm(`Delete process "${processName}"? This will also delete all associated inputs, outputs, and connections.`)) {
-                try {
-                    const response = await fetch(`/api/supply-chain/processes/${processId}`, {
-                        method: 'DELETE'
-                    });
-                    
-                    if (response.ok) {
-                        alert(`Process "${processName}" deleted successfully!`);
-                        location.reload();
-                    } else {
-                        const errorData = await response.json();
-                        alert('Error deleting process: ' + errorData.error);
+            showConfirm(
+                'Delete Process',
+                `Delete process "${processName}"? This will also delete all associated inputs, outputs, and connections.`,
+                async () => {
+                    try {
+                        const response = await fetch(`/api/supply-chain/processes/${processId}`, {
+                            method: 'DELETE'
+                        });
+                        
+                        if (response.ok) {
+                            showSuccess('Success!', `Process "${processName}" deleted successfully!`);
+                            location.reload();
+                        } else {
+                            const errorData = await response.json();
+                            showError('Error', 'Error deleting process: ' + errorData.error);
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        showError('Error', 'Error deleting process: ' + error.message);
                     }
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('Error deleting process: ' + error.message);
                 }
-            }
+            );
         }
         
         async function deleteConnection(connectionId) {
-            if (confirm('Delete this connection?')) {
-                try {
-                    const response = await fetch(`/api/supply-chain/connections/${connectionId}`, {
-                        method: 'DELETE'
-                    });
-                    
-                    if (response.ok) {
-                        alert('Connection deleted successfully!');
-                        loadConnectionsTable();
-                        if (isVisualView) {
-                            renderDAG();
+            showConfirm(
+                'Delete Connection',
+                'Are you sure you want to delete this connection?',
+                async () => {
+                    try {
+                        const response = await fetch(`/api/supply-chain/connections/${connectionId}`, {
+                            method: 'DELETE'
+                        });
+                        
+                        if (response.ok) {
+                            showSuccess('Success!', 'Connection deleted successfully!');
+                            loadConnectionsTable();
+                            if (isVisualView) {
+                                renderDAG();
+                            }
+                        } else {
+                            const errorData = await response.json();
+                            showError('Error', 'Error deleting connection: ' + errorData.error);
                         }
-                    } else {
-                        const errorData = await response.json();
-                        alert('Error deleting connection: ' + errorData.error);
+                    } catch (error) {
+                        console.error('Error:', error);
+                        showError('Error', 'Error deleting connection: ' + error.message);
                     }
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('Error deleting connection: ' + error.message);
                 }
-            }
+            );
         }
         
         // Form submissions
@@ -1212,16 +1660,16 @@
                 });
                 
                 if (response.ok) {
-                    alert('Process created successfully!');
+                    showSuccess('Success!', 'Process created successfully!');
                     closeCreateProcessModal();
                     location.reload();
                 } else {
                     const errorData = await response.json();
-                    alert('Error creating process: ' + errorData.error);
+                    showError('Error', 'Error creating process: ' + errorData.error);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Error creating process: ' + error.message);
+                showError('Error', 'Error creating process: ' + error.message);
             }
         });
         
@@ -1239,7 +1687,7 @@
                 });
                 
                 if (response.ok) {
-                    alert('Connection created successfully!');
+                    showSuccess('Success!', 'Connection created successfully!');
                     closeAddConnectionModal();
                     loadConnectionsTable();
                     if (isVisualView) {
@@ -1247,11 +1695,11 @@
                     }
                 } else {
                     const errorData = await response.json();
-                    alert('Error creating connection: ' + errorData.error);
+                    showError('Error', 'Error creating connection: ' + errorData.error);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Error creating connection: ' + error.message);
+                showError('Error', 'Error creating connection: ' + error.message);
             }
         });
         
@@ -1270,16 +1718,432 @@
                 });
                 
                 if (response.ok) {
-                    alert('Process updated successfully!');
+                    showSuccess('Success!', 'Process updated successfully!');
                     closeEditProcessModal();
                     location.reload();
                 } else {
                     const errorData = await response.json();
-                    alert('Error updating process: ' + errorData.error);
+                    showError('Error', 'Error updating process: ' + errorData.error);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Error updating process: ' + error.message);
+                showError('Error', 'Error updating process: ' + error.message);
+            }
+        });
+        
+        // Inputs Modal Functions
+        function openAddInputModal() {
+            document.getElementById('addInputModal').style.display = 'block';
+        }
+        
+        function closeAddInputModal() {
+            document.getElementById('addInputModal').style.display = 'none';
+            document.getElementById('addInputForm').reset();
+        }
+        
+        function openEditInputModal(inputId) {
+            loadInputForEdit(inputId);
+            document.getElementById('editInputModal').style.display = 'block';
+        }
+        
+        function closeEditInputModal() {
+            document.getElementById('editInputModal').style.display = 'none';
+            document.getElementById('editInputForm').reset();
+        }
+        
+        function openProcessDetailsModal(processId, processName) {
+            document.getElementById('processDetailsModalTitle').textContent = `${processName} - Details`;
+            // Store the current process ID for the add input modal
+            window.currentProcessId = processId;
+            window.currentProcessName = processName;
+            loadProcessDetails(processId);
+            document.getElementById('processDetailsModal').style.display = 'block';
+        }
+        
+        function openAddInputModalFromDetails() {
+            document.getElementById('addInputProcessId').value = window.currentProcessId;
+            document.getElementById('addInputModal').style.display = 'block';
+        }
+        
+        function openAddOutputModalFromDetails() {
+            document.getElementById('addOutputProcessId').value = window.currentProcessId;
+            document.getElementById('addOutputModal').style.display = 'block';
+        }
+        
+        function closeAddOutputModal() {
+            document.getElementById('addOutputModal').style.display = 'none';
+            document.getElementById('addOutputForm').reset();
+        }
+        
+        function openEditOutputModal(outputId) {
+            loadOutputForEdit(outputId);
+            document.getElementById('editOutputModal').style.display = 'block';
+        }
+        
+        function closeEditOutputModal() {
+            document.getElementById('editOutputModal').style.display = 'none';
+            document.getElementById('editOutputForm').reset();
+        }
+        
+        function closeProcessDetailsModal() {
+            document.getElementById('processDetailsModal').style.display = 'none';
+        }
+        
+        
+        // Load input for editing
+        async function loadInputForEdit(inputId) {
+            try {
+                const response = await fetch(`/api/supply-chain/inputs/${inputId}`);
+                if (response.ok) {
+                    const input = await response.json();
+                    document.getElementById('editInputId').value = input.id;
+                    document.getElementById('editInputName').value = input.input_name;
+                    document.getElementById('editInputVolume').value = input.input_quantity;
+                    document.getElementById('editInputMeasure').value = input.input_unit;
+                    document.getElementById('editInputBatch').value = input.input_batch_number || '';
+                    
+                    // Handle input_specifications JSON data
+                    let notes = '';
+                    if (input.input_specifications) {
+                        if (typeof input.input_specifications === 'string') {
+                            try {
+                                const specs = JSON.parse(input.input_specifications);
+                                notes = specs.notes || '';
+                            } catch (e) {
+                                notes = input.input_specifications; // fallback to raw string
+                            }
+                        } else if (typeof input.input_specifications === 'object') {
+                            notes = input.input_specifications.notes || '';
+                        }
+                    }
+                    document.getElementById('editInputNotes').value = notes;
+                    
+                    document.getElementById('editInputType').value = input.input_type;
+                    document.getElementById('editInputSource').value = input.input_source || '';
+                }
+            } catch (error) {
+                console.error('Error loading input:', error);
+            }
+        }
+        
+        // Load output for editing
+        async function loadOutputForEdit(outputId) {
+            try {
+                const response = await fetch(`/api/supply-chain/outputs/${outputId}`);
+                if (response.ok) {
+                    const output = await response.json();
+                    document.getElementById('editOutputId').value = output.id;
+                    document.getElementById('editOutputType').value = output.output_name;
+                    document.getElementById('editOutputVolume').value = output.output_quantity;
+                    document.getElementById('editOutputMeasure').value = output.output_unit;
+                    document.getElementById('editOutputBatch').value = output.output_batch_number || '';
+                    
+                    // Handle output_specifications JSON data
+                    let notes = '';
+                    if (output.output_specifications) {
+                        if (typeof output.output_specifications === 'string') {
+                            try {
+                                const specs = JSON.parse(output.output_specifications);
+                                notes = specs.notes || '';
+                            } catch (e) {
+                                notes = output.output_specifications; // fallback to raw string
+                            }
+                        } else if (typeof output.output_specifications === 'object') {
+                            notes = output.output_specifications.notes || '';
+                        }
+                    }
+                    document.getElementById('editOutputNotes').value = notes;
+                    
+                    document.getElementById('editOutputTypeCategory').value = output.output_type;
+                    document.getElementById('editOutputDestination').value = output.output_destination || '';
+                }
+            } catch (error) {
+                console.error('Error loading output:', error);
+            }
+        }
+        
+        // Load process details for the details modal
+        async function loadProcessDetails(processId) {
+            try {
+                // Load inputs
+                const inputsResponse = await fetch(`/api/supply-chain/inputs?process_id=${processId}`);
+                if (inputsResponse.ok) {
+                    const inputs = await inputsResponse.json();
+                    const inputsDiv = document.getElementById('processDetailsInputs');
+                    
+                    if (inputs.length === 0) {
+                        inputsDiv.innerHTML = '<p style="color: var(--text-secondary);">No inputs found. Click "+ Add Input" to get started.</p>';
+                    } else {
+                        inputsDiv.innerHTML = inputs.map(input => `
+                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${input.input_name}</strong><br>
+                                    <small style="color: var(--text-secondary);">${input.input_quantity} ${input.input_unit} | ${input.input_type} | Batch: ${input.input_batch_number || 'N/A'}</small>
+                                    ${input.input_source ? `<br><small style="color: var(--text-secondary);">Source: ${input.input_source}</small>` : ''}
+                                </div>
+                                <div>
+                                    <button class="btn btn-primary btn-small" onclick="openEditInputModal(${input.id})">Edit</button>
+                                    <button class="btn btn-danger btn-small" onclick="deleteInput(${input.id}, '${input.input_name}')">Delete</button>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                }
+                
+                // Load outputs
+                const outputsResponse = await fetch(`/api/supply-chain/outputs?process_id=${processId}`);
+                if (outputsResponse.ok) {
+                    const outputs = await outputsResponse.json();
+                    const outputsDiv = document.getElementById('processDetailsOutputs');
+                    
+                    if (outputs.length === 0) {
+                        outputsDiv.innerHTML = '<p style="color: var(--text-secondary);">No outputs found. Click "+ Add Output" to get started.</p>';
+                    } else {
+                        outputsDiv.innerHTML = outputs.map(output => `
+                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${output.output_name}</strong><br>
+                                    <small style="color: var(--text-secondary);">${output.output_quantity} ${output.output_unit} | ${output.output_type} | Batch: ${output.output_batch_number || 'N/A'}</small>
+                                    ${output.output_destination ? `<br><small style="color: var(--text-secondary);">Destination: ${output.output_destination}</small>` : ''}
+                                </div>
+                                <div>
+                                    <button class="btn btn-primary btn-small" onclick="openEditOutputModal(${output.id})">Edit</button>
+                                    <button class="btn btn-danger btn-small" onclick="deleteOutput(${output.id}, '${output.output_name}')">Delete</button>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                }
+                
+                // Load connections
+                const connectionsResponse = await fetch('/api/supply-chain/connections');
+                if (connectionsResponse.ok) {
+                    const allConnections = await connectionsResponse.json();
+                    const processConnections = allConnections.filter(conn => 
+                        conn.from_process_id == processId || conn.to_process_id == processId
+                    );
+                    
+                    const connectionsDiv = document.getElementById('processDetailsConnections');
+                    
+                    if (processConnections.length === 0) {
+                        connectionsDiv.innerHTML = '<p style="color: var(--text-secondary);">No connections</p>';
+                    } else {
+                        connectionsDiv.innerHTML = processConnections.map(conn => `
+                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+                                <strong>${conn.from_process_name}</strong> → <strong>${conn.to_process_name}</strong><br>
+                                <small style="color: var(--text-secondary);">${conn.connection_type} | ${conn.connection_status}</small>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading process details:', error);
+            }
+        }
+        
+        // Delete input
+        async function deleteInput(inputId, inputName) {
+            showConfirm(
+                'Delete Input',
+                `Are you sure you want to delete input "${inputName}"?`,
+                async () => {
+                    try {
+                        const response = await fetch(`/api/supply-chain/inputs/${inputId}`, {
+                            method: 'DELETE'
+                        });
+                        
+                        if (response.ok) {
+                            showSuccess('Success!', `Input "${inputName}" deleted successfully!`);
+                            // Always refresh process details if it's open
+                            if (window.currentProcessId) {
+                                loadProcessDetails(window.currentProcessId);
+                            }
+                        } else {
+                            const errorData = await response.json();
+                            showError('Error', 'Error deleting input: ' + errorData.error);
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        showError('Error', 'Error deleting input: ' + error.message);
+                    }
+                }
+            );
+        }
+        
+        // Delete output
+        async function deleteOutput(outputId, outputName) {
+            showConfirm(
+                'Delete Output',
+                `Are you sure you want to delete output "${outputName}"?`,
+                async () => {
+                    try {
+                        const response = await fetch(`/api/supply-chain/outputs/${outputId}`, {
+                            method: 'DELETE'
+                        });
+                        
+                        if (response.ok) {
+                            showSuccess('Success!', `Output "${outputName}" deleted successfully!`);
+                            // Always refresh process details if it's open
+                            if (window.currentProcessId) {
+                                loadProcessDetails(window.currentProcessId);
+                            }
+                        } else {
+                            const errorData = await response.json();
+                            showError('Error', 'Error deleting output: ' + errorData.error);
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        showError('Error', 'Error deleting output: ' + error.message);
+                    }
+                }
+            );
+        }
+        
+        // Form submissions for inputs
+        document.getElementById('addInputForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            // Convert notes to JSON object for input_specifications
+            if (data.input_specifications) {
+                data.input_specifications = { notes: data.input_specifications };
+            }
+            
+            try {
+                const response = await fetch('/api/supply-chain/inputs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success!', 'Input added successfully!');
+                    closeAddInputModal();
+                    // Always refresh process details if it's open
+                    if (window.currentProcessId) {
+                        loadProcessDetails(window.currentProcessId);
+                    }
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error adding input: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error adding input: ' + error.message);
+            }
+        });
+        
+        document.getElementById('editInputForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const inputId = data.input_id;
+            
+            // Convert notes to JSON object for input_specifications
+            if (data.input_specifications) {
+                data.input_specifications = { notes: data.input_specifications };
+            }
+            
+            try {
+                const response = await fetch(`/api/supply-chain/inputs/${inputId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success!', 'Input updated successfully!');
+                    closeEditInputModal();
+                    // Always refresh process details if it's open
+                    if (window.currentProcessId) {
+                        loadProcessDetails(window.currentProcessId);
+                    }
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error updating input: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error updating input: ' + error.message);
+            }
+        });
+        
+        // Form submissions for outputs
+        document.getElementById('addOutputForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            // Convert notes to JSON object for output_specifications
+            if (data.output_specifications) {
+                data.output_specifications = { notes: data.output_specifications };
+            }
+            
+            try {
+                const response = await fetch('/api/supply-chain/outputs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success!', 'Output added successfully!');
+                    closeAddOutputModal();
+                    // Always refresh process details if it's open
+                    if (window.currentProcessId) {
+                        loadProcessDetails(window.currentProcessId);
+                    }
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error adding output: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error adding output: ' + error.message);
+            }
+        });
+        
+        document.getElementById('editOutputForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const outputId = data.output_id;
+            
+            // Convert notes to JSON object for output_specifications
+            if (data.output_specifications) {
+                data.output_specifications = { notes: data.output_specifications };
+            }
+            
+            try {
+                const response = await fetch(`/api/supply-chain/outputs/${outputId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success!', 'Output updated successfully!');
+                    closeEditOutputModal();
+                    // Always refresh process details if it's open
+                    if (window.currentProcessId) {
+                        loadProcessDetails(window.currentProcessId);
+                    }
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error updating output: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error updating output: ' + error.message);
             }
         });
         
