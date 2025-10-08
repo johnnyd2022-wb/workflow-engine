@@ -13,8 +13,6 @@ crm_bp = Blueprint('crm', __name__, template_folder='../frontend')
 # Configuration settings
 INVOICE_BUTTON_ENABLED = config.invoice_button_enabled
 
-## Manual copied code
-
 @crm_bp.route('/crm', methods=['GET', 'POST'])
 def crm():
     print("Accessed /crm route")
@@ -308,6 +306,79 @@ def crm():
         """)
         follow_ups_due = cursor.fetchall()
 
+        # Get customers without all products (Solstice and Wildflower)
+        cursor.execute("""
+            WITH customers_without_solstice AS (
+                SELECT DISTINCT buyer
+                FROM sales_product
+                WHERE buyer NOT IN (
+                    SELECT DISTINCT buyer
+                    FROM sales_product
+                    WHERE (products -> 'products') ? 'solstice'
+                )
+                AND buyer NOT IN ('WHISTLEBIRD INTERNAL (Personal)', 'Mainfreight Ltd', 'POST HASTE LTD')
+            ),
+            customers_without_wildflower AS (
+                SELECT DISTINCT buyer
+                FROM sales_product
+                WHERE buyer NOT IN (
+                    SELECT DISTINCT buyer
+                    FROM sales_product
+                    WHERE (products -> 'products') ? 'wildflower'
+                )
+                AND buyer NOT IN ('WHISTLEBIRD INTERNAL (Personal)', 'Mainfreight Ltd', 'POST HASTE LTD')
+            ),
+            customers_without_either_product AS (
+                SELECT DISTINCT buyer
+                FROM sales_product
+                WHERE buyer NOT IN (
+                    SELECT DISTINCT buyer
+                    FROM sales_product
+                    WHERE (products -> 'products') ? 'solstice'
+                )
+                OR buyer NOT IN (
+                    SELECT DISTINCT buyer
+                    FROM sales_product
+                    WHERE (products -> 'products') ? 'wildflower'
+                )
+                AND buyer NOT IN ('WHISTLEBIRD INTERNAL (Personal)', 'Mainfreight Ltd', 'POST HASTE LTD')
+            )
+            SELECT 
+                c.buyer,
+                CASE 
+                    WHEN c.buyer IN (SELECT buyer FROM customers_without_solstice) AND c.buyer NOT IN (SELECT buyer FROM customers_without_wildflower) THEN 'Without Solstice'
+                    WHEN c.buyer IN (SELECT buyer FROM customers_without_wildflower) AND c.buyer NOT IN (SELECT buyer FROM customers_without_solstice) THEN 'Without Wildflower'
+                    ELSE 'Without Both'
+                END as missing_products,
+                CASE 
+                    WHEN c.buyer IN (SELECT buyer FROM customers_without_solstice) AND c.buyer NOT IN (SELECT buyer FROM customers_without_wildflower) THEN 1
+                    WHEN c.buyer IN (SELECT buyer FROM customers_without_wildflower) AND c.buyer NOT IN (SELECT buyer FROM customers_without_solstice) THEN 2
+                    ELSE 3
+                END as sort_order
+            FROM customers_without_either_product c
+            WHERE c.buyer NOT IN ('WHISTLEBIRD INTERNAL (Personal)', 'Mainfreight Ltd', 'POST HASTE LTD')
+            ORDER BY sort_order, c.buyer
+        """)
+        customers_without_products = cursor.fetchall()
+
+        # Get count of customers without all products
+        cursor.execute("""
+            SELECT COUNT(DISTINCT buyer)
+            FROM sales_product
+            WHERE buyer NOT IN (
+                SELECT DISTINCT buyer
+                FROM sales_product
+                WHERE (products -> 'products') ? 'solstice'
+            )
+            OR buyer NOT IN (
+                SELECT DISTINCT buyer
+                FROM sales_product
+                WHERE (products -> 'products') ? 'wildflower'
+            )
+            AND buyer NOT IN ('WHISTLEBIRD INTERNAL (Personal)', 'Mainfreight Ltd', 'POST HASTE LTD')
+        """)
+        customers_without_products_count = cursor.fetchall()
+
         # Parse JSONB data for active customers
         parsed_active_customers = []
         for customer in active_customers_details:
@@ -350,7 +421,9 @@ def crm():
                             customer_recent_activity=customer_recent_activity,
                             follow_ups_due=follow_ups_due,
                             potential_matches=potential_matches,
-                            monthly_revenue=monthly_revenue)
+                            monthly_revenue=monthly_revenue,
+                            customers_without_products=customers_without_products,
+                            customers_without_products_count=customers_without_products_count)
     
     except Exception as e:
         print(f"Error in CRM route: {e}")
@@ -365,7 +438,9 @@ def crm():
                             customer_recent_activity={},
                             follow_ups_due=[],
                             potential_matches=[],
-                            monthly_revenue=[])
+                            monthly_revenue=[],
+                            customers_without_products=[],
+                            customers_without_products_count=[])
     finally:
         if cursor:
             cursor.close()
