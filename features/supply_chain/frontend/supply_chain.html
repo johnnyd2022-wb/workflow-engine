@@ -341,8 +341,16 @@
             z-index: 1100;
         }
         
+        .modal.add-modal {
+            z-index: 2000 !important;
+        }
+        
+        .modal.add-modal .modal-content {
+            z-index: 2001;
+        }
+        
         .modal.notification-modal {
-            z-index: 1200;
+            z-index: 2500;
         }
         
         .notification-content {
@@ -628,48 +636,6 @@
         </div>
     </div>
     
-    <!-- Add Connection Modal -->
-    <div id="addConnectionModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeAddConnectionModal()">&times;</span>
-            <h2>Add Connection</h2>
-            <form id="addConnectionForm">
-                <div class="form-group">
-                    <label for="fromProcess">From Process:</label>
-                    <select id="fromProcess" name="from_process_id" required>
-                        <!-- Options will be populated by JavaScript -->
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="toProcess">To Process:</label>
-                    <select id="toProcess" name="to_process_id" required>
-                        <!-- Options will be populated by JavaScript -->
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="connectionType">Connection Type:</label>
-                    <select id="connectionType" name="connection_type">
-                        <option value="direct">Direct</option>
-                        <option value="conditional">Conditional</option>
-                        <option value="parallel">Parallel</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="connectionStatus">Status:</label>
-                    <select id="connectionStatus" name="connection_status">
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="connectionNotes">Notes:</label>
-                    <textarea id="connectionNotes" name="connection_notes"></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary">Add Connection</button>
-            </form>
-        </div>
-    </div>
-    
     <!-- Edit Process Modal -->
     <div id="editProcessModal" class="modal">
         <div class="modal-content">
@@ -711,7 +677,7 @@
     </div>
     
     <!-- Add Input Modal -->
-    <div id="addInputModal" class="modal edit-modal">
+    <div id="addInputModal" class="modal add-modal">
         <div class="modal-content">
             <span class="close" onclick="closeAddInputModal()">&times;</span>
             <h2>Add Input</h2>
@@ -816,7 +782,7 @@
     </div>
     
     <!-- Add Output Modal -->
-    <div id="addOutputModal" class="modal edit-modal">
+    <div id="addOutputModal" class="modal add-modal">
         <div class="modal-content">
             <span class="close" onclick="closeAddOutputModal()">&times;</span>
             <h2>Add Output</h2>
@@ -862,6 +828,12 @@
                 <div class="form-group">
                     <label for="outputDestination">Destination:</label>
                     <input type="text" id="outputDestination" name="output_destination" placeholder="Where is this output going?">
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="outputFlowThrough" name="output_flow_through">
+                        <span>Flow through to next process</span>
+                    </label>
                 </div>
                 <button type="submit" class="btn btn-primary">Add Output</button>
             </form>
@@ -915,7 +887,105 @@
                     <label for="editOutputDestination">Destination:</label>
                     <input type="text" id="editOutputDestination" name="output_destination">
                 </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="editOutputFlowThrough" name="output_flow_through">
+                        <span>Flow through to next process</span>
+                    </label>
+                </div>
                 <button type="submit" class="btn btn-primary">Update Output</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add Connection Modal -->
+    <div id="addConnectionModal" class="modal add-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddConnectionModal()">&times;</span>
+            <h2>Add Connection</h2>
+            <form id="addConnectionForm">
+                <div class="form-group">
+                    <label for="addConnectionFrom">From Process:</label>
+                    <select id="addConnectionFrom" name="from_process_id" required>
+                        <option value="">Select from process</option>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="addConnectionTo">To Process:</label>
+                    <select id="addConnectionTo" name="to_process_id" required>
+                        <option value="">Select to process</option>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="addConnectionType">Connection Type:</label>
+                    <select id="addConnectionType" name="connection_type" required>
+                        <option value="">Select connection type</option>
+                        <option value="direct">Direct</option>
+                        <option value="conditional">Conditional</option>
+                        <option value="parallel">Parallel</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="addConnectionStatus">Status:</label>
+                    <select id="addConnectionStatus" name="connection_status" required>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="pending">Pending</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="addConnectionNotes">Notes:</label>
+                    <textarea id="addConnectionNotes" name="connection_notes" placeholder="Additional notes about this connection"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Connection</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit Connection Modal -->
+    <div id="editConnectionModal" class="modal edit-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditConnectionModal()">&times;</span>
+            <h2>Edit Connection</h2>
+            <form id="editConnectionForm">
+                <input type="hidden" id="editConnectionId" name="connection_id">
+                <div class="form-group">
+                    <label for="editConnectionFrom">From Process:</label>
+                    <select id="editConnectionFrom" name="from_process_id" required>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editConnectionTo">To Process:</label>
+                    <select id="editConnectionTo" name="to_process_id" required>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editConnectionType">Connection Type:</label>
+                    <select id="editConnectionType" name="connection_type" required>
+                        <option value="direct">Direct</option>
+                        <option value="conditional">Conditional</option>
+                        <option value="parallel">Parallel</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editConnectionStatus">Status:</label>
+                    <select id="editConnectionStatus" name="connection_status" required>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="pending">Pending</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editConnectionNotes">Notes:</label>
+                    <textarea id="editConnectionNotes" name="connection_notes" placeholder="Additional notes about this connection"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Update Connection</button>
             </form>
         </div>
     </div>
@@ -939,7 +1009,13 @@
                 <div style="flex: 1;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h3 style="color: var(--primary-color); margin: 0;">Outputs</h3>
-                        <button class="btn btn-primary btn-small" onclick="openAddOutputModalFromDetails()">+ Add Output</button>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem;">
+                                <input type="checkbox" id="processFlowThroughEnabled" onchange="toggleProcessFlowThrough()">
+                                <span>Enable flow-through</span>
+                            </label>
+                            <button class="btn btn-primary btn-small" onclick="openAddOutputModalFromDetails()">+ Add Output</button>
+                        </div>
                     </div>
                     <div id="processDetailsOutputs">
                         <!-- Outputs will be loaded here -->
@@ -947,9 +1023,16 @@
                 </div>
             </div>
             
-            <h3 style="color: var(--primary-color);">Connections</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="color: var(--primary-color); margin: 0;">Connections</h3>
+                <button class="btn btn-primary btn-small" onclick="openAddConnectionModalFromDetails()">+ Add Connection</button>
+            </div>
             <div id="processDetailsConnections">
                 <!-- Connections will be loaded here -->
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.75rem;" onclick="deleteProcessFromDetails()">Delete Process</button>
             </div>
         </div>
     </div>
@@ -1494,7 +1577,7 @@
         
         function openAddConnectionModal() {
             document.getElementById('addConnectionModal').style.display = 'block';
-            loadProcessesForConnection();
+            loadProcessesForConnectionDropdowns();
         }
         
         function closeAddConnectionModal() {
@@ -1562,7 +1645,8 @@
                             <td><span class="status-${connection.connection_status || 'inactive'}">${connection.connection_status || 'inactive'}</span></td>
                             <td>${connection.connection_notes || 'N/A'}</td>
                             <td>
-                                <button class="btn btn-danger btn-small" onclick="deleteConnection(${connection.id})">Delete</button>
+                                <button class="btn btn-primary btn-small" onclick="openEditConnectionModal(${connection.id})">Edit</button>
+                                <button class="btn btn-danger btn-small" onclick="deleteConnection(${connection.id}, '${connection.from_process_name} → ${connection.to_process_name}')">Delete</button>
                             </td>
                         `;
                         tbody.appendChild(row);
@@ -1598,15 +1682,21 @@
                 `Delete process "${processName}"? This will also delete all associated inputs, outputs, and connections.`,
                 async () => {
                     try {
+                        console.log(`Deleting process ${processId} (${processName})`);
                         const response = await fetch(`/api/supply-chain/processes/${processId}`, {
                             method: 'DELETE'
                         });
                         
+                        console.log(`Delete response status: ${response.status}`);
+                        
                         if (response.ok) {
+                            const result = await response.json();
+                            console.log('Delete result:', result);
                             showSuccess('Success!', `Process "${processName}" deleted successfully!`);
                             location.reload();
                         } else {
                             const errorData = await response.json();
+                            console.error('Delete error:', errorData);
                             showError('Error', 'Error deleting process: ' + errorData.error);
                         }
                     } catch (error) {
@@ -1670,36 +1760,6 @@
             } catch (error) {
                 console.error('Error:', error);
                 showError('Error', 'Error creating process: ' + error.message);
-            }
-        });
-        
-        document.getElementById('addConnectionForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            
-            try {
-                const response = await fetch('/api/supply-chain/connections', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(Object.fromEntries(formData))
-                });
-                
-                if (response.ok) {
-                    showSuccess('Success!', 'Connection created successfully!');
-                    closeAddConnectionModal();
-                    loadConnectionsTable();
-                    if (isVisualView) {
-                        renderDAG();
-                    }
-                } else {
-                    const errorData = await response.json();
-                    showError('Error', 'Error creating connection: ' + errorData.error);
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showError('Error', 'Error creating connection: ' + error.message);
             }
         });
         
@@ -1770,6 +1830,16 @@
             document.getElementById('addOutputModal').style.display = 'block';
         }
         
+        function openAddConnectionModalFromDetails() {
+            document.getElementById('addConnectionModal').style.display = 'block';
+            loadProcessesForConnectionDropdowns(window.currentProcessId, null, null);
+        }
+        
+        function closeAddConnectionModal() {
+            document.getElementById('addConnectionModal').style.display = 'none';
+            document.getElementById('addConnectionForm').reset();
+        }
+        
         function closeAddOutputModal() {
             document.getElementById('addOutputModal').style.display = 'none';
             document.getElementById('addOutputForm').reset();
@@ -1785,8 +1855,57 @@
             document.getElementById('editOutputForm').reset();
         }
         
+        function openEditConnectionModal(connectionId) {
+            loadConnectionForEdit(connectionId);
+            document.getElementById('editConnectionModal').style.display = 'block';
+        }
+        
+        function closeEditConnectionModal() {
+            document.getElementById('editConnectionModal').style.display = 'none';
+            document.getElementById('editConnectionForm').reset();
+        }
+        
         function closeProcessDetailsModal() {
             document.getElementById('processDetailsModal').style.display = 'none';
+        }
+        
+        function deleteProcessFromDetails() {
+            if (window.currentProcessId && window.currentProcessName) {
+                deleteProcess(window.currentProcessId, window.currentProcessName);
+            }
+        }
+        
+        function toggleProcessFlowThrough() {
+            const checkbox = document.getElementById('processFlowThroughEnabled');
+            const isEnabled = checkbox.checked;
+            
+            // Update the process flow-through setting
+            if (window.currentProcessId) {
+                updateProcessFlowThrough(window.currentProcessId, isEnabled);
+            }
+        }
+        
+        async function updateProcessFlowThrough(processId, enabled) {
+            try {
+                const response = await fetch(`/api/supply-chain/processes/${processId}/flow-through`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ flow_through_enabled: enabled })
+                });
+                
+                if (response.ok) {
+                    const message = enabled ? 'Flow-through enabled for this process' : 'Flow-through disabled for this process';
+                    showSuccess('Success!', message);
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error updating flow-through setting: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error updating flow-through setting: ' + error.message);
+            }
         }
         
         
@@ -1856,15 +1975,94 @@
                     
                     document.getElementById('editOutputTypeCategory').value = output.output_type;
                     document.getElementById('editOutputDestination').value = output.output_destination || '';
+            document.getElementById('editOutputFlowThrough').checked = output.flow_through_enabled || false;
                 }
             } catch (error) {
                 console.error('Error loading output:', error);
             }
         }
         
+        // Load processes for connection dropdowns
+        async function loadProcessesForConnectionDropdowns(currentProcessId = null, excludeFromId = null, excludeToId = null) {
+            try {
+                const response = await fetch('/api/supply-chain/processes');
+                if (response.ok) {
+                    const processes = await response.json();
+                    
+                    // Get current selections to preserve them
+                    const fromSelect = document.getElementById('addConnectionFrom');
+                    const toSelect = document.getElementById('addConnectionTo');
+                    const currentFromValue = fromSelect ? fromSelect.value : '';
+                    const currentToValue = toSelect ? toSelect.value : '';
+                    
+                    // Populate From Process dropdown (exclude selected to process)
+                    const fromFilteredProcesses = processes.filter(proc => proc.id != excludeToId);
+                    fromSelect.innerHTML = '<option value="">Select from process</option>' + 
+                        fromFilteredProcesses.map(proc => {
+                            const selected = (currentProcessId && proc.id == currentProcessId) || proc.id == currentFromValue ? 'selected' : '';
+                            return `<option value="${proc.id}" ${selected}>${proc.name}</option>`;
+                        }).join('');
+                    
+                    // Populate To Process dropdown (exclude selected from process)
+                    const toFilteredProcesses = processes.filter(proc => proc.id != excludeFromId);
+                    toSelect.innerHTML = '<option value="">Select to process</option>' + 
+                        toFilteredProcesses.map(proc => {
+                            const selected = proc.id == currentToValue ? 'selected' : '';
+                            return `<option value="${proc.id}" ${selected}>${proc.name}</option>`;
+                        }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading processes for dropdowns:', error);
+            }
+        }
+        
+        // Load connection for editing
+        async function loadConnectionForEdit(connectionId) {
+            try {
+                const response = await fetch(`/api/supply-chain/connections/${connectionId}`);
+                if (response.ok) {
+                    const connection = await response.json();
+                    document.getElementById('editConnectionId').value = connection.id;
+                    document.getElementById('editConnectionType').value = connection.connection_type;
+                    document.getElementById('editConnectionStatus').value = connection.connection_status;
+                    document.getElementById('editConnectionNotes').value = connection.connection_notes || '';
+                    
+                    // Load processes for dropdowns
+                    const processesResponse = await fetch('/api/supply-chain/processes');
+                    if (processesResponse.ok) {
+                        const processes = await processesResponse.json();
+                        
+                        // Populate From Process dropdown
+                        const fromSelect = document.getElementById('editConnectionFrom');
+                        fromSelect.innerHTML = processes.map(proc => 
+                            `<option value="${proc.id}" ${proc.id == connection.from_process_id ? 'selected' : ''}>${proc.name}</option>`
+                        ).join('');
+                        
+                        // Populate To Process dropdown
+                        const toSelect = document.getElementById('editConnectionTo');
+                        toSelect.innerHTML = processes.map(proc => 
+                            `<option value="${proc.id}" ${proc.id == connection.to_process_id ? 'selected' : ''}>${proc.name}</option>`
+                        ).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading connection:', error);
+            }
+        }
+        
         // Load process details for the details modal
         async function loadProcessDetails(processId) {
             try {
+                // Load process details to get flow-through setting
+                const processResponse = await fetch(`/api/supply-chain/processes/${processId}`);
+                if (processResponse.ok) {
+                    const process = await processResponse.json();
+                    const flowThroughCheckbox = document.getElementById('processFlowThroughEnabled');
+                    if (flowThroughCheckbox) {
+                        flowThroughCheckbox.checked = process.flow_through_enabled || false;
+                    }
+                }
+                
                 // Load inputs
                 const inputsResponse = await fetch(`/api/supply-chain/inputs?process_id=${processId}`);
                 if (inputsResponse.ok) {
@@ -1875,15 +2073,22 @@
                         inputsDiv.innerHTML = '<p style="color: var(--text-secondary);">No inputs found. Click "+ Add Input" to get started.</p>';
                     } else {
                         inputsDiv.innerHTML = inputs.map(input => `
-                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <strong>${input.input_name}</strong><br>
-                                    <small style="color: var(--text-secondary);">${input.input_quantity} ${input.input_unit} | ${input.input_type} | Batch: ${input.input_batch_number || 'N/A'}</small>
-                                    ${input.input_source ? `<br><small style="color: var(--text-secondary);">Source: ${input.input_source}</small>` : ''}
-                                </div>
-                                <div>
-                                    <button class="btn btn-primary btn-small" onclick="openEditInputModal(${input.id})">Edit</button>
-                                    <button class="btn btn-danger btn-small" onclick="deleteInput(${input.id}, '${input.input_name}')">Delete</button>
+                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-color);">${input.input_name}</div>
+                                        <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+                                            ${input.input_quantity} ${input.input_unit} | ${input.input_type}
+                                        </div>
+                                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
+                                            Batch: ${input.input_batch_number || 'N/A'}
+                                        </div>
+                                        ${input.input_source ? `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px;">Source: ${input.input_source}</div>` : ''}
+                                    </div>
+                                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.75rem; min-width: auto;" onclick="openEditInputModal(${input.id})">Edit</button>
+                                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.75rem; min-width: auto;" onclick="deleteInput(${input.id}, '${input.input_name}')">Delete</button>
+                                    </div>
                                 </div>
                             </div>
                         `).join('');
@@ -1900,15 +2105,23 @@
                         outputsDiv.innerHTML = '<p style="color: var(--text-secondary);">No outputs found. Click "+ Add Output" to get started.</p>';
                     } else {
                         outputsDiv.innerHTML = outputs.map(output => `
-                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <strong>${output.output_name}</strong><br>
-                                    <small style="color: var(--text-secondary);">${output.output_quantity} ${output.output_unit} | ${output.output_type} | Batch: ${output.output_batch_number || 'N/A'}</small>
-                                    ${output.output_destination ? `<br><small style="color: var(--text-secondary);">Destination: ${output.output_destination}</small>` : ''}
-                                </div>
-                                <div>
-                                    <button class="btn btn-primary btn-small" onclick="openEditOutputModal(${output.id})">Edit</button>
-                                    <button class="btn btn-danger btn-small" onclick="deleteOutput(${output.id}, '${output.output_name}')">Delete</button>
+                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-color);">${output.output_name}</div>
+                                        <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+                                            ${output.output_quantity} ${output.output_unit} | ${output.output_type}
+                                        </div>
+                                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
+                                            Batch: ${output.output_batch_number || 'N/A'}
+                                        </div>
+                                        ${output.output_destination ? `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px;">Destination: ${output.output_destination}</div>` : ''}
+                                        ${output.flow_through_enabled ? `<div style="font-size: 0.8rem; color: var(--primary-color); margin-top: 2px; font-weight: 500;">✓ Flow-through enabled</div>` : ''}
+                                    </div>
+                                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.75rem; min-width: auto;" onclick="openEditOutputModal(${output.id})">Edit</button>
+                                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.75rem; min-width: auto;" onclick="deleteOutput(${output.id}, '${output.output_name}')">Delete</button>
+                                    </div>
                                 </div>
                             </div>
                         `).join('');
@@ -1929,9 +2142,22 @@
                         connectionsDiv.innerHTML = '<p style="color: var(--text-secondary);">No connections</p>';
                     } else {
                         connectionsDiv.innerHTML = processConnections.map(conn => `
-                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
-                                <strong>${conn.from_process_name}</strong> → <strong>${conn.to_process_name}</strong><br>
-                                <small style="color: var(--text-secondary);">${conn.connection_type} | ${conn.connection_status}</small>
+                            <div style="background: var(--card-background); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-color);">
+                                            ${conn.from_process_name} → ${conn.to_process_name}
+                                        </div>
+                                        <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+                                            Type: ${conn.connection_type} | Status: ${conn.connection_status}
+                                        </div>
+                                        ${conn.connection_notes ? `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">Notes: ${conn.connection_notes}</div>` : ''}
+                                    </div>
+                                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.75rem; min-width: auto;" onclick="openEditConnectionModal(${conn.id})">Edit</button>
+                                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.75rem; min-width: auto;" onclick="deleteConnection(${conn.id}, '${conn.from_process_name} → ${conn.to_process_name}')">Delete</button>
+                                    </div>
+                                </div>
                             </div>
                         `).join('');
                     }
@@ -1994,6 +2220,37 @@
                     } catch (error) {
                         console.error('Error:', error);
                         showError('Error', 'Error deleting output: ' + error.message);
+                    }
+                }
+            );
+        }
+        
+        // Delete connection
+        async function deleteConnection(connectionId, connectionName) {
+            showConfirm(
+                'Delete Connection',
+                `Are you sure you want to delete connection "${connectionName}"?`,
+                async () => {
+                    try {
+                        const response = await fetch(`/api/supply-chain/connections/${connectionId}`, {
+                            method: 'DELETE'
+                        });
+                        
+                        if (response.ok) {
+                            showSuccess('Success!', `Connection "${connectionName}" deleted successfully!`);
+                            // Always refresh process details if it's open
+                            if (window.currentProcessId) {
+                                loadProcessDetails(window.currentProcessId);
+                            }
+                            // Also refresh the visual editor
+                            renderDAG();
+                        } else {
+                            const errorData = await response.json();
+                            showError('Error', 'Error deleting connection: ' + errorData.error);
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        showError('Error', 'Error deleting connection: ' + error.message);
                     }
                 }
             );
@@ -2144,6 +2401,124 @@
             } catch (error) {
                 console.error('Error:', error);
                 showError('Error', 'Error updating output: ' + error.message);
+            }
+        });
+        
+        // Form submission for adding connections
+        document.getElementById('addConnectionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Prevent double submission
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            if (submitButton.disabled) {
+                return; // Already processing
+            }
+            
+            submitButton.disabled = true;
+            submitButton.textContent = 'Adding...';
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                console.log('Adding connection:', data);
+                const response = await fetch('/api/supply-chain/connections', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                console.log('Add connection response status:', response.status);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Add connection result:', result);
+                    showSuccess('Success!', 'Connection added successfully!');
+                    closeAddConnectionModal();
+                    // Always refresh process details if it's open
+                    if (window.currentProcessId) {
+                        loadProcessDetails(window.currentProcessId);
+                    }
+                    // Also refresh the visual editor
+                    renderDAG();
+                } else if (response.status === 409) {
+                    const errorData = await response.json();
+                    console.warn('Duplicate connection attempt:', errorData);
+                    showWarning('Duplicate Connection', 'A connection with the same From process, To process, and connection type already exists. Please choose different parameters.');
+                } else {
+                    const errorData = await response.json();
+                    console.error('Add connection error:', errorData);
+                    showError('Error', 'Error adding connection: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error adding connection: ' + error.message);
+            } finally {
+                // Re-enable button
+                submitButton.disabled = false;
+                submitButton.textContent = 'Add Connection';
+            }
+        });
+        
+        // Form submission for connections
+        document.getElementById('editConnectionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const connectionId = data.connection_id;
+            
+            try {
+                const response = await fetch(`/api/supply-chain/connections/${connectionId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success!', 'Connection updated successfully!');
+                    closeEditConnectionModal();
+                    // Always refresh process details if it's open
+                    if (window.currentProcessId) {
+                        loadProcessDetails(window.currentProcessId);
+                    }
+                    // Also refresh the visual editor
+                    renderDAG();
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error updating connection: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error updating connection: ' + error.message);
+            }
+        });
+        
+        // Universal event listener for connection dropdowns (works for both scenarios)
+        document.addEventListener('change', function(e) {
+            if (e.target.id === 'addConnectionFrom') {
+                const selectedFromId = e.target.value;
+                const toSelect = document.getElementById('addConnectionTo');
+                const selectedToId = toSelect ? toSelect.value : '';
+                
+                if (selectedFromId) {
+                    loadProcessesForConnectionDropdowns(null, selectedFromId, selectedToId);
+                } else {
+                    loadProcessesForConnectionDropdowns(null, null, selectedToId);
+                }
+            } else if (e.target.id === 'addConnectionTo') {
+                const selectedToId = e.target.value;
+                const fromSelect = document.getElementById('addConnectionFrom');
+                const selectedFromId = fromSelect ? fromSelect.value : '';
+                
+                if (selectedToId) {
+                    loadProcessesForConnectionDropdowns(null, selectedFromId, selectedToId);
+                } else {
+                    loadProcessesForConnectionDropdowns(null, selectedFromId, null);
+                }
             }
         });
         

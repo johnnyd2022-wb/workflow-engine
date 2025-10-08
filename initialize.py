@@ -479,20 +479,32 @@ def create_supply_chain_process_templates_table():
     
     create_table(table_name, columns)
 
-def create_supply_chain_dag_layout_table():
-    """Table to store DAG layout positions"""
-    table_name = "supply_chain_dag_layout"
+def add_flow_through_columns():
+    """Add flow-through columns to existing tables"""
+    connection, cursor = db_conn()
     
-    columns = {
-        "id": "SERIAL PRIMARY KEY",
-        "date": "DATE",
-        "action": "TEXT",
-        "layout_data": "JSONB", # JSON object containing node positions
-        "layout_timestamp": "TEXT", # timestamp when layout was saved
-        "uid": "TEXT"
-    }
-    
-    create_table(table_name, columns)
+    try:
+        # Add flow_through_enabled to processes table
+        cursor.execute("""
+            ALTER TABLE supply_chain_processes 
+            ADD COLUMN IF NOT EXISTS flow_through_enabled BOOLEAN DEFAULT FALSE
+        """)
+        
+        # Add flow_through_enabled to outputs table
+        cursor.execute("""
+            ALTER TABLE supply_chain_outputs 
+            ADD COLUMN IF NOT EXISTS flow_through_enabled BOOLEAN DEFAULT FALSE
+        """)
+        
+        connection.commit()
+        print("Flow-through columns added successfully")
+        
+    except Exception as e:
+        print(f"Error adding flow-through columns: {e}")
+        connection.rollback()
+    finally:
+        cursor.close()
+        connection.close()
 
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"

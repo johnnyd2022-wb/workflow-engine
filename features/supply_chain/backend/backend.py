@@ -263,22 +263,42 @@ def update_process(process_id):
 def delete_process(process_id):
     """Delete a process"""
     try:
+        print(f"Delete process API called for process_id: {process_id}")
         connection, cursor = db_conn()
         
         # Check if process exists
-        cursor.execute("SELECT id FROM supply_chain_processes WHERE id = %s", (process_id,))
-        if not cursor.fetchone():
+        cursor.execute("SELECT id, process_name FROM supply_chain_processes WHERE id = %s", (process_id,))
+        process = cursor.fetchone()
+        if not process:
+            print(f"Process {process_id} not found")
             return jsonify({'error': 'Process not found'}), 404
         
+        print(f"Found process: {process[1]} (ID: {process[0]})")
+        
         # Delete related records first
+        print("Deleting related inputs...")
         cursor.execute("DELETE FROM supply_chain_inputs WHERE process_id = %s", (process_id,))
+        inputs_deleted = cursor.rowcount
+        print(f"Deleted {inputs_deleted} inputs")
+        
+        print("Deleting related outputs...")
         cursor.execute("DELETE FROM supply_chain_outputs WHERE process_id = %s", (process_id,))
+        outputs_deleted = cursor.rowcount
+        print(f"Deleted {outputs_deleted} outputs")
+        
+        print("Deleting related connections...")
         cursor.execute("DELETE FROM supply_chain_connections WHERE from_process_id = %s OR to_process_id = %s", (process_id, process_id))
+        connections_deleted = cursor.rowcount
+        print(f"Deleted {connections_deleted} connections")
         
         # Delete the process
+        print("Deleting process...")
         cursor.execute("DELETE FROM supply_chain_processes WHERE id = %s", (process_id,))
+        process_deleted = cursor.rowcount
+        print(f"Deleted {process_deleted} processes")
         
         connection.commit()
+        print("Transaction committed successfully")
         return jsonify({'message': 'Process deleted successfully'})
         
     except Exception as e:
@@ -288,6 +308,136 @@ def delete_process(process_id):
         if cursor:
             cursor.close()
         if connection:
+            connection.close()
+
+def create_automatic_inputs_for_flow_through(process_id, connection, cursor):
+    """Create automatic inputs in connected processes when flow-through is enabled"""
+    try:
+        # Get all outputs from this process that have flow-through enabled
+        cursor.execute("""
+            SELECT id, output_name, output_type, output_quantity, output_unit, 
+                   output_specifications, output_batch_number, output_destination
+            FROM supply_chain_outputs 
+            WHERE process_id = %s AND flow_through_enabled = TRUE
+        """, (process_id,))
+        
+        flow_through_outputs = cursor.fetchall()
+        
+        if not flow_through_outputs:
+            print(f"No flow-through outputs found for process {process_id}")
+            return
+        
+        # Get all connections from this process
+        cursor.execute("""
+            SELECT to_process_id, connection_type
+            FROM supply_chain_connections 
+            WHERE from_process_id = %s AND connection_status = 'active'
+        """, (process_id,))
+        
+        connections = cursor.fetchall()
+        
+        if not connections:
+            print(f"No active connections found from process {process_id}")
+            return
+        
+        # For each connection, create inputs in the receiving process
+        for to_process_id, connection_type in connections:
+            print(f"Processing connection to process {to_process_id} (type: {connection_type})")
+            
+            # Check if the receiving process has flow-through enabled
+            cursor.execute("""
+                SELECT flow_through_enabled FROM supply_chain_processes 
+                WHERE id = %s
+            """, (to_process_id,))
+            
+            receiving_process = cursor.fetchone()
+            if not receiving_process or not receiving_process[0]:
+                print(f"Receiving process {to_process_id} does not have flow-through enabled")
+                continue
+            
+            # Create inputs for each flow-through output
+            for output in flow_through_outputs:
+                output_id, output_name, output_type, output_quantity, output_unit, output_specifications, output_batch_number, output_destination = output
+                
+                # Check if this input already exists (avoid duplicates)
+                cursor.execute("""
+                    SELECT id FROM supply_chain_inputs 
+                    WHERE process_id = %s AND input_name = %s AND input_source = %s
+                """, (to_process_id, output_name, f"Flow-through from process {process_id}"))
+                
+                if cursor.fetchone():
+                    print(f"Input '{output_name}' already exists in process {to_process_id}")
+                    continue
+                
+                # Create the input
+                cursor.execute("""
+                    INSERT INTO supply_chain_inputs 
+                    (date, action, process_id, input_name, input_type, input_quantity, 
+                     input_unit, input_specifications, input_source, input_batch_number, 
+                     input_status, uid)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    date.today(),
+                    'create',
+                    to_process_id,
+                    output_name,
+                    output_type,
+                    output_quantity,
+                    output_unit,
+                    output_specifications,
+                    f"Flow-through from process {process_id}",
+                    output_batch_number,
+                    'available',
+                    ''
+                ))
+                
+                print(f"Created input '{output_name}' in process {to_process_id}")
+        
+        connection.commit()
+        print(f"Automatic inputs created successfully for process {process_id}")
+        
+    except Exception as e:
+        print(f"Error creating automatic inputs: {e}")
+        connection.rollback()
+        raise e
+
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>/flow-through', methods=['PUT'])
+def update_process_flow_through(process_id):
+    """Update flow-through setting for a process"""
+    try:
+        data = request.get_json()
+        flow_through_enabled = data.get('flow_through_enabled', False)
+        
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            UPDATE supply_chain_processes 
+            SET flow_through_enabled = %s, action = 'update', date = CURRENT_DATE
+            WHERE id = %s
+        """, (flow_through_enabled, process_id))
+        
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'Process not found'}), 404
+        
+        connection.commit()
+        
+        # Check if we need to create automatic inputs in connected processes
+        if flow_through_enabled:
+            create_automatic_inputs_for_flow_through(process_id, connection, cursor)
+        
+        return jsonify({
+            'message': 'Flow-through setting updated successfully',
+            'process_id': process_id,
+            'flow_through_enabled': flow_through_enabled
+        })
+        
+    except Exception as e:
+        print(f"Error updating process flow-through: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'connection' in locals():
             connection.close()
 
 @supply_chain_bp.route('/api/supply-chain/inputs', methods=['GET'])
@@ -603,17 +753,21 @@ def update_output(output_id):
         connection, cursor = db_conn()
         data = request.get_json()
         
-        # Check if output exists
-        cursor.execute("SELECT id FROM supply_chain_outputs WHERE id = %s", (output_id,))
-        if not cursor.fetchone():
+        # Check if output exists and get process_id
+        cursor.execute("SELECT id, process_id FROM supply_chain_outputs WHERE id = %s", (output_id,))
+        output_record = cursor.fetchone()
+        if not output_record:
             return jsonify({'error': 'Output not found'}), 404
+        
+        process_id = output_record[1]
         
         # Update output
         cursor.execute("""
             UPDATE supply_chain_outputs 
             SET output_name = %s, output_type = %s, output_quantity = %s, output_unit = %s,
                 output_specifications = %s, output_batch_number = %s,
-                output_quality_status = %s, output_destination = %s, date = NOW(), action = 'update'
+                output_quality_status = %s, output_destination = %s, flow_through_enabled = %s,
+                date = NOW(), action = 'update'
             WHERE id = %s
         """, (
             data.get('output_name'),
@@ -624,10 +778,16 @@ def update_output(output_id):
             data.get('output_batch_number'),
             data.get('output_quality_status'),
             data.get('output_destination'),
+            data.get('flow_through_enabled', False),
             output_id
         ))
         
         connection.commit()
+        
+        # Check if we need to create automatic inputs for this output
+        if data.get('flow_through_enabled', False):
+            create_automatic_inputs_for_flow_through(process_id, connection, cursor)
+        
         return jsonify({'message': 'Output updated successfully'})
         
     except Exception as e:
@@ -676,8 +836,8 @@ def create_output():
             INSERT INTO supply_chain_outputs 
             (date, action, process_id, output_name, output_type, output_quantity, 
              output_unit, output_specifications, output_batch_number, 
-             output_quality_status, output_destination, uid)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             output_quality_status, output_destination, flow_through_enabled, uid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             date.today(),
@@ -691,11 +851,16 @@ def create_output():
             data.get('output_batch_number', ''),
             data.get('output_quality_status', 'pending'),
             data.get('output_destination', ''),
+            data.get('flow_through_enabled', False),
             data.get('uid', '')
         ))
         
         output_id = cursor.fetchone()[0]
         connection.commit()
+        
+        # Check if we need to create automatic inputs for this output
+        if data.get('flow_through_enabled', False):
+            create_automatic_inputs_for_flow_through(data.get('process_id'), connection, cursor)
         
         return jsonify({'id': output_id, 'message': 'Output created successfully'}), 201
         
@@ -753,6 +918,15 @@ def create_connection():
     try:
         data = request.get_json()
         connection, cursor = db_conn()
+        
+        # Check if connection already exists
+        cursor.execute("""
+            SELECT id FROM supply_chain_connections 
+            WHERE from_process_id = %s AND to_process_id = %s AND connection_type = %s
+        """, (data.get('from_process_id'), data.get('to_process_id'), data.get('connection_type', 'direct')))
+        
+        if cursor.fetchone():
+            return jsonify({'error': 'Connection already exists with the same From process, To process, and connection type'}), 409
         
         cursor.execute("""
             INSERT INTO supply_chain_connections 
