@@ -1734,6 +1734,57 @@
             box-shadow: 0 2px 6px rgba(255, 51, 102, 0.3);
         }
 
+        /* Missing Product Badge Styling */
+        .missing-product-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: #ff6b6b;
+            color: white;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .missing-product-badge:contains("Solstice") {
+            background: #ff9f43;
+        }
+
+        .missing-product-badge:contains("Wildflower") {
+            background: #ff6b6b;
+        }
+
+        .missing-product-badge:contains("Both") {
+            background: #ee5a52;
+        }
+
+        /* Customers Without Products Modal Styling */
+        .customers-without-products-modal {
+            max-width: 1200px;
+            width: 90vw;
+        }
+
+        .customers-without-products-container {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .missing-products-cell {
+            text-align: center;
+        }
+
+        .no-customers-without-products {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .no-customers-without-products p {
+            font-size: 1.1rem;
+            margin: 0;
+        }
+
         /* Follow-up Alert Banner */
         .follow-up-alert-banner {
             background: linear-gradient(135deg, 
@@ -3266,6 +3317,11 @@
                      <div class="stat-label">Existing customers to follow-up</div>
                      <div class="stat-hint">Click to view details</div>
                  </div>
+                <div class="stat-card clickable-stat" onclick="viewCustomersWithoutProducts()">
+                     <div class="stat-number">{{ customers_without_products_count[0][0] if customers_without_products_count else 0 }}</div>
+                     <div class="stat-label">Customers Without All Products</div>
+                     <div class="stat-hint">Click to view details</div>
+                 </div>
             </div>
 
             <!-- Customer Search Modal (Hidden by default) -->
@@ -3737,6 +3793,55 @@
                     
                     <div class="modal-footer">
                         <button class="secondary-button" onclick="closeNewCustomersModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Customers Without All Products Modal (Hidden by default) -->
+            <div id="customersWithoutProductsModal" class="modal" style="display: none;">
+                <div class="modal-content customers-without-products-modal">
+                    <div class="modal-header">
+                        <h2>Customers Without All Products</h2>
+                        <span class="close-button" onclick="closeCustomersWithoutProductsModal()">&times;</span>
+                    </div>
+                    
+                    <div class="customers-without-products-container">
+                        {% if customers_without_products %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Missing Products</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for customer in customers_without_products %}
+                                        <tr class="customer-row">
+                                            <td class="customer-name-cell">{{ customer[0] }}</td>
+                                            <td class="missing-products-cell">
+                                                <span class="missing-product-badge">{{ customer[1] }}</span>
+                                            </td>
+                                            <td class="action-cell">
+                                                <button class="action-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
+                                                    View Profile
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-customers-without-products">
+                                <p>All customers have purchased both Solstice and Wildflower products.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeCustomersWithoutProductsModal()">Close</button>
                     </div>
                 </div>
             </div>
@@ -5005,6 +5110,15 @@
             document.getElementById('newCustomersModal').style.display = 'none';
         }
 
+        // Customers Without Products Modal Functions
+        function viewCustomersWithoutProducts() {
+            document.getElementById('customersWithoutProductsModal').style.display = 'block';
+        }
+
+        function closeCustomersWithoutProductsModal() {
+            document.getElementById('customersWithoutProductsModal').style.display = 'none';
+        }
+
         function viewRevenueReport() {
             document.getElementById('revenueReportModal').style.display = 'block';
             initializeRevenueChart();
@@ -5435,6 +5549,7 @@
             const totalDueTasksModal = document.getElementById('totalDueTasksModal');
             const activeCustomersModal = document.getElementById('activeCustomersModal');
             const newCustomersModal = document.getElementById('newCustomersModal');
+            const customersWithoutProductsModal = document.getElementById('customersWithoutProductsModal');
             const confirmationModal = document.getElementById('confirmationModal');
             const successModal = document.getElementById('successModal');
             const processMatchConfirmationModal = document.getElementById('processMatchConfirmationModal');
@@ -5465,6 +5580,9 @@
             }
             if (event.target == newCustomersModal) {
                 closeNewCustomersModal();
+            }
+            if (event.target == customersWithoutProductsModal) {
+                closeCustomersWithoutProductsModal();
             }
             if (event.target == confirmationModal) {
                 closeConfirmationModal();
