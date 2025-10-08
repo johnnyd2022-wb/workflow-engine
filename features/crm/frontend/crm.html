@@ -1788,8 +1788,9 @@
 
         /* Customers Without Products Modal Styling */
         .customers-without-products-modal {
-            max-width: 1200px;
-            width: 90vw;
+            max-width: 95vw;
+            width: 95vw;
+            max-height: 90vh;
         }
 
         .customers-without-products-container {
@@ -3840,7 +3841,8 @@
                                         <tr>
                                             <th>Customer</th>
                                             <th>Missing Products</th>
-                                            <th>Action</th>
+                                            <th>Recent Activity</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -3850,10 +3852,38 @@
                                             <td class="missing-products-cell">
                                                 <span class="missing-product-badge">{{ customer[1] }}</span>
                                             </td>
+                                            <td class="recent-activity-cell">
+                                                {% set customer_name = customer[0] %}
+                                                {% if customer_recent_activity and customer_name in customer_recent_activity %}
+                                                    {% set activity = customer_recent_activity[customer_name] %}
+                                                    <div class="activity-summary">
+                                                        {% if activity.logs %}
+                                                            <a href="/crm-customer-page?customer_name={{ customer_name|urlencode }}&tab=call-logs" class="activity-badge logs-badge" title="Recent CRM Logs: {{ activity.logs|length }} - Click to view">
+                                                                📞 {{ activity.logs|length }} call{{ 's' if activity.logs|length != 1 else '' }}
+                                                            </a>
+                                                        {% endif %}
+                                                        {% if activity.follow_ups %}
+                                                            <a href="/crm-customer-page?customer_name={{ customer_name|urlencode }}&tab=follow-ups" class="activity-badge follow-ups-badge" title="Recent Follow-ups: {{ activity.follow_ups|length }} - Click to view">
+                                                                ✅ {{ activity.follow_ups|length }} follow-up{{ 's' if activity.follow_ups|length != 1 else '' }}
+                                                            </a>
+                                                        {% endif %}
+                                                        {% if not activity.logs and not activity.follow_ups %}
+                                                            <span class="activity-badge no-activity-badge">No recent activity</span>
+                                                        {% endif %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="activity-badge no-activity-badge">No recent activity</span>
+                                                {% endif %}
+                                            </td>
                                             <td class="action-cell">
-                                                <button class="action-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
-                                                    View Profile
-                                                </button>
+                                                <div class="action-buttons">
+                                                    <button class="action-btn log-call-btn" onclick="logCallForCustomer('{{ customer[0] }}')">
+                                                        📞 Log Call
+                                                    </button>
+                                                    <button class="action-btn view-profile-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
+                                                        👤 View Profile
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                         {% endfor %}
