@@ -490,10 +490,10 @@ def add_flow_through_columns():
             ADD COLUMN IF NOT EXISTS flow_through_enabled BOOLEAN DEFAULT FALSE
         """)
         
-        # Add flow_through_enabled to outputs table
+        # Add flow_through_fields to outputs table (JSON to store which fields should flow through)
         cursor.execute("""
             ALTER TABLE supply_chain_outputs 
-            ADD COLUMN IF NOT EXISTS flow_through_enabled BOOLEAN DEFAULT FALSE
+            ADD COLUMN IF NOT EXISTS flow_through_fields JSONB DEFAULT '{}'
         """)
         
         connection.commit()
