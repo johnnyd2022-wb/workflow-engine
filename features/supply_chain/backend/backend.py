@@ -8,27 +8,49 @@ from config_loader import config
 # Create Supply Chain blueprint
 supply_chain_bp = Blueprint('supply_chain', __name__, template_folder='../frontend')
 
+def format_process_type_for_display(process_type):
+    """Convert database process type to user-friendly display name"""
+    if not process_type:
+        return 'Not specified'
+    
+    type_mapping = {
+        'production_workflow': 'Production Workflow',
+        'quality_workflow': 'Quality Workflow', 
+        'logistics_workflow': 'Logistics Workflow',
+        'procurement_workflow': 'Procurement Workflow',
+        'manufacturing': 'Manufacturing',
+        'packaging': 'Packaging',
+        'quality_control': 'Quality Control',
+        'logistics': 'Logistics',
+        'procurement': 'Procurement'
+    }
+    
+    return type_mapping.get(process_type, process_type.replace('_', ' ').title())
+
 @supply_chain_bp.route('/supply-chain', methods=['GET', 'POST'])
 def supply_chain():
     print("Accessed /supply-chain route")
     connection, cursor = db_conn()
 
     try:
-        # Get all processes
+        # Get all parent processes
         cursor.execute("""
-            SELECT id, process_name, process_description, process_type, 
-                   process_status, process_category, process_notes, date, is_managed
-            FROM supply_chain_processes
-            ORDER BY process_name
+            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+                   parent_process_status, parent_process_category, parent_process_notes, date
+            FROM supply_chain_parent_processes
+            ORDER BY parent_process_name
         """)
-        processes = cursor.fetchall()
+        parent_processes = cursor.fetchall()
 
-        # Get process statistics
-        cursor.execute("SELECT COUNT(*) FROM supply_chain_processes")
-        total_processes = cursor.fetchone()[0]
+        # Get parent process statistics
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_parent_processes")
+        total_parent_processes = cursor.fetchone()[0]
 
-        cursor.execute("SELECT COUNT(*) FROM supply_chain_processes WHERE process_status = 'active'")
-        active_processes = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_parent_processes WHERE parent_process_status = 'active'")
+        active_parent_processes = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_sub_processes")
+        total_sub_processes = cursor.fetchone()[0]
 
         cursor.execute("SELECT COUNT(*) FROM supply_chain_inputs")
         total_inputs = cursor.fetchone()[0]
@@ -40,19 +62,22 @@ def supply_chain():
         total_connections = cursor.fetchone()[0]
 
         return render_template('supply_chain.html',
-                               processes=processes,
-                               total_processes=total_processes,
-                               active_processes=active_processes,
+                               parent_processes=parent_processes,
+                               total_parent_processes=total_parent_processes,
+                               active_parent_processes=active_parent_processes,
+                               total_sub_processes=total_sub_processes,
                                total_inputs=total_inputs,
                                total_outputs=total_outputs,
-                               total_connections=total_connections)
+                               total_connections=total_connections,
+                               format_type=format_process_type_for_display)
 
     except Exception as e:
         print(f"Error in supply_chain route: {e}")
         return render_template('supply_chain.html', 
-                               processes=[],
-                               total_processes=0,
-                               active_processes=0,
+                               parent_processes=[],
+                               total_parent_processes=0,
+                               active_parent_processes=0,
+                               total_sub_processes=0,
                                total_inputs=0,
                                total_outputs=0,
                                total_connections=0,
@@ -62,6 +87,407 @@ def supply_chain():
             cursor.close()
         if connection:
             connection.close()
+
+@supply_chain_bp.route('/supply-chain/parent-process/<int:parent_process_id>')
+def parent_process_detail(parent_process_id):
+    print(f"Accessed parent process detail for ID: {parent_process_id}")
+    connection, cursor = db_conn()
+
+    try:
+        # Get parent process details
+        cursor.execute("""
+            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+                   parent_process_status, parent_process_category, parent_process_notes, date
+            FROM supply_chain_parent_processes
+            WHERE id = %s
+        """, (parent_process_id,))
+        parent_process = cursor.fetchone()
+
+        if not parent_process:
+            return render_template('parent_process_detail.html', 
+                                   parent_process=None, 
+                                   sub_processes=[],
+                                   connections=[],
+                                   error="Parent process not found")
+
+        # Get sub processes for this parent
+        cursor.execute("""
+            SELECT id, sub_process_name, sub_process_description, sub_process_type,
+                   sub_process_status, sub_process_category, sub_process_notes, 
+                   execution_order, date
+            FROM supply_chain_sub_processes
+            WHERE parent_process_id = %s
+            ORDER BY execution_order, sub_process_name
+        """, (parent_process_id,))
+        sub_processes = cursor.fetchall()
+
+        # Get connections between sub-processes in this parent process
+        cursor.execute("""
+            SELECT c.id, c.parent_process_id, c.from_sub_process_id, c.to_sub_process_id, c.connection_type,
+                   c.connection_status, c.connection_notes, c.date, c.action, c.uid,
+                   sp1.sub_process_name as from_sub_process_name,
+                   sp2.sub_process_name as to_sub_process_name
+            FROM supply_chain_connections c
+            LEFT JOIN supply_chain_sub_processes sp1 ON c.from_sub_process_id = sp1.id
+            LEFT JOIN supply_chain_sub_processes sp2 ON c.to_sub_process_id = sp2.id
+            WHERE c.parent_process_id = %s
+            ORDER BY c.date DESC
+        """, (parent_process_id,))
+        connections = cursor.fetchall()
+
+        return render_template('parent_process_detail.html',
+                               parent_process=parent_process,
+                               sub_processes=sub_processes,
+                               connections=connections,
+                               format_type=format_process_type_for_display)
+
+    except Exception as e:
+        print(f"Error in parent_process_detail route: {e}")
+        return render_template('parent_process_detail.html', 
+                               parent_process=None,
+                               sub_processes=[],
+                               connections=[],
+                               error=str(e))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/supply-chain/parent-process/<int:parent_process_id>/visual', methods=['GET'])
+def parent_process_visual_view(parent_process_id):
+    """Visual DAG view for a specific parent process showing only its sub processes"""
+    print(f"Accessed /supply-chain/parent-process/{parent_process_id}/visual route")
+    connection, cursor = db_conn()
+    
+    try:
+        # Get parent process details
+        cursor.execute("""
+            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+                   parent_process_status, parent_process_category, parent_process_notes
+            FROM supply_chain_parent_processes 
+            WHERE id = %s
+        """, (parent_process_id,))
+        parent_process = cursor.fetchone()
+        
+        if not parent_process:
+            return "Parent process not found", 404
+        
+        return render_template('parent_process_visual.html',
+                               parent_process=parent_process,
+                               format_type=format_process_type_for_display)
+        
+    except Exception as e:
+        print(f"Error in parent_process_visual_view route: {e}")
+        return f"Error loading visual view: {e}", 500
+    finally:
+        cursor.close()
+        connection.close()
+
+@supply_chain_bp.route('/supply-chain/sub-process/<int:sub_process_id>')
+def sub_process_detail(sub_process_id):
+    """Detail view for a specific sub process"""
+    print(f"Accessed sub-process detail for ID: {sub_process_id}")
+    connection, cursor = db_conn()
+    
+    try:
+        # Get sub process details
+        cursor.execute("""
+            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_description, 
+                   s.sub_process_type, s.sub_process_status, s.sub_process_category, 
+                   s.sub_process_notes, s.execution_order, s.date,
+                   p.parent_process_name
+            FROM supply_chain_sub_processes s
+            LEFT JOIN supply_chain_parent_processes p ON s.parent_process_id = p.id
+            WHERE s.id = %s
+        """, (sub_process_id,))
+        sub_process = cursor.fetchone()
+        
+        if not sub_process:
+            return render_template('process_detail.html', 
+                                   process=None, 
+                                   inputs=[], 
+                                   outputs=[], 
+                                   connections=[],
+                                   error="Sub-process not found")
+        
+        # Get inputs for this sub process
+        cursor.execute("""
+            SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity,
+                   i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
+                   i.input_status, i.date, i.action
+            FROM supply_chain_inputs i
+            WHERE i.process_id = %s
+            ORDER BY i.input_name
+        """, (sub_process_id,))
+        inputs = cursor.fetchall()
+        
+        # Get outputs for this sub process
+        cursor.execute("""
+            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity,
+                   o.output_unit, o.output_specifications, o.output_batch_number,
+                   o.output_quality_status, o.output_destination, o.date, o.action
+            FROM supply_chain_outputs o
+            WHERE o.process_id = %s
+            ORDER BY o.output_name
+        """, (sub_process_id,))
+        outputs = cursor.fetchall()
+        
+        # Get connections for this sub process
+        cursor.execute("""
+            SELECT c.id, c.from_process_id, c.to_process_id, c.connection_type,
+                   c.connection_status, c.connection_notes, c.date, c.action,
+                   from_proc.sub_process_name as from_process_name,
+                   to_proc.sub_process_name as to_process_name
+            FROM supply_chain_connections c
+            LEFT JOIN supply_chain_sub_processes from_proc ON c.from_process_id = from_proc.id
+            LEFT JOIN supply_chain_sub_processes to_proc ON c.to_process_id = to_proc.id
+            WHERE c.from_process_id = %s OR c.to_process_id = %s
+            ORDER BY c.from_process_id, c.to_process_id
+        """, (sub_process_id, sub_process_id))
+        connections = cursor.fetchall()
+        
+        return render_template('process_detail.html',
+                               process=sub_process,
+                               inputs=inputs,
+                               outputs=outputs,
+                               connections=connections,
+                               parent_process_name=sub_process[10] if sub_process else None)
+        
+    except Exception as e:
+        print(f"Error in sub_process_detail route: {e}")
+        return f"Error loading sub-process details: {e}", 500
+    finally:
+        cursor.close()
+        connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/save-layout', methods=['POST'])
+def save_layout():
+    """Save DAG layout positions"""
+    try:
+        data = request.get_json()
+        layout_data = data.get('layout_data')
+        parent_process_id = data.get('parent_processId')
+        
+        if not layout_data or not parent_process_id:
+            return jsonify({'success': False, 'error': 'Missing layout data or parent process ID'}), 400
+        
+        connection, cursor = db_conn()
+        
+        # Check if layout already exists for this parent process
+        cursor.execute("""
+            SELECT id FROM supply_chain_dag_layout 
+            WHERE layout_data::text LIKE %s
+        """, (f'%"parentProcessId":{parent_process_id}%',))
+        
+        existing_layout = cursor.fetchone()
+        
+        if existing_layout:
+            # Update existing layout
+            cursor.execute("""
+                UPDATE supply_chain_dag_layout 
+                SET layout_data = %s, layout_timestamp = %s, action = 'update'
+                WHERE id = %s
+            """, (json.dumps(layout_data), datetime.now(), existing_layout[0]))
+        else:
+            # Create new layout
+            cursor.execute("""
+                INSERT INTO supply_chain_dag_layout 
+                (date, action, layout_data, layout_timestamp, uid)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (datetime.now().date(), 'save', json.dumps(layout_data), datetime.now(), f'parent_{parent_process_id}'))
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Error saving layout: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@supply_chain_bp.route('/api/supply-chain/load-layout/<int:parent_process_id>', methods=['GET'])
+def load_layout(parent_process_id):
+    """Load DAG layout positions for a parent process"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT layout_data, layout_timestamp 
+            FROM supply_chain_dag_layout 
+            WHERE layout_data::text LIKE %s
+            ORDER BY layout_timestamp DESC
+            LIMIT 1
+        """, (f'%"parentProcessId":{parent_process_id}%',))
+        
+        layout = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        
+        if layout:
+            return jsonify({'success': True, 'layout': {'layout_data': layout[0], 'layout_timestamp': layout[1]}})
+        else:
+            return jsonify({'success': True, 'layout': None})
+            
+    except Exception as e:
+        print(f"Error loading layout: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@supply_chain_bp.route('/api/supply-chain/update-execution-order', methods=['POST'])
+def update_execution_order():
+    """Update execution order based on DAG connections"""
+    try:
+        data = request.get_json()
+        parent_process_id = data.get('parent_process_id')
+        execution_order = data.get('execution_order')  # List of sub_process_ids in order
+        
+        if not parent_process_id or not execution_order:
+            return jsonify({'success': False, 'error': 'Missing parent_process_id or execution_order'}), 400
+        
+        connection, cursor = db_conn()
+        
+        # Update execution order for each sub process
+        for order, sub_process_id in enumerate(execution_order, 1):
+            cursor.execute("""
+                UPDATE supply_chain_sub_processes 
+                SET execution_order = %s, action = 'update_order'
+                WHERE id = %s AND parent_process_id = %s
+            """, (order, sub_process_id, parent_process_id))
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Error updating execution order: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes/<int:parent_process_id>/inputs', methods=['GET'])
+def get_inputs_by_parent(parent_process_id):
+    """Get all inputs for sub processes of a specific parent process"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT i.id, i.sub_process_id, i.input_name, i.input_type, 
+                   i.input_specifications, i.input_quantity, i.input_unit, i.input_status,
+                   sp.sub_process_name
+            FROM supply_chain_inputs i
+            JOIN supply_chain_sub_processes sp ON i.sub_process_id = sp.id
+            WHERE sp.parent_process_id = %s
+            ORDER BY sp.execution_order, i.input_name
+        """, (parent_process_id,))
+        
+        inputs = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        
+        # Convert to list of dictionaries for JSON response
+        result = []
+        for inp in inputs:
+            result.append({
+                'id': inp[0],
+                'sub_process_id': inp[1],
+                'input_name': inp[2],
+                'input_type': inp[3],
+                'input_specifications': inp[4],
+                'input_quantity': inp[5],
+                'input_unit': inp[6],
+                'input_status': inp[7],
+                'sub_process_name': inp[8]
+            })
+        
+        return jsonify({'success': True, 'inputs': result})
+        
+    except Exception as e:
+        print(f"Error getting inputs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes/<int:parent_process_id>/outputs', methods=['GET'])
+def get_outputs_by_parent(parent_process_id):
+    """Get all outputs for sub processes of a specific parent process"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT o.id, o.sub_process_id, o.output_name, o.output_type, 
+                   o.output_specifications, o.output_quantity, o.output_unit, o.output_quality_status,
+                   sp.sub_process_name
+            FROM supply_chain_outputs o
+            JOIN supply_chain_sub_processes sp ON o.sub_process_id = sp.id
+            WHERE sp.parent_process_id = %s
+            ORDER BY sp.execution_order, o.output_name
+        """, (parent_process_id,))
+        
+        outputs = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        
+        # Convert to list of dictionaries for JSON response
+        result = []
+        for out in outputs:
+            result.append({
+                'id': out[0],
+                'sub_process_id': out[1],
+                'output_name': out[2],
+                'output_type': out[3],
+                'output_specifications': out[4],
+                'output_quantity': out[5],
+                'output_unit': out[6],
+                'output_quality_status': out[7],
+                'sub_process_name': out[8]
+            })
+        
+        return jsonify({'success': True, 'outputs': result})
+        
+    except Exception as e:
+        print(f"Error getting outputs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes/<int:parent_process_id>/connections', methods=['GET'])
+def get_connections_by_parent(parent_process_id):
+    """Get all connections between sub processes of a specific parent process"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT c.id, c.from_sub_process_id, c.to_sub_process_id, c.connection_type, 
+                   c.connection_notes, c.connection_status,
+                   sp_from.sub_process_name as from_process_name,
+                   sp_to.sub_process_name as to_process_name
+            FROM supply_chain_connections c
+            JOIN supply_chain_sub_processes sp_from ON c.from_sub_process_id = sp_from.id
+            JOIN supply_chain_sub_processes sp_to ON c.to_sub_process_id = sp_to.id
+            WHERE sp_from.parent_process_id = %s AND sp_to.parent_process_id = %s
+            ORDER BY c.id
+        """, (parent_process_id, parent_process_id))
+        
+        connections = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        
+        # Convert to list of dictionaries for JSON response
+        result = []
+        for conn in connections:
+            result.append({
+                'id': conn[0],
+                'from_sub_process_id': conn[1],
+                'to_sub_process_id': conn[2],
+                'connection_type': conn[3],
+                'connection_notes': conn[4],
+                'connection_status': conn[5],
+                'from_process_name': conn[6],
+                'to_process_name': conn[7]
+            })
+        
+        return jsonify({'success': True, 'connections': result})
+        
+    except Exception as e:
+        print(f"Error getting connections: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @supply_chain_bp.route('/supply-chain/process/<int:process_id>')
 def process_detail(process_id):
@@ -1215,23 +1641,24 @@ def create_connection():
         # Check if connection already exists
         cursor.execute("""
             SELECT id FROM supply_chain_connections 
-            WHERE from_process_id = %s AND to_process_id = %s AND connection_type = %s
-        """, (data.get('from_process_id'), data.get('to_process_id'), data.get('connection_type', 'direct')))
+            WHERE from_sub_process_id = %s AND to_sub_process_id = %s AND connection_type = %s
+        """, (data.get('from_sub_process_id'), data.get('to_sub_process_id'), data.get('connection_type', 'direct')))
         
         if cursor.fetchone():
             return jsonify({'error': 'Connection already exists with the same From process, To process, and connection type'}), 409
         
         cursor.execute("""
             INSERT INTO supply_chain_connections 
-            (date, action, from_process_id, to_process_id, from_output_id, 
+            (date, action, parent_process_id, from_sub_process_id, to_sub_process_id, from_output_id, 
              to_input_id, connection_type, connection_status, connection_notes, uid)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             date.today(),
             'create',
-            data.get('from_process_id'),
-            data.get('to_process_id'),
+            data.get('parent_process_id'),
+            data.get('from_sub_process_id'),
+            data.get('to_sub_process_id'),
             data.get('from_output_id'),
             data.get('to_input_id'),
             data.get('connection_type', 'direct'),
@@ -1971,72 +2398,81 @@ def delete_connection(connection_id):
 
 @supply_chain_bp.route('/api/supply-chain/dag-layout', methods=['POST'])
 def save_dag_layout():
-    """Save DAG layout positions to database"""
+    """Save DAG layout positions to database for a specific parent process"""
     try:
         data = request.get_json()
+        parent_process_id = data.get('parent_process_id')
+        layout_data = data.get('layout_data')
+        
+        if not parent_process_id or not layout_data:
+            return jsonify({'success': False, 'error': 'Missing parent_process_id or layout_data'}), 400
+        
         connection, cursor = db_conn()
         
-        # Store layout data in a simple key-value table
-        # First, clear existing layout data
-        cursor.execute("DELETE FROM supply_chain_dag_layout")
-        
-        # Insert new layout data
+        # Check if layout already exists for this parent process
         cursor.execute("""
-            INSERT INTO supply_chain_dag_layout 
-            (date, action, layout_data, layout_timestamp, uid)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (
-            date.today(),
-            'save',
-            json.dumps(data.get('positions', {})),
-            data.get('timestamp'),
-            data.get('uid', 'user')
-        ))
+            SELECT id FROM supply_chain_dag_layout 
+            WHERE layout_data::text LIKE %s
+        """, (f'%"parentProcessId":{parent_process_id}%',))
+        
+        existing_layout = cursor.fetchone()
+        
+        if existing_layout:
+            # Update existing layout
+            cursor.execute("""
+                UPDATE supply_chain_dag_layout 
+                SET layout_data = %s, layout_timestamp = %s, action = 'update'
+                WHERE id = %s
+            """, (json.dumps(layout_data), datetime.now(), existing_layout[0]))
+        else:
+            # Create new layout
+            cursor.execute("""
+                INSERT INTO supply_chain_dag_layout 
+                (date, action, layout_data, layout_timestamp, uid)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (datetime.now().date(), 'save', json.dumps(layout_data), datetime.now(), f'parent_{parent_process_id}'))
         
         connection.commit()
-        return jsonify({'message': 'DAG layout saved successfully'})
+        cursor.close()
+        connection.close()
+        
+        return jsonify({'success': True})
         
     except Exception as e:
         print(f"Error saving DAG layout: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         if cursor:
             cursor.close()
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/supply-chain/dag-layout', methods=['GET'])
-def get_dag_layout():
-    """Get saved DAG layout positions"""
+@supply_chain_bp.route('/api/supply-chain/dag-layout/<int:parent_process_id>', methods=['GET'])
+def get_dag_layout(parent_process_id):
+    """Get saved DAG layout positions for a specific parent process"""
     try:
         connection, cursor = db_conn()
         
         cursor.execute("""
-            SELECT layout_data, layout_timestamp
-            FROM supply_chain_dag_layout
-            ORDER BY date DESC
+            SELECT layout_data, layout_timestamp 
+            FROM supply_chain_dag_layout 
+            WHERE layout_data::text LIKE %s
+            ORDER BY layout_timestamp DESC
             LIMIT 1
-        """)
+        """, (f'%"parentProcessId":{parent_process_id}%',))
         
         layout = cursor.fetchone()
-        if layout:
-            # layout[0] is already a dict (jsonb), no need to parse
-            layout_data = layout[0] if isinstance(layout[0], dict) else json.loads(layout[0])
-            return jsonify({
-                'positions': layout_data,
-                'timestamp': layout[1]
-            })
-        else:
-            return jsonify({'positions': {}, 'timestamp': None})
+        cursor.close()
+        connection.close()
         
+        if layout:
+            return jsonify({'success': True, 'layout': {'layout_data': layout[0], 'layout_timestamp': layout[1]}})
+        else:
+            return jsonify({'success': True, 'layout': None})
+            
     except Exception as e:
-        print(f"Error getting DAG layout: {e}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
+        print(f"Error loading DAG layout: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @supply_chain_bp.route('/api/supply-chain/dag-layout', methods=['DELETE'])
 def delete_dag_layout():
@@ -2058,3 +2494,433 @@ def delete_dag_layout():
             cursor.close()
         if connection:
             connection.close()
+
+# Parent Process API Routes
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes', methods=['POST'])
+def create_parent_process():
+    """Create a new parent process"""
+    try:
+        data = request.get_json()
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            INSERT INTO supply_chain_parent_processes 
+            (date, action, parent_process_name, parent_process_description, parent_process_type, 
+             parent_process_status, parent_process_category, parent_process_notes, uid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            date.today(),
+            'create',
+            data.get('parent_process_name'),
+            data.get('parent_process_description', ''),
+            data.get('parent_process_type', 'production_workflow'),
+            data.get('parent_process_status', 'active'),
+            data.get('parent_process_category', ''),
+            data.get('parent_process_notes', ''),
+            data.get('uid', '')
+        ))
+        
+        parent_process_id = cursor.fetchone()[0]
+        connection.commit()
+        
+        return jsonify({'id': parent_process_id, 'message': 'Parent process created successfully'}), 201
+        
+    except Exception as e:
+        print(f"Error creating parent process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes/<int:parent_process_id>', methods=['GET'])
+def get_parent_process(parent_process_id):
+    """Get a specific parent process"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+                   parent_process_status, parent_process_category, parent_process_notes, date
+            FROM supply_chain_parent_processes
+            WHERE id = %s
+        """, (parent_process_id,))
+        
+        parent_process = cursor.fetchone()
+        if not parent_process:
+            return jsonify({'error': 'Parent process not found'}), 404
+            
+        return jsonify({
+            'id': parent_process[0],
+            'parent_process_name': parent_process[1],
+            'parent_process_description': parent_process[2],
+            'parent_process_type': parent_process[3],
+            'parent_process_status': parent_process[4],
+            'parent_process_category': parent_process[5],
+            'parent_process_notes': parent_process[6],
+            'date': parent_process[7].isoformat() if parent_process[7] else None
+        })
+        
+    except Exception as e:
+        print(f"Error getting parent process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes/<int:parent_process_id>', methods=['PUT'])
+def update_parent_process(parent_process_id):
+    """Update a parent process"""
+    try:
+        data = request.get_json()
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            UPDATE supply_chain_parent_processes 
+            SET parent_process_name = %s, parent_process_description = %s, parent_process_type = %s,
+                parent_process_status = %s, parent_process_category = %s, parent_process_notes = %s,
+                action = 'update', date = %s
+            WHERE id = %s
+        """, (
+            data.get('parent_process_name'),
+            data.get('parent_process_description'),
+            data.get('parent_process_type'),
+            data.get('parent_process_status'),
+            data.get('parent_process_category'),
+            data.get('parent_process_notes'),
+            date.today(),
+            parent_process_id
+        ))
+        
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'Parent process not found'}), 404
+            
+        connection.commit()
+        return jsonify({'message': 'Parent process updated successfully'})
+        
+    except Exception as e:
+        print(f"Error updating parent process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes/<int:parent_process_id>', methods=['DELETE'])
+def delete_parent_process(parent_process_id):
+    """Delete a parent process and all its sub processes"""
+    try:
+        print(f"Delete parent process API called for parent_process_id: {parent_process_id}")
+        connection, cursor = db_conn()
+        
+        # Check if parent process exists
+        cursor.execute("SELECT id, parent_process_name FROM supply_chain_parent_processes WHERE id = %s", (parent_process_id,))
+        parent_process = cursor.fetchone()
+        if not parent_process:
+            print(f"Parent process {parent_process_id} not found")
+            return jsonify({'error': 'Parent process not found'}), 404
+        
+        print(f"Found parent process: {parent_process[1]} (ID: {parent_process[0]})")
+        
+        # Get all sub processes for this parent
+        cursor.execute("SELECT id FROM supply_chain_sub_processes WHERE parent_process_id = %s", (parent_process_id,))
+        sub_process_ids = [row[0] for row in cursor.fetchall()]
+        print(f"Found {len(sub_process_ids)} sub processes to delete")
+        
+        # Delete inputs, outputs, and connections for each sub process
+        for sub_process_id in sub_process_ids:
+            # Delete inputs
+            cursor.execute("DELETE FROM supply_chain_inputs WHERE sub_process_id = %s", (sub_process_id,))
+            inputs_deleted = cursor.rowcount
+            print(f"Deleted {inputs_deleted} inputs for sub process {sub_process_id}")
+            
+            # Delete outputs
+            cursor.execute("DELETE FROM supply_chain_outputs WHERE sub_process_id = %s", (sub_process_id,))
+            outputs_deleted = cursor.rowcount
+            print(f"Deleted {outputs_deleted} outputs for sub process {sub_process_id}")
+            
+            # Delete connections
+            cursor.execute("DELETE FROM supply_chain_connections WHERE from_sub_process_id = %s OR to_sub_process_id = %s", (sub_process_id, sub_process_id))
+            connections_deleted = cursor.rowcount
+            print(f"Deleted {connections_deleted} connections for sub process {sub_process_id}")
+        
+        # Delete all sub processes
+        cursor.execute("DELETE FROM supply_chain_sub_processes WHERE parent_process_id = %s", (parent_process_id,))
+        sub_processes_deleted = cursor.rowcount
+        print(f"Deleted {sub_processes_deleted} sub processes")
+        
+        # Delete the parent process
+        cursor.execute("DELETE FROM supply_chain_parent_processes WHERE id = %s", (parent_process_id,))
+        parent_deleted = cursor.rowcount
+        print(f"Deleted {parent_deleted} parent processes")
+        
+        connection.commit()
+        print("Transaction committed successfully")
+        return jsonify({'message': 'Parent process and all sub processes deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting parent process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes', methods=['GET'])
+def get_all_parent_processes():
+    """Get all parent processes"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT id, parent_process_name, parent_process_type, parent_process_status, parent_process_category
+            FROM supply_chain_parent_processes
+            ORDER BY parent_process_name
+        """)
+        
+        parent_processes = cursor.fetchall()
+        
+        return jsonify([{
+            'id': process[0],
+            'parent_process_name': process[1],
+            'parent_process_type': process[2],
+            'parent_process_status': process[3],
+            'parent_process_category': process[4]
+        } for process in parent_processes])
+        
+    except Exception as e:
+        print(f"Error getting parent processes: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+# Sub Process API Routes
+
+@supply_chain_bp.route('/api/supply-chain/sub-processes', methods=['POST'])
+def create_sub_process():
+    """Create a new sub process"""
+    try:
+        data = request.get_json()
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            INSERT INTO supply_chain_sub_processes 
+            (date, action, parent_process_id, sub_process_name, sub_process_description, sub_process_type, 
+             sub_process_status, sub_process_category, sub_process_notes, execution_order, uid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            date.today(),
+            'create',
+            data.get('parent_process_id'),
+            data.get('sub_process_name'),
+            data.get('sub_process_description', ''),
+            data.get('sub_process_type', 'manufacturing'),
+            data.get('sub_process_status', 'active'),
+            data.get('sub_process_category', ''),
+            data.get('sub_process_notes', ''),
+            data.get('execution_order', 1),
+            data.get('uid', '')
+        ))
+        
+        sub_process_id = cursor.fetchone()[0]
+        connection.commit()
+        
+        return jsonify({'id': sub_process_id, 'message': 'Sub process created successfully'}), 201
+        
+    except Exception as e:
+        print(f"Error creating sub process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/sub-processes/<int:sub_process_id>', methods=['GET'])
+def get_sub_process(sub_process_id):
+    """Get a specific sub process"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_description, 
+                   s.sub_process_type, s.sub_process_status, s.sub_process_category, 
+                   s.sub_process_notes, s.execution_order, s.date,
+                   p.parent_process_name
+            FROM supply_chain_sub_processes s
+            LEFT JOIN supply_chain_parent_processes p ON s.parent_process_id = p.id
+            WHERE s.id = %s
+        """, (sub_process_id,))
+        
+        sub_process = cursor.fetchone()
+        if not sub_process:
+            return jsonify({'error': 'Sub process not found'}), 404
+            
+        return jsonify({
+            'id': sub_process[0],
+            'parent_process_id': sub_process[1],
+            'sub_process_name': sub_process[2],
+            'sub_process_description': sub_process[3],
+            'sub_process_type': sub_process[4],
+            'sub_process_status': sub_process[5],
+            'sub_process_category': sub_process[6],
+            'sub_process_notes': sub_process[7],
+            'execution_order': sub_process[8],
+            'date': sub_process[9].isoformat() if sub_process[9] else None,
+            'parent_process_name': sub_process[10]
+        })
+        
+    except Exception as e:
+        print(f"Error getting sub process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/sub-processes/<int:sub_process_id>', methods=['PUT'])
+def update_sub_process(sub_process_id):
+    """Update a sub process"""
+    try:
+        data = request.get_json()
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            UPDATE supply_chain_sub_processes 
+            SET sub_process_name = %s, sub_process_description = %s, sub_process_type = %s,
+                sub_process_status = %s, sub_process_category = %s, sub_process_notes = %s,
+                execution_order = %s, action = 'update', date = %s
+            WHERE id = %s
+        """, (
+            data.get('sub_process_name'),
+            data.get('sub_process_description'),
+            data.get('sub_process_type'),
+            data.get('sub_process_status'),
+            data.get('sub_process_category'),
+            data.get('sub_process_notes'),
+            data.get('execution_order'),
+            date.today(),
+            sub_process_id
+        ))
+        
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'Sub process not found'}), 404
+            
+        connection.commit()
+        return jsonify({'message': 'Sub process updated successfully'})
+        
+    except Exception as e:
+        print(f"Error updating sub process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/sub-processes/<int:sub_process_id>', methods=['DELETE'])
+def delete_sub_process(sub_process_id):
+    """Delete a sub process and all its inputs, outputs, and connections"""
+    try:
+        print(f"Delete sub process API called for sub_process_id: {sub_process_id}")
+        connection, cursor = db_conn()
+        
+        # Check if sub process exists
+        cursor.execute("SELECT id, sub_process_name FROM supply_chain_sub_processes WHERE id = %s", (sub_process_id,))
+        sub_process = cursor.fetchone()
+        if not sub_process:
+            print(f"Sub process {sub_process_id} not found")
+            return jsonify({'error': 'Sub process not found'}), 404
+        
+        print(f"Found sub process: {sub_process[1]} (ID: {sub_process[0]})")
+        
+        # Delete related records first
+        print("Deleting related inputs...")
+        cursor.execute("DELETE FROM supply_chain_inputs WHERE sub_process_id = %s", (sub_process_id,))
+        inputs_deleted = cursor.rowcount
+        print(f"Deleted {inputs_deleted} inputs")
+        
+        print("Deleting related outputs...")
+        cursor.execute("DELETE FROM supply_chain_outputs WHERE sub_process_id = %s", (sub_process_id,))
+        outputs_deleted = cursor.rowcount
+        print(f"Deleted {outputs_deleted} outputs")
+        
+        print("Deleting related connections...")
+        cursor.execute("DELETE FROM supply_chain_connections WHERE from_sub_process_id = %s OR to_sub_process_id = %s", (sub_process_id, sub_process_id))
+        connections_deleted = cursor.rowcount
+        print(f"Deleted {connections_deleted} connections")
+        
+        # Delete the sub process
+        print("Deleting sub process...")
+        cursor.execute("DELETE FROM supply_chain_sub_processes WHERE id = %s", (sub_process_id,))
+        sub_process_deleted = cursor.rowcount
+        print(f"Deleted {sub_process_deleted} sub processes")
+        
+        connection.commit()
+        print("Transaction committed successfully")
+        return jsonify({'message': 'Sub process deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting sub process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/parent-processes/<int:parent_process_id>/sub-processes', methods=['GET'])
+def get_sub_processes_by_parent(parent_process_id):
+    """Get all sub processes for a specific parent process"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_type, 
+                   s.sub_process_status, s.sub_process_category, s.execution_order,
+                   p.parent_process_name
+            FROM supply_chain_sub_processes s
+            LEFT JOIN supply_chain_parent_processes p ON s.parent_process_id = p.id
+            WHERE s.parent_process_id = %s
+            ORDER BY s.execution_order, s.sub_process_name
+        """, (parent_process_id,))
+        
+        sub_processes = cursor.fetchall()
+        
+        # Convert to list of dictionaries for JSON response
+        result = []
+        for sub_process in sub_processes:
+            result.append({
+                'id': sub_process[0],
+                'parent_process_id': sub_process[1],
+                'sub_process_name': sub_process[2],
+                'sub_process_type': sub_process[3],
+                'sub_process_status': sub_process[4],
+                'sub_process_category': sub_process[5],
+                'execution_order': sub_process[6],
+                'parent_process_name': sub_process[7]
+            })
+        
+        return jsonify({'success': True, 'sub_processes': result})
+        
+    except Exception as e:
+        print(f"Error getting sub processes: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+

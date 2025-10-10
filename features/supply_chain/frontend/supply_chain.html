@@ -605,19 +605,12 @@
         </div>
         
         <div class="controls">
-            <button class="btn btn-primary" onclick="openCreateProcessModal()">+ Add Process</button>
-            <button class="btn btn-success" onclick="openAddConnectionModal()">+ Add Connection</button>
-            <button class="btn btn-secondary" onclick="toggleGrid()">Show Grid</button>
-            <button class="btn btn-success" onclick="saveLayout()">Save Layout</button>
-            <button class="btn btn-secondary" onclick="resetLayout()">Reset Layout</button>
-            <div class="view-toggle">
-                <button class="btn btn-primary" id="toggleViewBtn" onclick="toggleView()">Show Visual View</button>
-            </div>
+            <button class="btn btn-primary" onclick="openCreateParentProcessModal()">+ Create New Process</button>
         </div>
         
         <!-- Table View -->
         <div id="tableView" class="table-container">
-            <h2>Processes</h2>
+            <h2>Parent Processes</h2>
             <table>
                 <thead>
                     <tr>
@@ -630,23 +623,23 @@
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody id="processesTableBody">
-                    {% for process in processes %}
+                <tbody id="parentProcessesTableBody">
+                    {% for parent_process in parent_processes %}
                     <tr>
-                        <td>{{ process[0] }}</td>
-                        <td>{{ process[1] }}</td>
-                        <td>{{ process[2] or 'N/A' }}</td>
-                        <td>{{ process[3] or 'N/A' }}</td>
+                        <td>{{ parent_process[0] }}</td>
+                        <td>{{ parent_process[1] }}</td>
+                        <td>{{ parent_process[2] or 'N/A' }}</td>
+                        <td>{{ format_type(parent_process[3]) if parent_process[3] else 'N/A' }}</td>
                         <td>
-                            <span class="status-{{ process[4] or 'inactive' }}">
-                                {{ process[4] or 'inactive' }}
+                            <span class="status-{{ parent_process[4] or 'inactive' }}">
+                                {{ parent_process[4] or 'inactive' }}
                             </span>
                         </td>
-                        <td>{{ process[5] or 'N/A' }}</td>
+                        <td>{{ parent_process[5] or 'N/A' }}</td>
                         <td>
-                            <button class="btn btn-primary btn-small" onclick="editProcess({{ process[0] }})">Edit</button>
-                            <button class="btn btn-secondary btn-small" onclick="openProcessDetailsModal({{ process[0] }}, '{{ process[1] }}')">Details</button>
-                            <button class="btn btn-danger btn-small" onclick="deleteProcess({{ process[0] }}, '{{ process[1] }}')">Delete</button>
+                            <button class="btn btn-primary btn-small" onclick="editParentProcess({{ parent_process[0] }})">Edit</button>
+                            <a href="/supply-chain/parent-process/{{ parent_process[0] }}" class="btn btn-secondary btn-small">View Details</a>
+                            <button class="btn btn-danger btn-small" onclick="deleteParentProcess({{ parent_process[0] }}, '{{ parent_process[1] }}')">Delete</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -670,26 +663,6 @@
                     <!-- Connections will be loaded here -->
                 </tbody>
             </table>
-        </div>
-        
-        <!-- Visual View -->
-        <div id="visualView" class="hidden">
-            <div class="visual-layout">
-                <!-- Unmanaged Processes Sidebar -->
-                <div class="unmanaged-sidebar">
-                    <h3>Unmanaged Processes</h3>
-                    <div id="unmanagedProcesses" class="unmanaged-list">
-                        <!-- Unmanaged processes will be listed here -->
-                    </div>
-                </div>
-                
-                <!-- Main DAG Area -->
-            <div class="dag-container">
-                <svg id="dagSvg" class="dag-svg" viewBox="0 0 1200 700">
-                    <!-- Grid and nodes will be rendered here -->
-                </svg>
-                </div>
-            </div>
         </div>
     </div>
     
@@ -772,7 +745,84 @@
         </div>
     </div>
     
-    <!-- Add Input Modal -->
+    <!-- Create Parent Process Modal -->
+    <div id="createParentProcessModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateParentProcessModal()">&times;</span>
+            <h2>Create New Process</h2>
+            <form id="createParentProcessForm">
+                <div class="form-group">
+                    <label for="parentProcessName">Process Name:</label>
+                    <input type="text" id="parentProcessName" name="parent_process_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="parentProcessDescription">Description:</label>
+                    <textarea id="parentProcessDescription" name="parent_process_description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="parentProcessType">Type:</label>
+                    <select id="parentProcessType" name="parent_process_type">
+                        <option value="production_workflow">Production Workflow</option>
+                        <option value="quality_workflow">Quality Workflow</option>
+                        <option value="logistics_workflow">Logistics Workflow</option>
+                        <option value="procurement_workflow">Procurement Workflow</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="parentProcessStatus">Status:</label>
+                    <select id="parentProcessStatus" name="parent_process_status">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="parentProcessCategory">Category:</label>
+                    <input type="text" id="parentProcessCategory" name="parent_process_category">
+                </div>
+                <button type="submit" class="btn btn-primary">Create Process</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit Parent Process Modal -->
+    <div id="editParentProcessModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditParentProcessModal()">&times;</span>
+            <h2>Edit Process</h2>
+            <form id="editParentProcessForm">
+                <input type="hidden" id="editParentProcessId" name="parent_process_id">
+                <div class="form-group">
+                    <label for="editParentProcessName">Process Name:</label>
+                    <input type="text" id="editParentProcessName" name="parent_process_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="editParentProcessDescription">Description:</label>
+                    <textarea id="editParentProcessDescription" name="parent_process_description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editParentProcessType">Type:</label>
+                    <select id="editParentProcessType" name="parent_process_type">
+                        <option value="production_workflow">Production Workflow</option>
+                        <option value="quality_workflow">Quality Workflow</option>
+                        <option value="logistics_workflow">Logistics Workflow</option>
+                        <option value="procurement_workflow">Procurement Workflow</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editParentProcessStatus">Status:</label>
+                    <select id="editParentProcessStatus" name="parent_process_status">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editParentProcessCategory">Category:</label>
+                    <input type="text" id="editParentProcessCategory" name="parent_process_category">
+                </div>
+                <button type="submit" class="btn btn-primary">Update Process</button>
+            </form>
+        </div>
+    </div>
     <div id="addInputModal" class="modal add-modal">
         <div class="modal-content">
             <span class="close" onclick="closeAddInputModal()">&times;</span>
@@ -1296,6 +1346,50 @@
         }
         
         // Load unmanaged processes
+        async function loadParentProcesses() {
+            try {
+                const response = await fetch('/api/supply-chain/parent-processes');
+                if (response.ok) {
+                    const parentProcesses = await response.json();
+                    console.log('Parent processes:', parentProcesses);
+                    
+                    const tbody = document.getElementById('parentProcessesTableBody');
+                    tbody.innerHTML = '';
+                    
+                    if (parentProcesses.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary); font-style: italic;">No parent processes found</td></tr>';
+                        return;
+                    }
+                    
+                    parentProcesses.forEach(parentProcess => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${parentProcess.id}</td>
+                            <td>${parentProcess.parent_process_name}</td>
+                            <td>${parentProcess.parent_process_description || 'N/A'}</td>
+                            <td>${parentProcess.parent_process_type || 'N/A'}</td>
+                            <td>
+                                <span class="status-${parentProcess.parent_process_status || 'inactive'}">
+                                    ${parentProcess.parent_process_status || 'inactive'}
+                                </span>
+                            </td>
+                            <td>${parentProcess.parent_process_category || 'N/A'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" onclick="viewParentProcess(${parentProcess.id})">View</button>
+                                <button class="btn btn-sm btn-secondary" onclick="editParentProcess(${parentProcess.id})">Edit</button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteParentProcess(${parentProcess.id}, '${parentProcess.parent_process_name}')">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    console.error('Failed to load parent processes');
+                }
+            } catch (error) {
+                console.error('Error loading parent processes:', error);
+            }
+        }
+
         async function loadUnmanagedProcesses() {
             try {
                 const response = await fetch('/api/supply-chain/processes');
@@ -1463,11 +1557,55 @@
             }
         }
         
+        // Parent Process Actions
+        function viewParentProcess(parentProcessId) {
+            window.location.href = `/supply-chain/parent-process/${parentProcessId}`;
+        }
+
+        function editParentProcess(parentProcessId) {
+            // TODO: Implement edit parent process modal
+            console.log('Edit parent process:', parentProcessId);
+        }
+
+        async function deleteParentProcess(parentProcessId, parentProcessName) {
+            try {
+                const confirmed = await showConfirmDialog(
+                    'Delete Parent Process',
+                    `Are you sure you want to delete "${parentProcessName}"? This will also delete all associated sub-processes, inputs, outputs, and connections.`,
+                    'Delete',
+                    'Cancel'
+                );
+                
+                if (!confirmed) return;
+                
+                const response = await fetch(`/api/supply-chain/parent-processes/${parentProcessId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success', 'Parent process deleted successfully');
+                    loadParentProcesses(); // Reload the table
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Failed to delete parent process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Failed to delete parent process: ' + error.message);
+            }
+        }
+
+        function openCreateParentProcessModal() {
+            // TODO: Implement create parent process modal
+            console.log('Open create parent process modal');
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
             loadConnectionsTable();
             await loadPositions();
             loadUnmanagedProcesses();
+            loadParentProcesses();
             
             // If we're starting in visual view, render the DAG with loaded positions
             if (isVisualView) {
@@ -2107,6 +2245,25 @@
             document.getElementById('editProcessModal').style.display = 'none';
             document.getElementById('editProcessForm').reset();
         }
+
+        // Parent Process Modal functions
+        function openCreateParentProcessModal() {
+            document.getElementById('createParentProcessModal').style.display = 'block';
+        }
+        
+        function closeCreateParentProcessModal() {
+            document.getElementById('createParentProcessModal').style.display = 'none';
+            document.getElementById('createParentProcessForm').reset();
+        }
+        
+        function openEditParentProcessModal() {
+            document.getElementById('editParentProcessModal').style.display = 'block';
+        }
+        
+        function closeEditParentProcessModal() {
+            document.getElementById('editParentProcessModal').style.display = 'none';
+            document.getElementById('editParentProcessForm').reset();
+        }
         
         // Load processes for connection dropdowns
         function loadProcessesForConnection() {
@@ -2220,6 +2377,56 @@
             }
             );
         }
+
+        // Parent Process CRUD operations
+        async function editParentProcess(parentProcessId) {
+            try {
+                const response = await fetch(`/api/supply-chain/parent-processes/${parentProcessId}`);
+                if (response.ok) {
+                    const parentProcess = await response.json();
+                    document.getElementById('editParentProcessId').value = parentProcess.id;
+                    document.getElementById('editParentProcessName').value = parentProcess.parent_process_name;
+                    document.getElementById('editParentProcessDescription').value = parentProcess.parent_process_description || '';
+                    document.getElementById('editParentProcessType').value = parentProcess.parent_process_type || '';
+                    document.getElementById('editParentProcessStatus').value = parentProcess.parent_process_status || 'inactive';
+                    document.getElementById('editParentProcessCategory').value = parentProcess.parent_process_category || '';
+                    openEditParentProcessModal();
+                }
+            } catch (error) {
+                console.error('Error loading parent process:', error);
+            }
+        }
+        
+        async function deleteParentProcess(parentProcessId, parentProcessName) {
+            showConfirm(
+                'Delete Parent Process',
+                `Delete parent process "${parentProcessName}"? This will also delete all associated sub processes, inputs, outputs, and connections.`,
+                async () => {
+                try {
+                        console.log(`Deleting parent process ${parentProcessId} (${parentProcessName})`);
+                    const response = await fetch(`/api/supply-chain/parent-processes/${parentProcessId}`, {
+                        method: 'DELETE'
+                    });
+                        
+                        console.log(`Delete response status: ${response.status}`);
+                    
+                    if (response.ok) {
+                            const result = await response.json();
+                            console.log('Delete result:', result);
+                            showSuccess('Success!', `Parent process "${parentProcessName}" deleted successfully!`);
+                        location.reload();
+                    } else {
+                        const errorData = await response.json();
+                            console.error('Delete error:', errorData);
+                            showError('Error', 'Error deleting parent process: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                        showError('Error', 'Error deleting parent process: ' + error.message);
+                }
+            }
+            );
+        }
         
         async function deleteConnection(connectionId) {
             showConfirm(
@@ -2301,7 +2508,62 @@
                 }
             } catch (error) {
                 console.error('Error:', error);
-                showError('Error', 'Error updating process: ' + error.message);
+            }
+        });
+        
+        // Parent Process Form submissions
+        document.getElementById('createParentProcessForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/api/supply-chain/parent-processes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success!', 'Parent process created successfully!');
+                    closeCreateParentProcessModal();
+                    location.reload();
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error creating parent process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error creating parent process: ' + error.message);
+            }
+        });
+        
+        document.getElementById('editParentProcessForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const parentProcessId = formData.get('parent_process_id');
+            
+            try {
+                const response = await fetch(`/api/supply-chain/parent-processes/${parentProcessId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success!', 'Parent process updated successfully!');
+                    closeEditParentProcessModal();
+                    location.reload();
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error updating parent process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error updating parent process: ' + error.message);
             }
         });
         

@@ -359,10 +359,11 @@ def create_supply_chain_connections_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "from_process_id": "INTEGER", # source process
-        "to_process_id": "INTEGER", # destination process
-        "from_output_id": "INTEGER", # specific output from source process
-        "to_input_id": "INTEGER", # specific input to destination process
+        "parent_process_id": "INTEGER", # parent process this connection belongs to
+        "from_sub_process_id": "INTEGER", # source sub-process
+        "to_sub_process_id": "INTEGER", # destination sub-process
+        "from_output_id": "INTEGER", # specific output from source sub-process
+        "to_input_id": "INTEGER", # specific input to destination sub-process
         "connection_type": "TEXT", # type of connection (e.g., "direct", "storage", "transport")
         "connection_status": "TEXT", # 'active', 'inactive', 'blocked'
         "connection_notes": "TEXT", # additional notes about the connection
@@ -479,53 +480,60 @@ def create_supply_chain_process_templates_table():
     
     create_table(table_name, columns)
 
-def add_flow_through_columns():
-    """Add flow-through columns to existing tables"""
-    connection, cursor = db_conn()
+def create_supply_chain_dag_layout_table():
+    """Table to store DAG layout data for visual editor"""
+    table_name = "supply_chain_dag_layout"
     
-    try:
-        # Add flow_through_enabled to processes table
-        cursor.execute("""
-            ALTER TABLE supply_chain_processes 
-            ADD COLUMN IF NOT EXISTS flow_through_enabled BOOLEAN DEFAULT FALSE
-        """)
-        
-        # Add flow_through_fields to outputs table (JSON to store which fields should flow through)
-        cursor.execute("""
-            ALTER TABLE supply_chain_outputs 
-            ADD COLUMN IF NOT EXISTS flow_through_fields JSONB DEFAULT '{}'
-        """)
-        
-        connection.commit()
-        print("Flow-through columns added successfully")
-        
-    except Exception as e:
-        print(f"Error adding flow-through columns: {e}")
-        connection.rollback()
-    finally:
-        cursor.close()
-        connection.close()
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "layout_data": "JSONB", # JSON data containing node positions and layout info
+        "layout_timestamp": "TIMESTAMP", # when this layout was saved
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
 
-def add_managed_status_column():
-    """Add is_managed column to processes table"""
-    connection, cursor = db_conn()
+def create_supply_chain_parent_processes_table():
+    """Table to store parent processes"""
+    table_name = "supply_chain_parent_processes"
     
-    try:
-        # Add is_managed to processes table
-        cursor.execute("""
-            ALTER TABLE supply_chain_processes 
-            ADD COLUMN IF NOT EXISTS is_managed BOOLEAN DEFAULT FALSE
-        """)
-        
-        connection.commit()
-        print("Managed status column added successfully")
-        
-    except Exception as e:
-        print(f"Error adding managed status column: {e}")
-        connection.rollback()
-    finally:
-        cursor.close()
-        connection.close()
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_process_name": "TEXT",
+        "parent_process_description": "TEXT",
+        "parent_process_type": "TEXT",
+        "parent_process_status": "TEXT",
+        "parent_process_category": "TEXT",
+        "parent_process_notes": "TEXT",
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_sub_processes_table():
+    """Table to store sub-processes"""
+    table_name = "supply_chain_sub_processes"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_process_id": "INTEGER",
+        "sub_process_name": "TEXT",
+        "sub_process_description": "TEXT",
+        "sub_process_type": "TEXT",
+        "sub_process_status": "TEXT",
+        "sub_process_category": "TEXT",
+        "sub_process_notes": "TEXT",
+        "execution_order": "INTEGER",
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
 
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"
@@ -1081,8 +1089,8 @@ def main():
     create_supply_chain_execution_outputs_table()
     create_supply_chain_process_templates_table()
     create_supply_chain_dag_layout_table()
-    add_flow_through_columns()
-    add_managed_status_column()
+    create_supply_chain_parent_processes_table()
+    create_supply_chain_sub_processes_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()
