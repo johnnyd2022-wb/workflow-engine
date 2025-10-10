@@ -506,6 +506,27 @@ def add_flow_through_columns():
         cursor.close()
         connection.close()
 
+def add_managed_status_column():
+    """Add is_managed column to processes table"""
+    connection, cursor = db_conn()
+    
+    try:
+        # Add is_managed to processes table
+        cursor.execute("""
+            ALTER TABLE supply_chain_processes 
+            ADD COLUMN IF NOT EXISTS is_managed BOOLEAN DEFAULT FALSE
+        """)
+        
+        connection.commit()
+        print("Managed status column added successfully")
+        
+    except Exception as e:
+        print(f"Error adding managed status column: {e}")
+        connection.rollback()
+    finally:
+        cursor.close()
+        connection.close()
+
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"
 
@@ -1060,6 +1081,8 @@ def main():
     create_supply_chain_execution_outputs_table()
     create_supply_chain_process_templates_table()
     create_supply_chain_dag_layout_table()
+    add_flow_through_columns()
+    add_managed_status_column()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()

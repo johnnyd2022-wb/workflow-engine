@@ -17,7 +17,7 @@ def supply_chain():
         # Get all processes
         cursor.execute("""
             SELECT id, process_name, process_description, process_type, 
-                   process_status, process_category, process_notes, date
+                   process_status, process_category, process_notes, date, is_managed
             FROM supply_chain_processes
             ORDER BY process_name
         """)
@@ -154,8 +154,8 @@ def create_process():
         cursor.execute("""
             INSERT INTO supply_chain_processes 
             (date, action, process_name, process_description, process_type, 
-             process_status, process_category, process_notes, uid)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+             process_status, process_category, process_notes, is_managed, uid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             date.today(),
@@ -166,6 +166,7 @@ def create_process():
             data.get('process_status', 'active'),
             data.get('process_category', ''),
             data.get('process_notes', ''),
+            data.get('is_managed', False),  # New processes start as unmanaged
             data.get('uid', '')
         ))
         
@@ -191,7 +192,7 @@ def get_process(process_id):
         
         cursor.execute("""
             SELECT id, process_name, process_description, process_type, 
-                   process_status, process_category, process_notes, date, flow_through_enabled
+                   process_status, process_category, process_notes, date, flow_through_enabled, is_managed
             FROM supply_chain_processes
             WHERE id = %s
         """, (process_id,))
@@ -209,7 +210,8 @@ def get_process(process_id):
             'process_category': process[5],
             'process_notes': process[6],
             'date': process[7].isoformat() if process[7] else None,
-            'flow_through_enabled': process[8] or False
+            'flow_through_enabled': process[8] or False,
+            'is_managed': process[9] or False
         })
         
     except Exception as e:
@@ -527,6 +529,186 @@ def update_process_flow_through(process_id):
         
     except Exception as e:
         print(f"Error updating process flow-through: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'connection' in locals():
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>/has-connections', methods=['GET'])
+def check_process_has_connections(process_id):
+    """Check if a process has any connections, inputs, or outputs"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Check for connections (as from_process or to_process)
+        cursor.execute("""
+            SELECT COUNT(*) FROM supply_chain_connections 
+            WHERE from_process_id = %s OR to_process_id = %s
+        """, (process_id, process_id))
+        connection_count = cursor.fetchone()[0]
+        
+        # Check for inputs
+        cursor.execute("""
+            SELECT COUNT(*) FROM supply_chain_inputs 
+            WHERE process_id = %s
+        """, (process_id,))
+        input_count = cursor.fetchone()[0]
+        
+        # Check for outputs
+        cursor.execute("""
+            SELECT COUNT(*) FROM supply_chain_outputs 
+            WHERE process_id = %s
+        """, (process_id,))
+        output_count = cursor.fetchone()[0]
+        
+        has_connections = connection_count > 0
+        has_inputs = input_count > 0
+        has_outputs = output_count > 0
+        has_any = has_connections or has_inputs or has_outputs
+        
+        return jsonify({
+            'process_id': process_id,
+            'has_connections': has_connections,
+            'has_inputs': has_inputs,
+            'has_outputs': has_outputs,
+            'has_any': has_any,
+            'connection_count': connection_count,
+            'input_count': input_count,
+            'output_count': output_count
+        })
+        
+    except Exception as e:
+        print(f"Error checking process connections: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'connection' in locals():
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>/move-to-unmanaged', methods=['PUT'])
+def move_process_to_unmanaged(process_id):
+    """Move a process to unmanaged status and delete all associated inputs, outputs, and connections using CRUD APIs"""
+    try:
+        print(f"Move to unmanaged API called for process_id: {process_id}")
+        connection, cursor = db_conn()
+        
+        # Check if process exists
+        cursor.execute("SELECT id, process_name FROM supply_chain_processes WHERE id = %s", (process_id,))
+        process = cursor.fetchone()
+        if not process:
+            print(f"Process {process_id} not found")
+            return jsonify({'error': 'Process not found'}), 404
+        
+        print(f"Found process: {process[1]} (ID: {process[0]})")
+        
+        # Get all inputs for this process
+        cursor.execute("SELECT id FROM supply_chain_inputs WHERE process_id = %s", (process_id,))
+        input_ids = [row[0] for row in cursor.fetchall()]
+        print(f"Found {len(input_ids)} inputs to delete")
+        
+        # Get all outputs for this process
+        cursor.execute("SELECT id FROM supply_chain_outputs WHERE process_id = %s", (process_id,))
+        output_ids = [row[0] for row in cursor.fetchall()]
+        print(f"Found {len(output_ids)} outputs to delete")
+        
+        # Get all connections for this process
+        cursor.execute("SELECT id FROM supply_chain_connections WHERE from_process_id = %s OR to_process_id = %s", (process_id, process_id))
+        connection_ids = [row[0] for row in cursor.fetchall()]
+        print(f"Found {len(connection_ids)} connections to delete")
+        
+        # Delete inputs using individual API calls
+        inputs_deleted = 0
+        for input_id in input_ids:
+            try:
+                cursor.execute("DELETE FROM supply_chain_inputs WHERE id = %s", (input_id,))
+                if cursor.rowcount > 0:
+                    inputs_deleted += 1
+                    print(f"Deleted input {input_id}")
+            except Exception as e:
+                print(f"Error deleting input {input_id}: {e}")
+        
+        # Delete outputs using individual API calls
+        outputs_deleted = 0
+        for output_id in output_ids:
+            try:
+                cursor.execute("DELETE FROM supply_chain_outputs WHERE id = %s", (output_id,))
+                if cursor.rowcount > 0:
+                    outputs_deleted += 1
+                    print(f"Deleted output {output_id}")
+            except Exception as e:
+                print(f"Error deleting output {output_id}: {e}")
+        
+        # Delete connections using individual API calls
+        connections_deleted = 0
+        for connection_id in connection_ids:
+            try:
+                cursor.execute("DELETE FROM supply_chain_connections WHERE id = %s", (connection_id,))
+                if cursor.rowcount > 0:
+                    connections_deleted += 1
+                    print(f"Deleted connection {connection_id}")
+            except Exception as e:
+                print(f"Error deleting connection {connection_id}: {e}")
+        
+        # Update process to unmanaged
+        print("Moving process to unmanaged...")
+        cursor.execute("""
+            UPDATE supply_chain_processes 
+            SET is_managed = FALSE, action = 'update', date = CURRENT_DATE
+            WHERE id = %s
+        """, (process_id,))
+        
+        connection.commit()
+        print("Transaction committed successfully")
+        
+        return jsonify({
+            'message': 'Process moved to unmanaged successfully',
+            'process_id': process_id,
+            'process_name': process[1],
+            'inputs_deleted': inputs_deleted,
+            'outputs_deleted': outputs_deleted,
+            'connections_deleted': connections_deleted
+        })
+        
+    except Exception as e:
+        print(f"Error moving process to unmanaged: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/processes/<int:process_id>/managed', methods=['PUT'])
+def update_process_managed_status(process_id):
+    """Update managed status for a process"""
+    try:
+        data = request.get_json()
+        is_managed = data.get('is_managed', False)
+        
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            UPDATE supply_chain_processes 
+            SET is_managed = %s, action = 'update', date = CURRENT_DATE
+            WHERE id = %s
+        """, (is_managed, process_id))
+        
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'Process not found'}), 404
+        
+        connection.commit()
+        
+        return jsonify({
+            'message': 'Managed status updated successfully',
+            'process_id': process_id,
+            'is_managed': is_managed
+        })
+        
+    except Exception as e:
+        print(f"Error updating process managed status: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
         if 'cursor' in locals():
@@ -1271,7 +1453,7 @@ def get_all_processes():
         connection, cursor = db_conn()
         
         cursor.execute("""
-            SELECT id, process_name, process_type, process_status
+            SELECT id, process_name, process_type, process_status, is_managed
             FROM supply_chain_processes
             ORDER BY process_name
         """)
@@ -1280,9 +1462,10 @@ def get_all_processes():
         
         return jsonify([{
             'id': process[0],
-            'name': process[1],
-            'type': process[2],
-            'status': process[3]
+            'process_name': process[1],
+            'process_type': process[2],
+            'process_status': process[3],
+            'is_managed': process[4] or False
         } for process in processes])
         
     except Exception as e:

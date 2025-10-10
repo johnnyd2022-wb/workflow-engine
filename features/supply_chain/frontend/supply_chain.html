@@ -205,14 +205,85 @@
             margin-left: auto;
         }
 
+        .visual-layout {
+            display: flex;
+            gap: 20px;
+            height: 800px;
+        }
+
+        .unmanaged-sidebar {
+            width: 250px;
+            background: var(--card-background);
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .unmanaged-sidebar h3 {
+            margin: 0 0 15px 0;
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .unmanaged-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .unmanaged-process-item {
+            background: var(--background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            cursor: grab;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .unmanaged-process-item:hover {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .unmanaged-process-item:active {
+            cursor: grabbing;
+        }
+
+        .unmanaged-process-item.dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+        }
+
+        .unmanaged-process-item h4 {
+            margin: 0 0 5px 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .unmanaged-process-item p {
+            margin: 0;
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
         .dag-container {
             position: relative;
-            height: 700px;
+            flex: 1;
             background: var(--card-background);
             border-radius: 15px;
             box-shadow: var(--shadow);
             border: 1px solid var(--border-color);
             overflow: hidden;
+        }
+
+        .dag-container.drag-over {
+            border: 2px dashed var(--primary-color);
+            background: rgba(var(--primary-color-rgb), 0.1);
         }
 
         .dag-svg {
@@ -254,15 +325,15 @@
         }
 
         .grid-line {
-            stroke: rgba(255, 255, 255, 0.1);
+            stroke: rgba(255, 255, 255, 0.3);
             stroke-width: 0.5;
-            opacity: 0.3;
+            opacity: 0.6;
         }
 
         .grid-line.major {
             stroke-width: 1;
-            opacity: 0.5;
-            stroke: rgba(255, 51, 102, 0.2);
+            opacity: 0.8;
+            stroke: rgba(255, 255, 255, 0.5);
         }
 
         .table-container {
@@ -507,7 +578,21 @@
             }
             
             .dag-container {
-                height: 500px;
+                height: 400px;
+            }
+            
+            .visual-layout {
+                flex-direction: column;
+                height: 600px;
+            }
+            
+            .unmanaged-sidebar {
+                width: 100%;
+                height: 150px;
+            }
+            
+            .dag-container {
+                height: 450px;
             }
         }
     </style>
@@ -589,10 +674,21 @@
         
         <!-- Visual View -->
         <div id="visualView" class="hidden">
+            <div class="visual-layout">
+                <!-- Unmanaged Processes Sidebar -->
+                <div class="unmanaged-sidebar">
+                    <h3>Unmanaged Processes</h3>
+                    <div id="unmanagedProcesses" class="unmanaged-list">
+                        <!-- Unmanaged processes will be listed here -->
+                    </div>
+                </div>
+                
+                <!-- Main DAG Area -->
             <div class="dag-container">
                 <svg id="dagSvg" class="dag-svg" viewBox="0 0 1200 700">
                     <!-- Grid and nodes will be rendered here -->
                 </svg>
+                </div>
             </div>
         </div>
     </div>
@@ -1175,14 +1271,215 @@
             ]);
         }
         
+        // Promise-based confirmation dialog
+        function showConfirmDialog(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {
+            return new Promise((resolve) => {
+                showNotification('warning', title, message, [
+                    {
+                        text: cancelText,
+                        class: 'btn-secondary',
+                        onclick: () => {
+                            closeNotification();
+                            resolve(false);
+                        }
+                    },
+                    {
+                        text: confirmText,
+                        class: 'btn-primary',
+                        onclick: () => {
+                            closeNotification();
+                            resolve(true);
+                        }
+                    }
+                ]);
+            });
+        }
+        
+        // Load unmanaged processes
+        async function loadUnmanagedProcesses() {
+            try {
+                const response = await fetch('/api/supply-chain/processes');
+                if (response.ok) {
+                    const processes = await response.json();
+                    console.log('All processes:', processes);
+                    const unmanagedProcesses = processes.filter(p => !p.is_managed);
+                    console.log('Unmanaged processes:', unmanagedProcesses);
+                    
+                    const container = document.getElementById('unmanagedProcesses');
+                    container.innerHTML = '';
+                    
+                    if (unmanagedProcesses.length === 0) {
+                        container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-style: italic;">No unmanaged processes</p>';
+                        return;
+                    }
+                    
+                    unmanagedProcesses.forEach(process => {
+                        const item = document.createElement('div');
+                        item.className = 'unmanaged-process-item';
+                        item.draggable = true;
+                        item.dataset.processId = process.id;
+                        item.innerHTML = `
+                            <h4>${process.process_name || 'Unnamed Process'}</h4>
+                            <p>${process.process_type || 'No type'}</p>
+                        `;
+                        
+                        // Add drag event listeners
+                        item.addEventListener('dragstart', handleDragStart);
+                        item.addEventListener('dragend', handleDragEnd);
+                        
+                        container.appendChild(item);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading unmanaged processes:', error);
+            }
+        }
+        
+        // Drag and drop handlers
+        let draggedProcessId = null;
+
+        function handleDragStart(e) {
+            draggedProcessId = e.target.dataset.processId;
+            e.target.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', draggedProcessId);
+        }
+
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            draggedProcessId = null;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            e.currentTarget.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drag-over');
+            
+            const processId = e.dataTransfer.getData('text/plain');
+            if (processId) {
+                moveProcessToDAG(processId);
+            }
+        }
+
+        // Move process from unmanaged to managed (DAG)
+        async function moveProcessToDAG(processId) {
+            try {
+                // First check if the process has any connections, inputs, or outputs
+                const checkResponse = await fetch(`/api/supply-chain/processes/${processId}/has-connections`);
+                if (!checkResponse.ok) {
+                    showError('Error', 'Failed to check process status');
+                    return;
+                }
+                
+                const checkData = await checkResponse.json();
+                
+                // If the process has no connections, inputs, or outputs, ask for confirmation
+                if (!checkData.has_any) {
+                    const confirmed = await showConfirmDialog(
+                        'Process Has No Inputs, Outputs or Connections',
+                        'This process has no inputs, outputs or connections. \n\n Click `view` on the process to add an input, output or connection to save process',
+                        'Move',
+                        'Cancel'
+                    );
+                    
+                    if (!confirmed) {
+                        return;
+                    }
+                }
+                
+                const response = await fetch(`/api/supply-chain/processes/${processId}/managed`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_managed: true })
+                });
+                
+                if (response.ok) {
+                    showSuccess('Process Moved', 'Process has been moved to the DAG area');
+                    loadUnmanagedProcesses();
+                    if (isVisualView) {
+                        await renderDAG();
+                        // Auto-save layout after moving process to DAG
+                        await saveLayout();
+                    }
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Failed to move process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Failed to move process: ' + error.message);
+            }
+        }
+        
+        // Move process from DAG to unmanaged area
+        async function moveProcessToUnmanaged(processId, processName) {
+            try {
+                const confirmed = await showConfirmDialog(
+                    'Move Process to Unmanaged',
+                    `All inputs, outputs and connections for this process will be deleted if you move to 'Unmanaged Processes' pane`,
+                    'Move Anyway',
+                    'Cancel'
+                );
+                
+                if (!confirmed) {
+                    // User cancelled - refresh the DAG to restore the process to its saved position
+                    if (isVisualView) {
+                        await renderDAG();
+                    }
+                    return;
+                }
+                
+                const response = await fetch(`/api/supply-chain/processes/${processId}/move-to-unmanaged`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showSuccess('Process Moved', `Process "${processName}" has been moved to unmanaged area. Deleted ${result.inputs_deleted} inputs, ${result.outputs_deleted} outputs, and ${result.connections_deleted} connections.`);
+                    
+                    // Refresh all views
+                    loadConnectionsTable(); // Refresh connections table
+                    loadUnmanagedProcesses();
+                    if (isVisualView) {
+                        await renderDAG();
+                    }
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Failed to move process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Failed to move process: ' + error.message);
+            }
+        }
+        
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
             loadConnectionsTable();
             await loadPositions();
+            loadUnmanagedProcesses();
             
             // If we're starting in visual view, render the DAG with loaded positions
             if (isVisualView) {
                 await renderDAG();
+            }
+            
+            // Set up drag and drop for DAG container
+            const dagContainer = document.querySelector('.dag-container');
+            if (dagContainer) {
+                dagContainer.addEventListener('dragover', handleDragOver);
+                dagContainer.addEventListener('dragleave', handleDragLeave);
+                dagContainer.addEventListener('drop', handleDrop);
             }
         });
         
@@ -1239,18 +1536,20 @@
                 drawGrid(svg);
             }
             
-            // Get processes data
-            const processes = [
-                {% for process in processes %}
-                {
-                    id: {{ process[0] }},
-                    name: "{{ process[1] }}",
-                    type: "{{ process[3] or 'N/A' }}",
-                    status: "{{ process[4] or 'inactive' }}",
-                    category: "{{ process[5] or 'N/A' }}"
-                }{% if not loop.last %},{% endif %}
-                {% endfor %}
-            ];
+            // Get processes data dynamically (only managed processes)
+            let processes = [];
+            try {
+                const response = await fetch('/api/supply-chain/processes');
+                if (response.ok) {
+                    const allProcesses = await response.json();
+                    processes = allProcesses.filter(p => p.is_managed);
+                    console.log('Loaded managed processes:', processes);
+                } else {
+                    console.error('Failed to load processes:', response.statusText);
+                }
+            } catch (error) {
+                console.error('Error loading processes:', error);
+            }
             
             if (processes.length === 0) {
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1267,14 +1566,63 @@
             
             // Create nodes
             processes.forEach((process, index) => {
-                const x = nodePositions[process.id]?.x || 100 + (index * 250);
-                const y = nodePositions[process.id]?.y || 100;
-                console.log(`Process ${process.id} (${process.name}): x=${x}, y=${y} (from nodePositions: ${nodePositions[process.id] ? 'yes' : 'no'})`);
+                // Get container dimensions for bounds checking
+                const container = document.querySelector('.dag-container');
+                const containerRect = container.getBoundingClientRect();
+                const containerWidth = containerRect.width;
+                const containerHeight = containerRect.height;
+                
+                // Calculate safe default positions within container bounds
+                const processWidth = 180;
+                const processHeight = 100;
+                const margin = 50;
+                
+                // If no saved position, calculate a safe default position
+                let x, y;
+                if (nodePositions[process.id]) {
+                    x = nodePositions[process.id].x;
+                    y = nodePositions[process.id].y;
+                } else {
+                    // Calculate grid position within container bounds
+                    const colsPerRow = Math.floor((containerWidth - margin) / (processWidth + margin));
+                    const row = Math.floor(index / colsPerRow);
+                    const col = index % colsPerRow;
+                    
+                    x = margin + (col * (processWidth + margin));
+                    y = margin + (row * (processHeight + margin));
+                    
+                    // Ensure position is within bounds
+                    x = Math.min(x, containerWidth - processWidth - margin);
+                    y = Math.min(y, containerHeight - processHeight - margin);
+                    
+                    // Store the new position in nodePositions so it gets saved
+                    nodePositions[process.id] = { x, y, width: processWidth, height: processHeight };
+                }
+                
+                console.log(`Process ${process.id} (${process.process_name}): x=${x}, y=${y} (from nodePositions: ${nodePositions[process.id] ? 'yes' : 'no'})`);
                 createProcessNode(process, x, y);
             });
             
             // Draw connections
             await drawConnections();
+            
+            // Adjust SVG size based on content
+            adjustSVGSize();
+        }
+        
+        function adjustSVGSize() {
+            const svg = document.getElementById('dagSvg');
+            const container = document.querySelector('.dag-container');
+            
+            // Get container dimensions
+            const containerRect = container.getBoundingClientRect();
+            const containerWidth = containerRect.width;
+            const containerHeight = containerRect.height;
+            
+            // Always use container size - no expansion
+            svg.setAttribute('viewBox', `0 0 ${containerWidth} ${containerHeight}`);
+            
+            console.log(`SVG size: ${containerWidth}x${containerHeight} (fits container exactly)`);
         }
         
         function createProcessNode(process, x, y) {
@@ -1328,7 +1676,7 @@
             text.setAttribute('font-size', '14');
             text.setAttribute('font-weight', '600');
             text.setAttribute('fill', 'var(--text-color)');
-            text.textContent = process.name;
+            text.textContent = process.process_name;
             
             // Create type text
             const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1337,20 +1685,20 @@
             typeText.setAttribute('text-anchor', 'middle');
             typeText.setAttribute('font-size', '11');
             typeText.setAttribute('fill', 'var(--text-secondary)');
-            typeText.textContent = process.type;
+            typeText.textContent = process.process_type || 'N/A';
             
             // Create status indicator
             const statusCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             statusCircle.setAttribute('cx', '160');
             statusCircle.setAttribute('cy', '20');
             statusCircle.setAttribute('r', '6');
-            statusCircle.setAttribute('fill', process.status === 'active' ? '#28a745' : '#dc3545');
+            statusCircle.setAttribute('fill', process.process_status === 'active' ? '#28a745' : '#dc3545');
             
             // Create view details button
             const viewButton = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            viewButton.setAttribute('x', '60');
+            viewButton.setAttribute('x', '20');
             viewButton.setAttribute('y', '75');
-            viewButton.setAttribute('width', '60');
+            viewButton.setAttribute('width', '50');
             viewButton.setAttribute('height', '20');
             viewButton.setAttribute('rx', '4');
             viewButton.setAttribute('fill', 'var(--secondary-color)');
@@ -1360,12 +1708,12 @@
             viewButton.setAttribute('data-process-id', process.id);
             viewButton.addEventListener('click', (e) => {
                 e.stopPropagation();
-                openProcessDetailsModal(process.id, process.name);
+                openProcessDetailsModal(process.id, process.process_name);
             });
             
             // Create view text
             const viewText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            viewText.setAttribute('x', '90');
+            viewText.setAttribute('x', '45');
             viewText.setAttribute('y', '87');
             viewText.setAttribute('text-anchor', 'middle');
             viewText.setAttribute('font-size', '10');
@@ -1376,7 +1724,40 @@
             viewText.setAttribute('data-process-id', process.id);
             viewText.addEventListener('click', (e) => {
                 e.stopPropagation();
-                openProcessDetailsModal(process.id, process.name);
+                openProcessDetailsModal(process.id, process.process_name);
+            });
+            
+            // Create unmanage button
+            const unmanageButton = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            unmanageButton.setAttribute('x', '80');
+            unmanageButton.setAttribute('y', '75');
+            unmanageButton.setAttribute('width', '60');
+            unmanageButton.setAttribute('height', '20');
+            unmanageButton.setAttribute('rx', '4');
+            unmanageButton.setAttribute('fill', 'var(--danger-color, #dc3545)');
+            unmanageButton.setAttribute('stroke', 'var(--danger-color, #dc3545)');
+            unmanageButton.setAttribute('stroke-width', '1');
+            unmanageButton.setAttribute('cursor', 'pointer');
+            unmanageButton.setAttribute('data-process-id', process.id);
+            unmanageButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                moveProcessToUnmanaged(process.id, process.process_name);
+            });
+            
+            // Create unmanage text
+            const unmanageText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            unmanageText.setAttribute('x', '110');
+            unmanageText.setAttribute('y', '87');
+            unmanageText.setAttribute('text-anchor', 'middle');
+            unmanageText.setAttribute('font-size', '10');
+            unmanageText.setAttribute('font-weight', '600');
+            unmanageText.setAttribute('fill', 'white');
+            unmanageText.textContent = 'unmanage';
+            unmanageText.setAttribute('cursor', 'pointer');
+            unmanageText.setAttribute('data-process-id', process.id);
+            unmanageText.addEventListener('click', (e) => {
+                e.stopPropagation();
+                moveProcessToUnmanaged(process.id, process.process_name);
             });
             
             group.appendChild(rect);
@@ -1385,6 +1766,8 @@
             group.appendChild(statusCircle);
             group.appendChild(viewButton);
             group.appendChild(viewText);
+            group.appendChild(unmanageButton);
+            group.appendChild(unmanageText);
             
             // Add drag handlers
             addDragHandlers(group, process);
@@ -1396,6 +1779,7 @@
         }
         
         function addDragHandlers(group, process) {
+            // Mouse drag for repositioning within DAG
             group.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 draggedNode = group;
@@ -1435,11 +1819,22 @@
                         y = Math.round(y / gridSize) * gridSize;
                     }
                     
+                    // Ensure process stays within bounds
+                    const processWidth = 180;
+                    const processHeight = 100;
+                    const margin = 10;
+                    
+                    x = Math.max(margin, Math.min(x, svgRect.width - processWidth - margin));
+                    y = Math.max(margin, Math.min(y, svgRect.height - processHeight - margin));
+                    
                     draggedNode.setAttribute('transform', `translate(${x}, ${y})`);
                     
                     // Update position
                     const processId = draggedNode.getAttribute('data-process-id');
                     nodePositions[processId] = { x, y, width: 180, height: 100 };
+                    
+                    // Adjust SVG size if needed
+                    adjustSVGSize();
                     
                     // Redraw connections only (much faster than full redraw)
                     redrawConnectionsOnly();
@@ -1462,8 +1857,10 @@
         
         function drawGrid(svg) {
             const gridSize = 20;
-            const width = 1200;
-            const height = 700;
+            // Get the current viewBox dimensions
+            const viewBox = svg.getAttribute('viewBox').split(' ').map(Number);
+            const width = viewBox[2];
+            const height = viewBox[3];
             
             for (let x = 0; x <= width; x += gridSize) {
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -1623,8 +2020,8 @@
         async function resetLayout() {
             try {
                 // Clear localStorage
-                localStorage.removeItem('dagPositions');
-                nodePositions = {};
+            localStorage.removeItem('dagPositions');
+            nodePositions = {};
                 
                 // Also clear backend layout
                 const response = await fetch('/api/supply-chain/dag-layout', {
@@ -1637,8 +2034,8 @@
                     showError('Error', 'Failed to reset layout on server');
                 }
                 
-                if (isVisualView) {
-                    renderDAG();
+            if (isVisualView) {
+                renderDAG();
                 }
             } catch (error) {
                 console.error('Error resetting layout:', error);
@@ -1664,9 +2061,9 @@
                 }
                 
                 // Fallback to localStorage if backend has no data
-                const saved = localStorage.getItem('dagPositions');
-                if (saved) {
-                    nodePositions = JSON.parse(saved);
+            const saved = localStorage.getItem('dagPositions');
+            if (saved) {
+                nodePositions = JSON.parse(saved);
                     console.log('Loaded positions from localStorage:', nodePositions);
                 } else {
                     console.log('No saved positions found');
@@ -1728,12 +2125,12 @@
             processes.forEach(process => {
                 const option1 = document.createElement('option');
                 option1.value = process.id;
-                option1.textContent = process.name;
+                option1.textContent = process.process_name;
                 fromSelect.appendChild(option1);
                 
                 const option2 = document.createElement('option');
                 option2.value = process.id;
-                option2.textContent = process.name;
+                option2.textContent = process.process_name;
                 toSelect.appendChild(option2);
             });
         }
@@ -1989,6 +2386,12 @@
         function deleteProcessFromDetails() {
             if (window.currentProcessId && window.currentProcessName) {
                 deleteProcess(window.currentProcessId, window.currentProcessName);
+            } else {
+                console.error('Missing process ID or name:', {
+                    processId: window.currentProcessId,
+                    processName: window.currentProcessName
+                });
+                showError('Error', 'Unable to delete process: missing process information');
             }
         }
         
@@ -2128,15 +2531,17 @@
                     fromSelect.innerHTML = '<option value="">Select from process</option>' + 
                         fromFilteredProcesses.map(proc => {
                             const selected = (currentProcessId && proc.id == currentProcessId) || proc.id == currentFromValue ? 'selected' : '';
-                            return `<option value="${proc.id}" ${selected}>${proc.name}</option>`;
+                            return `<option value="${proc.id}" ${selected}>${proc.process_name}</option>`;
                         }).join('');
                     
                     // Populate To Process dropdown (exclude selected from process)
-                    const toFilteredProcesses = processes.filter(proc => proc.id != excludeFromId);
+                    // Check what's actually selected in the From dropdown after it's populated
+                    const actualFromValue = fromSelect.value;
+                    const toFilteredProcesses = processes.filter(proc => proc.id != actualFromValue);
                     toSelect.innerHTML = '<option value="">Select to process</option>' + 
                         toFilteredProcesses.map(proc => {
                             const selected = proc.id == currentToValue ? 'selected' : '';
-                            return `<option value="${proc.id}" ${selected}>${proc.name}</option>`;
+                            return `<option value="${proc.id}" ${selected}>${proc.process_name}</option>`;
                         }).join('');
                 }
             } catch (error) {
@@ -2163,13 +2568,13 @@
                         // Populate From Process dropdown
                         const fromSelect = document.getElementById('editConnectionFrom');
                         fromSelect.innerHTML = processes.map(proc => 
-                            `<option value="${proc.id}" ${proc.id == connection.from_process_id ? 'selected' : ''}>${proc.name}</option>`
+                            `<option value="${proc.id}" ${proc.id == connection.from_process_id ? 'selected' : ''}>${proc.process_name}</option>`
                         ).join('');
                         
                         // Populate To Process dropdown
                         const toSelect = document.getElementById('editConnectionTo');
                         toSelect.innerHTML = processes.map(proc => 
-                            `<option value="${proc.id}" ${proc.id == connection.to_process_id ? 'selected' : ''}>${proc.name}</option>`
+                            `<option value="${proc.id}" ${proc.id == connection.to_process_id ? 'selected' : ''}>${proc.process_name}</option>`
                         ).join('');
                     }
                 }
