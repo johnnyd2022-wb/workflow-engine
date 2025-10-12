@@ -9,6 +9,11 @@ I want the ability to `execute` processes where inputs are user defined and thes
 This then feeds into outputs which are taken as inputs on future processes and eventually will lead to sales data showing the current state of a execution through `completed` processes and remaining (`pending`) processes in the exection allowing a visible DAG graph highlighting where executions are in or flight
 I will need a way to determine tracing from first input to processed sales to give a full end to end tracing system that works for any business type
 
+# Process executions
+After I created parent process and sub processes with inputs, outputs and connections, I want the ability to perform executions of the parent process. This allows me to track inputs for batches and give me the ability to start tracing my supply chain with batches or whatever other fields I want.
+
+Process executions should track using a unique execution ID to give the tracing ability. When all sub processes in the execution have been completed then there should be a Excutions heading showing the visual view with a green pulse around the completed steps to highlight done steps
+
 For example, I run a Gin distillery. I might create the following process using this DAG
  -  Process name: Distilling example1 flavor Gin
     - inputs:
@@ -59,6 +64,7 @@ All frontend code is stored in features/supply_chain/frontend
  - No UI objects should exceed the browser window size and scroll bars should only be visible if tables or content exceeds browser window size so the UI remains clean
  - Where possible create reusable components that can be applied without duplicating the same code
  - Styling / CSS should follow existing code in the frontend/ folder. I will change it all eventually but that way its all contained in the same location
+- NEVER USE BROWSER POP UPS - ALWAYS USE NICELY STYLED CSS POP UPS FOR SUCCESS OR FAILURE MESSAGES
 
 
 # Backend Code

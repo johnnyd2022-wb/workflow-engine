@@ -254,7 +254,6 @@
         
         <div class="controls">
             <button class="btn btn-primary" onclick="openCreateProcessModal()">+ Add Process</button>
-            <button class="btn btn-success" onclick="openAddConnectionModal()">+ Add Connection</button>
             <button class="btn btn-secondary" onclick="toggleGrid()">Show Grid</button>
             <button class="btn btn-success" onclick="saveLayout()">Save Layout</button>
             <button class="btn btn-secondary" onclick="resetLayout()">Reset Layout</button>
@@ -300,7 +299,10 @@
                 </tbody>
             </table>
             
-            <h2>Connections</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="color: var(--primary-color); margin: 0;">Connections</h2>
+                <button class="btn btn-primary btn-small" onclick="openAddConnectionModal()">+ Add Connection</button>
+            </div>
             <table>
                 <thead>
                     <tr>

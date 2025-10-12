@@ -441,6 +441,43 @@
             font-size: 12px;
         }
 
+        /* Notification Modal Styles */
+        .notification-modal {
+            z-index: 10000;
+        }
+
+        .notification-content {
+            max-width: 400px;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .notification-content h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0 0 15px 0;
+        }
+
+        .notification-content p {
+            font-size: 1rem;
+            margin: 0 0 20px 0;
+            color: var(--text-color);
+        }
+
+        .notification-content .close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            color: var(--text-color);
+        }
+
+        .notification-content .close:hover {
+            color: var(--primary-color);
+        }
+
         /* Form Styles */
         .form-group {
             margin-bottom: 20px;
@@ -506,14 +543,18 @@
                 <div class="stat-number" id="connectionCount">0</div>
                 <div class="stat-label">Connections</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-number" id="unmanagedCount">0</div>
+                <div class="stat-label">Unmanaged</div>
+            </div>
         </div>
 
         <div class="controls">
+            <button class="btn btn-primary" onclick="addSubProcess()">+ Add Sub Process</button>
             <button class="btn btn-secondary" onclick="toggleGrid()">Toggle Grid</button>
             <button class="btn btn-success" onclick="saveLayout()">Save Layout</button>
             <button class="btn btn-secondary" onclick="resetLayout()">Reset Layout</button>
             <button class="btn btn-primary" onclick="refreshDAG()">Refresh DAG</button>
-            <button class="btn btn-primary" onclick="openAddInputModalFromDetails()">Test Add Input</button>
         </div>
 
             <div class="visual-layout">
@@ -526,7 +567,7 @@
                 </div>
                 
                 <!-- Main DAG Area -->
-                <div class="dag-container">
+                <div class="dag-container" id="dagContainer">
                 <svg id="dagSvg" class="dag-svg" viewBox="0 0 1200 700">
                     <!-- Grid and nodes will be rendered here -->
                 </svg>
@@ -539,11 +580,6 @@
         <div class="modal-content" style="max-width: 900px;">
             <span class="close" onclick="closeProcessDetailsModal()">&times;</span>
             <h2 id="processDetailsModalTitle">Sub-Process Details</h2>
-            
-            <div style="margin-bottom: 20px;">
-                <button class="btn btn-secondary btn-small" onclick="alert('Modal test button works!')">Test Modal Button</button>
-                <button class="btn btn-primary btn-small" id="testAddInputBtn">Test Add Input (Event Listener)</button>
-            </div>
             
             <div style="display: flex; gap: 20px; margin-bottom: 20px;">
                 <div style="flex: 1;">
@@ -558,13 +594,7 @@
                 <div style="flex: 1;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h3 style="color: var(--primary-color); margin: 0;">Outputs</h3>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem;">
-                                <input type="checkbox" id="processFlowThroughEnabled" onchange="toggleProcessFlowThrough()">
-                                <span>Enable flow-through</span>
-                            </label>
-                            <button class="btn btn-primary btn-small" id="modalAddOutputBtn">+ Add Output</button>
-                        </div>
+                        <button class="btn btn-primary btn-small" id="modalAddOutputBtn">+ Add Output</button>
                     </div>
                     <div id="processDetailsOutputs">
                         <!-- Outputs will be loaded here -->
@@ -630,11 +660,30 @@
         function closeAddInputModal() {
             document.getElementById('addInputModal').style.display = 'none';
             document.getElementById('addInputForm').reset();
+            
+            // Reset modal to create mode
+            document.querySelector('#addInputModal h2').textContent = 'Add Input';
+            document.querySelector('#addInputModal button[type="submit"]').textContent = 'Add Input';
+            document.getElementById('addInputModal').removeAttribute('data-edit-id');
         }
 
         function closeAddOutputModal() {
             document.getElementById('addOutputModal').style.display = 'none';
             document.getElementById('addOutputForm').reset();
+            
+            // Reset flow-through field checkboxes
+            document.getElementById('flowThrough_name').checked = false;
+            document.getElementById('flowThrough_quantity').checked = false;
+            document.getElementById('flowThrough_unit').checked = false;
+            document.getElementById('flowThrough_batch').checked = false;
+            document.getElementById('flowThrough_specifications').checked = false;
+            document.getElementById('flowThrough_type').checked = false;
+            document.getElementById('flowThrough_destination').checked = false;
+            
+            // Reset modal to create mode
+            document.querySelector('#addOutputModal h2').textContent = 'Add Output';
+            document.querySelector('#addOutputModal button[type="submit"]').textContent = 'Add Output';
+            document.getElementById('addOutputModal').removeAttribute('data-edit-id');
         }
 
         function closeAddConnectionModal() {
@@ -647,28 +696,111 @@
             const fromSelect = document.getElementById('addConnectionFrom');
             const toSelect = document.getElementById('addConnectionTo');
             
-            // Clear existing options
-            fromSelect.innerHTML = '<option value="">Select from process</option>';
-            toSelect.innerHTML = '<option value="">Select to process</option>';
+            // Remove any existing event listeners to prevent duplicates
+            fromSelect.replaceWith(fromSelect.cloneNode(true));
+            toSelect.replaceWith(toSelect.cloneNode(true));
             
-            // Add sub-processes to dropdowns
+            // Get fresh references after replacement
+            const freshFromSelect = document.getElementById('addConnectionFrom');
+            const freshToSelect = document.getElementById('addConnectionTo');
+            
+            // Clear existing options
+            freshFromSelect.innerHTML = '<option value="">Select from process</option>';
+            freshToSelect.innerHTML = '<option value="">Select to process</option>';
+            
+            // Add sub-processes to FROM dropdown (include current process)
+            subProcesses.forEach(process => {
+                const option = document.createElement('option');
+                option.value = process.id;
+                option.textContent = process.sub_process_name;
+                freshFromSelect.appendChild(option);
+            });
+            
+            // Add sub-processes to TO dropdown (exclude current process to prevent loops)
             subProcesses.forEach(process => {
                 if (process.id !== currentProcessId) {
-                    const option1 = document.createElement('option');
-                    option1.value = process.id;
-                    option1.textContent = process.sub_process_name;
-                    fromSelect.appendChild(option1);
-                    
-                    const option2 = document.createElement('option');
-                    option2.value = process.id;
-                    option2.textContent = process.sub_process_name;
-                    toSelect.appendChild(option2);
+                    const option = document.createElement('option');
+                    option.value = process.id;
+                    option.textContent = process.sub_process_name;
+                    freshToSelect.appendChild(option);
                 }
             });
             
-            // Set selected values if provided
-            if (fromProcessId) fromSelect.value = fromProcessId;
-            if (toProcessId) toSelect.value = toProcessId;
+            // Pre-populate FROM process with current sub-process
+            if (currentProcessId) {
+                freshFromSelect.value = currentProcessId;
+            }
+            
+            // Simple function to update both dropdowns to prevent loops
+            function updateDropdowns() {
+                const fromValue = freshFromSelect.value;
+                const toValue = freshToSelect.value;
+                
+                console.log('=== updateDropdowns() called ===');
+                console.log('FROM value:', fromValue, 'TO value:', toValue);
+                
+                // Update FROM dropdown - exclude selected TO process
+                freshFromSelect.innerHTML = '<option value="">Select from process</option>';
+                subProcesses.forEach(process => {
+                    // Convert both to strings for comparison
+                    const processIdStr = String(process.id);
+                    const toValueStr = String(toValue);
+                    const shouldExclude = processIdStr === toValueStr;
+                    
+                    console.log(`FROM dropdown: process ${process.id} (${processIdStr}) vs TO value ${toValue} (${toValueStr}) = exclude? ${shouldExclude}`);
+                    
+                    if (!shouldExclude) {
+                        const option = document.createElement('option');
+                        option.value = process.id;
+                        option.textContent = process.sub_process_name;
+                        freshFromSelect.appendChild(option);
+                    }
+                });
+                
+                // Update TO dropdown - exclude selected FROM process
+                freshToSelect.innerHTML = '<option value="">Select to process</option>';
+                subProcesses.forEach(process => {
+                    // Convert both to strings for comparison
+                    const processIdStr = String(process.id);
+                    const fromValueStr = String(fromValue);
+                    const shouldExclude = processIdStr === fromValueStr;
+                    
+                    console.log(`TO dropdown: process ${process.id} (${processIdStr}) vs FROM value ${fromValue} (${fromValueStr}) = exclude? ${shouldExclude}`);
+                    
+                    if (!shouldExclude) {
+                        const option = document.createElement('option');
+                        option.value = process.id;
+                        option.textContent = process.sub_process_name;
+                        freshToSelect.appendChild(option);
+                    }
+                });
+                
+                // Restore selections
+                if (fromValue) freshFromSelect.value = fromValue;
+                if (toValue) freshToSelect.value = toValue;
+                
+                console.log('Final FROM options:', freshFromSelect.children.length - 1, 'Final TO options:', freshToSelect.children.length - 1);
+                console.log('Final FROM value:', freshFromSelect.value, 'Final TO value:', freshToSelect.value);
+                console.log('=== updateDropdowns() complete ===');
+            }
+            
+            // Set selected values if provided (override pre-population)
+            if (fromProcessId) freshFromSelect.value = fromProcessId;
+            if (toProcessId) freshToSelect.value = toProcessId;
+            
+            // Initial call to set up dropdowns properly AFTER setting values
+            updateDropdowns();
+            
+            // Add event listeners
+            freshFromSelect.addEventListener('change', function() {
+                console.log('FROM changed to:', this.value);
+                updateDropdowns();
+            });
+            
+            freshToSelect.addEventListener('change', function() {
+                console.log('TO changed to:', this.value);
+                updateDropdowns();
+            });
         }
 
         // Navigation function
@@ -681,54 +813,249 @@
         }
 
         function toggleProcessFlowThrough() {
-            alert('Flow-through toggle functionality will be implemented.');
+            showError('Coming Soon', 'Flow-through toggle functionality will be implemented.');
+        }
+
+        function updateOutputFlowThrough(outputId, flowThrough) {
+            fetch(`/api/supply-chain/outputs/${outputId}/flow-through`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ flow_through: flowThrough })
+            })
+            .then(response => {
+                if (response.ok) {
+                    const message = flowThrough ? 'Output enabled for flow-through' : 'Output disabled for flow-through';
+                    showSuccess('Success', message);
+                    // Refresh the process details to show updated state
+                    if (window.currentProcessId) {
+                        loadProcessDetails(window.currentProcessId);
+                    }
+                } else {
+                    response.json().then(data => {
+                        showError('Error', 'Error updating flow-through status: ' + data.error);
+                    });
+                }
+            })
+            .catch(error => {
+                showError('Error', 'Error updating flow-through status: ' + error.message);
+            });
         }
 
         function deleteProcessFromDetails() {
-            const confirmed = confirm('Are you sure you want to delete this sub-process? This action cannot be undone.');
-            if (confirmed) {
-                alert('Delete functionality will be implemented.');
-            }
+            showConfirmation(
+                'Delete Sub-Process',
+                'Are you sure you want to delete this sub-process? This action cannot be undone.',
+                () => {
+                    if (!window.currentProcessId) {
+                        showError('Error', 'No sub-process selected for deletion.');
+                        return;
+                    }
+                    
+                    console.log('Attempting to delete sub-process:', window.currentProcessId);
+                    
+                    fetch(`/api/supply-chain/sub-processes/${window.currentProcessId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(response => {
+                        console.log('Delete response status:', response.status);
+                        console.log('Delete response ok:', response.ok);
+                        
+                        if (response.ok) {
+                            showSuccess('Success', 'Sub-process deleted successfully!');
+                            closeProcessDetailsModal();
+                            refreshDAG(); // Refresh the DAG to remove the deleted sub-process
+                        } else {
+                            response.json().then(data => {
+                                console.log('Delete error response:', data);
+                                showError('Error', 'Error deleting sub-process: ' + data.error);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Delete fetch error:', error);
+                        showError('Error', 'Error deleting sub-process: ' + error.message);
+                    });
+                }
+            );
         }
 
         // Input/Output/Connection CRUD functions
         function editInput(inputId) {
-            alert(`Edit Input ${inputId} functionality will be implemented.`);
+            // Get the current input data and open edit modal
+            fetch(`/api/supply-chain/inputs/${inputId}`)
+            .then(response => response.json())
+            .then(input => {
+                // Pre-populate the add input modal with current data
+                document.getElementById('addInputProcessId').value = input.process_id;
+                document.getElementById('inputName').value = input.input_name || '';
+                document.getElementById('inputVolume').value = input.input_quantity || '';
+                document.getElementById('inputMeasure').value = input.input_unit || '';
+                document.getElementById('inputType').value = input.input_type || '';
+                document.getElementById('inputSource').value = input.input_source || '';
+                document.getElementById('inputBatch').value = input.input_batch_number || '';
+                document.getElementById('inputNotes').value = input.input_specifications || '';
+                document.getElementById('isExecutionInput').checked = input.is_execution_input || false;
+                
+                // Change modal title and button text
+                document.querySelector('#addInputModal h2').textContent = 'Edit Input';
+                document.querySelector('#addInputModal button[type="submit"]').textContent = 'Update Input';
+                
+                // Store the input ID for the update
+                document.getElementById('addInputModal').setAttribute('data-edit-id', inputId);
+                
+                // Open the modal
+                document.getElementById('addInputModal').style.display = 'block';
+            })
+            .catch(error => {
+                showError('Error', 'Error loading input details: ' + error.message);
+            });
         }
 
         function deleteInput(inputId, inputName) {
-            const confirmed = confirm(`Are you sure you want to delete "${inputName}"?`);
-            if (confirmed) {
-                alert(`Delete Input ${inputId} functionality will be implemented.`);
-            }
+            showConfirmation(
+                'Delete Input',
+                `Are you sure you want to delete "${inputName}"?`,
+                () => {
+                    fetch(`/api/supply-chain/inputs/${inputId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(async response => {
+                        if (response.ok) {
+                            showSuccess('Success', 'Input deleted successfully!');
+                            if (window.currentProcessId) {
+                                loadProcessDetails(window.currentProcessId);
+                            }
+                        } else {
+                            response.json().then(data => {
+                                showError('Error', 'Error deleting input: ' + data.error);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        showError('Error', 'Error deleting input: ' + error.message);
+                    });
+                }
+            );
         }
 
         function editOutput(outputId) {
-            alert(`Edit Output ${outputId} functionality will be implemented.`);
+            // Get the current output data and open edit modal
+            fetch(`/api/supply-chain/outputs/${outputId}`)
+            .then(response => response.json())
+            .then(output => {
+                // Pre-populate the add output modal with current data
+                document.getElementById('addOutputProcessId').value = output.process_id;
+                document.getElementById('outputType').value = output.output_name || '';
+                document.getElementById('outputVolume').value = output.output_quantity || '';
+                document.getElementById('outputMeasure').value = output.output_unit || '';
+                document.getElementById('outputTypeCategory').value = output.output_type || '';
+                document.getElementById('outputDestination').value = output.output_destination || '';
+                document.getElementById('outputBatch').value = output.output_batch_number || '';
+                document.getElementById('outputNotes').value = output.output_specifications || '';
+                
+                // Set flow-through field checkboxes
+                const flowThroughFields = output.output_flow_through_fields || {};
+                document.getElementById('flowThrough_name').checked = flowThroughFields.name || false;
+                document.getElementById('flowThrough_quantity').checked = flowThroughFields.quantity || false;
+                document.getElementById('flowThrough_unit').checked = flowThroughFields.unit || false;
+                document.getElementById('flowThrough_batch').checked = flowThroughFields.batch || false;
+                document.getElementById('flowThrough_specifications').checked = flowThroughFields.specifications || false;
+                document.getElementById('flowThrough_type').checked = flowThroughFields.type || false;
+                document.getElementById('flowThrough_destination').checked = flowThroughFields.destination || false;
+                
+                // Change modal title and button text
+                document.querySelector('#addOutputModal h2').textContent = 'Edit Output';
+                document.querySelector('#addOutputModal button[type="submit"]').textContent = 'Update Output';
+                
+                // Store the output ID for the update
+                document.getElementById('addOutputModal').setAttribute('data-edit-id', outputId);
+                
+                // Open the modal
+                document.getElementById('addOutputModal').style.display = 'block';
+            })
+            .catch(error => {
+                showError('Error', 'Error loading output details: ' + error.message);
+            });
         }
 
         function deleteOutput(outputId, outputName) {
-            const confirmed = confirm(`Are you sure you want to delete "${outputName}"?`);
-            if (confirmed) {
-                alert(`Delete Output ${outputId} functionality will be implemented.`);
-            }
+            showConfirmation(
+                'Delete Output',
+                `Are you sure you want to delete "${outputName}"?`,
+                () => {
+                    fetch(`/api/supply-chain/outputs/${outputId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(async response => {
+                        if (response.ok) {
+                            showSuccess('Success', 'Output deleted successfully!');
+                            if (window.currentProcessId) {
+                                loadProcessDetails(window.currentProcessId);
+                            }
+                        } else {
+                            response.json().then(data => {
+                                showError('Error', 'Error deleting output: ' + data.error);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        showError('Error', 'Error deleting output: ' + error.message);
+                    });
+                }
+            );
         }
 
         function editConnection(connectionId) {
-            alert(`Edit Connection ${connectionId} functionality will be implemented.`);
+            showError('Coming Soon', 'Edit connection functionality will be implemented in a future update.');
         }
 
         function deleteConnection(connectionId, connectionName) {
-            const confirmed = confirm(`Are you sure you want to delete "${connectionName}"?`);
-            if (confirmed) {
-                alert(`Delete Connection ${connectionId} functionality will be implemented.`);
-            }
+            showConfirmation(
+                'Delete Connection',
+                `Are you sure you want to delete "${connectionName}"?`,
+                () => {
+                    fetch(`/api/supply-chain/connections/${connectionId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(async response => {
+                        if (response.ok) {
+                            showSuccess('Success', 'Connection deleted successfully!');
+                            if (window.currentProcessId) {
+                                loadProcessDetails(window.currentProcessId);
+                            }
+                            // Refresh DAG to show updated connections
+                            await refreshDAG();
+                        } else {
+                            response.json().then(data => {
+                                showError('Error', 'Error deleting connection: ' + data.error);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        showError('Error', 'Error deleting connection: ' + error.message);
+                    });
+                }
+            );
         }
 
         // Refresh DAG data and re-render
         async function refreshDAG() {
             await loadAllData();
             await renderDAG();
+            populateUnmanagedSidebar();
+        }
+
+        // Sub-process management functions
+        function addSubProcess() {
+            // Open the create sub process modal
+            document.getElementById('createSubProcessModal').style.display = 'block';
+        }
+
+        function closeCreateSubProcessModal() {
+            document.getElementById('createSubProcessModal').style.display = 'none';
+            document.getElementById('createSubProcessForm').reset();
         }
 
         // Load all data for the DAG
@@ -757,11 +1084,23 @@
                 }
                 
                 // Load inputs and outputs for all sub-processes
-                // TODO: Implement sub-process inputs and outputs APIs
-                inputs = [];
-                outputs = [];
+                const inputsResponse = await fetch(`/api/supply-chain/parent-processes/${parentProcessId}/inputs`);
+                if (inputsResponse.ok) {
+                    const inputsData = await inputsResponse.json();
+                    if (inputsData.success) {
+                        inputs = inputsData.inputs;
+                        console.log('Loaded inputs:', inputs);
+                    }
+                }
                 
-                console.log('Inputs and outputs loading skipped - APIs not yet implemented');
+                const outputsResponse = await fetch(`/api/supply-chain/parent-processes/${parentProcessId}/outputs`);
+                if (outputsResponse.ok) {
+                    const outputsData = await outputsResponse.json();
+                    if (outputsData.success) {
+                        outputs = outputsData.outputs;
+                        console.log('Loaded outputs:', outputs);
+                    }
+                }
 
                 // Update stats display
                 updateStatsDisplay();
@@ -777,6 +1116,10 @@
             document.getElementById('inputCount').textContent = inputs.length;
             document.getElementById('outputCount').textContent = outputs.length;
             document.getElementById('connectionCount').textContent = connections.length;
+            
+            // Count unmanaged sub-processes
+            const unmanagedCount = subProcesses.filter(subProcess => !subProcess.is_managed).length;
+            document.getElementById('unmanagedCount').textContent = unmanagedCount;
         }
 
         // Populate unmanaged sidebar
@@ -784,14 +1127,23 @@
             const unmanagedList = document.getElementById('unmanagedProcesses');
             unmanagedList.innerHTML = '';
             
-            // For now, show all sub-processes as unmanaged
-            // TODO: Implement proper managed/unmanaged logic
-            subProcesses.forEach(subProcess => {
+            // Filter sub-processes to show only unmanaged ones
+            const unmanagedProcesses = subProcesses.filter(subProcess => !subProcess.is_managed);
+            
+            if (unmanagedProcesses.length === 0) {
+                unmanagedList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-style: italic; padding: 20px;">No unmanaged sub-processes</p>';
+                return;
+            }
+            
+            unmanagedProcesses.forEach(subProcess => {
                 const item = document.createElement('div');
                 item.className = 'unmanaged-item';
                 item.draggable = true;
                 item.textContent = subProcess.sub_process_name;
                 item.setAttribute('data-process-id', subProcess.id);
+                item.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', subProcess.id);
+                });
                 unmanagedList.appendChild(item);
             });
         }
@@ -824,7 +1176,10 @@
                 drawGrid(svg);
             }
             
-            if (subProcesses.length === 0) {
+            // Filter to only show managed sub-processes in the DAG
+            const managedProcesses = subProcesses.filter(subProcess => subProcess.is_managed);
+            
+            if (managedProcesses.length === 0) {
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.setAttribute('x', '50%');
                 text.setAttribute('y', '50%');
@@ -832,13 +1187,13 @@
                 text.setAttribute('fill', 'var(--text-secondary)');
                 text.setAttribute('font-size', '18');
                 text.setAttribute('font-weight', '600');
-                text.textContent = 'No sub-processes found';
+                text.textContent = 'No managed sub-processes found. Drag sub-processes from the sidebar to manage them.';
                 svg.appendChild(text);
                 return;
             }
 
-            // Create nodes
-            subProcesses.forEach((subProcess, index) => {
+            // Create nodes for managed processes only
+            managedProcesses.forEach((subProcess, index) => {
                 // Get container dimensions for bounds checking
                 const container = document.querySelector('.dag-container');
                 const containerRect = container.getBoundingClientRect();
@@ -1251,16 +1606,16 @@
 
         async function loadPositions() {
             try {
-                console.log('Loading positions...');
+                console.log('Loading positions for parent process:', parentProcessId);
                 
                 // First try to load from backend
-                const response = await fetch('/api/supply-chain/dag-layout');
+                const response = await fetch(`/api/supply-chain/dag-layout/${parentProcessId}`);
                 if (response.ok) {
                     const data = await response.json();
                     console.log('Backend response:', data);
                     
-                    if (data.positions && Object.keys(data.positions).length > 0) {
-                        nodePositions = data.positions;
+                    if (data.success && data.layout && data.layout.layout_data && data.layout.layout_data.positions) {
+                        nodePositions = data.layout.layout_data.positions;
                         console.log('Loaded positions from backend:', nodePositions);
                         return;
                     }
@@ -1416,6 +1771,16 @@
                                         <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px;">
                                             Quality: ${output.output_quality_status || 'N/A'}
                                         </div>
+                                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+                                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+                                                <input type="checkbox" 
+                                                       id="flowThrough_${output.id}" 
+                                                       ${output.output_flow_through ? 'checked' : ''}
+                                                       onchange="updateOutputFlowThrough(${output.id}, this.checked)"
+                                                       style="margin: 0;">
+                                                <span style="color: var(--text-secondary);">Flow-through</span>
+                                            </label>
+                                        </div>
                                     </div>
                                     <div style="display: flex; gap: 8px;">
                                         <button class="btn btn-secondary btn-small" onclick="editOutput(${output.id})">Edit</button>
@@ -1472,64 +1837,214 @@
             console.log('Toggle flow-through for process:', window.currentProcessId);
         }
 
-        function deleteProcessFromDetails() {
-            // TODO: Implement delete process
-            console.log('Delete process:', window.currentProcessId);
-        }
 
-        function editInput(inputId) {
-            // TODO: Implement edit input
-            console.log('Edit input:', inputId);
-        }
 
-        function deleteInput(inputId, inputName) {
-            // TODO: Implement delete input
-            console.log('Delete input:', inputId, inputName);
-        }
-
-        function editOutput(outputId) {
-            // TODO: Implement edit output
-            console.log('Edit output:', outputId);
-        }
-
-        function deleteOutput(outputId, outputName) {
-            // TODO: Implement delete output
-            console.log('Delete output:', outputId, outputName);
-        }
-
-        function editConnection(connectionId) {
-            // TODO: Implement edit connection
-            console.log('Edit connection:', connectionId);
-        }
-
-        function deleteConnection(connectionId, connectionName) {
-            // TODO: Implement delete connection
-            console.log('Delete connection:', connectionId, connectionName);
-        }
 
         async function moveProcessToUnmanaged(processId, processName) {
-            // TODO: Implement move to unmanaged functionality
-            console.log('Move to unmanaged:', processId, processName);
+            showConfirmation(
+                'Move to Unmanaged',
+                `Are you sure you want to move "${processName}" to unmanaged? This will remove it from the DAG and delete all its inputs, outputs, and connections.`,
+                async () => {
+                    try {
+                        const response = await fetch(`/api/supply-chain/sub-processes/${processId}/managed`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ is_managed: false })
+                        });
+                        
+                        if (response.ok) {
+                            showSuccess('Process Moved', `"${processName}" has been moved to unmanaged area.`);
+                            await refreshDAG();
+                        } else {
+                            const errorData = await response.json();
+                            showError('Error', 'Failed to move process: ' + errorData.error);
+                        }
+                    } catch (error) {
+                        console.error('Error moving process to unmanaged:', error);
+                        showError('Error', 'Failed to move process: ' + error.message);
+                    }
+                }
+            );
+        }
+
+        async function moveSubProcessToManaged(subProcessId) {
+            try {
+                const response = await fetch(`/api/supply-chain/sub-processes/${subProcessId}/managed`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ is_managed: true })
+                });
+                
+                if (response.ok) {
+                    showSuccess('Process Managed', 'Sub-process has been moved to managed area.');
+                    await refreshDAG();
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Failed to manage sub-process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error managing sub-process:', error);
+                showError('Error', 'Failed to manage sub-process: ' + error.message);
+            }
         }
 
         function showSuccess(title, message) {
-            alert(`${title}: ${message}`);
+            showNotification(title, message, 'success');
         }
 
         function showError(title, message) {
-            alert(`${title}: ${message}`);
+            showNotification(title, message, 'error');
+        }
+
+        function showNotification(title, message, type) {
+            // Create notification modal
+            const notificationModal = document.createElement('div');
+            notificationModal.className = 'modal notification-modal';
+            notificationModal.style.display = 'block';
+            
+            // Create modal content
+            const modalContent = document.createElement('div');
+            modalContent.className = 'modal-content notification-content';
+            
+            // Create close button
+            const closeBtn = document.createElement('span');
+            closeBtn.className = 'close';
+            closeBtn.innerHTML = '&times;';
+            closeBtn.onclick = () => {
+                document.body.removeChild(notificationModal);
+            };
+            
+            // Create title
+            const titleElement = document.createElement('h2');
+            titleElement.textContent = title;
+            titleElement.style.color = type === 'success' ? '#28a745' : '#dc3545';
+            titleElement.style.marginBottom = '15px';
+            
+            // Create message
+            const messageElement = document.createElement('p');
+            messageElement.textContent = message;
+            messageElement.style.marginBottom = '20px';
+            messageElement.style.lineHeight = '1.5';
+            
+            // Create OK button
+            const okBtn = document.createElement('button');
+            okBtn.className = 'btn btn-primary';
+            okBtn.textContent = 'OK';
+            okBtn.style.width = '100%';
+            okBtn.onclick = () => {
+                document.body.removeChild(notificationModal);
+            };
+            
+            // Assemble modal
+            modalContent.appendChild(closeBtn);
+            modalContent.appendChild(titleElement);
+            modalContent.appendChild(messageElement);
+            modalContent.appendChild(okBtn);
+            notificationModal.appendChild(modalContent);
+            
+            // Add to page
+            document.body.appendChild(notificationModal);
+            
+            // Auto-close after 3 seconds for success messages
+            if (type === 'success') {
+                setTimeout(() => {
+                    if (document.body.contains(notificationModal)) {
+                        document.body.removeChild(notificationModal);
+                    }
+                }, 3000);
+            }
+        }
+
+        function showConfirmation(title, message, onConfirm) {
+            // Create confirmation modal
+            const confirmationModal = document.createElement('div');
+            confirmationModal.className = 'modal notification-modal';
+            confirmationModal.style.display = 'block';
+            
+            // Create modal content
+            const modalContent = document.createElement('div');
+            modalContent.className = 'modal-content notification-content';
+            
+            // Create close button
+            const closeBtn = document.createElement('span');
+            closeBtn.className = 'close';
+            closeBtn.innerHTML = '&times;';
+            closeBtn.onclick = () => {
+                document.body.removeChild(confirmationModal);
+            };
+            
+            // Create title
+            const titleElement = document.createElement('h2');
+            titleElement.textContent = title;
+            titleElement.style.color = '#dc3545';
+            titleElement.style.marginBottom = '15px';
+            
+            // Create message
+            const messageElement = document.createElement('p');
+            messageElement.textContent = message;
+            messageElement.style.marginBottom = '20px';
+            messageElement.style.lineHeight = '1.5';
+            
+            // Create button container
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.gap = '10px';
+            buttonContainer.style.width = '100%';
+            
+            // Create Cancel button
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn btn-secondary';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.style.flex = '1';
+            cancelBtn.onclick = () => {
+                document.body.removeChild(confirmationModal);
+            };
+            
+            // Create Confirm button
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = 'btn btn-danger';
+            confirmBtn.textContent = 'Confirm';
+            confirmBtn.style.flex = '1';
+            confirmBtn.onclick = () => {
+                document.body.removeChild(confirmationModal);
+                onConfirm();
+            };
+            
+            // Assemble modal
+            buttonContainer.appendChild(cancelBtn);
+            buttonContainer.appendChild(confirmBtn);
+            modalContent.appendChild(closeBtn);
+            modalContent.appendChild(titleElement);
+            modalContent.appendChild(messageElement);
+            modalContent.appendChild(buttonContainer);
+            confirmationModal.appendChild(modalContent);
+            
+            // Add to page
+            document.body.appendChild(confirmationModal);
         }
 
         // Initialize the DAG when page loads
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('Initializing DAG for parent process:', parentProcessId);
             
-            // Add event listener for test button
-            const testBtn = document.getElementById('testAddInputBtn');
-            if (testBtn) {
-                testBtn.addEventListener('click', function() {
-                    console.log('Event listener test button clicked');
-                    alert('Event listener test button works!');
+            // Add drag and drop event handlers
+            const dagContainer = document.getElementById('dagContainer');
+            if (dagContainer) {
+                dagContainer.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                });
+                
+                dagContainer.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    const subProcessId = e.dataTransfer.getData('text/plain');
+                    if (subProcessId) {
+                        await moveSubProcessToManaged(subProcessId);
+                    }
                 });
             }
 
@@ -1539,28 +2054,47 @@
                 const formData = new FormData(e.target);
                 const data = Object.fromEntries(formData);
                 
+                // Check if this is an edit operation
+                const editId = document.getElementById('addInputModal').getAttribute('data-edit-id');
+                
                 try {
-                    const response = await fetch('/api/supply-chain/sub-processes/' + data.process_id + '/inputs', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(data)
-                    });
+                    let response;
+                    if (editId) {
+                        // Update existing input
+                        response = await fetch(`/api/supply-chain/inputs/${editId}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(data)
+                        });
+                    } else {
+                        // Create new input
+                        response = await fetch('/api/supply-chain/sub-processes/' + data.process_id + '/inputs', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(data)
+                        });
+                    }
                     
                     if (response.ok) {
-                        showSuccess('Success!', 'Input added successfully!');
+                        const message = editId ? 'Input updated successfully!' : 'Input added successfully!';
+                        showSuccess('Success!', message);
                         closeAddInputModal();
                         if (window.currentProcessId) {
                             loadProcessDetails(window.currentProcessId);
                         }
                     } else {
                         const errorData = await response.json();
-                        showError('Error', 'Error adding input: ' + errorData.error);
+                        const errorMessage = editId ? 'Error updating input: ' : 'Error adding input: ';
+                        showError('Error', errorMessage + errorData.error);
                     }
                 } catch (error) {
                     console.error('Error:', error);
-                    showError('Error', 'Error adding input: ' + error.message);
+                    const errorMessage = editId ? 'Error updating input: ' : 'Error adding input: ';
+                    showError('Error', errorMessage + error.message);
                 }
             });
 
@@ -1569,28 +2103,71 @@
                 const formData = new FormData(e.target);
                 const data = Object.fromEntries(formData);
                 
+                // Process flow-through fields
+                const flowThroughFields = {
+                    name: data.flow_through_name === 'on',
+                    quantity: data.flow_through_quantity === 'on',
+                    unit: data.flow_through_unit === 'on',
+                    batch: data.flow_through_batch === 'on',
+                    specifications: data.flow_through_specifications === 'on',
+                    type: data.flow_through_type === 'on',
+                    destination: data.flow_through_destination === 'on'
+                };
+                
+                // Remove flow-through field data from main data object
+                delete data.flow_through_name;
+                delete data.flow_through_quantity;
+                delete data.flow_through_unit;
+                delete data.flow_through_batch;
+                delete data.flow_through_specifications;
+                delete data.flow_through_type;
+                delete data.flow_through_destination;
+                
+                // Add flow-through fields to data
+                data.output_flow_through_fields = flowThroughFields;
+                data.output_flow_through = Object.values(flowThroughFields).some(value => value);
+                
+                // Check if this is an edit operation
+                const editId = document.getElementById('addOutputModal').getAttribute('data-edit-id');
+                
                 try {
-                    const response = await fetch('/api/supply-chain/sub-processes/' + data.process_id + '/outputs', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(data)
-                    });
+                    let response;
+                    if (editId) {
+                        // Update existing output
+                        response = await fetch(`/api/supply-chain/outputs/${editId}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(data)
+                        });
+                    } else {
+                        // Create new output
+                        response = await fetch('/api/supply-chain/sub-processes/' + data.process_id + '/outputs', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(data)
+                        });
+                    }
                     
                     if (response.ok) {
-                        showSuccess('Success!', 'Output added successfully!');
+                        const message = editId ? 'Output updated successfully!' : 'Output added successfully!';
+                        showSuccess('Success!', message);
                         closeAddOutputModal();
                         if (window.currentProcessId) {
                             loadProcessDetails(window.currentProcessId);
                         }
                     } else {
                         const errorData = await response.json();
-                        showError('Error', 'Error adding output: ' + errorData.error);
+                        const errorMessage = editId ? 'Error updating output: ' : 'Error adding output: ';
+                        showError('Error', errorMessage + errorData.error);
                     }
                 } catch (error) {
                     console.error('Error:', error);
-                    showError('Error', 'Error adding output: ' + error.message);
+                    const errorMessage = editId ? 'Error updating output: ' : 'Error adding output: ';
+                    showError('Error', errorMessage + error.message);
                 }
             });
 
@@ -1624,6 +2201,36 @@
                 } catch (error) {
                     console.error('Error:', error);
                     showError('Error', 'Error adding connection: ' + error.message);
+                }
+            });
+
+            // Create Sub Process form submission handler
+            document.getElementById('createSubProcessForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData);
+                
+                try {
+                    const response = await fetch('/api/supply-chain/sub-processes', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (response.ok) {
+                        showSuccess('Success!', 'Sub process created successfully!');
+                        closeCreateSubProcessModal();
+                        // Refresh DAG to show new sub-process in unmanaged sidebar
+                        await refreshDAG();
+                    } else {
+                        const errorData = await response.json();
+                        showError('Error', 'Error creating sub process: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showError('Error', 'Error creating sub process: ' + error.message);
                 }
             });
             
@@ -1689,6 +2296,15 @@
                     <label for="inputSource">Source:</label>
                     <input type="text" id="inputSource" name="input_source" placeholder="Where does this input come from?">
                 </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="isExecutionInput" name="is_execution_input">
+                        <span>Execution Input</span>
+                    </label>
+                    <small style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Check this if this input should be prompted for values during process execution
+                    </small>
+                </div>
                 <button type="submit" class="btn btn-primary">Add Input</button>
             </form>
         </div>
@@ -1703,50 +2319,86 @@
                 <input type="hidden" id="addOutputProcessId" name="process_id">
                 <div class="form-group">
                     <label for="outputType">Type:</label>
-                    <input type="text" id="outputType" name="output_name" required placeholder="e.g. Gin">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="text" id="outputType" name="output_name" required placeholder="e.g. Gin" style="flex: 1;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
+                            <input type="checkbox" id="flowThrough_name" name="flow_through_name">
+                            <span>Flow</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="outputVolume">Volume/Amount:</label>
-                    <input type="number" id="outputVolume" name="output_quantity" step="0.01" required>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="number" id="outputVolume" name="output_quantity" step="0.01" required style="flex: 1;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
+                            <input type="checkbox" id="flowThrough_quantity" name="flow_through_quantity">
+                            <span>Flow</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="outputMeasure">Measure:</label>
-                    <select id="outputMeasure" name="output_unit" required>
-                        <option value="">Select unit</option>
-                        <option value="grams">Grams</option>
-                        <option value="kg">Kilograms</option>
-                        <option value="liters">Liters</option>
-                        <option value="ml">Milliliters</option>
-                        <option value="pieces">Pieces</option>
-                        <option value="units">Units</option>
-                    </select>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <select id="outputMeasure" name="output_unit" required style="flex: 1;">
+                            <option value="">Select unit</option>
+                            <option value="grams">Grams</option>
+                            <option value="kg">Kilograms</option>
+                            <option value="liters">Liters</option>
+                            <option value="ml">Milliliters</option>
+                            <option value="pieces">Pieces</option>
+                            <option value="units">Units</option>
+                        </select>
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
+                            <input type="checkbox" id="flowThrough_unit" name="flow_through_unit">
+                            <span>Flow</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="outputBatch">Batch:</label>
-                    <input type="text" id="outputBatch" name="output_batch_number" placeholder="Internal batch code to trace">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="text" id="outputBatch" name="output_batch_number" placeholder="Internal batch code to trace" style="flex: 1;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
+                            <input type="checkbox" id="flowThrough_batch" name="flow_through_batch">
+                            <span>Flow</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="outputNotes">Notes:</label>
-                    <textarea id="outputNotes" name="output_specifications" placeholder="Additional notes about this output"></textarea>
+                    <div style="display: flex; align-items: flex-start; gap: 8px;">
+                        <textarea id="outputNotes" name="output_specifications" placeholder="Additional notes about this output" style="flex: 1;"></textarea>
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap; margin-top: 8px;">
+                            <input type="checkbox" id="flowThrough_specifications" name="flow_through_specifications">
+                            <span>Flow</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="outputTypeCategory">Category:</label>
-                    <select id="outputTypeCategory" name="output_type">
-                        <option value="finished_product">Finished Product</option>
-                        <option value="intermediate_product">Intermediate Product</option>
-                        <option value="by_product">By-Product</option>
-                        <option value="waste">Waste</option>
-                    </select>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <select id="outputTypeCategory" name="output_type" style="flex: 1;">
+                            <option value="finished_product">Finished Product</option>
+                            <option value="intermediate_product">Intermediate Product</option>
+                            <option value="by_product">By-Product</option>
+                            <option value="waste">Waste</option>
+                        </select>
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
+                            <input type="checkbox" id="flowThrough_type" name="flow_through_type">
+                            <span>Flow</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="outputDestination">Destination:</label>
-                    <input type="text" id="outputDestination" name="output_destination" placeholder="Where is this output going?">
-                </div>
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="outputFlowThrough" name="output_flow_through">
-                        <span>Enable flow-through</span>
-                    </label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="text" id="outputDestination" name="output_destination" placeholder="Where is this output going?" style="flex: 1;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
+                            <input type="checkbox" id="flowThrough_destination" name="flow_through_destination">
+                            <span>Flow</span>
+                        </label>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary">Add Output</button>
             </form>
@@ -1796,6 +2448,56 @@
                     <textarea id="addConnectionNotes" name="connection_notes" placeholder="Additional notes about this connection"></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary">Add Connection</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Sub Process Modal -->
+    <div id="createSubProcessModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateSubProcessModal()">&times;</span>
+            <h2>Create New Sub Process</h2>
+            <form id="createSubProcessForm">
+                <input type="hidden" id="createSubProcessParentId" name="parent_process_id" value="{{ parent_process[0] }}">
+                <div class="form-group">
+                    <label for="subProcessName">Sub Process Name:</label>
+                    <input type="text" id="subProcessName" name="sub_process_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="subProcessDescription">Description:</label>
+                    <textarea id="subProcessDescription" name="sub_process_description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="subProcessType">Type:</label>
+                    <select id="subProcessType" name="sub_process_type">
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="packaging">Packaging</option>
+                        <option value="quality">Quality Control</option>
+                        <option value="logistics">Logistics</option>
+                        <option value="procurement">Procurement</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="subProcessStatus">Status:</label>
+                    <select id="subProcessStatus" name="sub_process_status">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="subProcessCategory">Category:</label>
+                    <input type="text" id="subProcessCategory" name="sub_process_category">
+                </div>
+                <div class="form-group">
+                    <label for="subProcessNotes">Notes:</label>
+                    <textarea id="subProcessNotes" name="sub_process_notes"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="executionOrder">Execution Order:</label>
+                    <input type="number" id="executionOrder" name="execution_order" min="1" value="1">
+                </div>
+                <button type="submit" class="btn btn-primary">Create Sub Process</button>
             </form>
         </div>
     </div>

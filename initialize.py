@@ -326,6 +326,7 @@ def create_supply_chain_inputs_table():
         "input_batch_number": "TEXT", # batch or lot number for traceability
         "input_expiry_date": "DATE", # expiry date if applicable
         "input_status": "TEXT", # 'available', 'consumed', 'expired', 'quarantined'
+        "is_execution_input": "BOOLEAN DEFAULT FALSE", # whether this input should be prompted during execution
         "uid": "TEXT"
     }
 
@@ -347,6 +348,8 @@ def create_supply_chain_outputs_table():
         "output_batch_number": "TEXT", # batch or lot number for traceability
         "output_quality_status": "TEXT", # 'passed', 'failed', 'pending', 'quarantined'
         "output_destination": "TEXT", # where the output goes next
+        "output_flow_through": "BOOLEAN DEFAULT FALSE", # whether this output flows through to connected processes
+        "output_flow_through_fields": "JSONB", # which specific fields flow through as JSON
         "uid": "TEXT"
     }
 
@@ -530,6 +533,7 @@ def create_supply_chain_sub_processes_table():
         "sub_process_category": "TEXT",
         "sub_process_notes": "TEXT",
         "execution_order": "INTEGER",
+        "is_managed": "BOOLEAN",
         "uid": "TEXT"
     }
     

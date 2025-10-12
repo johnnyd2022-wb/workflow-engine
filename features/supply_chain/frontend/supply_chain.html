@@ -646,23 +646,6 @@
                 </tbody>
             </table>
             
-            <h2>Connections</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>From Process</th>
-                        <th>To Process</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                        <th>Notes</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="connectionsTableBody">
-                    <!-- Connections will be loaded here -->
-                </tbody>
-            </table>
         </div>
     </div>
     
@@ -1542,7 +1525,6 @@
                     showSuccess('Process Moved', `Process "${processName}" has been moved to unmanaged area. Deleted ${result.inputs_deleted} inputs, ${result.outputs_deleted} outputs, and ${result.connections_deleted} connections.`);
                     
                     // Refresh all views
-                    loadConnectionsTable(); // Refresh connections table
                     loadUnmanagedProcesses();
                     if (isVisualView) {
                         await renderDAG();
@@ -1602,7 +1584,6 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
-            loadConnectionsTable();
             await loadPositions();
             loadUnmanagedProcesses();
             loadParentProcesses();
@@ -2292,42 +2273,6 @@
             });
         }
         
-        // Load connections table
-        async function loadConnectionsTable() {
-            try {
-                const response = await fetch('/api/supply-chain/connections');
-                if (response.ok) {
-                    const connections = await response.json();
-                    const tbody = document.getElementById('connectionsTableBody');
-                    
-                    if (connections.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No connections found</td></tr>';
-                        return;
-                    }
-                    
-                    tbody.innerHTML = '';
-                    connections.forEach(connection => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${connection.id}</td>
-                            <td>${connection.from_process_name || 'N/A'}</td>
-                            <td>${connection.to_process_name || 'N/A'}</td>
-                            <td>${connection.connection_type || 'N/A'}</td>
-                            <td><span class="status-${connection.connection_status || 'inactive'}">${connection.connection_status || 'inactive'}</span></td>
-                            <td>${connection.connection_notes || 'N/A'}</td>
-                            <td>
-                                <button class="btn btn-primary btn-small" onclick="openEditConnectionModal(${connection.id})">Edit</button>
-                                <button class="btn btn-danger btn-small" onclick="deleteConnection(${connection.id}, '${connection.from_process_name} → ${connection.to_process_name}')">Delete</button>
-                            </td>
-                        `;
-                        tbody.appendChild(row);
-                    });
-                }
-            } catch (error) {
-                console.error('Error loading connections:', error);
-            }
-        }
-        
         // CRUD operations
         async function editProcess(processId) {
             try {
@@ -2440,7 +2385,6 @@
                     
                     if (response.ok) {
                             showSuccess('Success!', 'Connection deleted successfully!');
-                        loadConnectionsTable();
                         if (isVisualView) {
                             renderDAG();
                         }
