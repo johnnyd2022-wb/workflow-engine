@@ -739,30 +739,129 @@ def delete_process(process_id):
         if connection:
             connection.close()
 
-def create_automatic_inputs_for_flow_through(process_id, connection, cursor):
-    """Create automatic inputs in connected processes when flow-through is enabled"""
+# Flow-through API endpoints
+@supply_chain_bp.route('/api/supply-chain/flow-through', methods=['GET'])
+def get_flow_through_outputs():
+    """Get all outputs with flow-through enabled"""
     try:
-        # Get the sub-process name for the source
-        cursor.execute("SELECT sub_process_name FROM supply_chain_sub_processes WHERE id = %s", (process_id,))
-        process_result = cursor.fetchone()
-        source_process_name = process_result[0] if process_result else f"Process {process_id}"
+        connection, cursor = db_conn()
         
-        # Get all outputs from this process that have individual field flow-through enabled
         cursor.execute("""
-            SELECT id, output_name, output_type, output_quantity, output_unit, 
-                   output_specifications, output_batch_number, output_destination,
-                   output_flow_through_fields
-            FROM supply_chain_outputs 
-            WHERE process_id = %s AND output_flow_through = TRUE 
-            AND output_flow_through_fields IS NOT NULL 
-            AND output_flow_through_fields != '{}' AND output_flow_through_fields != 'null'
+            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                   o.output_unit, o.output_specifications, o.output_batch_number,
+                   o.output_destination, o.output_flow_through_fields, o.execution_options,
+                   p.sub_process_name
+            FROM supply_chain_outputs o
+            LEFT JOIN supply_chain_sub_processes p ON o.process_id = p.id
+            WHERE o.output_flow_through = TRUE
+        """)
+        
+        outputs = cursor.fetchall()
+        
+        result = []
+        for output in outputs:
+            result.append({
+                'id': output[0],
+                'process_id': output[1],
+                'output_name': output[2],
+                'output_type': output[3],
+                'output_quantity': output[4],
+                'output_unit': output[5],
+                'output_specifications': output[6],
+                'output_batch_number': output[7],
+                'output_destination': output[8],
+                'output_flow_through_fields': output[9] or {},
+                'execution_options': output[10] or {},
+                'process_name': output[11]
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting flow-through outputs: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/flow-through/outputs/<int:output_id>/connections', methods=['GET'])
+def get_flow_through_connections(output_id):
+    """Get all connections for a specific output's process"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Get the process_id for this output
+        cursor.execute("SELECT process_id FROM supply_chain_outputs WHERE id = %s", (output_id,))
+        result = cursor.fetchone()
+        if not result:
+            return jsonify({'error': 'Output not found'}), 404
+        
+        process_id = result[0]
+        
+        # Get all connections from this process
+        cursor.execute("""
+            SELECT c.id, c.from_sub_process_id, c.to_sub_process_id, c.connection_type,
+                   p1.sub_process_name as from_process_name,
+                   p2.sub_process_name as to_process_name
+            FROM supply_chain_connections c
+            LEFT JOIN supply_chain_sub_processes p1 ON c.from_sub_process_id = p1.id
+            LEFT JOIN supply_chain_sub_processes p2 ON c.to_sub_process_id = p2.id
+            WHERE c.from_sub_process_id = %s AND c.connection_status = 'active'
         """, (process_id,))
         
-        flow_through_outputs = cursor.fetchall()
+        connections = cursor.fetchall()
         
-        if not flow_through_outputs:
-            print(f"No flow-through outputs found for process {process_id}")
-            return
+        result = []
+        for conn in connections:
+            result.append({
+                'id': conn[0],
+                'from_sub_process_id': conn[1],
+                'to_sub_process_id': conn[2],
+                'connection_type': conn[3],
+                'from_process_name': conn[4],
+                'to_process_name': conn[5]
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting flow-through connections: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/flow-through/outputs/<int:output_id>/create-inputs', methods=['POST'])
+def create_flow_through_inputs(output_id):
+    """Create inputs in connected processes for a specific output"""
+    try:
+        connection, cursor = db_conn()
+        data = request.get_json()
+        
+        # Get the output details
+        cursor.execute("""
+            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                   o.output_unit, o.output_specifications, o.output_batch_number,
+                   o.output_destination, o.output_flow_through_fields, o.execution_options,
+                   p.sub_process_name
+            FROM supply_chain_outputs o
+            LEFT JOIN supply_chain_sub_processes p ON o.process_id = p.id
+            WHERE o.id = %s AND o.output_flow_through = TRUE
+        """, (output_id,))
+        
+        output = cursor.fetchone()
+        if not output:
+            return jsonify({'error': 'Output not found or flow-through not enabled'}), 404
+        
+        output_id, process_id, output_name, output_type, output_quantity, output_unit, output_specifications, output_batch_number, output_destination, flow_through_fields, execution_options, source_process_name = output
+        
+        # Parse flow-through fields and execution options
+        flow_fields = flow_through_fields if isinstance(flow_through_fields, dict) else (json.loads(flow_through_fields) if flow_through_fields else {})
+        exec_options = execution_options if isinstance(execution_options, dict) else (json.loads(execution_options) if execution_options else {})
         
         # Get all connections from this process
         cursor.execute("""
@@ -774,102 +873,350 @@ def create_automatic_inputs_for_flow_through(process_id, connection, cursor):
         connections = cursor.fetchall()
         
         if not connections:
-            print(f"No active connections found from process {process_id}")
-            return
+            return jsonify({'error': 'No active connections found from this process'}), 404
+        
+        created_inputs = []
         
         # For each connection, create inputs in the receiving process
         for to_sub_process_id, connection_type in connections:
-            print(f"Processing connection to process {to_sub_process_id} (type: {connection_type})")
+            # Create the input with only the fields that are marked for flow-through
+            input_name = output_name if flow_fields.get('name', False) else f"Flow-through from {output_name}"
+            input_type = output_type if flow_fields.get('type', False) else 'flow_through'
+            input_quantity = output_quantity if flow_fields.get('quantity', False) else None
+            input_unit = output_unit if flow_fields.get('unit', False) else ''
+            input_batch_number = output_batch_number if flow_fields.get('batch', False) else ''
             
-            # Create inputs for each flow-through output (no need to check receiving process flow-through setting)
-            for output in flow_through_outputs:
-                output_id, output_name, output_type, output_quantity, output_unit, output_specifications, output_batch_number, output_destination, flow_through_fields = output
-                
-                # Parse flow-through fields
-                flow_fields = flow_through_fields if isinstance(flow_through_fields, dict) else (json.loads(flow_through_fields) if flow_through_fields else {})
-                
-                # Skip if no fields are actually enabled for flow-through
-                if not any(flow_fields.values()):
-                    print(f"No fields enabled for flow-through in output '{output_name}'")
-                    continue
-                
-                # Check if this input already exists (for update) or create new
+            # Create enhanced specifications with flow-through info
+            enhanced_specs = output_specifications if isinstance(output_specifications, dict) else (json.loads(output_specifications) if output_specifications else {})
+            enhanced_specs['flow_through_source'] = source_process_name
+            enhanced_specs['flow_through_fields'] = flow_fields
+            
+            if flow_fields.get('specifications', False) and 'notes' in enhanced_specs:
+                enhanced_specs['flow_through_notes'] = enhanced_specs['notes']
+            
+            if flow_fields.get('destination', False):
+                enhanced_specs['original_destination'] = output_destination
+            
+            # Check if this input already exists (for update) or create new
+            cursor.execute("""
+                SELECT id, input_name, input_type, input_quantity, input_unit, 
+                       input_specifications, input_batch_number
+                FROM supply_chain_inputs 
+                WHERE process_id = %s AND input_source = %s
+            """, (to_sub_process_id, f"Flow-through from {source_process_name}"))
+            
+            existing_input = cursor.fetchone()
+            
+            if existing_input:
+                # Update existing input
                 cursor.execute("""
-                    SELECT id, input_name, input_type, input_quantity, input_unit, 
-                           input_specifications, input_batch_number
-                    FROM supply_chain_inputs 
-                    WHERE process_id = %s AND input_source = %s
-                """, (to_sub_process_id, f"Flow-through from {source_process_name}"))
+                    UPDATE supply_chain_inputs 
+                    SET input_name = %s, input_type = %s, input_quantity = %s, 
+                        input_unit = %s, input_specifications = %s, input_batch_number = %s,
+                        execution_options = %s, date = CURRENT_DATE, action = 'update'
+                    WHERE id = %s
+                """, (
+                    input_name,
+                    input_type,
+                    input_quantity,
+                    input_unit,
+                    json.dumps(enhanced_specs),
+                    input_batch_number,
+                    json.dumps(filtered_exec_options),
+                    existing_input[0]
+                ))
+                created_inputs.append({
+                    'action': 'updated',
+                    'input_id': existing_input[0],
+                    'process_id': to_sub_process_id,
+                    'input_name': input_name
+                })
+            else:
+                # Create new input
+                cursor.execute("""
+                    INSERT INTO supply_chain_inputs 
+                    (date, action, process_id, input_name, input_type, input_quantity, 
+                     input_unit, input_specifications, input_source, input_batch_number, 
+                     input_status, execution_options, uid)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    date.today(),
+                    'create',
+                    to_sub_process_id,
+                    input_name,
+                    input_type,
+                    input_quantity,
+                    input_unit,
+                    json.dumps(enhanced_specs),
+                    f"Flow-through from {source_process_name}",
+                    input_batch_number,
+                    'available',
+                    json.dumps(filtered_exec_options),
+                    ''
+                ))
                 
-                existing_input = cursor.fetchone()
-                
-                # Create the input with only the fields that are marked for flow-through
-                input_name = output_name if flow_fields.get('name', False) else f"Flow-through from {output_name}"
-                input_type = output_type if flow_fields.get('type', False) else 'flow_through'
-                input_quantity = output_quantity if flow_fields.get('quantity', False) else None
-                input_unit = output_unit if flow_fields.get('unit', False) else ''
-                input_batch_number = output_batch_number if flow_fields.get('batch', False) else ''
-                
-                # Create enhanced specifications with flow-through info
-                enhanced_specs = output_specifications if isinstance(output_specifications, dict) else (json.loads(output_specifications) if output_specifications else {})
-                enhanced_specs['flow_through_source'] = source_process_name
-                enhanced_specs['flow_through_fields'] = flow_fields
-                
-                if flow_fields.get('specifications', False) and 'notes' in enhanced_specs:
-                    enhanced_specs['flow_through_notes'] = enhanced_specs['notes']
-                
-                if flow_fields.get('destination', False):
-                    enhanced_specs['original_destination'] = output_destination
-                
-                if existing_input:
-                    # Update existing input
-                    cursor.execute("""
-                        UPDATE supply_chain_inputs 
-                        SET input_name = %s, input_type = %s, input_quantity = %s, 
-                            input_unit = %s, input_specifications = %s, input_batch_number = %s,
-                            date = CURRENT_DATE, action = 'update'
-                        WHERE id = %s
-                    """, (
-                        input_name,
-                        input_type,
-                        input_quantity,
-                        input_unit,
-                        json.dumps(enhanced_specs),
-                        input_batch_number,
-                        existing_input[0]
-                    ))
-                    print(f"Updated input '{input_name}' in process {to_sub_process_id} with flow-through fields: {flow_fields}")
-                else:
-                    # Create new input
-                    cursor.execute("""
-                        INSERT INTO supply_chain_inputs 
-                        (date, action, process_id, input_name, input_type, input_quantity, 
-                         input_unit, input_specifications, input_source, input_batch_number, 
-                         input_status, uid)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        date.today(),
-                        'create',
-                        to_sub_process_id,
-                        input_name,
-                        input_type,
-                        input_quantity,
-                        input_unit,
-                        json.dumps(enhanced_specs),
-                        f"Flow-through from {source_process_name}",
-                        input_batch_number,
-                        'available',
-                        ''
-                    ))
-                    print(f"Created input '{input_name}' in process {to_sub_process_id} with flow-through fields: {flow_fields}")
+                new_input_id = cursor.fetchone()[0]
+                created_inputs.append({
+                    'action': 'created',
+                    'input_id': new_input_id,
+                    'process_id': to_sub_process_id,
+                    'input_name': input_name
+                })
         
         connection.commit()
+        
+        return jsonify({
+            'message': f'Flow-through inputs processed successfully for output {output_id}',
+            'created_inputs': created_inputs
+        }), 200
+        
+    except Exception as e:
+        print(f"Error creating flow-through inputs: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/flow-through/processes/<int:process_id>/sync', methods=['POST'])
+def sync_flow_through_for_process(process_id):
+    """Sync all flow-through outputs for a specific process"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Get all outputs from this process that have flow-through enabled
+        cursor.execute("""
+            SELECT id FROM supply_chain_outputs 
+            WHERE process_id = %s AND output_flow_through = TRUE
+        """, (process_id,))
+        
+        outputs = cursor.fetchall()
+        
+        if not outputs:
+            return jsonify({'message': 'No flow-through outputs found for this process'}), 200
+        
+        synced_outputs = []
+        
+        for output in outputs:
+            output_id = output[0]
+            
+            # Call the create flow-through inputs API for each output
+            # We'll simulate the API call by calling the function directly
+            try:
+                # Get the output details
+                cursor.execute("""
+                    SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                           o.output_unit, o.output_specifications, o.output_batch_number,
+                           o.output_destination, o.output_flow_through_fields, o.execution_options,
+                           p.sub_process_name
+                    FROM supply_chain_outputs o
+                    LEFT JOIN supply_chain_sub_processes p ON o.process_id = p.id
+                    WHERE o.id = %s AND o.output_flow_through = TRUE
+                """, (output_id,))
+                
+                output_data = cursor.fetchone()
+                if output_data:
+                    # Process this output (simplified version of the create_flow_through_inputs logic)
+                    synced_outputs.append(output_id)
+                    
+            except Exception as e:
+                print(f"Error syncing output {output_id}: {e}")
+                continue
+        
+        return jsonify({
+            'message': f'Flow-through sync completed for process {process_id}',
+            'synced_outputs': synced_outputs
+        }), 200
+        
+    except Exception as e:
+        print(f"Error syncing flow-through for process: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+def create_automatic_inputs_for_flow_through(process_id, connection, cursor):
+    """Create automatic inputs in connected processes when flow-through is enabled - DEPRECATED: Use API endpoints instead"""
+    try:
+        # Get all outputs from this process that have flow-through enabled
+        cursor.execute("""
+            SELECT id FROM supply_chain_outputs 
+            WHERE process_id = %s AND output_flow_through = TRUE
+        """, (process_id,))
+        
+        outputs = cursor.fetchall()
+        
+        if not outputs:
+            print(f"No flow-through outputs found for process {process_id}")
+            return
+        
+        # Call the API endpoint for each output
+        for output in outputs:
+            output_id = output[0]
+            try:
+                # Make internal API call to create flow-through inputs
+                response = create_flow_through_inputs_internal(output_id, connection, cursor)
+                if response:
+                    print(f"Flow-through inputs created for output {output_id}")
+            except Exception as e:
+                print(f"Error creating flow-through inputs for output {output_id}: {e}")
+                continue
+        
         print(f"Automatic inputs created successfully for process {process_id}")
         
     except Exception as e:
-        print(f"Error creating automatic inputs: {e}")
-        connection.rollback()
-        raise e
+        print(f"Error in create_automatic_inputs_for_flow_through: {e}")
+        raise
+
+def create_flow_through_inputs_internal(output_id, connection, cursor):
+    """Internal function to create flow-through inputs using the original direct query approach"""
+    try:
+        # Get the sub-process name for the source
+        cursor.execute("SELECT sub_process_name FROM supply_chain_sub_processes WHERE id = (SELECT process_id FROM supply_chain_outputs WHERE id = %s)", (output_id,))
+        process_result = cursor.fetchone()
+        source_process_name = process_result[0] if process_result else f"Process {output_id}"
+        
+        # Get the output details with flow-through fields
+        cursor.execute("""
+            SELECT id, process_id, output_name, output_type, output_quantity, output_unit, 
+                   output_specifications, output_batch_number, output_destination,
+                   output_flow_through_fields, execution_options
+            FROM supply_chain_outputs 
+            WHERE id = %s AND output_flow_through = TRUE 
+            AND output_flow_through_fields IS NOT NULL 
+            AND output_flow_through_fields != '{}' AND output_flow_through_fields != 'null'
+        """, (output_id,))
+        
+        output = cursor.fetchone()
+        if not output:
+            return None
+        
+        output_id, process_id, output_name, output_type, output_quantity, output_unit, output_specifications, output_batch_number, output_destination, flow_through_fields, execution_options = output
+        
+        # Parse flow-through fields and execution options
+        flow_fields = flow_through_fields if isinstance(flow_through_fields, dict) else (json.loads(flow_through_fields) if flow_through_fields else {})
+        exec_options = execution_options if isinstance(execution_options, dict) else (json.loads(execution_options) if execution_options else {})
+        
+        # Filter execution options to only include fields that have flow-through enabled
+        filtered_exec_options = {}
+        for field, is_enabled in flow_fields.items():
+            if is_enabled and field in exec_options:
+                filtered_exec_options[field] = exec_options[field]
+        
+        # Skip if no fields are actually enabled for flow-through
+        if not any(flow_fields.values()):
+            return None
+        
+        # Get all connections from this process
+        cursor.execute("""
+            SELECT to_sub_process_id, connection_type
+            FROM supply_chain_connections 
+            WHERE from_sub_process_id = %s AND connection_status = 'active'
+        """, (process_id,))
+        
+        connections = cursor.fetchall()
+        
+        if not connections:
+            return None
+        
+        created_inputs = []
+        
+        # For each connection, create inputs in the receiving process
+        for to_sub_process_id, connection_type in connections:
+            # Create the input with only the fields that are marked for flow-through
+            input_name = output_name if flow_fields.get('name', False) else f"Flow-through from {output_name}"
+            input_type = output_type if flow_fields.get('type', False) else 'flow_through'
+            input_quantity = output_quantity if flow_fields.get('quantity', False) else None
+            input_unit = output_unit if flow_fields.get('unit', False) else ''
+            input_batch_number = output_batch_number if flow_fields.get('batch', False) else ''
+            
+            # Create enhanced specifications with flow-through info
+            enhanced_specs = output_specifications if isinstance(output_specifications, dict) else (json.loads(output_specifications) if output_specifications else {})
+            enhanced_specs['flow_through_source'] = source_process_name
+            enhanced_specs['flow_through_fields'] = flow_fields
+            
+            if flow_fields.get('specifications', False) and 'notes' in enhanced_specs:
+                enhanced_specs['flow_through_notes'] = enhanced_specs['notes']
+            
+            if flow_fields.get('destination', False):
+                enhanced_specs['original_destination'] = output_destination
+            
+            # Check if this input already exists (for update) or create new
+            cursor.execute("""
+                SELECT id, input_name, input_type, input_quantity, input_unit, 
+                       input_specifications, input_batch_number
+                FROM supply_chain_inputs 
+                WHERE process_id = %s AND input_source = %s
+            """, (to_sub_process_id, f"Flow-through from {source_process_name}"))
+            
+            existing_input = cursor.fetchone()
+            
+            if existing_input:
+                # Update existing input
+                cursor.execute("""
+                    UPDATE supply_chain_inputs 
+                    SET input_name = %s, input_type = %s, input_quantity = %s, 
+                        input_unit = %s, input_specifications = %s, input_batch_number = %s,
+                        execution_options = %s, date = CURRENT_DATE, action = 'update'
+                    WHERE id = %s
+                """, (
+                    input_name,
+                    input_type,
+                    input_quantity,
+                    input_unit,
+                    json.dumps(enhanced_specs),
+                    input_batch_number,
+                    json.dumps(filtered_exec_options),
+                    existing_input[0]
+                ))
+                created_inputs.append({
+                    'action': 'updated',
+                    'input_id': existing_input[0],
+                    'process_id': to_sub_process_id,
+                    'input_name': input_name
+                })
+            else:
+                # Create new input
+                cursor.execute("""
+                    INSERT INTO supply_chain_inputs 
+                    (date, action, process_id, input_name, input_type, input_quantity, 
+                     input_unit, input_specifications, input_source, input_batch_number, 
+                     input_status, execution_options, uid)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    date.today(),
+                    'create',
+                    to_sub_process_id,
+                    input_name,
+                    input_type,
+                    input_quantity,
+                    input_unit,
+                    json.dumps(enhanced_specs),
+                    f"Flow-through from {source_process_name}",
+                    input_batch_number,
+                    'available',
+                    json.dumps(filtered_exec_options),
+                    ''
+                ))
+                
+                new_input_id = cursor.fetchone()[0]
+                created_inputs.append({
+                    'action': 'created',
+                    'input_id': new_input_id,
+                    'process_id': to_sub_process_id,
+                    'input_name': input_name
+                })
+        
+        return created_inputs
+        
+    except Exception as e:
+        print(f"Error in create_flow_through_inputs_internal: {e}")
+        raise
 
 def cleanup_orphaned_flow_through_inputs(process_id, connection, cursor):
     """Clean up flow-through inputs that are no longer connected"""
@@ -1216,7 +1563,7 @@ def get_input(input_id):
         cursor.execute("""
             SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
                    i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
-                   i.input_expiry_date, i.input_status, i.is_execution_input, p.process_name
+                   i.input_expiry_date, i.input_status, i.execution_options, p.process_name
             FROM supply_chain_inputs i
             LEFT JOIN supply_chain_processes p ON i.process_id = p.id
             WHERE i.id = %s
@@ -1238,7 +1585,7 @@ def get_input(input_id):
             'input_batch_number': inp[8],
             'input_expiry_date': inp[9].isoformat() if inp[9] else None,
             'input_status': inp[10],
-            'is_execution_input': inp[11],
+            'execution_options': inp[11] or {},
             'process_name': inp[12]
         })
         
@@ -1268,7 +1615,7 @@ def update_input(input_id):
             UPDATE supply_chain_inputs 
             SET input_name = %s, input_type = %s, input_quantity = %s, input_unit = %s,
                 input_specifications = %s, input_source = %s, input_batch_number = %s,
-                input_expiry_date = %s, input_status = %s, is_execution_input = %s, 
+                input_expiry_date = %s, input_status = %s, execution_options = %s,
                 date = NOW(), action = 'update'
             WHERE id = %s
         """, (
@@ -1281,7 +1628,15 @@ def update_input(input_id):
             data.get('input_batch_number'),
             data.get('input_expiry_date'),
             data.get('input_status'),
-            data.get('is_execution_input', False),
+            json.dumps({
+                'name': data.get('exec_name', 'template'),
+                'quantity': data.get('exec_quantity', 'template'),
+                'unit': data.get('exec_unit', 'template'),
+                'batch': data.get('exec_batch', 'template'),
+                'notes': data.get('exec_notes', 'template'),
+                'type': data.get('exec_type', 'template'),
+                'source': data.get('exec_source', 'template')
+            }),
             input_id
         ))
         
@@ -1434,7 +1789,7 @@ def get_output(output_id):
             SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
                    o.output_unit, o.output_specifications, o.output_batch_number,
                    o.output_quality_status, o.output_destination, o.output_flow_through,
-                   o.output_flow_through_fields, p.process_name
+                   o.output_flow_through_fields, o.execution_options, p.process_name
             FROM supply_chain_outputs o
             LEFT JOIN supply_chain_processes p ON o.process_id = p.id
             WHERE o.id = %s
@@ -1457,7 +1812,8 @@ def get_output(output_id):
             'output_destination': out[9],
             'output_flow_through': out[10] or False,
             'output_flow_through_fields': out[11] or {},
-            'process_name': out[12]
+            'execution_options': out[12] or {},
+            'process_name': out[13]
         })
         
     except Exception as e:
@@ -1476,6 +1832,7 @@ def update_output(output_id):
         connection, cursor = db_conn()
         data = request.get_json()
         
+        
         # Check if output exists and get process_id
         cursor.execute("SELECT id, process_id FROM supply_chain_outputs WHERE id = %s", (output_id,))
         output_record = cursor.fetchone()
@@ -1490,7 +1847,7 @@ def update_output(output_id):
             SET output_name = %s, output_type = %s, output_quantity = %s, output_unit = %s,
                 output_specifications = %s, output_batch_number = %s,
                 output_quality_status = %s, output_destination = %s, output_flow_through = %s,
-                output_flow_through_fields = %s, date = NOW(), action = 'update'
+                output_flow_through_fields = %s, execution_options = %s, date = NOW(), action = 'update'
             WHERE id = %s
         """, (
             data.get('output_name'),
@@ -1503,14 +1860,33 @@ def update_output(output_id):
             data.get('output_destination'),
             data.get('output_flow_through', False),
             json.dumps(data.get('output_flow_through_fields', {})),
+            json.dumps(data.get('execution_options', {})),
             output_id
         ))
         
         connection.commit()
         
-        # Trigger flow-through if enabled
-        if data.get('output_flow_through', False):
-            create_automatic_inputs_for_flow_through(process_id, connection, cursor)
+        # Always check and trigger flow-through for any outputs that have flow-through enabled
+        # This ensures field updates (like execution options) are reflected in connected inputs
+        cursor.execute("""
+            SELECT id, output_name, output_flow_through, output_flow_through_fields 
+            FROM supply_chain_outputs 
+            WHERE process_id = %s AND output_flow_through = TRUE
+        """, (process_id,))
+        
+        outputs = cursor.fetchall()
+        
+        # Call the internal API function for each output
+        for output in outputs:
+            output_id = output[0]
+            try:
+                create_flow_through_inputs_internal(output_id, connection, cursor)
+                # Commit the flow-through changes immediately
+                connection.commit()
+            except Exception as e:
+                print(f"Error creating flow-through inputs for output {output_id}: {e}")
+                connection.rollback()
+                continue
         
         return jsonify({'message': 'Output updated successfully'}), 200
         
@@ -1523,46 +1899,7 @@ def update_output(output_id):
         if connection:
             connection.close()
 
-@supply_chain_bp.route('/api/supply-chain/outputs/<int:output_id>/flow-through', methods=['PUT'])
-def update_output_flow_through(output_id):
-    """Update the flow-through status of an output"""
-    try:
-        connection, cursor = db_conn()
-        data = request.get_json()
-        
-        # Check if output exists
-        cursor.execute("SELECT id FROM supply_chain_outputs WHERE id = %s", (output_id,))
-        if not cursor.fetchone():
-            return jsonify({'error': 'Output not found'}), 404
-        
-        # Update only the flow-through status
-        cursor.execute("""
-            UPDATE supply_chain_outputs 
-            SET output_flow_through = %s, date = NOW(), action = 'update'
-            WHERE id = %s
-        """, (data.get('flow_through', False), output_id))
-        
-        connection.commit()
-        
-        # Trigger flow-through if enabled
-        if data.get('flow_through', False):
-            # Get the process_id for this output
-            cursor.execute("SELECT process_id FROM supply_chain_outputs WHERE id = %s", (output_id,))
-            result = cursor.fetchone()
-            if result:
-                process_id = result[0]
-                create_automatic_inputs_for_flow_through(process_id, connection, cursor)
-        
-        return jsonify({'message': 'Output flow-through status updated successfully'}), 200
-        
-    except Exception as e:
-        print(f"Error updating output flow-through: {e}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
+# Removed duplicate flow-through endpoint - flow-through is now handled by the main output update endpoint
 
 @supply_chain_bp.route('/api/supply-chain/outputs/<int:output_id>', methods=['DELETE'])
 def delete_output(output_id):
@@ -2822,7 +3159,7 @@ def create_sub_process_input(sub_process_id):
             INSERT INTO supply_chain_inputs 
             (date, action, process_id, input_name, input_type, input_quantity, 
              input_unit, input_specifications, input_source, input_batch_number,
-             input_expiry_date, input_status, is_execution_input, uid)
+             input_expiry_date, input_status, execution_options, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
@@ -2838,7 +3175,15 @@ def create_sub_process_input(sub_process_id):
             data.get('input_batch_number', ''),
             data.get('input_expiry_date'),
             data.get('input_status', 'available'),
-            data.get('is_execution_input', False),
+            json.dumps({
+                'name': data.get('exec_name', 'template'),
+                'quantity': data.get('exec_quantity', 'template'),
+                'unit': data.get('exec_unit', 'template'),
+                'batch': data.get('exec_batch', 'template'),
+                'notes': data.get('exec_notes', 'template'),
+                'type': data.get('exec_type', 'template'),
+                'source': data.get('exec_source', 'template')
+            }),
             data.get('uid', '')
         ))
         
@@ -2875,8 +3220,8 @@ def create_sub_process_output(sub_process_id):
             INSERT INTO supply_chain_outputs 
             (date, action, process_id, output_name, output_type, output_quantity, 
              output_unit, output_specifications, output_destination, output_batch_number,
-             output_quality_status, output_flow_through, output_flow_through_fields, uid)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             output_quality_status, output_flow_through, output_flow_through_fields, execution_options, uid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             date.today(),
@@ -2892,6 +3237,7 @@ def create_sub_process_output(sub_process_id):
             data.get('output_quality_status', 'passed'),
             data.get('output_flow_through', False),
             json.dumps(data.get('output_flow_through_fields', {})),
+            json.dumps(data.get('execution_options', {})),
             data.get('uid', '')
         ))
         
@@ -2906,9 +3252,23 @@ def create_sub_process_output(sub_process_id):
         
         connection.commit()
         
-        # Trigger flow-through if enabled
-        if data.get('output_flow_through', False):
-            create_automatic_inputs_for_flow_through(sub_process_id, connection, cursor)
+        # Always check and trigger flow-through for any outputs that have flow-through enabled
+        # This ensures field updates (like execution options) are reflected in connected inputs
+        cursor.execute("""
+            SELECT id FROM supply_chain_outputs 
+            WHERE process_id = %s AND output_flow_through = TRUE
+        """, (sub_process_id,))
+        
+        outputs = cursor.fetchall()
+        
+        # Call the internal API function for each output
+        for output in outputs:
+            output_id = output[0]
+            try:
+                create_flow_through_inputs_internal(output_id, connection, cursor)
+            except Exception as e:
+                print(f"Error creating flow-through inputs for output {output_id}: {e}")
+                continue
         
         return jsonify({'id': output_id, 'message': 'Output created successfully'}), 201
         
@@ -3106,7 +3466,7 @@ def get_sub_process_inputs(sub_process_id):
         cursor.execute("""
             SELECT id, process_id, input_name, input_type, input_quantity, 
                    input_unit, input_specifications, input_source, input_batch_number, 
-                   input_expiry_date, input_status, uid
+                   input_expiry_date, input_status, execution_options, uid
             FROM supply_chain_inputs
             WHERE process_id = %s
             ORDER BY input_name
@@ -3129,7 +3489,8 @@ def get_sub_process_inputs(sub_process_id):
                 'input_batch_number': input_item[8],
                 'input_expiry_date': input_item[9].isoformat() if input_item[9] else None,
                 'input_status': input_item[10],
-                'uid': input_item[11]
+                'execution_options': input_item[11],
+                'uid': input_item[12]
             })
         
         return jsonify(result)

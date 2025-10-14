@@ -326,7 +326,7 @@ def create_supply_chain_inputs_table():
         "input_batch_number": "TEXT", # batch or lot number for traceability
         "input_expiry_date": "DATE", # expiry date if applicable
         "input_status": "TEXT", # 'available', 'consumed', 'expired', 'quarantined'
-        "is_execution_input": "BOOLEAN DEFAULT FALSE", # whether this input should be prompted during execution
+        "execution_options": "JSONB", # JSON object with execution options for each field (e.g., {"name": "template", "quantity": "prompt", "unit": "template"})
         "uid": "TEXT"
     }
 
@@ -350,6 +350,7 @@ def create_supply_chain_outputs_table():
         "output_destination": "TEXT", # where the output goes next
         "output_flow_through": "BOOLEAN DEFAULT FALSE", # whether this output flows through to connected processes
         "output_flow_through_fields": "JSONB", # which specific fields flow through as JSON
+        "execution_options": "JSONB", # JSON object with execution options for each field (e.g., {"type": "template", "volume": "prompt", "measure": "template"})
         "uid": "TEXT"
     }
 

@@ -394,6 +394,7 @@
         
         .modal.add-modal .modal-content {
             z-index: 2001;
+            max-width: 1050px;
         }
 
         .modal-content {
@@ -661,6 +662,15 @@
             document.getElementById('addInputModal').style.display = 'none';
             document.getElementById('addInputForm').reset();
             
+            // Reset execution options to default
+            document.getElementById('execName').value = 'template';
+            document.getElementById('execQuantity').value = 'template';
+            document.getElementById('execUnit').value = 'template';
+            document.getElementById('execBatch').value = 'template';
+            document.getElementById('execNotes').value = 'template';
+            document.getElementById('execType').value = 'template';
+            document.getElementById('execSource').value = 'template';
+            
             // Reset modal to create mode
             document.querySelector('#addInputModal h2').textContent = 'Add Input';
             document.querySelector('#addInputModal button[type="submit"]').textContent = 'Add Input';
@@ -670,6 +680,15 @@
         function closeAddOutputModal() {
             document.getElementById('addOutputModal').style.display = 'none';
             document.getElementById('addOutputForm').reset();
+            
+            // Reset execution options to default
+            document.getElementById('execOutputType').value = 'template';
+            document.getElementById('execOutputVolume').value = 'template';
+            document.getElementById('execOutputMeasure').value = 'template';
+            document.getElementById('execOutputBatch').value = 'template';
+            document.getElementById('execOutputNotes').value = 'template';
+            document.getElementById('execOutputCategory').value = 'template';
+            document.getElementById('execOutputDestination').value = 'template';
             
             // Reset flow-through field checkboxes
             document.getElementById('flowThrough_name').checked = false;
@@ -817,30 +836,13 @@
         }
 
         function updateOutputFlowThrough(outputId, flowThrough) {
-            fetch(`/api/supply-chain/outputs/${outputId}/flow-through`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ flow_through: flowThrough })
-            })
-            .then(response => {
-                if (response.ok) {
-                    const message = flowThrough ? 'Output enabled for flow-through' : 'Output disabled for flow-through';
-                    showSuccess('Success', message);
-                    // Refresh the process details to show updated state
-                    if (window.currentProcessId) {
-                        loadProcessDetails(window.currentProcessId);
-                    }
-                } else {
-                    response.json().then(data => {
-                        showError('Error', 'Error updating flow-through status: ' + data.error);
-                    });
-                }
-            })
-            .catch(error => {
-                showError('Error', 'Error updating flow-through status: ' + error.message);
-            });
+            // Flow-through is now handled by the form submission
+            // This function just updates the UI state
+            if (flowThrough) {
+                showSuccess('Info', 'Flow-through enabled. Click "Update Output" to apply changes.');
+            } else {
+                showSuccess('Info', 'Flow-through disabled. Click "Update Output" to apply changes.');
+            }
         }
 
         function deleteProcessFromDetails() {
@@ -896,7 +898,16 @@
                 document.getElementById('inputSource').value = input.input_source || '';
                 document.getElementById('inputBatch').value = input.input_batch_number || '';
                 document.getElementById('inputNotes').value = input.input_specifications || '';
-                document.getElementById('isExecutionInput').checked = input.is_execution_input || false;
+                
+                // Set execution options
+                const execOptions = input.execution_options || {};
+                document.getElementById('execName').value = execOptions.name || 'template';
+                document.getElementById('execQuantity').value = execOptions.quantity || 'template';
+                document.getElementById('execUnit').value = execOptions.unit || 'template';
+                document.getElementById('execBatch').value = execOptions.batch || 'template';
+                document.getElementById('execNotes').value = execOptions.notes || 'template';
+                document.getElementById('execType').value = execOptions.type || 'template';
+                document.getElementById('execSource').value = execOptions.source || 'template';
                 
                 // Change modal title and button text
                 document.querySelector('#addInputModal h2').textContent = 'Edit Input';
@@ -954,6 +965,16 @@
                 document.getElementById('outputDestination').value = output.output_destination || '';
                 document.getElementById('outputBatch').value = output.output_batch_number || '';
                 document.getElementById('outputNotes').value = output.output_specifications || '';
+                
+                // Set execution options
+                const execOptions = output.execution_options || {};
+                document.getElementById('execOutputType').value = execOptions.type || 'template';
+                document.getElementById('execOutputVolume').value = execOptions.volume || 'template';
+                document.getElementById('execOutputMeasure').value = execOptions.measure || 'template';
+                document.getElementById('execOutputBatch').value = execOptions.batch || 'template';
+                document.getElementById('execOutputNotes').value = execOptions.notes || 'template';
+                document.getElementById('execOutputCategory').value = execOptions.category || 'template';
+                document.getElementById('execOutputDestination').value = execOptions.destination || 'template';
                 
                 // Set flow-through field checkboxes
                 const flowThroughFields = output.output_flow_through_fields || {};
@@ -2103,6 +2124,17 @@
                 const formData = new FormData(e.target);
                 const data = Object.fromEntries(formData);
                 
+                // Process execution options
+                const executionOptions = {
+                    type: data.exec_output_type || 'template',
+                    volume: data.exec_output_volume || 'template',
+                    measure: data.exec_output_measure || 'template',
+                    batch: data.exec_output_batch || 'template',
+                    notes: data.exec_output_notes || 'template',
+                    category: data.exec_output_category || 'template',
+                    destination: data.exec_output_destination || 'template'
+                };
+                
                 // Process flow-through fields
                 const flowThroughFields = {
                     name: data.flow_through_name === 'on',
@@ -2114,6 +2146,15 @@
                     destination: data.flow_through_destination === 'on'
                 };
                 
+                // Remove execution option fields from main data object
+                delete data.exec_output_type;
+                delete data.exec_output_volume;
+                delete data.exec_output_measure;
+                delete data.exec_output_batch;
+                delete data.exec_output_notes;
+                delete data.exec_output_category;
+                delete data.exec_output_destination;
+                
                 // Remove flow-through field data from main data object
                 delete data.flow_through_name;
                 delete data.flow_through_quantity;
@@ -2123,7 +2164,8 @@
                 delete data.flow_through_type;
                 delete data.flow_through_destination;
                 
-                // Add flow-through fields to data
+                // Add execution options and flow-through fields to data
+                data.execution_options = executionOptions;
                 data.output_flow_through_fields = flowThroughFields;
                 data.output_flow_through = Object.values(flowThroughFields).some(value => value);
                 
@@ -2157,7 +2199,29 @@
                         showSuccess('Success!', message);
                         closeAddOutputModal();
                         if (window.currentProcessId) {
-                            loadProcessDetails(window.currentProcessId);
+                            // Add a small delay to ensure flow-through is processed before refreshing
+                            setTimeout(async () => {
+                                // Refresh the current process
+                                loadProcessDetails(window.currentProcessId);
+                                
+                                // Also refresh connected processes to show flow-through updates
+                                try {
+                                    const connectionsResponse = await fetch(`/api/supply-chain/sub-processes/${window.currentProcessId}/connections`);
+                                    if (connectionsResponse.ok) {
+                                        const connections = await connectionsResponse.json();
+                                        for (const connection of connections) {
+                                            if (connection.connection_status === 'active') {
+                                                // Refresh the connected process to show updated flow-through inputs
+                                                setTimeout(() => {
+                                                    loadProcessDetails(connection.to_sub_process_id);
+                                                }, 100);
+                                            }
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.log('Error refreshing connected processes:', error);
+                                }
+                            }, 500);
                         }
                     } else {
                         const errorData = await response.json();
@@ -2256,56 +2320,107 @@
             <form id="addInputForm">
                 <input type="hidden" id="addInputProcessId" name="process_id">
                 <div class="form-group">
+                    <div style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; margin-bottom: 20px; margin-top: 20px;">
+                        <div>
+                            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 600; margin: 0 0 8px 0;">Input Fields</h4>
+                        </div>
+                        <div>
+                            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 600; margin: 0 0 8px 0;">Execution Options</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
                     <label for="inputName">Name:</label>
-                    <input type="text" id="inputName" name="input_name" required placeholder="e.g. Juniper berries">
+                    <div style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: center;">
+                        <input type="text" id="inputName" name="input_name" required placeholder="e.g. Juniper berries">
+                        <select id="execName" name="exec_name">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="inputVolume">Volume/Amount:</label>
-                    <input type="number" id="inputVolume" name="input_quantity" step="0.01" required>
+                    <div style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: center;">
+                        <input type="number" id="inputVolume" name="input_quantity" step="0.01" required>
+                        <select id="execQuantity" name="exec_quantity">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="inputMeasure">Measure:</label>
-                    <select id="inputMeasure" name="input_unit" required>
-                        <option value="">Select unit</option>
-                        <option value="grams">Grams</option>
-                        <option value="kg">Kilograms</option>
-                        <option value="liters">Liters</option>
-                        <option value="ml">Milliliters</option>
-                        <option value="pieces">Pieces</option>
-                        <option value="units">Units</option>
-                    </select>
+                    <div style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: center;">
+                        <select id="inputMeasure" name="input_unit" required>
+                            <option value="">Select unit</option>
+                            <option value="grams">Grams</option>
+                            <option value="kg">Kilograms</option>
+                            <option value="liters">Liters</option>
+                            <option value="ml">Milliliters</option>
+                            <option value="pieces">Pieces</option>
+                            <option value="units">Units</option>
+                        </select>
+                        <select id="execUnit" name="exec_unit">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="inputBatch">Input Batch:</label>
-                    <input type="text" id="inputBatch" name="input_batch_number" placeholder="e.g. internal code or supplier provided batch code">
+                    <div style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: center;">
+                        <input type="text" id="inputBatch" name="input_batch_number" placeholder="e.g. internal code or supplier provided batch code">
+                        <select id="execBatch" name="exec_batch">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="inputNotes">Notes:</label>
-                    <textarea id="inputNotes" name="input_specifications" placeholder="Additional notes about this input"></textarea>
+                    <div style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: start;">
+                        <textarea id="inputNotes" name="input_specifications" placeholder="Additional notes about this input"></textarea>
+                        <select id="execNotes" name="exec_notes">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="inputType">Type:</label>
-                    <select id="inputType" name="input_type">
-                        <option value="raw_material">Raw Material</option>
-                        <option value="intermediate_product">Intermediate Product</option>
-                        <option value="equipment">Equipment</option>
-                        <option value="chemical">Chemical</option>
-                    </select>
+                    <div style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: center;">
+                        <select id="inputType" name="input_type">
+                            <option value="raw_material">Raw Material</option>
+                            <option value="intermediate_product">Intermediate Product</option>
+                            <option value="equipment">Equipment</option>
+                            <option value="chemical">Chemical</option>
+                        </select>
+                        <select id="execType" name="exec_type">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="inputSource">Source:</label>
-                    <input type="text" id="inputSource" name="input_source" placeholder="Where does this input come from?">
+                    <div style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: center;">
+                        <input type="text" id="inputSource" name="input_source" placeholder="Where does this input come from?">
+                        <select id="execSource" name="exec_source">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="isExecutionInput" name="is_execution_input">
-                        <span>Execution Input</span>
-                    </label>
-                    <small style="color: var(--text-secondary); font-size: 0.9rem;">
-                        Check this if this input should be prompted for values during process execution
-                    </small>
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 0; line-height: 1.4;">
+                        <strong>Input Fields:</strong> Define the input specifications and values for this process<br>
+                        <strong>Execution Options:</strong> Template will store the value entered in the input fields, Prompt will ask for input during execution
+                    </p>
                 </div>
-                <button type="submit" class="btn btn-primary">Add Input</button>
+                <div style="margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary">Add Input</button>
+                </div>
             </form>
         </div>
     </div>
@@ -2318,9 +2433,26 @@
             <form id="addOutputForm">
                 <input type="hidden" id="addOutputProcessId" name="process_id">
                 <div class="form-group">
+                    <div style="display: grid; grid-template-columns: 1fr 220px 120px; gap: 20px; margin-bottom: 20px; margin-top: 20px;">
+                        <div>
+                            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 600; margin: 0 0 8px 0;">Output Fields</h4>
+                        </div>
+                        <div>
+                            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 600; margin: 0 0 8px 0;">Execution Options</h4>
+                        </div>
+                        <div>
+                            <h4 style="color: var(--text-primary); font-size: 1rem; font-weight: 600; margin: 0 0 8px 0;">Flow Through</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
                     <label for="outputType">Type:</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="text" id="outputType" name="output_name" required placeholder="e.g. Gin" style="flex: 1;">
+                    <div style="display: grid; grid-template-columns: 1fr 220px 120px; gap: 20px; align-items: center;">
+                        <input type="text" id="outputType" name="output_name" required placeholder="e.g. Gin">
+                        <select id="execOutputType" name="exec_output_type">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
                         <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
                             <input type="checkbox" id="flowThrough_name" name="flow_through_name">
                             <span>Flow</span>
@@ -2329,8 +2461,12 @@
                 </div>
                 <div class="form-group">
                     <label for="outputVolume">Volume/Amount:</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="number" id="outputVolume" name="output_quantity" step="0.01" required style="flex: 1;">
+                    <div style="display: grid; grid-template-columns: 1fr 220px 120px; gap: 20px; align-items: center;">
+                        <input type="number" id="outputVolume" name="output_quantity" step="0.01" required>
+                        <select id="execOutputVolume" name="exec_output_volume">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
                         <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
                             <input type="checkbox" id="flowThrough_quantity" name="flow_through_quantity">
                             <span>Flow</span>
@@ -2339,8 +2475,8 @@
                 </div>
                 <div class="form-group">
                     <label for="outputMeasure">Measure:</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <select id="outputMeasure" name="output_unit" required style="flex: 1;">
+                    <div style="display: grid; grid-template-columns: 1fr 220px 120px; gap: 20px; align-items: center;">
+                        <select id="outputMeasure" name="output_unit" required>
                             <option value="">Select unit</option>
                             <option value="grams">Grams</option>
                             <option value="kg">Kilograms</option>
@@ -2348,6 +2484,10 @@
                             <option value="ml">Milliliters</option>
                             <option value="pieces">Pieces</option>
                             <option value="units">Units</option>
+                        </select>
+                        <select id="execOutputMeasure" name="exec_output_measure">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
                         </select>
                         <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
                             <input type="checkbox" id="flowThrough_unit" name="flow_through_unit">
@@ -2357,8 +2497,12 @@
                 </div>
                 <div class="form-group">
                     <label for="outputBatch">Batch:</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="text" id="outputBatch" name="output_batch_number" placeholder="Internal batch code to trace" style="flex: 1;">
+                    <div style="display: grid; grid-template-columns: 1fr 220px 120px; gap: 20px; align-items: center;">
+                        <input type="text" id="outputBatch" name="output_batch_number" placeholder="Internal batch code to trace">
+                        <select id="execOutputBatch" name="exec_output_batch">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
                         <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
                             <input type="checkbox" id="flowThrough_batch" name="flow_through_batch">
                             <span>Flow</span>
@@ -2367,8 +2511,12 @@
                 </div>
                 <div class="form-group">
                     <label for="outputNotes">Notes:</label>
-                    <div style="display: flex; align-items: flex-start; gap: 8px;">
-                        <textarea id="outputNotes" name="output_specifications" placeholder="Additional notes about this output" style="flex: 1;"></textarea>
+                    <div style="display: grid; grid-template-columns: 1fr 220px 120px; gap: 20px; align-items: start;">
+                        <textarea id="outputNotes" name="output_specifications" placeholder="Additional notes about this output"></textarea>
+                        <select id="execOutputNotes" name="exec_output_notes">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
                         <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap; margin-top: 8px;">
                             <input type="checkbox" id="flowThrough_specifications" name="flow_through_specifications">
                             <span>Flow</span>
@@ -2377,12 +2525,16 @@
                 </div>
                 <div class="form-group">
                     <label for="outputTypeCategory">Category:</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <select id="outputTypeCategory" name="output_type" style="flex: 1;">
+                    <div style="display: grid; grid-template-columns: 1fr 220px 120px; gap: 20px; align-items: center;">
+                        <select id="outputTypeCategory" name="output_type">
                             <option value="finished_product">Finished Product</option>
                             <option value="intermediate_product">Intermediate Product</option>
                             <option value="by_product">By-Product</option>
                             <option value="waste">Waste</option>
+                        </select>
+                        <select id="execOutputCategory" name="exec_output_category">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
                         </select>
                         <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
                             <input type="checkbox" id="flowThrough_type" name="flow_through_type">
@@ -2392,15 +2544,28 @@
                 </div>
                 <div class="form-group">
                     <label for="outputDestination">Destination:</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="text" id="outputDestination" name="output_destination" placeholder="Where is this output going?" style="flex: 1;">
+                    <div style="display: grid; grid-template-columns: 1fr 220px 120px; gap: 20px; align-items: center;">
+                        <input type="text" id="outputDestination" name="output_destination" placeholder="Where is this output going?">
+                        <select id="execOutputDestination" name="exec_output_destination">
+                            <option value="template">Template</option>
+                            <option value="prompt">Prompt</option>
+                        </select>
                         <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap;">
                             <input type="checkbox" id="flowThrough_destination" name="flow_through_destination">
                             <span>Flow</span>
                         </label>
                     </div>
                 </div>
-                <button type="submit" class="btn btn-primary">Add Output</button>
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+                    <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 0; line-height: 1.4;">
+                        <strong>Output Fields:</strong> Define the output specifications and values for this process<br>
+                        <strong>Execution Options:</strong> Template will store the value entered in the output fields, Prompt will ask for input during execution<br>
+                        <strong>Flow Through:</strong> Values will flow to connected processes in execution DAG
+                    </p>
+                </div>
+                <div style="margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary">Add Output</button>
+                </div>
             </form>
         </div>
     </div>
