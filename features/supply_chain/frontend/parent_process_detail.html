@@ -223,6 +223,181 @@
             color: var(--text-color);
         }
 
+        .view-more-section {
+            text-align: center;
+            margin-top: 20px;
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Execution Status Auras with Breathing Effect */
+        .execution-row[data-status="completed"] {
+            position: relative;
+            animation: breathing-glow 3s ease-in-out infinite;
+        }
+
+        .execution-row[data-status="completed"]::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            right: -3px;
+            bottom: -3px;
+            background: linear-gradient(45deg, #10b981, #34d399, #6ee7b7, #a7f3d0);
+            border-radius: 10px;
+            z-index: -1;
+            opacity: 0.6;
+            filter: blur(2px);
+        }
+
+        .execution-row[data-status="completed"]::after {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            right: -1px;
+            bottom: -1px;
+            background: linear-gradient(45deg, #10b981, #34d399);
+            border-radius: 8px;
+            z-index: -1;
+            opacity: 0.8;
+        }
+
+        @keyframes breathing-glow {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(16, 185, 129, 0.3), 
+                           0 0 20px rgba(16, 185, 129, 0.2), 
+                           0 0 30px rgba(16, 185, 129, 0.1);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(16, 185, 129, 0.6), 
+                           0 0 40px rgba(16, 185, 129, 0.4), 
+                           0 0 60px rgba(16, 185, 129, 0.2);
+            }
+        }
+
+        .execution-row[data-status="in_progress"] {
+            position: relative;
+        }
+
+        .execution-row[data-status="in_progress"]::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #f59e0b, #fbbf24, #fcd34d);
+            border-radius: 8px;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        .execution-row[data-status="failed"] {
+            position: relative;
+        }
+
+        .execution-row[data-status="failed"]::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #ef4444, #f87171, #fca5a5);
+            border-radius: 8px;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background-color: var(--bg-color);
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: var(--text-color);
+        }
+
+        .close {
+            color: var(--text-secondary);
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+
+        .close:hover {
+            color: var(--text-color);
+        }
+
+        .modal-body {
+            padding: 0;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .modal-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .modal-table th,
+        .modal-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-table th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            color: var(--text-color);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .modal-table tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        .status-active {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22C55E;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
         .status-badge {
             padding: 6px 12px;
             border-radius: 20px;
@@ -232,10 +407,24 @@
             letter-spacing: 0.5px;
         }
 
-        .status-active {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22C55E;
-            border: 1px solid rgba(34, 197, 94, 0.3);
+        .status-pending {
+            background: rgba(156, 163, 175, 0.2);
+            color: #6b7280;
+        }
+
+        .status-in_progress {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+
+        .status-completed {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-failed {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
         }
 
         .status-inactive {
@@ -623,9 +812,6 @@
                             <button class="visual-view-btn" onclick="openVisualView()">
                                 Visual View
                             </button>
-                            <button class="execute-btn" onclick="executeProcess()">
-                                Execute Process
-                            </button>
                         </div>
                     </h2>
 
@@ -683,6 +869,69 @@
                     {% endif %}
                 </div>
 
+                <!-- Executions Section -->
+                <div class="table-container">
+                    <h2>
+                        Executions
+                        <div class="header-buttons">
+                            <button class="btn btn-primary" onclick="executeProcess()">
+                                Initiate New Execution
+                            </button>
+                        </div>
+                    </h2>
+                    {% if executions %}
+                        <table class="sub-processes-table">
+                            <thead>
+                                <tr>
+                                    <th>Execution ID</th>
+                                    <th>Status</th>
+                                    <th>Start Time</th>
+                                    <th>End Time</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for execution in executions %}
+                                <tr class="execution-row" data-status="{{ execution[2] }}">
+                                    <td>{{ execution[0] }}</td>
+                                    <td>
+                                        <span class="status-badge status-{{ execution[2] }}">
+                                            {{ execution[2].replace('_', ' ').title() }}
+                                        </span>
+                                    </td>
+                                    <td>{{ execution[3].strftime('%Y-%m-%d %H:%M') if execution[3] else 'Not started' }}</td>
+                                    <td>{{ execution[4].strftime('%Y-%m-%d %H:%M') if execution[4] else 'Not completed' }}</td>
+                                    <td>{{ execution[5] or 'No notes' }}</td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-primary" onclick="viewExecution({{ execution[0] }})">
+                                                View Details
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% if total_executions > 5 %}
+                            <div class="view-more-section">
+                                <button class="btn btn-secondary" onclick="showAllExecutions()">
+                                    View All {{ total_executions }} Executions
+                                </button>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="empty-state">
+                            <h3>No Executions</h3>
+                            <p>This parent process doesn't have any executions yet.</p>
+                            <button class="btn btn-primary" onclick="executeProcess()">
+                                Initiate First Execution
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+
                 <div class="table-container">
                     <h2>
                         Connections
@@ -732,6 +981,33 @@
                 </div>
             {% endif %}
         {% endif %}
+    </div>
+
+    <!-- All Executions Modal -->
+    <div id="allExecutionsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>All Executions</h2>
+                <button class="close" onclick="closeAllExecutionsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <table class="modal-table">
+                    <thead>
+                        <tr>
+                            <th>Execution ID</th>
+                            <th>Status</th>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="allExecutionsTableBody">
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Create Sub Process Modal -->
@@ -896,8 +1172,99 @@
         function executeProcess() {
             // Start process execution
             console.log('Starting process execution for parent process:', {{ parent_process[0] }});
-            // TODO: Implement execution flow
-            alert('Execute Process functionality coming soon!');
+            
+            // Create a new parent execution
+            fetch(`/api/supply-chain/parent-processes/{{ parent_process[0] }}/executions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Navigate to the execution detail page
+                    window.location.href = `/supply-chain/execution/${data.parent_execution_id}`;
+                } else {
+                    alert('Error creating execution: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error creating execution: ' + error.message);
+            });
+        }
+
+        function viewExecution(executionId) {
+            // Navigate to the execution detail page
+            window.location.href = `/supply-chain/execution/${executionId}`;
+        }
+
+        function showAllExecutions() {
+            // Show the modal
+            document.getElementById('allExecutionsModal').style.display = 'block';
+            
+            // Fetch all executions
+            fetch(`/api/supply-chain/parent-processes/{{ parent_process[0] }}/executions/all`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        populateAllExecutionsTable(data.executions);
+                    } else {
+                        alert('Error loading executions: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error loading executions: ' + error.message);
+                });
+        }
+
+        function populateAllExecutionsTable(executions) {
+            const tbody = document.getElementById('allExecutionsTableBody');
+            tbody.innerHTML = '';
+            
+            executions.forEach(execution => {
+                const row = document.createElement('tr');
+                row.className = 'execution-row';
+                row.setAttribute('data-status', execution[2]);
+                
+                const startTime = execution[3] ? new Date(execution[3]).toLocaleString() : 'Not started';
+                const endTime = execution[4] ? new Date(execution[4]).toLocaleString() : 'Not completed';
+                
+                row.innerHTML = `
+                    <td>${execution[0]}</td>
+                    <td>
+                        <span class="status-badge status-${execution[2]}">
+                            ${execution[2].replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </span>
+                    </td>
+                    <td>${startTime}</td>
+                    <td>${endTime}</td>
+                    <td>${execution[5] || 'No notes'}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" onclick="viewExecution(${execution[0]})">
+                                View Details
+                            </button>
+                        </div>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        function closeAllExecutionsModal() {
+            document.getElementById('allExecutionsModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('allExecutionsModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
         }
 
         function addSubProcess() {
