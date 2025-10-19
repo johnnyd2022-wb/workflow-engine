@@ -905,6 +905,17 @@
                     <label for="editInputSource">Source:</label>
                     <input type="text" id="editInputSource" name="input_source">
                 </div>
+                
+                <!-- Execution Options Section -->
+                <h3 style="margin-top: 24px; margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Execution Options</h3>
+                <div class="form-group">
+                    <label for="editExecInputBatch">Input Batch:</label>
+                    <select id="editExecInputBatch" name="exec_batch">
+                        <option value="template">Template</option>
+                        <option value="prompt">Prompt</option>
+                    </select>
+                </div>
+                
                 <button type="submit" class="btn btn-primary">Update Input</button>
             </form>
         </div>
@@ -2638,7 +2649,7 @@
         // Load input for editing
         async function loadInputForEdit(inputId) {
             try {
-                const response = await fetch(`/api/supply-chain/inputs/${inputId}`);
+                const response = await fetch(`/api/supply-chain/inputs/${inputId}?t=${Date.now()}`);
                 if (response.ok) {
                     const input = await response.json();
                     document.getElementById('editInputId').value = input.id;
@@ -2665,6 +2676,12 @@
                     
                     document.getElementById('editInputType').value = input.input_type;
                     document.getElementById('editInputSource').value = input.input_source || '';
+                    
+                    // Load execution options
+                    const execOptions = input.execution_options || {};
+                    console.log('Loading input for edit - execution options:', execOptions);
+                    console.log('Setting batch execution option to:', execOptions.batch || 'template');
+                    document.getElementById('editExecInputBatch').value = execOptions.batch || 'template';
                 }
             } catch (error) {
                 console.error('Error loading input:', error);

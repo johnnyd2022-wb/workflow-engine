@@ -463,6 +463,25 @@ def create_supply_chain_execution_outputs_table():
     
     create_table(table_name, columns)
 
+def create_supply_chain_execution_flow_through_table():
+    """Table to track flow-through data from executions"""
+    table_name = "supply_chain_execution_flow_through"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "source_execution_id": "INTEGER", # foreign key to supply_chain_sub_executions
+        "source_output_id": "INTEGER", # foreign key to supply_chain_outputs
+        "target_process_id": "INTEGER", # foreign key to supply_chain_sub_processes (where it flows to)
+        "flow_through_data": "JSONB", # actual prompted values and flow-through configuration
+        "flow_through_status": "TEXT", # 'pending', 'processed', 'failed'
+        "flow_through_notes": "TEXT", # notes about this flow-through
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
 def create_supply_chain_process_templates_table():
     """Table to store process templates with default inputs/outputs"""
     table_name = "supply_chain_process_templates"
@@ -1108,6 +1127,7 @@ def main():
     create_supply_chain_process_executions_table()
     create_supply_chain_execution_inputs_table()
     create_supply_chain_execution_outputs_table()
+    create_supply_chain_execution_flow_through_table()
     create_supply_chain_process_templates_table()
     create_supply_chain_dag_layout_table()
     create_supply_chain_parent_processes_table()

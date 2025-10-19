@@ -770,7 +770,7 @@
                         <h3>Processes</h3>
                         <div class="sub-process-grid">
                             {% for sub_execution in sub_executions %}
-                            {% set can_start = sub_execution[3] == 'pending' %}
+                                {% set can_start = sub_execution[3] == 'pending' %}
                             <div class="sub-process-card">
                                 <div class="sub-process-header">
                                     <div class="sub-process-name">{{ sub_execution[7] }}</div>
@@ -781,9 +781,9 @@
                                 
                                 <div class="sub-process-actions">
                                     {% if sub_execution[3] == 'pending' %}
-                                        <button class="btn btn-primary" onclick="startSubExecution({{ sub_execution[0] }})">
-                                            Start
-                                        </button>
+                                            <button class="btn btn-primary" onclick="startSubExecution({{ sub_execution[0] }})">
+                                                Start
+                                            </button>
                                     {% elif sub_execution[3] == 'in_progress' %}
                                         <button class="btn btn-success" onclick="completeSubExecution({{ sub_execution[0] }})">
                                             Complete
@@ -926,7 +926,30 @@
         });
 
         function completeSubExecution(subExecutionId) {
+            // Check if there are output prompts before completing
+            fetch(`/api/supply-chain/sub-executions/${subExecutionId}/inputs-outputs`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Received data for completion:', data);
+                    if (data.success) {
+                        // Check if there are prompt outputs
+                        if (data.prompt_outputs && data.prompt_outputs.length > 0) {
+                            // Show output prompt modal
+                            data.sub_execution_id = subExecutionId;
+                            data.is_completion = true;
+                            showBatchOutputModal(data);
+                        } else {
+                            // No output prompts, complete directly
             updateSubExecutionStatus(subExecutionId, 'completed');
+                        }
+                    } else {
+                        alert('Error loading execution data: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error loading execution data: ' + error.message);
+                });
         }
 
         function failSubExecution(subExecutionId) {
@@ -1047,6 +1070,107 @@
             });
         }
         
+        function showBatchOutputModal(data) {
+            // Remove existing modal if any
+            const existingModal = document.getElementById('batchOutputModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Create modal HTML
+            let modalContent = `
+                <div id="batchOutputModal" class="modal" style="display: block;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Complete: ${data.sub_process_name || 'Sub-Process'}</h2>
+                            <span class="close" onclick="closeBatchOutputModal()">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <p style="color: #6b7280; margin-bottom: 24px;">Provide output data for completion</p>
+                            
+                            <form id="batchOutputForm">
+            `;
+            
+            // Add output fields
+            console.log('Processing outputs:', data.prompt_outputs);
+            if (data.prompt_outputs && data.prompt_outputs.length > 0) {
+                modalContent += '<h3 style="margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Outputs</h3>';
+                data.prompt_outputs.forEach(output => {
+                    console.log('Processing output:', output);
+                    modalContent += `
+                        <div class="batch-section">
+                            <div class="batch-title">${output.output_name}</div>
+                    `;
+                    
+                    // Only show fields that are set to "prompt"
+                    const execOptions = output.execution_options || {};
+                    console.log('Output execution options:', execOptions);
+                    
+                    if (execOptions.unit === 'prompt') {
+                        modalContent += `
+                            <div class="form-group">
+                                <label class="form-label">Unit</label>
+                                <select class="form-input" name="output_${output.id}_unit" required data-output-id="${output.id}">
+                                    <option value="">Loading options...</option>
+                                </select>
+                            </div>
+                        `;
+                    }
+                    
+                    if (execOptions.quantity === 'prompt') {
+                        modalContent += `
+                            <div class="form-group">
+                                <label class="form-label">Quantity</label>
+                                <input type="number" class="form-input" name="output_${output.id}_quantity" value="${output.output_quantity || ''}" step="0.01" required>
+                            </div>
+                        `;
+                    }
+                    
+                    if (execOptions.batch === 'prompt') {
+                        modalContent += `
+                            <div class="form-group">
+                                <label class="form-label">Output Batch</label>
+                                <input type="text" class="form-input" name="output_${output.id}_batch" value="${output.output_batch || ''}" required>
+                            </div>
+                        `;
+                    }
+                    
+                    modalContent += `
+                        </div>
+                    `;
+                });
+            }
+            
+            // Add execution notes
+            modalContent += `
+                <h3 style="margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Completion Notes</h3>
+                <div class="form-group">
+                    <textarea class="form-textarea" name="execution_notes" placeholder="Add any notes about this completion..."></textarea>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeBatchOutputModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Complete Execution</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+            `;
+            
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+            
+            // Populate dropdowns with API call
+            populateOutputDropdowns(data);
+            
+            // Handle form submission
+            document.getElementById('batchOutputForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitBatchOutput(data.sub_execution_id);
+            });
+        }
+        
         function populateDropdowns(data) {
             console.log('Populating dropdowns...');
             
@@ -1090,9 +1214,9 @@
                         console.log('No unit options found, attempting to populate defaults...');
                         // Try to populate default options first
                         fetch('/api/supply-chain/field-options/populate-defaults', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
                             }
                         })
                         .then(response => response.json())
@@ -1104,8 +1228,8 @@
                             } else {
                                 throw new Error('Failed to populate defaults');
                             }
-                        })
-                        .then(response => response.json())
+            })
+            .then(response => response.json())
                         .then(retryOptionsData => {
                             console.log('Retry unit options:', retryOptionsData);
                             if (retryOptionsData.success && retryOptionsData.options && retryOptionsData.options.length > 0) {
@@ -1129,11 +1253,11 @@
                                         dropdown.value = input.input_unit;
                                     }
                                 });
-                            } else {
+                } else {
                                 throw new Error('Still no options after populating defaults');
-                            }
-                        })
-                        .catch(error => {
+                }
+            })
+            .catch(error => {
                             console.error('Error populating defaults or retrying:', error);
                             // Final fallback to hardcoded options
                             unitDropdowns.forEach(dropdown => {
@@ -1163,6 +1287,179 @@
                         `;
                     });
                 });
+        }
+        
+        function populateOutputDropdowns(data) {
+            console.log('Populating output dropdowns...');
+            
+            // Get all unit dropdowns for outputs
+            const unitDropdowns = document.querySelectorAll('select[name*="output_"][name*="_unit"]');
+            console.log(`Found ${unitDropdowns.length} output unit dropdowns`);
+            
+            // Fetch field options for units
+            fetch('/api/supply-chain/field-options/unit')
+                .then(response => response.json())
+                .then(optionsData => {
+                    console.log('Received unit options for outputs:', optionsData);
+                    
+                    if (optionsData.success && optionsData.options && optionsData.options.length > 0) {
+                        unitDropdowns.forEach(dropdown => {
+                            // Clear loading option
+                            dropdown.innerHTML = '';
+                            
+                            // Add default option
+                            const defaultOption = document.createElement('option');
+                            defaultOption.value = '';
+                            defaultOption.textContent = 'Select unit...';
+                            dropdown.appendChild(defaultOption);
+                            
+                            // Add options from API
+                            optionsData.options.forEach(option => {
+                                const optionElement = document.createElement('option');
+                                optionElement.value = option.value;
+                                optionElement.textContent = option.label;
+                                dropdown.appendChild(optionElement);
+                            });
+                            
+                            // Set default value if available
+                            const outputId = dropdown.getAttribute('data-output-id');
+                            const output = data.prompt_outputs.find(o => o.id == outputId);
+                            if (output && output.output_unit) {
+                                dropdown.value = output.output_unit;
+                            }
+                        });
+                    } else {
+                        console.log('No unit options found for outputs, attempting to populate defaults...');
+                        // Try to populate default options first
+                        fetch('/api/supply-chain/field-options/populate-defaults', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(populateResult => {
+                            console.log('Populate defaults result for outputs:', populateResult);
+                            if (populateResult.success) {
+                                // Retry fetching options after populating defaults
+                                return fetch('/api/supply-chain/field-options/unit');
+                            } else {
+                                throw new Error('Failed to populate defaults');
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(retryOptionsData => {
+                            console.log('Retry unit options for outputs:', retryOptionsData);
+                            if (retryOptionsData.success && retryOptionsData.options && retryOptionsData.options.length > 0) {
+                                unitDropdowns.forEach(dropdown => {
+                                    dropdown.innerHTML = '';
+                                    const defaultOption = document.createElement('option');
+                                    defaultOption.value = '';
+                                    defaultOption.textContent = 'Select unit...';
+                                    dropdown.appendChild(defaultOption);
+                                    
+                                    retryOptionsData.options.forEach(option => {
+                                        const optionElement = document.createElement('option');
+                                        optionElement.value = option.value;
+                                        optionElement.textContent = option.label;
+                                        dropdown.appendChild(optionElement);
+                                    });
+                                    
+                                    const outputId = dropdown.getAttribute('data-output-id');
+                                    const output = data.prompt_outputs.find(o => o.id == outputId);
+                                    if (output && output.output_unit) {
+                                        dropdown.value = output.output_unit;
+                                    }
+                                });
+                    } else {
+                                throw new Error('Still no options after populating defaults');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error populating defaults or retrying for outputs:', error);
+                            // Final fallback to hardcoded options
+                            unitDropdowns.forEach(dropdown => {
+                                dropdown.innerHTML = `
+                                    <option value="">Select unit...</option>
+                                    <option value="kg">Kilograms</option>
+                                    <option value="g">Grams</option>
+                                    <option value="l">Liters</option>
+                                    <option value="ml">Milliliters</option>
+                                    <option value="pieces">Pieces</option>
+                                `;
+                            });
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading unit options for outputs:', error);
+                    // Fallback to default options
+                    unitDropdowns.forEach(dropdown => {
+                        dropdown.innerHTML = `
+                            <option value="">Select unit...</option>
+                            <option value="kg">Kilograms</option>
+                            <option value="g">Grams</option>
+                            <option value="l">Liters</option>
+                            <option value="ml">Milliliters</option>
+                            <option value="pieces">Pieces</option>
+                        `;
+                    });
+                });
+        }
+        
+        function closeBatchOutputModal() {
+            const modal = document.getElementById('batchOutputModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+        
+        function submitBatchOutput(subExecutionId) {
+            const form = document.getElementById('batchOutputForm');
+            const formData = new FormData(form);
+            
+            // Convert form data to JSON
+            const outputData = {};
+            const executionNotes = formData.get('execution_notes');
+            
+            // Process output fields
+            for (let [key, value] of formData.entries()) {
+                if (key.startsWith('output_') && key !== 'execution_notes') {
+                    const parts = key.split('_');
+                    const outputId = parts[1];
+                    const fieldType = parts[2];
+                    
+                    if (!outputData[outputId]) {
+                        outputData[outputId] = {};
+                    }
+                    outputData[outputId][fieldType] = value;
+                }
+            }
+            
+            // Submit to API
+            fetch(`/api/supply-chain/sub-executions/${subExecutionId}/complete-with-outputs`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                    output_data: outputData,
+                    execution_notes: executionNotes
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                if (data.success) {
+                    closeBatchOutputModal();
+                    location.reload();
+                } else {
+                    alert('Error completing sub-process: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                console.error('Error:', error);
+                alert('Error completing sub-process: ' + error.message);
+            });
         }
         
         function closeBatchInputModal() {
