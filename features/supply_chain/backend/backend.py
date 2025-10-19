@@ -3991,6 +3991,21 @@ def execute_sub_execution(sub_execution_id):
             WHERE id = %s
         """, (sub_execution_id,))
         
+        # Get parent execution ID and update its status to 'in_progress'
+        cursor.execute("""
+            SELECT parent_execution_id FROM supply_chain_sub_executions WHERE id = %s
+        """, (sub_execution_id,))
+        parent_execution_result = cursor.fetchone()
+        if parent_execution_result:
+            parent_execution_id = parent_execution_result[0]
+            print(f"Updating parent execution {parent_execution_id} to in_progress")
+            cursor.execute("""
+                UPDATE supply_chain_parent_executions 
+                SET execution_status = 'in_progress', execution_start_time = NOW()
+                WHERE id = %s AND execution_status IN ('pending', 'in_progress')
+            """, (parent_execution_id,))
+            print(f"Parent execution update affected {cursor.rowcount} rows")
+        
         # Get inputs for this sub-process to create execution inputs
         cursor.execute("""
             SELECT id, input_name, input_type, execution_options
@@ -4086,6 +4101,55 @@ def update_sub_execution_status(sub_execution_id):
             SET {', '.join(update_fields)}
             WHERE id = %s
         """, update_values + [sub_execution_id])
+        
+        # Get parent execution ID
+        cursor.execute("""
+            SELECT parent_execution_id FROM supply_chain_sub_executions WHERE id = %s
+        """, (sub_execution_id,))
+        parent_execution_result = cursor.fetchone()
+        
+        if parent_execution_result:
+            parent_execution_id = parent_execution_result[0]
+            print(f"Checking completion status for parent execution {parent_execution_id}")
+            
+            # Check if all sub-executions for this parent are completed
+            cursor.execute("""
+                SELECT COUNT(*) FROM supply_chain_sub_executions 
+                WHERE parent_execution_id = %s AND execution_status != 'completed'
+            """, (parent_execution_id,))
+            incomplete_count = cursor.fetchone()[0]
+            print(f"Found {incomplete_count} incomplete sub-executions")
+            
+            if incomplete_count == 0:
+                # All sub-executions are completed, update parent to completed
+                print(f"All sub-executions completed, updating parent execution {parent_execution_id} to completed")
+                cursor.execute("""
+                    UPDATE supply_chain_parent_executions 
+                    SET execution_status = 'completed', execution_end_time = NOW()
+                    WHERE id = %s
+                """, (parent_execution_id,))
+                print(f"Parent execution completion update affected {cursor.rowcount} rows")
+            elif status == 'completed':
+                # Check if this was the last sub-execution to complete
+                cursor.execute("""
+                    SELECT COUNT(*) FROM supply_chain_sub_executions 
+                    WHERE parent_execution_id = %s AND execution_status = 'completed'
+                """, (parent_execution_id,))
+                completed_count = cursor.fetchone()[0]
+                
+                cursor.execute("""
+                    SELECT COUNT(*) FROM supply_chain_sub_executions 
+                    WHERE parent_execution_id = %s
+                """, (parent_execution_id,))
+                total_count = cursor.fetchone()[0]
+                
+                if completed_count == total_count:
+                    # All sub-executions are completed, update parent to completed
+                    cursor.execute("""
+                        UPDATE supply_chain_parent_executions 
+                        SET execution_status = 'completed', execution_end_time = NOW()
+                        WHERE id = %s
+                    """, (parent_execution_id,))
         
         connection.commit()
         
@@ -4506,6 +4570,75 @@ def populate_default_field_options():
         connection.rollback()
         print(f"Error populating default field options: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+@supply_chain_bp.route('/supply-chain/parent-process/<int:parent_process_id>/executions/summary')
+def execution_summary(parent_process_id):
+    """Display execution summary page for a parent process"""
+    connection, cursor = db_conn()
+    
+    try:
+        # Get parent process details
+        cursor.execute("""
+            SELECT id, parent_process_name, parent_process_description
+            FROM supply_chain_parent_processes
+            WHERE id = %s
+        """, (parent_process_id,))
+        parent_process = cursor.fetchone()
+        
+        if not parent_process:
+            return "Parent process not found", 404
+        
+        # Get all executions for this parent process
+        cursor.execute("""
+            SELECT pe.id, pe.parent_process_id, pe.execution_status, pe.execution_start_time,
+                   pe.execution_end_time, pe.execution_notes, pe.date,
+                   pp.parent_process_name
+            FROM supply_chain_parent_executions pe
+            LEFT JOIN supply_chain_parent_processes pp ON pe.parent_process_id = pp.id
+            WHERE pe.parent_process_id = %s
+            ORDER BY pe.date DESC, pe.id DESC
+        """, (parent_process_id,))
+        executions = cursor.fetchall()
+        
+        # Calculate statistics
+        total_executions = len(executions)
+        completed_executions = len([e for e in executions if e[2] == 'completed'])
+        in_progress_executions = len([e for e in executions if e[2] == 'in_progress'])
+        failed_executions = len([e for e in executions if e[2] == 'failed'])
+        pending_executions = len([e for e in executions if e[2] == 'pending'])
+        
+        # Convert executions to a more convenient format
+        execution_list = []
+        for execution in executions:
+            execution_dict = {
+                'id': execution[0],
+                'parent_process_id': execution[1],
+                'execution_status': execution[2],
+                'execution_start_time': execution[3],
+                'execution_end_time': execution[4],
+                'execution_notes': execution[5],
+                'date': execution[6],
+                'parent_process_name': execution[7]
+            }
+            print(f"Execution {execution[0]}: status = {execution[2]}")
+            execution_list.append(execution_dict)
+        
+        return render_template('execution_summary.html',
+                             parent_process_id=parent_process_id,
+                             parent_process_name=parent_process[1],
+                             executions=execution_list,
+                             total_executions=total_executions,
+                             completed_executions=completed_executions,
+                             in_progress_executions=in_progress_executions,
+                             failed_executions=failed_executions,
+                             pending_executions=pending_executions)
+        
+    except Exception as e:
+        print(f"Error loading execution summary: {e}")
+        return f"Error loading execution summary: {str(e)}", 500
     finally:
         cursor.close()
         connection.close()

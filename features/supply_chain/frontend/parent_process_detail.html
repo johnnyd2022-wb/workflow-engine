@@ -916,9 +916,9 @@
                         </table>
                         {% if total_executions > 5 %}
                             <div class="view-more-section">
-                                <button class="btn btn-secondary" onclick="showAllExecutions()">
+                                <a href="/supply-chain/parent-process/{{ parent_process[0] }}/executions/summary" class="btn btn-secondary">
                                     View All {{ total_executions }} Executions
-                                </button>
+                                </a>
                             </div>
                         {% endif %}
                     {% else %}
@@ -984,31 +984,6 @@
     </div>
 
     <!-- All Executions Modal -->
-    <div id="allExecutionsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>All Executions</h2>
-                <button class="close" onclick="closeAllExecutionsModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <table class="modal-table">
-                    <thead>
-                        <tr>
-                            <th>Execution ID</th>
-                            <th>Status</th>
-                            <th>Start Time</th>
-                            <th>End Time</th>
-                            <th>Notes</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="allExecutionsTableBody">
-                        <!-- Will be populated by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
 
     <!-- Create Sub Process Modal -->
     <div id="createSubProcessModal" class="modal">
@@ -1198,73 +1173,6 @@
         function viewExecution(executionId) {
             // Navigate to the execution detail page
             window.location.href = `/supply-chain/execution/${executionId}`;
-        }
-
-        function showAllExecutions() {
-            // Show the modal
-            document.getElementById('allExecutionsModal').style.display = 'block';
-            
-            // Fetch all executions
-            fetch(`/api/supply-chain/parent-processes/{{ parent_process[0] }}/executions/all`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        populateAllExecutionsTable(data.executions);
-                    } else {
-                        alert('Error loading executions: ' + (data.error || 'Unknown error'));
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error loading executions: ' + error.message);
-                });
-        }
-
-        function populateAllExecutionsTable(executions) {
-            const tbody = document.getElementById('allExecutionsTableBody');
-            tbody.innerHTML = '';
-            
-            executions.forEach(execution => {
-                const row = document.createElement('tr');
-                row.className = 'execution-row';
-                row.setAttribute('data-status', execution[2]);
-                
-                const startTime = execution[3] ? new Date(execution[3]).toLocaleString() : 'Not started';
-                const endTime = execution[4] ? new Date(execution[4]).toLocaleString() : 'Not completed';
-                
-                row.innerHTML = `
-                    <td>${execution[0]}</td>
-                    <td>
-                        <span class="status-badge status-${execution[2]}">
-                            ${execution[2].replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </span>
-                    </td>
-                    <td>${startTime}</td>
-                    <td>${endTime}</td>
-                    <td>${execution[5] || 'No notes'}</td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="btn btn-primary" onclick="viewExecution(${execution[0]})">
-                                View Details
-                            </button>
-                        </div>
-                    </td>
-                `;
-                
-                tbody.appendChild(row);
-            });
-        }
-
-        function closeAllExecutionsModal() {
-            document.getElementById('allExecutionsModal').style.display = 'none';
-        }
-
-        // Close modal when clicking outside of it
-        window.onclick = function(event) {
-            const modal = document.getElementById('allExecutionsModal');
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
         }
 
         function addSubProcess() {

@@ -770,14 +770,7 @@
                         <h3>Processes</h3>
                         <div class="sub-process-grid">
                             {% for sub_execution in sub_executions %}
-                            {% set loop_index = loop.index0 %}
-                            {% set can_start = false %}
-                            {% if loop_index == 0 %}
-                                {% set can_start = sub_execution[3] == 'pending' %}
-                            {% else %}
-                                {% set prev_execution = sub_executions[loop_index - 1] %}
-                                {% set can_start = sub_execution[3] == 'pending' and prev_execution[3] == 'completed' %}
-                            {% endif %}
+                            {% set can_start = sub_execution[3] == 'pending' %}
                             <div class="sub-process-card">
                                 <div class="sub-process-header">
                                     <div class="sub-process-name">{{ sub_execution[7] }}</div>
@@ -788,15 +781,9 @@
                                 
                                 <div class="sub-process-actions">
                                     {% if sub_execution[3] == 'pending' %}
-                                        {% if can_start %}
-                                            <button class="btn btn-primary" onclick="startSubExecution({{ sub_execution[0] }})">
-                                                Start
-                                            </button>
-                                        {% else %}
-                                            <button class="btn" style="background: #e5e7eb; color: #6b7280; cursor: not-allowed;" disabled>
-                                                Waiting for Previous Process
-                                            </button>
-                                        {% endif %}
+                                        <button class="btn btn-primary" onclick="startSubExecution({{ sub_execution[0] }})">
+                                            Start
+                                        </button>
                                     {% elif sub_execution[3] == 'in_progress' %}
                                         <button class="btn btn-success" onclick="completeSubExecution({{ sub_execution[0] }})">
                                             Complete
