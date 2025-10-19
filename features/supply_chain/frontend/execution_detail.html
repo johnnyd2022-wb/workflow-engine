@@ -12,433 +12,623 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f8fafc;
-            color: #1e293b;
-            line-height: 1.5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            color: #1d1d1f;
+            line-height: 1.6;
         }
 
-        .dashboard-container {
+        .main-container {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 24px;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            min-height: calc(100vh - 4rem);
         }
 
-        .dashboard-header {
-            margin-bottom: 32px;
+        .sidebar {
+            position: fixed;
+            left: 2rem;
+            top: 2rem;
+            width: 80px;
+            height: calc(100vh - 4rem);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 0;
+            z-index: 1000;
         }
 
-        .dashboard-title {
-            font-size: 28px;
+        .sidebar-item {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .sidebar-item.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .sidebar-item.active::after {
+            content: '';
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 20px;
+            background: #667eea;
+            border-radius: 2px;
+        }
+
+        .sidebar-icon {
+            width: 24px;
+            height: 24px;
+            fill: #6e6e73;
+        }
+
+        .sidebar-item.active .sidebar-icon {
+            fill: white;
+        }
+
+        .sidebar-label {
+            position: absolute;
+            left: 100%;
+            margin-left: 1rem;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .sidebar-item:hover .sidebar-label {
+            opacity: 1;
+        }
+
+        .content-area {
+            margin-left: 120px;
+            padding: 2rem;
+        }
+
+        .header {
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 3rem;
             font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
         }
 
-        .dashboard-subtitle {
-            font-size: 16px;
-            color: #64748b;
+        .header .subtitle {
+            font-size: 1.25rem;
+            color: #6e6e73;
             font-weight: 400;
         }
 
         .execution-status-bar {
             display: flex;
             align-items: center;
-            gap: 16px;
-            margin-bottom: 24px;
-            padding: 16px 24px;
-            background: white;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            gap: 2rem;
+            margin-bottom: 3rem;
+            padding: 1.5rem 2rem;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .status-indicator {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 14px;
+            gap: 1rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
             font-weight: 600;
         }
 
-        .status-planned {
-            background: #f1f5f9;
-            color: #475569;
-        }
-
-        .status-in-progress {
-            background: #fef3c7;
+        .status-indicator.status-pending {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
             color: #92400e;
         }
 
-        .status-completed {
-            background: #d1fae5;
+        .status-indicator.status-in_progress {
+            background: linear-gradient(135deg, #dbeafe, #93c5fd);
+            color: #1e40af;
+        }
+
+        .status-indicator.status-completed {
+            background: linear-gradient(135deg, #d1fae5, #6ee7b7);
             color: #065f46;
         }
 
-        .status-failed {
-            background: #fee2e2;
+        .status-indicator.status-failed {
+            background: linear-gradient(135deg, #fee2e2, #fca5a5);
             color: #991b1b;
         }
 
         .status-dot {
-            width: 8px;
-            height: 8px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             background: currentColor;
         }
 
         .execution-id {
-            font-size: 14px;
-            color: #64748b;
-            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 1.125rem;
+            color: #6e6e73;
+            font-weight: 500;
         }
 
-        .dashboard-grid {
+        .main-content {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            margin-bottom: 32px;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
         }
 
-        .dashboard-card {
-            background: white;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
+        .process-tracing {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        .card-header {
-            padding: 20px 24px 16px;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .card-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #0f172a;
-            margin-bottom: 4px;
-        }
-
-        .card-subtitle {
-            font-size: 14px;
-            color: #64748b;
-        }
-
-        .card-content {
-            padding: 24px;
-        }
-
-        .metric-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 16px;
-        }
-
-        .metric-item {
-            text-align: center;
-            padding: 16px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-        }
-
-        .metric-value {
-            font-size: 24px;
+        .process-tracing h2 {
+            font-size: 1.5rem;
             font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 4px;
+            color: #1d1d1f;
+            margin-bottom: 2rem;
         }
 
-        .metric-label {
-            font-size: 12px;
-            color: #64748b;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .info-list {
-            list-style: none;
-        }
-
-        .info-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .info-item:last-child {
-            border-bottom: none;
-        }
-
-        .info-label {
-            font-size: 14px;
-            color: #64748b;
-            font-weight: 500;
-        }
-
-        .info-value {
-            font-size: 14px;
-            color: #0f172a;
-            font-weight: 600;
-        }
-
-        .sub-processes-section {
-            background: white;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-
-        .section-header {
-            padding: 24px 24px 16px;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .section-title {
-            font-size: 20px;
-            font-weight: 600;
-            color: #0f172a;
-            margin-bottom: 8px;
-        }
-
-        .section-description {
-            font-size: 14px;
-            color: #64748b;
-        }
-
-        .sub-process-list {
-            padding: 24px;
-        }
-
-        .sub-process-item {
+        .flow-diagram {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 20px;
-            margin-bottom: 12px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            transition: all 0.2s ease;
+            margin-bottom: 2rem;
         }
 
-        .sub-process-item:hover {
-            background: #f1f5f9;
-            border-color: #cbd5e1;
-        }
-
-        .sub-process-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .sub-process-info {
+        .flow-step {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 16px;
-            flex: 1;
+            text-align: center;
         }
 
-        .sub-process-number {
-            width: 32px;
-            height: 32px;
-            background: #3b82f6;
-            color: white;
-            border-radius: 6px;
+        .flow-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
-            font-weight: 600;
+            font-weight: 700;
+            font-size: 1.125rem;
+            color: white;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            position: relative;
         }
 
-        .sub-process-details {
-            flex: 1;
+        .flow-circle.batch {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        }
+
+        .flow-circle.process {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+        }
+
+        .flow-circle.output {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        }
+
+        .flow-label {
+            font-size: 0.875rem;
+            color: #6e6e73;
+            font-weight: 500;
+        }
+
+        .flow-connector {
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, #e5e7eb, #d1d5db);
+            margin: 0 1rem;
+        }
+
+        .sub-processes {
+            margin-top: 2rem;
+        }
+
+        .sub-processes h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 1.5rem;
+        }
+
+        .sub-process-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .sub-process-card {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .sub-process-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        .sub-process-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
         }
 
         .sub-process-name {
-            font-size: 16px;
             font-weight: 600;
-            color: #0f172a;
-            margin-bottom: 4px;
+            color: #1d1d1f;
+            font-size: 1.125rem;
         }
 
-        .sub-process-meta {
-            font-size: 14px;
-            color: #64748b;
+        .sub-process-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .sub-process-status.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .sub-process-status.in_progress {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .sub-process-status.completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .sub-process-status.failed {
+            background: #fee2e2;
+            color: #991b1b;
         }
 
         .sub-process-actions {
             display: flex;
-            gap: 8px;
+            gap: 0.5rem;
+            margin-top: 1rem;
         }
 
         .btn {
-            padding: 8px 16px;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
             border: none;
-            border-radius: 6px;
-            font-size: 14px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            transition: all 0.3s ease;
+            font-size: 0.875rem;
         }
 
         .btn-primary {
-            background: #3b82f6;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
         }
 
         .btn-primary:hover {
-            background: #2563eb;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
         }
 
         .btn-success {
-            background: #10b981;
+            background: linear-gradient(135deg, #10b981, #059669);
             color: white;
         }
 
         .btn-success:hover {
-            background: #059669;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
         }
 
         .btn-danger {
-            background: #ef4444;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
             color: white;
         }
 
         .btn-danger:hover {
-            background: #dc2626;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
         }
 
-        .btn-secondary {
-            background: #f1f5f9;
-            color: #64748b;
-            border: 1px solid #e2e8f0;
+        .stats-section {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
         }
 
-        .btn-secondary:hover {
-            background: #e2e8f0;
+        .stats-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .stats-card h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 1.5rem;
         }
 
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #f1f5f9;
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 16px 0;
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
         }
 
-        .progress-fill {
-            height: 100%;
-            background: #3b82f6;
-            border-radius: 4px;
-            transition: width 0.3s ease;
-        }
-
-        .progress-text {
-            font-size: 14px;
-            color: #64748b;
+        .stat-item {
             text-align: center;
-            margin-top: 8px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1d1d1f;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: #6e6e73;
+            font-weight: 500;
+        }
+
+        .customer-connections {
+            margin-top: 1rem;
+        }
+
+        .customer-card {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .customer-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .customer-info h4 {
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 0.25rem;
+        }
+
+        .customer-info p {
+            font-size: 0.875rem;
+            color: #6e6e73;
         }
 
         /* Modal Styles */
         .modal {
             display: none;
             position: fixed;
-            z-index: 1000;
+            z-index: 2000;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(8px);
         }
 
         .modal-content {
-            background: white;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
             margin: 5% auto;
-            padding: 0;
-            border-radius: 12px;
+            padding: 2rem;
+            border-radius: 20px;
             width: 90%;
             max-width: 600px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            border: 1px solid #e2e8f0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .modal-header {
-            padding: 24px 24px 16px;
-            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
         }
 
         .modal-title {
-            font-size: 20px;
-            font-weight: 600;
-            color: #0f172a;
-            margin-bottom: 8px;
-        }
-
-        .modal-subtitle {
-            font-size: 14px;
-            color: #64748b;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1d1d1f;
         }
 
         .close {
-            position: absolute;
-            top: 20px;
-            right: 24px;
-            font-size: 24px;
-            font-weight: 400;
-            color: #64748b;
+            font-size: 2rem;
+            font-weight: bold;
             cursor: pointer;
-            transition: color 0.2s ease;
+            color: #6e6e73;
+            transition: color 0.3s ease;
         }
 
         .close:hover {
-            color: #0f172a;
-        }
-
-        .modal-body {
-            padding: 24px;
+            color: #1d1d1f;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 1.5rem;
         }
 
         .form-label {
             display: block;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .add-option-btn {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            margin-left: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .add-option-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                display: none;
+            }
+            
+            .content-area {
+                margin-left: 0;
+            }
+            
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .flow-diagram {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .flow-connector {
+                width: 2px;
+                height: 40px;
+                margin: 0.5rem 0;
+            }
+        }
+
+        /* Batch Input Modal Styles */
+        .batch-section {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .batch-title {
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 12px;
             font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
             font-weight: 500;
             color: #374151;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            font-size: 14px;
         }
 
         .form-input {
             width: 100%;
-            padding: 12px 16px;
+            padding: 8px 12px;
             border: 1px solid #d1d5db;
-            border-radius: 8px;
+            border-radius: 6px;
             font-size: 14px;
+            color: #111827;
             background: white;
-            transition: border-color 0.2s ease;
         }
 
         .form-input:focus {
@@ -449,10 +639,11 @@
 
         .form-textarea {
             width: 100%;
-            padding: 12px 16px;
+            padding: 8px 12px;
             border: 1px solid #d1d5db;
-            border-radius: 8px;
+            border-radius: 6px;
             font-size: 14px;
+            color: #111827;
             background: white;
             resize: vertical;
             min-height: 80px;
@@ -464,540 +655,336 @@
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
-        .batch-section {
-            background: #f8fafc;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
-            border: 1px solid #e2e8f0;
-        }
-
-        .batch-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #0f172a;
-            margin-bottom: 12px;
-        }
-
         .modal-footer {
-            padding: 16px 24px 24px;
             display: flex;
             justify-content: flex-end;
             gap: 12px;
-            border-top: 1px solid #f1f5f9;
+            padding: 20px;
+            border-top: 1px solid #e5e7eb;
+            background: #f9fafb;
         }
 
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .dashboard-container {
-                padding: 16px;
-            }
-
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-                gap: 16px;
-            }
-
-            .execution-status-bar {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
-            }
-
-            .sub-process-item {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 16px;
-            }
-
-            .sub-process-actions {
-                width: 100%;
-                justify-content: flex-end;
-            }
-
-            .modal-content {
-                width: 95%;
-                margin: 10% auto;
-            }
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
         }
 
-        /* Loading States */
-        .loading {
-            opacity: 0.6;
-            pointer-events: none;
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
         }
 
-        .loading::after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 2px solid #3b82f6;
-            border-top: 2px solid transparent;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
+        .btn-secondary:hover {
+            background: #e5e7eb;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Batch Data Styles */
-        .batch-data-section {
-            margin: 16px 0;
-            padding: 16px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-        }
-
-        .batch-data-grid {
-            display: grid;
-            gap: 12px;
-        }
-
-        .batch-data-item {
-            background: white;
-            border-radius: 8px;
-            padding: 16px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .batch-data-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .batch-data-name {
-            font-size: 16px;
-            font-weight: 600;
-            color: #0f172a;
-        }
-
-        .batch-data-batch {
+        .btn-primary {
             background: #3b82f6;
             color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
         }
 
-        .batch-data-details {
-            display: grid;
-            gap: 8px;
-        }
-
-        .batch-data-field {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .field-label {
-            font-size: 14px;
-            color: #64748b;
-            font-weight: 500;
-        }
-
-        .field-value {
-            font-size: 14px;
-            color: #0f172a;
-            font-weight: 600;
+        .btn-primary:hover {
+            background: #2563eb;
         }
     </style>
 </head>
 <body>
-    <div class="dashboard-container">
-        {% if error %}
-            <div class="dashboard-card">
-                <div class="card-content">
-                    <h2 style="color: #ef4444; margin-bottom: 16px;">Error</h2>
-                    <p style="color: #64748b; margin-bottom: 24px;">{{ error }}</p>
-                    <a href="/supply-chain/parent-processes" class="btn btn-secondary">← Back to Parent Processes</a>
-                </div>
+    <div class="main-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-item active">
+                <svg class="sidebar-icon" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                <div class="sidebar-label">Execution</div>
             </div>
-        {% else %}
-            <!-- Dashboard Header -->
-            <div class="dashboard-header">
-                <h1 class="dashboard-title">Execution Dashboard</h1>
-                <p class="dashboard-subtitle">Monitor and manage process execution in real-time</p>
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24">
+                    <path d="M9 12l2 2 4-4"/>
+                    <circle cx="12" cy="12" r="10"/>
+                </svg>
+                <div class="sidebar-label">Processes</div>
+            </div>
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24">
+                    <path d="M18 20V10"/>
+                    <path d="M12 20V4"/>
+                    <path d="M6 20v-6"/>
+                </svg>
+                <div class="sidebar-label">Analytics</div>
+            </div>
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <div class="sidebar-label">Quality</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content-area">
+            <div class="header">
+                <h1>Process Execution</h1>
+                <p class="subtitle">Monitor and manage process execution in real-time</p>
             </div>
 
             <!-- Execution Status Bar -->
             <div class="execution-status-bar">
-                <div class="status-indicator status-{{ execution[3] }}">
+                <div class="status-indicator status-{{ execution[2] if execution else 'pending' }}">
                     <div class="status-dot"></div>
-                    {{ execution[3].replace('_', ' ').title() }}
+                    {{ (execution[2] if execution else 'pending').replace('_', ' ').title() }}
                 </div>
-                <div class="execution-id">{{ execution[2] }}</div>
+                <div class="execution-id">Execution ID: {{ execution[0] if execution else 'N/A' }}</div>
             </div>
 
-            <!-- Progress Bar -->
-            {% set completed_count = 0 %}
-            {% for sub_exec in sub_executions %}
-                {% if sub_exec[2] == 'completed' %}
-                    {% set completed_count = completed_count + 1 %}
-                {% endif %}
-            {% endfor %}
-            {% set total_count = sub_executions|length %}
-            {% set progress_percentage = (completed_count / total_count * 100) if total_count > 0 else 0 %}
-            <div class="progress-bar">
-                <div class="progress-fill" style="width: {{ progress_percentage }}%"></div>
-            </div>
-            <div class="progress-text">{{ completed_count }} of {{ total_count }} steps completed ({{ "%.0f"|format(progress_percentage) }}%)</div>
-
-            <!-- Dashboard Grid -->
-            <div class="dashboard-grid">
-                <!-- Execution Metrics -->
-                <div class="dashboard-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Execution Metrics</h3>
-                        <p class="card-subtitle">Key performance indicators</p>
-                    </div>
-                    <div class="card-content">
-                        <div class="metric-grid">
-                            <div class="metric-item">
-                                <div class="metric-value">{{ total_count }}</div>
-                                <div class="metric-label">Total Steps</div>
-                            </div>
-                            <div class="metric-item">
-                                <div class="metric-value">{{ completed_count }}</div>
-                                <div class="metric-label">Completed</div>
-                            </div>
-                            <div class="metric-item">
-                                {% set in_progress_count = 0 %}
-                                {% for sub_exec in sub_executions %}
-                                    {% if sub_exec[2] == 'in_progress' %}
-                                        {% set in_progress_count = in_progress_count + 1 %}
-                                    {% endif %}
-                                {% endfor %}
-                                <div class="metric-value">{{ in_progress_count }}</div>
-                                <div class="metric-label">In Progress</div>
-                            </div>
-                            <div class="metric-item">
-                                {% set failed_count = 0 %}
-                                {% for sub_exec in sub_executions %}
-                                    {% if sub_exec[2] == 'failed' %}
-                                        {% set failed_count = failed_count + 1 %}
-                                    {% endif %}
-                                {% endfor %}
-                                <div class="metric-value">{{ failed_count }}</div>
-                                <div class="metric-label">Failed</div>
-                            </div>
+            <div class="main-content">
+                <!-- Process Tracing Section -->
+                <div class="process-tracing">
+                    <h2>Process Execution</h2>
+                    
+                    <!-- Flow Diagram -->
+                    <div class="flow-diagram">
+                        <div class="flow-step">
+                            <div class="flow-circle batch">Input</div>
+                            <div class="flow-label">Execution {{ execution[0] if execution else 'N/A' }}</div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-circle process">Process</div>
+                            <div class="flow-label">{{ execution[7] if execution else 'Parent Process' }}</div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-circle output">Output</div>
+                            <div class="flow-label">{{ sub_executions|length }} Processes</div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Execution Details -->
-                <div class="dashboard-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Execution Details</h3>
-                        <p class="card-subtitle">Process information and timing</p>
-                    </div>
-                    <div class="card-content">
-                        <ul class="info-list">
-                            <li class="info-item">
-                                <span class="info-label">Process Name</span>
-                                <span class="info-value">{{ execution[9] }}</span>
-                            </li>
-                            <li class="info-item">
-                                <span class="info-label">Start Time</span>
-                                <span class="info-value">{{ execution[4] or 'Not started' }}</span>
-                            </li>
-                            <li class="info-item">
-                                <span class="info-label">End Time</span>
-                                <span class="info-value">{{ execution[5] or 'Not completed' }}</span>
-                            </li>
-                            <li class="info-item">
-                                <span class="info-label">Duration</span>
-                                <span class="info-value">
-                                    {% if execution[4] and execution[5] %}
-                                        {% set duration = execution[5] - execution[4] %}
-                                        {% if duration.total_seconds() >= 0 %}
-                                            {{ (duration.total_seconds() / 60)|round|int }} min
+                    <!-- Processes -->
+                    <div class="sub-processes">
+                        <h3>Processes</h3>
+                        <div class="sub-process-grid">
+                            {% for sub_execution in sub_executions %}
+                            {% set loop_index = loop.index0 %}
+                            {% set can_start = false %}
+                            {% if loop_index == 0 %}
+                                {% set can_start = sub_execution[3] == 'pending' %}
+                            {% else %}
+                                {% set prev_execution = sub_executions[loop_index - 1] %}
+                                {% set can_start = sub_execution[3] == 'pending' and prev_execution[3] == 'completed' %}
+                            {% endif %}
+                            <div class="sub-process-card">
+                                <div class="sub-process-header">
+                                    <div class="sub-process-name">{{ sub_execution[7] }}</div>
+                                    <div class="sub-process-status {{ sub_execution[3] }}">
+                                        {{ sub_execution[3].replace('_', ' ').title() }}
+                                    </div>
+                                </div>
+                                
+                                <div class="sub-process-actions">
+                                    {% if sub_execution[3] == 'pending' %}
+                                        {% if can_start %}
+                                            <button class="btn btn-primary" onclick="startSubExecution({{ sub_execution[0] }})">
+                                                Start
+                                            </button>
                                         {% else %}
-                                            Invalid timing
+                                            <button class="btn" style="background: #e5e7eb; color: #6b7280; cursor: not-allowed;" disabled>
+                                                Waiting for Previous Process
+                                            </button>
                                         {% endif %}
-                                    {% else %}
-                                        In progress
+                                    {% elif sub_execution[3] == 'in_progress' %}
+                                        <button class="btn btn-success" onclick="completeSubExecution({{ sub_execution[0] }})">
+                                            Complete
+                                        </button>
+                                        <button class="btn btn-danger" onclick="failSubExecution({{ sub_execution[0] }})">
+                                            Fail
+                                        </button>
+                                    {% elif sub_execution[3] == 'completed' %}
+                                        <span class="btn" style="background: #d1fae5; color: #065f46;">Completed</span>
+                                    {% elif sub_execution[3] == 'failed' %}
+                                        <span class="btn" style="background: #fee2e2; color: #991b1b;">Failed</span>
                                     {% endif %}
-                                </span>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Variables Card -->
-            {% if execution[7] %}
-            <div class="dashboard-card" style="margin-bottom: 32px;">
-                <div class="card-header">
-                    <h3 class="card-title">Execution Variables</h3>
-                    <p class="card-subtitle">Custom parameters and settings</p>
-                </div>
-                <div class="card-content">
-                    <div class="metric-grid">
-                        {% if execution[7] is mapping %}
-                            {% for key, value in execution[7].items() %}
-                            <div class="metric-item">
-                                <div class="metric-value">{{ value }}</div>
-                                <div class="metric-label">{{ key.replace('_', ' ').title() }}</div>
+                                </div>
                             </div>
                             {% endfor %}
-                        {% else %}
-                            <div class="metric-item">
-                                <div class="metric-value">{{ execution[7] }}</div>
-                                <div class="metric-label">Variables</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Section -->
+                <div class="stats-section">
+                    <!-- Execution Statistics -->
+                    <div class="stats-card">
+                        <h3>Execution Statistics</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value">{{ sub_executions|length }}</div>
+                                <div class="stat-label">Total Processes</div>
                             </div>
-                        {% endif %}
+                            <div class="stat-item">
+                                <div class="stat-value">{{ sub_executions|selectattr('3', 'equalto', 'completed')|list|length }}</div>
+                                <div class="stat-label">Completed</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ sub_executions|selectattr('3', 'equalto', 'in_progress')|list|length }}</div>
+                                <div class="stat-label">In Progress</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ sub_executions|selectattr('3', 'equalto', 'pending')|list|length }}</div>
+                                <div class="stat-label">Pending</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Execution Details -->
+                    <div class="stats-card">
+                        <h3>Execution Details</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value">{{ execution[4].strftime('%H:%M') if execution and execution[4] else 'N/A' }}</div>
+                                <div class="stat-label">Start Time</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ execution[5].strftime('%H:%M') if execution and execution[5] else 'N/A' }}</div>
+                                <div class="stat-label">End Time</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ execution[6].strftime('%m/%d') if execution and execution[6] else 'N/A' }}</div>
+                                <div class="stat-label">Date</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ execution[0] if execution else 'N/A' }}</div>
+                                <div class="stat-label">Execution ID</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-            {% endif %}
+        </div>
+    </div>
 
-            <!-- Sub-Processes Section -->
-            <div class="sub-processes-section">
-                <div class="section-header">
-                    <h2 class="section-title">Process Steps</h2>
-                    <p class="section-description">Execute and monitor each step of the process</p>
-                </div>
-                <div class="sub-process-list">
-                    {% for sub_execution in sub_executions %}
-                    <div class="sub-process-item">
-                        <div class="sub-process-info">
-                            <div class="sub-process-number">{{ sub_execution[6] }}</div>
-                            <div class="sub-process-details">
-                                <div class="sub-process-name">{{ sub_execution[7] }}</div>
-                                <div class="sub-process-meta">
-                                    {{ sub_execution[2].replace('_', ' ').title() }}
-                                    {% if sub_execution[3] %}
-                                        • Started: {{ sub_execution[3].strftime('%H:%M') }}
-                                    {% endif %}
-                                    {% if sub_execution[4] %}
-                                        • Completed: {{ sub_execution[4].strftime('%H:%M') }}
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="sub-process-actions">
-                            {% if sub_execution[2] == 'pending' %}
-                                <button class="btn btn-primary" onclick="startSubExecution({{ sub_execution[0] }})">
-                                    ▶ Start
-                                </button>
-                            {% elif sub_execution[2] == 'in_progress' %}
-                                <button class="btn btn-success" onclick="completeSubExecution({{ sub_execution[0] }})">
-                                    ✅ Complete
-                                </button>
-                                <button class="btn btn-danger" onclick="failSubExecution({{ sub_execution[0] }})">
-                                    ❌ Fail
-                                </button>
-                            {% elif sub_execution[2] == 'completed' %}
-                                <span class="btn btn-secondary" disabled>✅ Completed</span>
-                            {% elif sub_execution[2] == 'failed' %}
-                                <span class="btn btn-secondary" disabled>❌ Failed</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
+    <!-- Batch Input Modal -->
+    <div id="batchInputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Execute Sub-Process</h2>
+                <span class="close" onclick="closeBatchInputModal()">&times;</span>
             </div>
-
-            <!-- Batch Data Section -->
-            {% if execution_batch_data %}
-            <div class="sub-processes-section" style="margin-top: 32px;">
-                <div class="section-header">
-                    <h2 class="section-title">Execution Batch Data</h2>
-                    <p class="section-description">Actual inputs and outputs recorded during execution</p>
+            <form id="batchInputForm">
+                <div id="inputFields"></div>
+                <div id="outputFields"></div>
+                <div class="form-group">
+                    <label class="form-label" for="executionNotes">Execution Notes</label>
+                    <textarea class="form-textarea" id="executionNotes" name="execution_notes" rows="3" placeholder="Add any notes about this execution..."></textarea>
                 </div>
-                <div class="sub-process-list">
-                    {% for sub_execution in sub_executions %}
-                        {% set sub_exec_id = sub_execution[0] %}
-                        {% set batch_data = execution_batch_data.get(sub_exec_id) %}
-                        {% if batch_data and (batch_data.inputs or batch_data.outputs) %}
-                        <div class="sub-process-item">
-                            <div class="sub-process-info">
-                                <div class="sub-process-number">{{ sub_execution[6] }}</div>
-                                <div class="sub-process-details">
-                                    <div class="sub-process-name">{{ sub_execution[7] }}</div>
-                                    <div class="sub-process-meta">
-                                        {{ sub_execution[2].replace('_', ' ').title() }}
-                                        {% if sub_execution[3] %}
-                                            • Started: {{ sub_execution[3].strftime('%H:%M') }}
-                                        {% endif %}
-                                        {% if sub_execution[4] %}
-                                            • Completed: {{ sub_execution[4].strftime('%H:%M') }}
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Batch Inputs -->
-                        {% if batch_data.inputs %}
-                        <div class="batch-data-section">
-                            <h4 style="color: #0f172a; font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                                <span style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">📥</span>
-                                Inputs Used
-                            </h4>
-                            <div class="batch-data-grid">
-                                {% for input_data in batch_data.inputs %}
-                                <div class="batch-data-item">
-                                    <div class="batch-data-header">
-                                        <span class="batch-data-name">{{ input_data[0] or 'Unnamed Input' }}</span>
-                                        {% if input_data[3] %}
-                                        <span class="batch-data-batch">{{ input_data[3] }}</span>
-                                        {% endif %}
-                                    </div>
-                                    <div class="batch-data-details">
-                                        {% if input_data[1] %}
-                                        <div class="batch-data-field">
-                                            <span class="field-label">Quantity:</span>
-                                            <span class="field-value">{{ input_data[1] }} {{ input_data[2] or '' }}</span>
-                                        </div>
-                                        {% endif %}
-                                        {% if input_data[4] %}
-                                        <div class="batch-data-field">
-                                            <span class="field-label">Source:</span>
-                                            <span class="field-value">{{ input_data[4] }}</span>
-                                        </div>
-                                        {% endif %}
-                                        {% if input_data[5] %}
-                                        <div class="batch-data-field">
-                                            <span class="field-label">Notes:</span>
-                                            <span class="field-value">{{ input_data[5] }}</span>
-                                        </div>
-                                        {% endif %}
-                                        {% if input_data[6] %}
-                                        <div class="batch-data-field">
-                                            <span class="field-label">Consumed:</span>
-                                            <span class="field-value">{{ input_data[6].strftime('%H:%M') }}</span>
-                                        </div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% endif %}
-                        
-                        <!-- Batch Outputs -->
-                        {% if batch_data.outputs %}
-                        <div class="batch-data-section">
-                            <h4 style="color: #0f172a; font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                                <span style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">📤</span>
-                                Outputs Produced
-                            </h4>
-                            <div class="batch-data-grid">
-                                {% for output_data in batch_data.outputs %}
-                                <div class="batch-data-item">
-                                    <div class="batch-data-header">
-                                        <span class="batch-data-name">{{ output_data[0] or 'Unnamed Output' }}</span>
-                                        {% if output_data[3] %}
-                                        <span class="batch-data-batch">{{ output_data[3] }}</span>
-                                        {% endif %}
-                                    </div>
-                                    <div class="batch-data-details">
-                                        {% if output_data[1] %}
-                                        <div class="batch-data-field">
-                                            <span class="field-label">Quantity:</span>
-                                            <span class="field-value">{{ output_data[1] }} {{ output_data[2] or '' }}</span>
-                                        </div>
-                                        {% endif %}
-                                        {% if output_data[4] %}
-                                        <div class="batch-data-field">
-                                            <span class="field-label">Destination:</span>
-                                            <span class="field-value">{{ output_data[4] }}</span>
-                                        </div>
-                                        {% endif %}
-                                        {% if output_data[5] %}
-                                        <div class="batch-data-field">
-                                            <span class="field-label">Notes:</span>
-                                            <span class="field-value">{{ output_data[5] }}</span>
-                                        </div>
-                                        {% endif %}
-                                        {% if output_data[6] %}
-                                        <div class="batch-data-field">
-                                            <span class="field-label">Produced:</span>
-                                            <span class="field-value">{{ output_data[6].strftime('%H:%M') }}</span>
-                                        </div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% endif %}
-                        {% endif %}
-                    {% endfor %}
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                    <button type="button" class="btn" onclick="closeBatchInputModal()" style="background: #6e6e73; color: white;">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Execute</button>
                 </div>
-            </div>
-            {% endif %}
-        {% endif %}
+            </form>
+        </div>
     </div>
 
     <script>
+        console.log('Script loading...');
+        let currentSubExecutionId = null;
+
         function startSubExecution(subExecutionId) {
             console.log('startSubExecution called with ID:', subExecutionId);
-            if (!subExecutionId) {
-                alert('Error: Sub-execution ID is missing');
-                return;
-            }
-            loadSubExecutionPromptData(subExecutionId);
-        }
-
-        function loadSubExecutionPromptData(subExecutionId) {
-            console.log('Loading prompt data for sub-execution:', subExecutionId);
-            fetch(`/api/supply-chain/sub-executions/${subExecutionId}/execute`)
+            console.log('Starting sub-execution:', subExecutionId);
+            
+            // Load prompt data for this sub-execution
+            fetch(`/api/supply-chain/sub-executions/${subExecutionId}/inputs-outputs`)
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Received data:', data);
-                    if (data.prompt_inputs && data.prompt_inputs.length > 0 || 
-                        data.prompt_outputs && data.prompt_outputs.length > 0) {
-                        // Show batch input modal
-                        showBatchInputModal(subExecutionId, data);
+                    if (data.success) {
+                        // Add sub_execution_id to the data
+                        data.sub_execution_id = subExecutionId;
+                        showBatchInputModal(data);
                     } else {
-                        // No prompts needed, start execution directly
-                        updateSubExecutionStatus(subExecutionId, 'in_progress');
+                        alert('Error loading execution data: ' + (data.error || 'Unknown error'));
                     }
                 })
                 .catch(error => {
-                    console.error('Error loading prompt data:', error);
-                    alert('Error loading execution data');
+                    console.error('Error:', error);
+                    alert('Error loading execution data: ' + error.message);
                 });
         }
 
-        function showBatchInputModal(subExecutionId, data) {
+        console.log('startSubExecution function defined:', typeof startSubExecution);
+
+        // Test if function is available globally
+        window.testStartSubExecution = function() {
+            console.log('Global test function called');
+            if (typeof startSubExecution === 'function') {
+                console.log('startSubExecution is available');
+            } else {
+                console.log('startSubExecution is NOT available');
+            }
+        };
+
+        // Make startSubExecution globally available
+        window.startSubExecution = startSubExecution;
+
+        // Ensure function is available when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, startSubExecution available:', typeof window.startSubExecution);
+        });
+
+        function completeSubExecution(subExecutionId) {
+            updateSubExecutionStatus(subExecutionId, 'completed');
+        }
+
+        function failSubExecution(subExecutionId) {
+            updateSubExecutionStatus(subExecutionId, 'failed');
+        }
+
+        function updateSubExecutionStatus(subExecutionId, status) {
+            fetch(`/api/supply-chain/sub-executions/${subExecutionId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ status: status })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error updating status: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error updating status: ' + error.message);
+            });
+        }
+
+        function showBatchInputModal(data) {
             // Remove existing modal if any
             const existingModal = document.getElementById('batchInputModal');
             if (existingModal) {
                 existingModal.remove();
             }
-
-            const modal = document.createElement('div');
-            modal.id = 'batchInputModal';
-            modal.className = 'modal';
-            modal.style.display = 'block';
             
+            // Create modal HTML
             let modalContent = `
-                <div class="modal-content">
-                    <span class="close" onclick="closeBatchInputModal()">&times;</span>
-                    <div class="modal-header">
-                        <h2 class="modal-title">Execute: ${data.sub_execution.sub_process_name}</h2>
-                        <p class="modal-subtitle">Provide batch data for inputs and outputs</p>
-                    </div>
-                    <div class="modal-body">
-                        <form id="batchInputForm">
-                            <input type="hidden" id="subExecutionId" name="subExecutionId" value="${subExecutionId}">
+                <div id="batchInputModal" class="modal" style="display: block;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Execute: ${data.sub_process_name || 'Sub-Process'}</h2>
+                            <span class="close" onclick="closeBatchInputModal()">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <p style="color: #6b7280; margin-bottom: 24px;">Provide batch data for inputs and outputs</p>
+                            
+                            <form id="batchInputForm">
             `;
             
             // Add input fields
@@ -1011,191 +998,240 @@
                     
                     // Only show fields that are set to "prompt"
                     const execOptions = input.execution_options || {};
-                    if (execOptions.name === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Name</label>
-                                <input type="text" class="form-input" name="input_${input.id}_name" value="${input.input_name}" required>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.quantity === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Quantity</label>
-                                <input type="number" class="form-input" name="input_${input.id}_quantity" value="${input.input_quantity || ''}" required>
-                            </div>
-                        `;
-                    }
+                    
                     if (execOptions.unit === 'prompt') {
                         modalContent += `
                             <div class="form-group">
                                 <label class="form-label">Unit</label>
                                 <select class="form-input" name="input_${input.id}_unit" required>
-                                    <option value="grams" ${input.input_unit === 'grams' ? 'selected' : ''}>Grams</option>
-                                    <option value="kg" ${input.input_unit === 'kg' ? 'selected' : ''}>Kilograms</option>
-                                    <option value="liters" ${input.input_unit === 'liters' ? 'selected' : ''}>Liters</option>
-                                    <option value="ml" ${input.input_unit === 'ml' ? 'selected' : ''}>Milliliters</option>
-                                    <option value="pieces" ${input.input_unit === 'pieces' ? 'selected' : ''}>Pieces</option>
-                                    <option value="units" ${input.input_unit === 'units' ? 'selected' : ''}>Units</option>
+                        `;
+                        
+                        // Add options from field_options
+                        if (data.field_options && data.field_options.unit) {
+                            data.field_options.unit.forEach(option => {
+                                const selected = input.input_unit === option.value ? 'selected' : '';
+                                modalContent += `<option value="${option.value}" ${selected}>${option.label}</option>`;
+                            });
+                        }
+                        
+                        modalContent += `
                                 </select>
                             </div>
                         `;
                     }
+                    
                     if (execOptions.batch === 'prompt') {
                         modalContent += `
                             <div class="form-group">
                                 <label class="form-label">Input Batch</label>
-                                <input type="text" class="form-input" name="input_${input.id}_batch_number" value="${input.input_batch_number || ''}" required>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.type === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Type</label>
-                                <select class="form-input" name="input_${input.id}_type" required>
-                                    <option value="raw_material" ${input.input_type === 'raw_material' ? 'selected' : ''}>Raw Material</option>
-                                    <option value="intermediate_product" ${input.input_type === 'intermediate_product' ? 'selected' : ''}>Intermediate Product</option>
-                                    <option value="equipment" ${input.input_type === 'equipment' ? 'selected' : ''}>Equipment</option>
-                                    <option value="chemical" ${input.input_type === 'chemical' ? 'selected' : ''}>Chemical</option>
-                                </select>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.source === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Source</label>
-                                <input type="text" class="form-input" name="input_${input.id}_source" value="${input.input_source || ''}" required>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.notes === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Notes</label>
-                                <textarea class="form-textarea" name="input_${input.id}_notes" rows="2"></textarea>
+                                <input type="text" class="form-input" name="input_${input.id}_batch" value="${input.input_batch || ''}" required>
                             </div>
                         `;
                     }
                     
-                    modalContent += '</div>';
-                });
-            }
-            
-            // Add output fields
-            if (data.prompt_outputs && data.prompt_outputs.length > 0) {
-                modalContent += '<h3 style="margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Outputs</h3>';
-                data.prompt_outputs.forEach(output => {
                     modalContent += `
-                        <div class="batch-section">
-                            <div class="batch-title">${output.output_name}</div>
+                        </div>
                     `;
-                    
-                    // Only show fields that are set to "prompt"
-                    const execOptions = output.execution_options || {};
-                    if (execOptions.name === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Name</label>
-                                <input type="text" class="form-input" name="output_${output.id}_name" value="${output.output_name}" required>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.quantity === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Quantity</label>
-                                <input type="number" class="form-input" name="output_${output.id}_quantity" value="${output.output_quantity || ''}" required>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.unit === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Unit</label>
-                                <input type="text" class="form-input" name="output_${output.id}_unit" value="${output.output_unit || ''}" required>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.batch_number === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Batch Number</label>
-                                <input type="text" class="form-input" name="output_${output.id}_batch_number" value="${output.output_batch_number || ''}" required>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.quality_status === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Quality Status</label>
-                                <select class="form-input" name="output_${output.id}_quality_status" required>
-                                    <option value="pass">Pass</option>
-                                    <option value="fail">Fail</option>
-                                    <option value="pending">Pending</option>
-                                </select>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.destination === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Destination</label>
-                                <input type="text" class="form-input" name="output_${output.id}_destination" value="${output.output_destination || ''}" required>
-                            </div>
-                        `;
-                    }
-                    if (execOptions.notes === 'prompt') {
-                        modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Notes</label>
-                                <textarea class="form-textarea" name="output_${output.id}_notes" rows="2"></textarea>
-                            </div>
-                        `;
-                    }
-                    
-                    modalContent += '</div>';
                 });
             }
             
+            // Add execution notes
             modalContent += `
-                            <div class="form-group">
-                                <label class="form-label">Execution Notes</label>
-                                <textarea class="form-textarea" name="execution_notes" rows="3" placeholder="Add any notes about this execution..."></textarea>
-                            </div>
-                        </form>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" onclick="closeBatchInputModal()">Cancel</button>
-                        <button type="button" class="btn btn-primary" onclick="submitBatchData()">Start Execution</button>
-                    </div>
+                <h3 style="margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Execution Notes</h3>
+                <div class="form-group">
+                    <textarea class="form-textarea" name="execution_notes" placeholder="Add any notes about this execution..."></textarea>
                 </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeBatchInputModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Start Execution</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
             `;
             
-            modal.innerHTML = modalContent;
-            document.body.appendChild(modal);
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+            
+            // Handle form submission
+            document.getElementById('batchInputForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitBatchInput(data.sub_execution_id);
+            });
         }
-
+        
         function closeBatchInputModal() {
             const modal = document.getElementById('batchInputModal');
             if (modal) {
                 modal.remove();
             }
         }
-
-        function submitBatchData() {
+        
+        function submitBatchInput(subExecutionId) {
             const form = document.getElementById('batchInputForm');
             const formData = new FormData(form);
-            const subExecutionId = formData.get('subExecutionId');
             
-            console.log('submitBatchData - subExecutionId:', subExecutionId);
+            // Convert form data to JSON
+            const batchData = {};
+            const executionNotes = formData.get('execution_notes');
             
-            if (!subExecutionId) {
-                alert('Error: Sub-execution ID is missing from form');
+            // Process input fields
+            for (let [key, value] of formData.entries()) {
+                if (key.startsWith('input_') && key !== 'execution_notes') {
+                    const parts = key.split('_');
+                    const inputId = parts[1];
+                    const fieldType = parts[2];
+                    
+                    if (!batchData[inputId]) {
+                        batchData[inputId] = {};
+                    }
+                    batchData[inputId][fieldType] = value;
+                }
+            }
+            
+            // Submit to API
+            fetch(`/api/supply-chain/sub-executions/${subExecutionId}/execute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    batch_data: batchData,
+                    execution_notes: executionNotes
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeBatchInputModal();
+                    location.reload();
+                } else {
+                    alert('Error executing sub-process: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error executing sub-process: ' + error.message);
+            });
+        }
+                        inputElement.className = 'form-input';
+                        inputElement.name = `input_${input.id}_unit`;
+                        inputElement.value = input.unit || '';
+                        fieldGroup.appendChild(inputElement);
+                    }
+                    
+                    inputFields.appendChild(fieldGroup);
+                });
+            }
+            
+            // Add output fields
+            if (data.prompt_outputs && data.prompt_outputs.length > 0) {
+                data.prompt_outputs.forEach(output => {
+                    const fieldGroup = document.createElement('div');
+                    fieldGroup.className = 'form-group';
+                    
+                    const label = document.createElement('label');
+                    label.className = 'form-label';
+                    label.textContent = output.name;
+                    fieldGroup.appendChild(label);
+                    
+                    const execOptions = output.execution_options || {};
+                    
+                    if (execOptions.unit === 'prompt') {
+                        const select = document.createElement('select');
+                        select.className = 'form-select';
+                        select.name = `output_${output.id}_unit`;
+                        select.required = true;
+                        
+                        // Add options from field_options
+                        if (data.field_options && data.field_options.unit) {
+                            data.field_options.unit.forEach(option => {
+                                const optionElement = document.createElement('option');
+                                optionElement.value = option.value;
+                                optionElement.textContent = option.label;
+                                select.appendChild(optionElement);
+                            });
+                        }
+                        
+                        // Add custom option
+                        const addButton = document.createElement('button');
+                        addButton.type = 'button';
+                        addButton.className = 'add-option-btn';
+                        addButton.textContent = '+Add';
+                        addButton.onclick = () => addCustomOption('unit', select.name);
+                        
+                        const container = document.createElement('div');
+                        container.style.display = 'flex';
+                        container.appendChild(select);
+                        container.appendChild(addButton);
+                        fieldGroup.appendChild(container);
+                    } else {
+                        const inputElement = document.createElement('input');
+                        inputElement.type = 'text';
+                        inputElement.className = 'form-input';
+                        inputElement.name = `output_${output.id}_unit`;
+                        inputElement.value = output.unit || '';
+                        fieldGroup.appendChild(inputElement);
+                    }
+                    
+                    outputFields.appendChild(fieldGroup);
+                });
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        function closeBatchInputModal() {
+            document.getElementById('batchInputModal').style.display = 'none';
+        }
+
+        function addCustomOption(fieldType, selectName) {
+            const newOption = prompt(`Enter new ${fieldType} option:`);
+            if (newOption) {
+                // Add to dropdown
+                const select = document.querySelector(`select[name="${selectName}"]`);
+                const option = document.createElement('option');
+                option.value = newOption.toLowerCase().replace(/\s+/g, '_');
+                option.textContent = newOption;
+                select.appendChild(option);
+                select.value = option.value;
+                
+                // Save to database
+                fetch('/api/supply-chain/field-options', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        field_type: fieldType,
+                        option_value: option.value,
+                        option_label: newOption
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        console.error('Error saving custom option:', data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving custom option:', error);
+                });
+            }
+        }
+
+        // Form submission
+        document.getElementById('batchInputForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            if (!currentSubExecutionId) {
+                alert('Error: Sub-execution ID is missing');
                 return;
             }
+            
+            const formData = new FormData(this);
             
             // Process input data
             const inputBatchData = {};
@@ -1229,7 +1265,7 @@
                 execution_notes: formData.get('execution_notes') || ''
             };
             
-            fetch(`/api/supply-chain/sub-executions/${subExecutionId}/execute`, {
+            fetch(`/api/supply-chain/sub-executions/${currentSubExecutionId}/execute`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1240,47 +1276,23 @@
             .then(data => {
                 if (data.success) {
                     closeBatchInputModal();
-                    // Reload the page to show updated status
                     location.reload();
                 } else {
                     alert('Error executing sub-process: ' + (data.error || 'Unknown error'));
                 }
             })
             .catch(error => {
-                console.error('Error executing sub-process:', error);
+                console.error('Error:', error);
                 alert('Error executing sub-process: ' + error.message);
             });
-        }
+        });
 
-        function completeSubExecution(subExecutionId) {
-            updateSubExecutionStatus(subExecutionId, 'completed');
-        }
-
-        function failSubExecution(subExecutionId) {
-            updateSubExecutionStatus(subExecutionId, 'failed');
-        }
-
-        function updateSubExecutionStatus(subExecutionId, status) {
-            fetch(`/api/supply-chain/sub-executions/${subExecutionId}/status`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ status: status })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Reload the page to show updated status
-                    location.reload();
-                } else {
-                    alert('Error updating status: ' + (data.error || 'Unknown error'));
-                }
-            })
-            .catch(error => {
-                console.error('Error updating status:', error);
-                alert('Error updating status: ' + error.message);
-            });
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('batchInputModal');
+            if (event.target === modal) {
+                closeBatchInputModal();
+            }
         }
     </script>
 </body>
