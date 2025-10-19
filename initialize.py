@@ -540,6 +540,22 @@ def create_supply_chain_sub_processes_table():
     
     create_table(table_name, columns)
 
+def create_supply_chain_field_options_table():
+    """Table to store field options for dynamic dropdowns"""
+    table_name = "supply_chain_field_options"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "field_type": "TEXT NOT NULL",
+        "option_value": "TEXT NOT NULL",
+        "option_label": "TEXT",
+        "is_system_default": "BOOLEAN DEFAULT FALSE",
+        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    }
+    
+    create_table(table_name, columns)
+
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"
 
@@ -1096,6 +1112,7 @@ def main():
     create_supply_chain_dag_layout_table()
     create_supply_chain_parent_processes_table()
     create_supply_chain_sub_processes_table()
+    create_supply_chain_field_options_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()

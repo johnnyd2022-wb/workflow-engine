@@ -362,7 +362,7 @@ def execution_detail(execution_id):
         parent_execution = cursor.fetchone()
         
         if not parent_execution:
-            return render_template('execution_detail_new.html', 
+            return render_template('execution_detail.html', 
                                    execution=None, 
                                    sub_executions=[],
                                    error="Execution not found")
@@ -389,13 +389,13 @@ def execution_detail(execution_id):
                     sub_executions.append(sub_execution)
                     break
         
-        return render_template('execution_detail_new.html',
+        return render_template('execution_detail.html',
                                execution=parent_execution,
                                sub_executions=sub_executions)
         
     except Exception as e:
         print(f"Error in execution_detail route: {e}")
-        return render_template('execution_detail_new.html', 
+        return render_template('execution_detail.html', 
                                execution=None,
                                sub_executions=[],
                                error=str(e))
@@ -4000,7 +4000,9 @@ def execute_sub_execution(sub_execution_id):
         inputs = cursor.fetchall()
         
         # Create execution inputs from batch data
-        input_batch_data = data.get('input_batch_data', {})
+        input_batch_data = data.get('batch_data', {})
+        print(f"Received batch data: {input_batch_data}")
+        
         for input_template in inputs:
             input_id = input_template[0]
             input_name = input_template[1]
@@ -4016,19 +4018,28 @@ def execute_sub_execution(sub_execution_id):
                 actual_input_name = input_name
             
             # Create execution input record
+            # Handle empty values for numeric fields
+            quantity = batch_data.get('quantity', '')
+            if quantity == '' or quantity is None:
+                quantity = None  # Use NULL for empty quantity
+            else:
+                try:
+                    quantity = float(quantity)  # Convert to float if it's a valid number
+                except (ValueError, TypeError):
+                    quantity = None
+            
             cursor.execute("""
                 INSERT INTO supply_chain_execution_inputs 
-                (execution_id, input_template_id, actual_input_name, actual_input_value, 
+                (execution_id, input_template_id, actual_input_name, 
                  actual_input_quantity, actual_input_unit, actual_input_batch_number, date, action)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), 'create')
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), 'create')
             """, (
                 sub_execution_id,
                 input_id,
                 actual_input_name,
-                batch_data.get('value', ''),
-                batch_data.get('quantity', ''),
+                quantity,
                 batch_data.get('unit', ''),
-                batch_data.get('batch_number', '')
+                batch_data.get('batch', '')  # Changed from 'batch_number' to 'batch' to match frontend
             ))
         
         connection.commit()
@@ -4165,18 +4176,30 @@ def get_sub_execution_inputs_outputs(sub_execution_id):
                 ]
             }
         
+        # Get sub-process name
+        cursor.execute("""
+            SELECT sp.sub_process_name
+            FROM supply_chain_sub_processes sp
+            WHERE sp.id = %s
+        """, (sub_execution[1],))
+        sub_process_result = cursor.fetchone()
+        sub_process_name = sub_process_result[0] if sub_process_result else 'Unknown Process'
+        
         # Process inputs
         prompt_inputs = []
+        print(f"Found {len(inputs)} inputs for sub-process {sub_execution[1]}")
         for input_item in inputs:
             execution_options = input_item[4] or {}
+            print(f"Input: {input_item[1]}, execution_options: {execution_options}")
             if execution_options.get('batch') == 'prompt':
                 prompt_inputs.append({
                     'id': input_item[0],
-                    'name': input_item[1],
-                    'type': input_item[2],
-                    'unit': input_item[3],
+                    'input_name': input_item[1],  # Changed from 'name' to 'input_name'
+                    'input_type': input_item[2],  # Changed from 'type' to 'input_type'
+                    'input_unit': input_item[3],  # Changed from 'unit' to 'input_unit'
                     'execution_options': execution_options
                 })
+        print(f"Found {len(prompt_inputs)} prompt inputs")
         
         # Process outputs
         prompt_outputs = []
@@ -4185,14 +4208,15 @@ def get_sub_execution_inputs_outputs(sub_execution_id):
             if execution_options.get('batch') == 'prompt':
                 prompt_outputs.append({
                     'id': output_item[0],
-                    'name': output_item[1],
-                    'type': output_item[2],
-                    'unit': output_item[3],
+                    'output_name': output_item[1],  # Changed from 'name' to 'output_name'
+                    'output_type': output_item[2],  # Changed from 'type' to 'output_type'
+                    'output_unit': output_item[3],  # Changed from 'unit' to 'output_unit'
                     'execution_options': execution_options
                 })
         
         return jsonify({
             'success': True,
+            'sub_process_name': sub_process_name,
             'prompt_inputs': prompt_inputs,
             'prompt_outputs': prompt_outputs,
             'field_options': field_options
@@ -4455,14 +4479,21 @@ def populate_default_field_options():
             ('quality_status', 'requires_testing', 'Requires Testing', True),
         ]
         
-        # Insert default options (ignore duplicates)
+        # Insert default options (check for existing first)
         for field_type, option_value, option_label, is_system_default in default_options:
+            # Check if option already exists
             cursor.execute("""
-                INSERT INTO supply_chain_field_options 
-                (field_type, option_value, option_label, is_system_default, uid, created_date)
-                VALUES (%s, %s, %s, %s, 'system', NOW())
-                ON CONFLICT (field_type, option_value) DO NOTHING
-            """, (field_type, option_value, option_label, is_system_default))
+                SELECT id FROM supply_chain_field_options 
+                WHERE field_type = %s AND option_value = %s
+            """, (field_type, option_value))
+            
+            if not cursor.fetchone():
+                # Insert new option
+                cursor.execute("""
+                    INSERT INTO supply_chain_field_options 
+                    (field_type, option_value, option_label, is_system_default)
+                    VALUES (%s, %s, %s, %s)
+                """, (field_type, option_value, option_label, is_system_default))
         
         connection.commit()
         
