@@ -51,6 +51,34 @@ def insert_data(table_name=None, audit_action=None, **kwargs):
         # Commit the transaction if both insertions are successful
         connection.commit()
         print(f"Data inserted successfully for action: {audit_action}!")
+        
+        # Attempt automatic sales-execution mapping for sales_product records
+        if table_name == 'sales_product':
+            try:
+                # Get the inserted sales record ID
+                cursor.execute("SELECT id FROM sales_product WHERE uid = %s ORDER BY id DESC LIMIT 1", (uid,))
+                sales_record = cursor.fetchone()
+                
+                if sales_record:
+                    sales_id = sales_record[0]
+                    
+                    # Import and attempt automatic mapping
+                    try:
+                        from features.supply_chain.backend.sales_execution_mapping import attempt_automatic_sales_mapping
+                        mapping_result = attempt_automatic_sales_mapping(sales_id)
+                        
+                        if mapping_result['success'] and mapping_result['mappings_created'] > 0:
+                            print(f"Auto-mapped {mapping_result['mappings_created']} products to executions for sales ID {sales_id}")
+                        else:
+                            print(f"No automatic mappings created for sales ID {sales_id}")
+                    except ImportError:
+                        print("Sales execution mapping module not available")
+                    except Exception as mapping_error:
+                        print(f"Error in automatic sales mapping: {mapping_error}")
+                        
+            except Exception as e:
+                print(f"Error attempting automatic sales mapping: {e}")
+                
     except Exception as e:
         # Rollback the transaction if there's an error to maintain data consistency
         print(f"Error inserting data for action - {audit_action}: {e}")

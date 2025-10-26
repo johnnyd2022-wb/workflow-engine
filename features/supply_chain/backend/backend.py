@@ -4895,3 +4895,541 @@ def execution_summary(parent_process_id):
     finally:
         cursor.close()
         connection.close()
+
+# ============================================================================
+# EXECUTION TRACING APIs
+# ============================================================================
+
+@supply_chain_bp.route('/api/supply-chain/executions/<int:execution_id>/lineage', methods=['GET'])
+def get_execution_lineage(execution_id):
+    """Get full execution lineage tree for tracing"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Get the execution details
+        cursor.execute("""
+            SELECT pe.id, pe.parent_process_id, pe.execution_batch_id, pe.execution_status,
+                   pe.execution_start_time, pe.execution_end_time, pe.execution_notes,
+                   pe.parent_execution_ids, pe.sales_mapping_status,
+                   pp.parent_process_name
+            FROM supply_chain_parent_executions pe
+            LEFT JOIN supply_chain_parent_processes pp ON pe.parent_process_id = pp.id
+            WHERE pe.id = %s
+        """, (execution_id,))
+        
+        execution = cursor.fetchone()
+        if not execution:
+            return jsonify({'success': False, 'error': 'Execution not found'}), 404
+        
+        # Get all sub-executions for this parent execution
+        cursor.execute("""
+            SELECT se.id, se.sub_process_id, se.execution_status, se.execution_start_time,
+                   se.execution_end_time, se.execution_notes, se.execution_data,
+                   sp.sub_process_name, sp.execution_order
+            FROM supply_chain_sub_executions se
+            LEFT JOIN supply_chain_sub_processes sp ON se.sub_process_id = sp.id
+            WHERE se.parent_execution_id = %s
+            ORDER BY sp.execution_order, se.id
+        """, (execution_id,))
+        
+        sub_executions = cursor.fetchall()
+        
+        # Get lineage relationships
+        cursor.execute("""
+            SELECT parent_execution_id, child_execution_id, relationship_type, flow_through_data
+            FROM supply_chain_execution_lineage
+            WHERE parent_execution_id = %s OR child_execution_id = %s
+        """, (execution_id, execution_id))
+        
+        lineage_relationships = cursor.fetchall()
+        
+        # Get sales mappings
+        cursor.execute("""
+            SELECT esm.id, esm.sales_id, esm.product_name, esm.quantity_sold,
+                   esm.batch_reference, esm.mapping_type, esm.mapping_confidence,
+                   esm.mapping_notes, sp.date as sales_date, sp.buyer
+            FROM supply_chain_execution_sales_mapping esm
+            LEFT JOIN sales_product sp ON esm.sales_id = sp.id
+            WHERE esm.execution_id = %s
+        """, (execution_id,))
+        
+        sales_mappings = cursor.fetchall()
+        
+        # Build the lineage tree
+        lineage_tree = {
+            'execution': {
+                'id': execution[0],
+                'parent_process_id': execution[1],
+                'execution_batch_id': execution[2],
+                'execution_status': execution[3],
+                'execution_start_time': execution[4].isoformat() if execution[4] else None,
+                'execution_end_time': execution[5].isoformat() if execution[5] else None,
+                'execution_notes': execution[6],
+                'parent_execution_ids': execution[7],
+                'sales_mapping_status': execution[8],
+                'parent_process_name': execution[9]
+            },
+            'sub_executions': [],
+            'lineage_relationships': [],
+            'sales_mappings': [],
+            'ancestors': [],
+            'descendants': []
+        }
+        
+        # Process sub-executions
+        for sub_exec in sub_executions:
+            lineage_tree['sub_executions'].append({
+                'id': sub_exec[0],
+                'sub_process_id': sub_exec[1],
+                'execution_status': sub_exec[2],
+                'execution_start_time': sub_exec[3].isoformat() if sub_exec[3] else None,
+                'execution_end_time': sub_exec[4].isoformat() if sub_exec[4] else None,
+                'execution_notes': sub_exec[5],
+                'execution_data': sub_exec[6],
+                'sub_process_name': sub_exec[7],
+                'execution_order': sub_exec[8]
+            })
+        
+        # Process lineage relationships
+        for rel in lineage_relationships:
+            lineage_tree['lineage_relationships'].append({
+                'parent_execution_id': rel[0],
+                'child_execution_id': rel[1],
+                'relationship_type': rel[2],
+                'flow_through_data': rel[3]
+            })
+        
+        # Process sales mappings
+        for mapping in sales_mappings:
+            lineage_tree['sales_mappings'].append({
+                'id': mapping[0],
+                'sales_id': mapping[1],
+                'product_name': mapping[2],
+                'quantity_sold': mapping[3],
+                'batch_reference': mapping[4],
+                'mapping_type': mapping[5],
+                'mapping_confidence': mapping[6],
+                'mapping_notes': mapping[7],
+                'sales_date': mapping[8].isoformat() if mapping[8] else None,
+                'buyer': mapping[9]
+            })
+        
+        return jsonify({'success': True, 'lineage': lineage_tree})
+        
+    except Exception as e:
+        print(f"Error getting execution lineage: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/executions/<int:execution_id>/sales', methods=['GET'])
+def get_execution_sales(execution_id):
+    """Get all sales linked to a specific execution"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT esm.id, esm.sales_id, esm.product_name, esm.quantity_sold,
+                   esm.batch_reference, esm.mapping_type, esm.mapping_confidence,
+                   esm.mapping_notes, esm.created_at,
+                   sp.date as sales_date, sp.buyer, sp.invoice_total, sp.products
+            FROM supply_chain_execution_sales_mapping esm
+            LEFT JOIN sales_product sp ON esm.sales_id = sp.id
+            WHERE esm.execution_id = %s
+            ORDER BY sp.date DESC
+        """, (execution_id,))
+        
+        sales_mappings = cursor.fetchall()
+        
+        result = []
+        for mapping in sales_mappings:
+            result.append({
+                'mapping_id': mapping[0],
+                'sales_id': mapping[1],
+                'product_name': mapping[2],
+                'quantity_sold': mapping[3],
+                'batch_reference': mapping[4],
+                'mapping_type': mapping[5],
+                'mapping_confidence': mapping[6],
+                'mapping_notes': mapping[7],
+                'mapping_created_at': mapping[8].isoformat() if mapping[8] else None,
+                'sales_date': mapping[9].isoformat() if mapping[9] else None,
+                'buyer': mapping[10],
+                'invoice_total': mapping[11],
+                'products': mapping[12]
+            })
+        
+        return jsonify({'success': True, 'sales': result})
+        
+    except Exception as e:
+        print(f"Error getting execution sales: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/sales/unmapped', methods=['GET'])
+def get_unmapped_sales():
+    """Get sales that don't have execution mappings"""
+    try:
+        connection, cursor = db_conn()
+        
+        cursor.execute("""
+            SELECT sp.id, sp.date, sp.buyer, sp.products, sp.invoice_total,
+                   sp.invoice_gst, sp.notes
+            FROM sales_product sp
+            LEFT JOIN supply_chain_execution_sales_mapping esm ON sp.id = esm.sales_id
+            WHERE esm.sales_id IS NULL
+            ORDER BY sp.date DESC
+            LIMIT 100
+        """)
+        
+        unmapped_sales = cursor.fetchall()
+        
+        result = []
+        for sale in unmapped_sales:
+            # Parse products JSON to extract product details
+            products_data = sale[3] if sale[3] else {}
+            products_list = []
+            
+            if isinstance(products_data, dict) and 'products' in products_data:
+                for product_name, product_data in products_data['products'].items():
+                    products_list.append({
+                        'name': product_name,
+                        'quantity': product_data.get('quantity', 0),
+                        'unit_price': product_data.get('unit_price', 0),
+                        'amount_nzd': product_data.get('amount_nzd', 0),
+                        'bottle_batch': product_data.get('bottle_batch', ''),
+                        'abv': product_data.get('abv', 0),
+                        'bottle_size_ml': product_data.get('bottle_size_ml', 0)
+                    })
+            
+            result.append({
+                'id': sale[0],
+                'date': sale[1].isoformat() if sale[1] else None,
+                'buyer': sale[2],
+                'products': products_list,
+                'invoice_total': sale[4],
+                'invoice_gst': sale[5],
+                'notes': sale[6]
+            })
+        
+        return jsonify({'success': True, 'unmapped_sales': result})
+        
+    except Exception as e:
+        print(f"Error getting unmapped sales: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/sales/<int:sales_id>/trace', methods=['GET'])
+def trace_sales_to_source(sales_id):
+    """Trace a sale back to its source execution and materials"""
+    try:
+        connection, cursor = db_conn()
+        
+        # Get the sale details
+        cursor.execute("""
+            SELECT id, date, buyer, products, invoice_total, notes
+            FROM sales_product
+            WHERE id = %s
+        """, (sales_id,))
+        
+        sale = cursor.fetchone()
+        if not sale:
+            return jsonify({'success': False, 'error': 'Sale not found'}), 404
+        
+        # Get execution mappings for this sale
+        cursor.execute("""
+            SELECT esm.id, esm.execution_id, esm.product_name, esm.quantity_sold,
+                   esm.batch_reference, esm.mapping_type, esm.mapping_confidence,
+                   pe.execution_batch_id, pe.execution_status, pe.parent_process_id,
+                   pp.parent_process_name
+            FROM supply_chain_execution_sales_mapping esm
+            LEFT JOIN supply_chain_parent_executions pe ON esm.execution_id = pe.id
+            LEFT JOIN supply_chain_parent_processes pp ON pe.parent_process_id = pp.id
+            WHERE esm.sales_id = %s
+        """, (sales_id,))
+        
+        execution_mappings = cursor.fetchall()
+        
+        # Build trace result
+        trace_result = {
+            'sale': {
+                'id': sale[0],
+                'date': sale[1].isoformat() if sale[1] else None,
+                'buyer': sale[2],
+                'products': sale[3],
+                'invoice_total': sale[4],
+                'notes': sale[5]
+            },
+            'execution_mappings': [],
+            'full_lineage': []
+        }
+        
+        # Process execution mappings
+        for mapping in execution_mappings:
+            mapping_data = {
+                'mapping_id': mapping[0],
+                'execution_id': mapping[1],
+                'product_name': mapping[2],
+                'quantity_sold': mapping[3],
+                'batch_reference': mapping[4],
+                'mapping_type': mapping[5],
+                'mapping_confidence': mapping[6],
+                'execution_batch_id': mapping[7],
+                'execution_status': mapping[8],
+                'parent_process_id': mapping[9],
+                'parent_process_name': mapping[10]
+            }
+            
+            # Get full lineage for this execution
+            if mapping[1]:  # If execution_id exists
+                lineage_data = get_execution_lineage_data(cursor, mapping[1])
+                mapping_data['lineage'] = lineage_data
+            
+            trace_result['execution_mappings'].append(mapping_data)
+        
+        return jsonify({'success': True, 'trace': trace_result})
+        
+    except Exception as e:
+        print(f"Error tracing sale: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+def get_execution_lineage_data(cursor, execution_id):
+    """Helper function to get execution lineage data"""
+    try:
+        # Get execution details
+        cursor.execute("""
+            SELECT pe.id, pe.execution_batch_id, pe.execution_status,
+                   pe.parent_execution_ids, pp.parent_process_name
+            FROM supply_chain_parent_executions pe
+            LEFT JOIN supply_chain_parent_processes pp ON pe.parent_process_id = pp.id
+            WHERE pe.id = %s
+        """, (execution_id,))
+        
+        execution = cursor.fetchone()
+        if not execution:
+            return None
+        
+        # Get sub-executions
+        cursor.execute("""
+            SELECT se.id, se.execution_status, se.execution_data,
+                   sp.sub_process_name, sp.execution_order
+            FROM supply_chain_sub_executions se
+            LEFT JOIN supply_chain_sub_processes sp ON se.sub_process_id = sp.id
+            WHERE se.parent_execution_id = %s
+            ORDER BY sp.execution_order
+        """, (execution_id,))
+        
+        sub_executions = cursor.fetchall()
+        
+        return {
+            'execution_id': execution[0],
+            'execution_batch_id': execution[1],
+            'execution_status': execution[2],
+            'parent_execution_ids': execution[3],
+            'parent_process_name': execution[4],
+            'sub_executions': [
+                {
+                    'id': sub[0],
+                    'execution_status': sub[1],
+                    'execution_data': sub[2],
+                    'sub_process_name': sub[3],
+                    'execution_order': sub[4]
+                } for sub in sub_executions
+            ]
+        }
+        
+    except Exception as e:
+        print(f"Error getting execution lineage data: {e}")
+        return None
+
+@supply_chain_bp.route('/api/supply-chain/executions/<int:execution_id>/map-sales', methods=['POST'])
+def map_execution_to_sales(execution_id):
+    """Map an execution to sales data"""
+    try:
+        data = request.get_json()
+        sales_id = data.get('sales_id')
+        product_name = data.get('product_name')
+        quantity_sold = data.get('quantity_sold', 0)
+        batch_reference = data.get('batch_reference', '')
+        mapping_type = data.get('mapping_type', 'manual')
+        mapping_notes = data.get('mapping_notes', '')
+        
+        if not sales_id or not product_name:
+            return jsonify({'success': False, 'error': 'sales_id and product_name are required'}), 400
+        
+        connection, cursor = db_conn()
+        
+        # Check if mapping already exists
+        cursor.execute("""
+            SELECT id FROM supply_chain_execution_sales_mapping
+            WHERE execution_id = %s AND sales_id = %s AND product_name = %s
+        """, (execution_id, sales_id, product_name))
+        
+        if cursor.fetchone():
+            return jsonify({'success': False, 'error': 'Mapping already exists'}), 400
+        
+        # Create the mapping
+        cursor.execute("""
+            INSERT INTO supply_chain_execution_sales_mapping
+            (execution_id, sales_id, product_name, quantity_sold, batch_reference,
+             mapping_type, mapping_notes, uid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (execution_id, sales_id, product_name, quantity_sold, batch_reference,
+              mapping_type, mapping_notes, str(uuid.uuid4())))
+        
+        # Update execution sales mapping status
+        cursor.execute("""
+            UPDATE supply_chain_parent_executions
+            SET sales_mapping_status = 'partial'
+            WHERE id = %s AND sales_mapping_status = 'unmapped'
+        """, (execution_id,))
+        
+        connection.commit()
+        
+        return jsonify({'success': True, 'message': 'Sales mapping created successfully'})
+        
+    except Exception as e:
+        print(f"Error mapping execution to sales: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/traceability/search', methods=['GET'])
+def search_traceability():
+    """Search for executions, sales, or batches across the system"""
+    try:
+        query = request.args.get('q', '')
+        search_type = request.args.get('type', 'all')  # 'all', 'executions', 'sales', 'batches'
+        
+        if not query:
+            return jsonify({'success': False, 'error': 'Query parameter is required'}), 400
+        
+        connection, cursor = db_conn()
+        
+        results = {
+            'executions': [],
+            'sales': [],
+            'batches': []
+        }
+        
+        # Search executions
+        if search_type in ['all', 'executions']:
+            cursor.execute("""
+                SELECT pe.id, pe.execution_batch_id, pe.execution_status,
+                       pe.execution_start_time, pe.execution_end_time,
+                       pp.parent_process_name
+                FROM supply_chain_parent_executions pe
+                LEFT JOIN supply_chain_parent_processes pp ON pe.parent_process_id = pp.id
+                WHERE pe.execution_batch_id ILIKE %s OR pp.parent_process_name ILIKE %s
+                ORDER BY pe.execution_start_time DESC
+                LIMIT 20
+            """, (f'%{query}%', f'%{query}%'))
+            
+            executions = cursor.fetchall()
+            for exec_data in executions:
+                results['executions'].append({
+                    'id': exec_data[0],
+                    'execution_batch_id': exec_data[1],
+                    'execution_status': exec_data[2],
+                    'execution_start_time': exec_data[3].isoformat() if exec_data[3] else None,
+                    'execution_end_time': exec_data[4].isoformat() if exec_data[4] else None,
+                    'parent_process_name': exec_data[5]
+                })
+        
+        # Search sales
+        if search_type in ['all', 'sales']:
+            cursor.execute("""
+                SELECT id, date, buyer, invoice_total, notes
+                FROM sales_product
+                WHERE buyer ILIKE %s OR notes ILIKE %s
+                ORDER BY date DESC
+                LIMIT 20
+            """, (f'%{query}%', f'%{query}%'))
+            
+            sales = cursor.fetchall()
+            for sale in sales:
+                results['sales'].append({
+                    'id': sale[0],
+                    'date': sale[1].isoformat() if sale[1] else None,
+                    'buyer': sale[2],
+                    'invoice_total': sale[3],
+                    'notes': sale[4]
+                })
+        
+        # Search batches (from execution batch IDs and sales batch references)
+        if search_type in ['all', 'batches']:
+            cursor.execute("""
+                SELECT DISTINCT execution_batch_id
+                FROM supply_chain_parent_executions
+                WHERE execution_batch_id ILIKE %s
+                ORDER BY execution_batch_id
+                LIMIT 20
+            """, (f'%{query}%'))
+            
+            batches = cursor.fetchall()
+            for batch in batches:
+                results['batches'].append({
+                    'batch_id': batch[0],
+                    'type': 'execution'
+                })
+        
+        return jsonify({'success': True, 'results': results})
+        
+    except Exception as e:
+        print(f"Error searching traceability: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/api/supply-chain/sales/<int:sales_id>/auto-map', methods=['POST'])
+def auto_map_sales_to_execution(sales_id):
+    """Attempt to automatically map a sale to executions"""
+    try:
+        from features.supply_chain.backend.sales_execution_mapping import attempt_automatic_sales_mapping
+        
+        result = attempt_automatic_sales_mapping(sales_id)
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error in auto-mapping: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@supply_chain_bp.route('/api/supply-chain/sales/<int:sales_id>/suggestions', methods=['GET'])
+def get_execution_suggestions(sales_id):
+    """Get execution suggestions for a sale"""
+    try:
+        from features.supply_chain.backend.sales_execution_mapping import get_execution_suggestions_for_sale
+        
+        suggestions = get_execution_suggestions_for_sale(sales_id)
+        return jsonify({'success': True, 'suggestions': suggestions})
+        
+    except Exception as e:
+        print(f"Error getting execution suggestions: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@supply_chain_bp.route('/supply-chain/execution-tracing')
+def execution_tracing():
+    """Serve the execution tracing page"""
+    return render_template('execution_tracing.html')

@@ -575,6 +575,87 @@ def create_supply_chain_field_options_table():
     
     create_table(table_name, columns)
 
+def create_supply_chain_parent_executions_table():
+    """Table to store parent process executions"""
+    table_name = "supply_chain_parent_executions"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_process_id": "INTEGER",
+        "execution_batch_id": "TEXT", # Human-friendly batch identifier (e.g., "Gin Batch #2024-001")
+        "execution_status": "TEXT", # 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
+        "execution_start_time": "TIMESTAMP",
+        "execution_end_time": "TIMESTAMP",
+        "execution_notes": "TEXT",
+        "parent_execution_ids": "JSONB", # Array of parent execution IDs for lineage tracking
+        "sales_mapping_status": "TEXT DEFAULT 'unmapped'", # 'unmapped', 'partial', 'complete'
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_sub_executions_table():
+    """Table to store sub-process executions"""
+    table_name = "supply_chain_sub_executions"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_execution_id": "INTEGER", # Foreign key to supply_chain_parent_executions
+        "sub_process_id": "INTEGER", # Foreign key to supply_chain_sub_processes
+        "execution_status": "TEXT", # 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
+        "execution_start_time": "TIMESTAMP",
+        "execution_end_time": "TIMESTAMP",
+        "execution_notes": "TEXT",
+        "execution_data": "JSONB", # Store actual input/output data from execution
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_sales_mapping_table():
+    """Table to map executions to sales for full traceability"""
+    table_name = "supply_chain_execution_sales_mapping"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "execution_id": "INTEGER NOT NULL", # Links to supply_chain_parent_executions.id
+        "sales_id": "INTEGER NOT NULL", # Links to sales_product.id
+        "product_name": "TEXT NOT NULL", # Specific product sold
+        "quantity_sold": "DOUBLE PRECISION",
+        "batch_reference": "TEXT", # Human-readable batch identifier
+        "mapping_type": "TEXT DEFAULT 'auto'", # 'auto', 'manual', 'fifo'
+        "mapping_confidence": "DOUBLE PRECISION DEFAULT 1.0", # Confidence score for automatic mappings
+        "mapping_notes": "TEXT", # Notes about the mapping
+        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_lineage_table():
+    """Table to store execution lineage relationships for efficient tracing"""
+    table_name = "supply_chain_execution_lineage"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_execution_id": "INTEGER NOT NULL", # Parent execution
+        "child_execution_id": "INTEGER NOT NULL", # Child execution
+        "relationship_type": "TEXT DEFAULT 'direct'", # 'direct', 'inherited', 'split', 'merged'
+        "flow_through_data": "JSONB", # Data that flowed from parent to child
+        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"
 
@@ -1133,6 +1214,10 @@ def main():
     create_supply_chain_parent_processes_table()
     create_supply_chain_sub_processes_table()
     create_supply_chain_field_options_table()
+    create_supply_chain_parent_executions_table()
+    create_supply_chain_sub_executions_table()
+    create_supply_chain_execution_sales_mapping_table()
+    create_supply_chain_execution_lineage_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()
