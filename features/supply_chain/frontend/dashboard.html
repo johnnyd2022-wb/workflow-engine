@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Flume</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/supply-chain-static/styles.css">
+</head>
+<body>
+  <!-- Navigation -->
+  <div id="navbar-container"></div>
+
+  <!-- Main Content -->
+  <main class="container py-8">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8 animate-fade-in">
+      <div>
+        <h1 class="text-4xl font-bold mb-2">Welcome back</h1>
+        <p class="text-muted">Here's what's flowing through your supply chain</p>
+      </div>
+      <button class="btn btn-hero btn-lg" onclick="openModal('complianceModal')">
+        <svg class="icon-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Generate Report
+      </button>
+    </div>
+
+    <!-- Metric Cards -->
+    <div class="grid md-grid-cols-3 mb-8">
+      <div class="metric-card animate-fade-in">
+        <div class="metric-card-header">
+          <p class="metric-card-title">Compliance Score</p>
+          <div class="metric-card-icon success">
+            <svg class="icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </div>
+        </div>
+        <p class="metric-card-value">98.5%</p>
+        <p class="metric-card-trend">+2.3% from last month</p>
+      </div>
+
+      <div class="metric-card animate-fade-in">
+        <div class="metric-card-header">
+          <p class="metric-card-title">Active Batches</p>
+          <div class="metric-card-icon success">
+            <svg class="icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+          </div>
+        </div>
+        <p class="metric-card-value">156</p>
+        <p class="metric-card-trend">24 in transit</p>
+      </div>
+
+      <div class="metric-card animate-fade-in">
+        <div class="metric-card-header">
+          <p class="metric-card-title">Supply Chain Health</p>
+          <div class="metric-card-icon success">
+            <svg class="icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+              <polyline points="17 6 23 6 23 12"></polyline>
+            </svg>
+          </div>
+        </div>
+        <p class="metric-card-value">Excellent</p>
+        <p class="metric-card-trend">All systems operational</p>
+      </div>
+    </div>
+
+    <!-- Flow Visualization -->
+    <div class="glass-card animate-fade-in mb-8">
+      <div class="mb-6">
+        <h2 class="text-2xl font-bold mb-2">Supply Chain Flow</h2>
+        <p class="text-muted">Live traceability from source to sale</p>
+      </div>
+
+      <!-- Flow visualization -->
+      <div class="flex items-center justify-between py-8" style="gap: 1rem;">
+        <!-- Node 1 -->
+        <div class="flex items-center" style="flex: 1;">
+          <div class="flex flex-col items-center" style="flex: 1;">
+            <div style="position: relative;">
+              <div class="glass-card transition-smooth" style="padding: 1.5rem; cursor: pointer;">
+                <svg class="icon-xl text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                </svg>
+              </div>
+              <div style="position: absolute; top: -0.5rem; right: -0.5rem; background: var(--success); border-radius: 50%; padding: 0.25rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+            </div>
+            <p class="text-sm font-medium mt-3">Supplier A</p>
+            <span class="text-xs text-success">verified</span>
+          </div>
+          <div style="width: 3rem; margin: 0 0.5rem;">
+            <div class="gradient-brand animate-shimmer" style="height: 2px; width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Node 2 -->
+        <div class="flex items-center" style="flex: 1;">
+          <div class="flex flex-col items-center" style="flex: 1;">
+            <div style="position: relative;">
+              <div class="glass-card transition-smooth" style="padding: 1.5rem; cursor: pointer;">
+                <svg class="icon-xl text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                  <polyline points="7.5 4.21 12 6.81 16.5 4.21"></polyline>
+                  <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+              </div>
+              <div style="position: absolute; top: -0.5rem; right: -0.5rem; background: var(--success); border-radius: 50%; padding: 0.25rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+            </div>
+            <p class="text-sm font-medium mt-3">Manufacturer</p>
+            <span class="text-xs text-success">verified</span>
+          </div>
+          <div style="width: 3rem; margin: 0 0.5rem;">
+            <div class="gradient-brand animate-shimmer" style="height: 2px; width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Node 3 -->
+        <div class="flex items-center" style="flex: 1;">
+          <div class="flex flex-col items-center" style="flex: 1;">
+            <div style="position: relative;">
+              <div class="glass-card transition-smooth" style="padding: 1.5rem; cursor: pointer;">
+                <svg class="icon-xl text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                </svg>
+              </div>
+              <div style="position: absolute; top: -0.5rem; right: -0.5rem; background: var(--success); border-radius: 50%; padding: 0.25rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+            </div>
+            <p class="text-sm font-medium mt-3">Distributor</p>
+            <span class="text-xs text-success">verified</span>
+          </div>
+          <div style="width: 3rem; margin: 0 0.5rem;">
+            <div class="gradient-brand animate-shimmer" style="height: 2px; width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Node 4 -->
+        <div class="flex items-center" style="flex: 1;">
+          <div class="flex flex-col items-center" style="flex: 1;">
+            <div style="position: relative;">
+              <div class="glass-card transition-smooth" style="padding: 1.5rem; cursor: pointer;">
+                <svg class="icon-xl text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+              </div>
+            </div>
+            <p class="text-sm font-medium mt-3">Retailer</p>
+            <span class="text-xs text-warning">pending</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-3 mt-8 py-6 border-t">
+        <div class="text-center">
+          <p class="text-2xl font-bold text-primary">24</p>
+          <p class="text-xs text-muted">Connected Suppliers</p>
+        </div>
+        <div class="text-center">
+          <p class="text-2xl font-bold text-success">156</p>
+          <p class="text-xs text-muted">Verified Batches</p>
+        </div>
+        <div class="text-center">
+          <p class="text-2xl font-bold">98.5%</p>
+          <p class="text-xs text-muted">Traceability Score</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Grid -->
+    <div class="grid md-grid-cols-2">
+      <!-- Recent Alerts -->
+      <div class="glass-card animate-fade-in">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold">Recent Alerts</h2>
+          <svg class="icon-md text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <div class="space-y-4">
+          <div class="flex items-start p-3 rounded-xl transition-smooth" style="gap: 0.75rem; cursor: pointer;">
+            <div class="status-dot warning" style="margin-top: 0.25rem;"></div>
+            <div style="flex: 1;">
+              <p class="text-sm font-medium">Batch #2845 pending documentation</p>
+              <p class="text-xs text-muted">2 hours ago</p>
+            </div>
+          </div>
+          <div class="flex items-start p-3 rounded-xl transition-smooth" style="gap: 0.75rem; cursor: pointer;">
+            <div class="status-dot alert" style="margin-top: 0.25rem;"></div>
+            <div style="flex: 1;">
+              <p class="text-sm font-medium">New supplier verification required</p>
+              <p class="text-xs text-muted">5 hours ago</p>
+            </div>
+          </div>
+          <div class="flex items-start p-3 rounded-xl transition-smooth" style="gap: 0.75rem; cursor: pointer;">
+            <div class="status-dot warning" style="margin-top: 0.25rem;"></div>
+            <div style="flex: 1;">
+              <p class="text-sm font-medium">Compliance report due in 3 days</p>
+              <p class="text-xs text-muted">1 day ago</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compliance Progress -->
+      <div class="glass-card animate-fade-in">
+        <h2 class="text-xl font-bold mb-6">Compliance Overview</h2>
+        <div class="space-y-6">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium">NP3 Requirements</span>
+              <span class="text-sm text-success">98%</span>
+            </div>
+            <div class="progress">
+              <div class="progress-bar" data-value="98" style="width: 0%;"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium">FSANZ Standards</span>
+              <span class="text-sm text-success">95%</span>
+            </div>
+            <div class="progress">
+              <div class="progress-bar" data-value="95" style="width: 0%;"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium">ISO 22000</span>
+              <span class="text-sm text-warning">87%</span>
+            </div>
+            <div class="progress">
+              <div class="progress-bar" data-value="87" style="width: 0%; background: var(--warning);"></div>
+            </div>
+          </div>
+          <button class="btn btn-glass w-full mt-4" onclick="openModal('complianceModal')">
+            View Full Compliance Report
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Compliance Modal -->
+  <div id="complianceModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Generate Compliance Report</h2>
+        <p class="modal-description">Export your supply chain data for NP3/FSANZ compliance</p>
+      </div>
+
+      <div id="reportForm" class="space-y-6">
+        <div class="form-group">
+          <label class="form-label" for="schema">Compliance Schema</label>
+          <select id="schema" class="form-select">
+            <option value="np3">NP3 Export</option>
+            <option value="fsanz">FSANZ Audit</option>
+            <option value="iso">ISO 22000</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="dateRange">Date Range</label>
+          <input id="dateRange" type="text" class="form-input" value="Last 90 days">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="format">Export Format</label>
+          <select id="format" class="form-select">
+            <option value="pdf">PDF Report</option>
+            <option value="csv">CSV Data</option>
+            <option value="json">JSON Export</option>
+          </select>
+        </div>
+
+        <button id="generateBtn" class="btn btn-hero btn-lg w-full" onclick="generateReport()">
+          Generate Audit Report
+        </button>
+      </div>
+
+      <div id="reportSuccess" class="py-8 text-center animate-scale-in" style="display: none;">
+        <div class="mx-auto mb-4" style="width: 4rem; height: 4rem; background: rgba(22, 163, 74, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h3 class="text-xl font-bold mb-2">Your NP3 Export is Ready 🎉</h3>
+        <p class="text-muted mb-6">Compliance report generated successfully</p>
+        <button class="btn btn-hero btn-lg w-full" onclick="downloadReport()">
+          <svg class="icon-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Download Report
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/supply-chain-static/common.js"></script>
+  <script>
+    // Inject navbar when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      const navbarContainer = document.getElementById('navbar-container');
+      if (navbarContainer) {
+        navbarContainer.innerHTML = renderNavbar('dashboard');
+      }
+    });
+  </script>
+</body>
+</html>

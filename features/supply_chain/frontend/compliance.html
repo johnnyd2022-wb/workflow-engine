@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Compliance - Flume</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/supply-chain-static/styles.css">
+</head>
+<body>
+  <!-- Navigation -->
+  <div id="navbar-container"></div>
+
+  <!-- Main Content -->
+  <main class="container py-8">
+    <!-- Header -->
+    <div class="mb-8 animate-fade-in">
+      <h1 class="text-4xl font-bold mb-2">Compliance Management</h1>
+      <p class="text-muted">Generate audit reports and maintain compliance effortlessly</p>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid md-grid-cols-3 mb-8">
+      <div class="glass-card hover text-center animate-fade-in">
+        <svg class="icon-xl text-primary mx-auto mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <path d="M9 15l2 2 4-4"></path>
+        </svg>
+        <h3 class="text-lg font-bold mb-2">NP3 Export</h3>
+        <p class="text-sm text-muted mb-4">Generate New Zealand compliance export</p>
+        <button class="btn btn-glass w-full" onclick="openModal('complianceModal')">Generate</button>
+      </div>
+
+      <div class="glass-card hover text-center animate-fade-in">
+        <svg class="icon-xl text-primary mx-auto mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <path d="M9 15l2 2 4-4"></path>
+        </svg>
+        <h3 class="text-lg font-bold mb-2">FSANZ Audit</h3>
+        <p class="text-sm text-muted mb-4">Food Standards Australia NZ report</p>
+        <button class="btn btn-glass w-full" onclick="openModal('complianceModal')">Generate</button>
+      </div>
+
+      <div class="glass-card hover text-center animate-fade-in">
+        <svg class="icon-xl text-primary mx-auto mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <path d="M9 15l2 2 4-4"></path>
+        </svg>
+        <h3 class="text-lg font-bold mb-2">ISO 22000</h3>
+        <p class="text-sm text-muted mb-4">Food safety management certification</p>
+        <button class="btn btn-glass w-full" onclick="openModal('complianceModal')">Generate</button>
+      </div>
+    </div>
+
+    <!-- Recent Reports -->
+    <div class="glass-card animate-fade-in">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold">Recent Reports</h2>
+        <button class="btn btn-hero" onclick="openModal('complianceModal')">
+          Generate New Report
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between p-4 rounded-xl transition-smooth" style="cursor: pointer;">
+          <div class="flex items-center gap-4">
+            <div class="p-2 rounded-xl" style="background: rgba(22, 163, 74, 0.2);">
+              <svg class="icon-md text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <div>
+              <p class="font-medium">Q4 2024 NP3 Export</p>
+              <p class="text-sm text-muted">Dec 15, 2024</p>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm">View</button>
+        </div>
+
+        <div class="flex items-center justify-between p-4 rounded-xl transition-smooth" style="cursor: pointer;">
+          <div class="flex items-center gap-4">
+            <div class="p-2 rounded-xl" style="background: rgba(22, 163, 74, 0.2);">
+              <svg class="icon-md text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <div>
+              <p class="font-medium">FSANZ Quarterly Audit</p>
+              <p class="text-sm text-muted">Dec 10, 2024</p>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm">View</button>
+        </div>
+
+        <div class="flex items-center justify-between p-4 rounded-xl transition-smooth" style="cursor: pointer;">
+          <div class="flex items-center gap-4">
+            <div class="p-2 rounded-xl" style="background: rgba(22, 163, 74, 0.2);">
+              <svg class="icon-md text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <div>
+              <p class="font-medium">ISO 22000 Annual Review</p>
+              <p class="text-sm text-muted">Nov 30, 2024</p>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm">View</button>
+        </div>
+
+        <div class="flex items-center justify-between p-4 rounded-xl transition-smooth" style="cursor: pointer;">
+          <div class="flex items-center gap-4">
+            <div class="p-2 rounded-xl" style="background: rgba(245, 158, 11, 0.2);">
+              <svg class="icon-md text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+            </div>
+            <div>
+              <p class="font-medium">Q1 2025 NP3 Export</p>
+              <p class="text-sm text-muted">Pending</p>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm">View</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Compliance Modal -->
+  <div id="complianceModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Generate Compliance Report</h2>
+        <p class="modal-description">Export your supply chain data for NP3/FSANZ compliance</p>
+      </div>
+
+      <div id="reportForm" class="space-y-6">
+        <div class="form-group">
+          <label class="form-label" for="schema">Compliance Schema</label>
+          <select id="schema" class="form-select">
+            <option value="np3">NP3 Export</option>
+            <option value="fsanz">FSANZ Audit</option>
+            <option value="iso">ISO 22000</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="dateRange">Date Range</label>
+          <input id="dateRange" type="text" class="form-input" value="Last 90 days">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="format">Export Format</label>
+          <select id="format" class="form-select">
+            <option value="pdf">PDF Report</option>
+            <option value="csv">CSV Data</option>
+            <option value="json">JSON Export</option>
+          </select>
+        </div>
+
+        <button id="generateBtn" class="btn btn-hero btn-lg w-full" onclick="generateReport()">
+          Generate Audit Report
+        </button>
+      </div>
+
+      <div id="reportSuccess" class="py-8 text-center animate-scale-in" style="display: none;">
+        <div class="mx-auto mb-4" style="width: 4rem; height: 4rem; background: rgba(22, 163, 74, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h3 class="text-xl font-bold mb-2">Your NP3 Export is Ready 🎉</h3>
+        <p class="text-muted mb-6">Compliance report generated successfully</p>
+        <button class="btn btn-hero btn-lg w-full" onclick="downloadReport()">
+          <svg class="icon-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Download Report
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/supply-chain-static/common.js"></script>
+  <script>
+    // Inject navbar when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      const navbarContainer = document.getElementById('navbar-container');
+      if (navbarContainer) {
+        navbarContainer.innerHTML = renderNavbar('compliance');
+      }
+    });
+  </script>
+</body>
+</html>
