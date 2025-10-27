@@ -22,13 +22,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
   <!-- Styles -->
-  <link rel="stylesheet" href="/supply-chain-static/styles_2.css">
+  <link rel="stylesheet" href="/supply-chain-static/styles_9.css">
 </head>
 <body>
+  <!-- Flume UI Version 5 — Warm Midnight Flow -->
+  
   <!-- Navigation -->
   <nav class="navbar">
     <div class="container">
-      <a href="/supply-chain" class="navbar-logo">
+      <a href="/supply-chain/index" class="navbar-logo">
         <div class="navbar-logo-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
             <path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3V7z"></path>
@@ -49,7 +51,10 @@
 
   <!-- Hero Section -->
   <section class="gradient-hero" style="position: relative; overflow: hidden;">
-    <div class="container py-20 md-py-32">
+    <!-- Radial glow background -->
+    <div style="position: absolute; top: -20%; left: 50%; transform: translateX(-50%); width: 100%; height: 120%; background: radial-gradient(ellipse at center, rgba(0, 120, 212, 0.15) 0%, rgba(255, 179, 71, 0.08) 40%, transparent 70%); pointer-events: none; z-index: 0;"></div>
+    
+    <div class="container py-20 md-py-32" style="position: relative; z-index: 1;">
       <div class="grid md-grid-cols-2" style="gap: 3rem; align-items: center;">
         <!-- Hero Text -->
         <div class="space-y-8 animate-fade-in">
@@ -177,14 +182,12 @@
           <div class="flex flex-col" style="gap: 1rem;">
             <a href="/supply-chain/dashboard">
               <button class="btn btn-hero btn-lg" style="width: 100%;">
-                View Supply Chain
-              </button>
-            </a>
-            <a href="/supply-chain/core">
-              <button class="btn btn-glass btn-lg" style="width: 100%;">
                 See My Flow
               </button>
             </a>
+            <button class="btn btn-glass btn-lg" style="width: 100%;">
+              Watch Demo
+            </button>
           </div>
 
           <!-- Social proof -->
@@ -208,7 +211,9 @@
 
         <!-- Hero Image -->
         <div class="animate-float" style="position: relative;">
-          <div class="glass-card animate-glow" style="padding: 0.5rem;">
+          <!-- Blur backdrop -->
+          <div style="position: absolute; inset: -20px; background: rgba(30, 39, 53, 0.4); backdrop-filter: blur(40px); border-radius: 32px; z-index: 0;"></div>
+          <div class="glass-card animate-glow" style="padding: 0.5rem; position: relative; z-index: 1;">
             <img 
               src="/supply-chain-static/hero-wave.jpg"
               alt="Supply chain visualization" 
@@ -224,8 +229,8 @@
     <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 8rem; background: linear-gradient(to top, var(--background), transparent);"></div>
   </section>
 
-   <!-- Features Section -->
-   <section class="py-20" style="background-color: var(--background);">
+  <!-- Features Section -->
+  <section class="py-20" style="background-color: var(--background);">
     <div class="container">
       <div class="text-center mb-8 animate-fade-in">
         <h2 class="text-4xl md-text-5xl font-bold mb-4">
@@ -239,7 +244,7 @@
 
       <div class="grid md-grid-cols-3">
         <div class="glass-card hover animate-fade-in">
-          <div style="padding: 1rem; border-radius: 1rem; background: linear-gradient(135deg, rgba(0, 168, 232, 0.2), rgba(108, 99, 255, 0.2)); width: fit-content; margin-bottom: 1rem;">
+          <div style="padding: 1rem; border-radius: 1rem; background: linear-gradient(135deg, rgba(0, 120, 212, 0.2), rgba(0, 168, 232, 0.2)); width: fit-content; margin-bottom: 1rem;">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
             </svg>
@@ -249,7 +254,7 @@
         </div>
 
         <div class="glass-card hover animate-fade-in">
-          <div style="padding: 1rem; border-radius: 1rem; background: linear-gradient(135deg, rgba(0, 168, 232, 0.2), rgba(108, 99, 255, 0.2)); width: fit-content; margin-bottom: 1rem;">
+          <div style="padding: 1rem; border-radius: 1rem; background: linear-gradient(135deg, rgba(0, 120, 212, 0.2), rgba(0, 168, 232, 0.2)); width: fit-content; margin-bottom: 1rem;">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
             </svg>
@@ -259,7 +264,7 @@
         </div>
 
         <div class="glass-card hover animate-fade-in">
-          <div style="padding: 1rem; border-radius: 1rem; background: linear-gradient(135deg, rgba(0, 168, 232, 0.2), rgba(108, 99, 255, 0.2)); width: fit-content; margin-bottom: 1rem;">
+          <div style="padding: 1rem; border-radius: 1rem; background: linear-gradient(135deg, rgba(0, 120, 212, 0.2), rgba(0, 168, 232, 0.2)); width: fit-content; margin-bottom: 1rem;">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00A8E8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
@@ -283,7 +288,7 @@
         </p>
         <a href="/supply-chain/dashboard">
           <button class="btn btn-hero btn-lg">
-            View Supply Chain
+            Get Started Free
           </button>
         </a>
       </div>
@@ -297,6 +302,14 @@
     </div>
   </footer>
 
-  <script src="/supply-chain-static/common.js"></script>
+  <script src="/supply-chain-static/common_5.js"></script>
+  <script>
+    // Show mobile menu button on small screens
+    if (window.innerWidth <= 768) {
+      document.getElementById('sidebar-toggle').style.display = 'flex';
+      document.getElementById('sidebar-overlay').style.display = 'block';
+      document.getElementById('sidebar-overlay').classList.remove('active');
+    }
+  </script>
 </body>
 </html>

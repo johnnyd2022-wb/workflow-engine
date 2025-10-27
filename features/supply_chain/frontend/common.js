@@ -4,7 +4,7 @@
 function renderNavbar(activePage = '') {
   const navLinks = [
     { href: '/supply-chain/dashboard', icon: 'dashboard', label: 'Dashboard', id: 'dashboard' },
-    { href: '/supply-chain/core', icon: 'flow', label: 'Core', id: 'core' },
+    { href: '/supply-chain/core', icon: 'flow', label: 'Core Flows', id: 'core' },
     { href: '/supply-chain/compliance', icon: 'file', label: 'Compliance', id: 'compliance' },
     { href: '/supply-chain/integrations', icon: 'link', label: 'Integrations', id: 'integrations' },
     { href: '/supply-chain/settings', icon: 'settings', label: 'Settings', id: 'settings' }
