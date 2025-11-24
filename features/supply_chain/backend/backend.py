@@ -4,7 +4,10 @@ import json
 from datetime import datetime, date
 
 # Create Supply Chain blueprint
-supply_chain_bp = Blueprint('supply_chain', __name__, template_folder='../frontend')
+supply_chain_bp = Blueprint('supply_chain', __name__, 
+                             template_folder='../frontend',
+                             static_folder='../frontend',
+                             static_url_path='/supply-chain-static')
 
 def format_process_type_for_display(process_type):
     """Convert database process type to user-friendly display name"""
@@ -85,6 +88,111 @@ def supply_chain():
             cursor.close()
         if connection:
             connection.close()
+
+## Lovable Pages
+
+@supply_chain_bp.route('/supply-chain-lovable', methods=['GET', 'POST'])
+def supply_chain_lovable():
+    print("Accessed /supply-chain-lovable route")
+    connection, cursor = db_conn()
+
+    try:
+        # Get all parent processes
+        cursor.execute("""
+            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+                   parent_process_status, parent_process_category, parent_process_notes, date
+            FROM supply_chain_parent_processes
+            ORDER BY parent_process_name
+        """)
+        parent_processes = cursor.fetchall()
+
+        # Get parent process statistics
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_parent_processes")
+        total_parent_processes = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_parent_processes WHERE parent_process_status = 'active'")
+        active_parent_processes = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_sub_processes")
+        total_sub_processes = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_inputs")
+        total_inputs = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_outputs")
+        total_outputs = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM supply_chain_connections")
+        total_connections = cursor.fetchone()[0]
+
+        return render_template('supply_chain_lovable.html',
+                               parent_processes=parent_processes,
+                               total_parent_processes=total_parent_processes,
+                               active_parent_processes=active_parent_processes,
+                               total_sub_processes=total_sub_processes,
+                               total_inputs=total_inputs,
+                               total_outputs=total_outputs,
+                               total_connections=total_connections,
+                               format_type=format_process_type_for_display)
+
+    except Exception as e:
+        print(f"Error in supply_chain route: {e}")
+        return render_template('supply_chain.html', 
+                               parent_processes=[],
+                               total_parent_processes=0,
+                               active_parent_processes=0,
+                               total_sub_processes=0,
+                               total_inputs=0,
+                               total_outputs=0,
+                               total_connections=0,
+                               error=str(e))
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@supply_chain_bp.route('/supply-chain/index')
+def index():
+    """Render the index page"""
+    return render_template('index.html')
+
+@supply_chain_bp.route('/supply-chain/core')
+def parent_processes():
+    """Render the core engine supply chain page"""
+    return render_template('core.html')
+
+@supply_chain_bp.route('/supply-chain/dashboard')
+def dashboard():
+    """Render the dashboard page"""
+    return render_template('dashboard.html')
+
+@supply_chain_bp.route('/supply-chain/compliance')
+def compliance():
+    """Render the compliance page"""
+    return render_template('compliance.html')
+
+@supply_chain_bp.route('/supply-chain/integrations')
+def integrations():
+    """Render the integrations page"""
+    return render_template('integrations.html')
+
+@supply_chain_bp.route('/supply-chain/settings')
+def settings():
+    """Render the settings page"""
+    return render_template('settings.html')
+
+@supply_chain_bp.route('/supply-chain/flow-engine1')
+def flow_engine1():
+    """Render the flow engine 1 page"""
+    return render_template('flow-engine.html')
+
+@supply_chain_bp.route('/supply-chain/flow-engine')
+def flow_engine():
+    """Render the flow engine page"""
+    return render_template('flow-engine1.html')
+
+##
 
 @supply_chain_bp.route('/supply-chain/parent-process/<int:parent_process_id>')
 def parent_process_detail(parent_process_id):

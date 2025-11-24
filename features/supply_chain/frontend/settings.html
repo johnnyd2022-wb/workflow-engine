@@ -3,185 +3,200 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Settings - Flume</title>
+  <title>Settings — Flume Supply Chain Visibility</title>
+  <meta name="description" content="Configure your Flume account and preferences">
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/supply-chain-static/styles_2.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/supply-chain-static/styles_10.css">
 </head>
 <body>
-  <!-- Navigation -->
-  <div id="navbar-container"></div>
-
-  <!-- Main Content -->
-  <main class="container py-8">
-    <!-- Header -->
-    <div class="mb-8 animate-fade-in">
-      <h1 class="text-4xl font-bold mb-2">Settings</h1>
-      <p class="text-muted">Manage your account and organization preferences</p>
-    </div>
-
-    <!-- Settings Sections -->
-    <div class="grid md-grid-cols-2">
-      <!-- Organization Settings -->
-      <div class="glass-card animate-fade-in">
-        <h2 class="text-2xl font-bold mb-6">Organization</h2>
-        <div class="space-y-4">
-          <div class="form-group">
-            <label class="form-label" for="orgName">Organization Name</label>
-            <input id="orgName" type="text" class="form-input" value="Acme Supply Chain Co.">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="orgEmail">Contact Email</label>
-            <input id="orgEmail" type="email" class="form-input" value="contact@acmesupply.com">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="orgIndustry">Industry</label>
-            <select id="orgIndustry" class="form-select">
-              <option>Food & Beverage</option>
-              <option>Manufacturing</option>
-              <option>Retail</option>
-              <option>Logistics</option>
-            </select>
-          </div>
-          <button class="btn btn-hero w-full">Save Changes</button>
+  <!-- Flume UI Version 5 — Liquid Depth Aesthetic with Darker Sidebar -->
+  
+  <button class="mobile-menu-toggle" aria-label="Toggle menu">
+    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 12h18M3 6h18M3 18h18"/>
+    </svg>
+  </button>
+  
+  <div class="mobile-overlay"></div>
+  
+  <div class="app-shell">
+    
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <div class="logo-icon">F</div>
+          <div class="logo-text">Flume</div>
         </div>
       </div>
-
-      <!-- Notification Settings -->
-      <div class="glass-card animate-fade-in">
-        <h2 class="text-2xl font-bold mb-6">Notifications</h2>
-        <div class="space-y-4">
-          <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
-            <div>
-              <p class="font-medium">Email Notifications</p>
-              <p class="text-sm text-muted">Receive updates via email</p>
-            </div>
-            <label class="switch">
-              <input type="checkbox" checked>
-              <span class="switch-slider"></span>
-            </label>
-          </div>
-          <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
-            <div>
-              <p class="font-medium">Compliance Alerts</p>
-              <p class="text-sm text-muted">Get notified about compliance issues</p>
-            </div>
-            <label class="switch">
-              <input type="checkbox" checked>
-              <span class="switch-slider"></span>
-            </label>
-          </div>
-          <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
-            <div>
-              <p class="font-medium">Weekly Reports</p>
-              <p class="text-sm text-muted">Receive weekly summary reports</p>
-            </div>
-            <label class="switch">
-              <input type="checkbox">
-              <span class="switch-slider"></span>
-            </label>
-          </div>
-          <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
-            <div>
-              <p class="font-medium">System Updates</p>
-              <p class="text-sm text-muted">Notifications about new features</p>
-            </div>
-            <label class="switch">
-              <input type="checkbox" checked>
-              <span class="switch-slider"></span>
-            </label>
-          </div>
+      
+      <nav class="sidebar-nav">
+        <div class="nav-item">
+          <a href="/supply-chain/dashboard" class="nav-link">
+            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+            <span>Dashboard</span>
+          </a>
         </div>
-      </div>
 
-      <!-- Team Management -->
-      <div class="glass-card animate-fade-in">
-        <div class="flex items-center justify-between mb-6">
-          <h2 class="text-2xl font-bold">Team Members</h2>
-          <button class="btn btn-hero btn-sm">Invite Member</button>
+        <div class="nav-item">
+          <a href="/supply-chain/flow-engine" class="nav-link">
+            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3V7z"></path>
+            </svg>
+            <span>Flow Engine</span>
+          </a>
         </div>
-        <div class="space-y-3">
-          <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
-            <div>
-              <p class="font-medium">Sarah Johnson</p>
-              <p class="text-sm text-muted">sarah@acmesupply.com · Admin</p>
-            </div>
-            <button class="btn btn-ghost btn-sm">Edit</button>
-          </div>
-          <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
-            <div>
-              <p class="font-medium">Mike Chen</p>
-              <p class="text-sm text-muted">mike@acmesupply.com · Member</p>
-            </div>
-            <button class="btn btn-ghost btn-sm">Edit</button>
-          </div>
-          <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
-            <div>
-              <p class="font-medium">Emily Rodriguez</p>
-              <p class="text-sm text-muted">emily@acmesupply.com · Member</p>
-            </div>
-            <button class="btn btn-ghost btn-sm">Edit</button>
-          </div>
+        
+        <div class="nav-item">
+          <a href="/supply-chain/core" class="nav-link">
+            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v6m0 6v6m9.66-9L16 12m-6 0L4.34 9M19.66 18L16 12m-6 0L4.34 18"/>
+            </svg>
+            <span>Core Flows</span>
+          </a>
         </div>
-      </div>
-
-      <!-- Security Settings -->
-      <div class="glass-card animate-fade-in">
-        <h2 class="text-2xl font-bold mb-6">Security</h2>
-        <div class="space-y-4">
-          <div class="form-group">
-            <label class="form-label" for="currentPassword">Current Password</label>
-            <input id="currentPassword" type="password" class="form-input" placeholder="••••••••">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="newPassword">New Password</label>
-            <input id="newPassword" type="password" class="form-input" placeholder="••••••••">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="confirmPassword">Confirm Password</label>
-            <input id="confirmPassword" type="password" class="form-input" placeholder="••••••••">
-          </div>
-          <button class="btn btn-hero w-full">Update Password</button>
+        
+        <div class="nav-item">
+          <a href="/supply-chain/compliance" class="nav-link">
+            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span>Compliance</span>
+          </a>
+        </div>
+        
+        <div class="nav-item">
+          <a href="/supply-chain/integrations" class="nav-link">
+            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            <span>Integrations</span>
+          </a>
+        </div>
+        
+        <div class="nav-item">
+          <a href="/supply-chain/settings" class="nav-link active">
+            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v6m0 6v6"/>
+              <path d="M1 12h6m6 0h6"/>
+            </svg>
+            <span>Settings</span>
+          </a>
+        </div>
+      </nav>
+    </aside>
+    
+    <main class="main-content">
+      
+      <header class="main-header">
+        <div>
+          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem;">Settings</h1>
+          <p style="color: var(--text-secondary); font-size: 0.9375rem;">Configure your account and preferences</p>
+        </div>
+      </header>
+      
+      <div class="main-body">
+        
+        <div class="glass-card mb-4">
+          <h2 class="mb-3">Account Information</h2>
           
-          <div class="flex items-center justify-between p-4 rounded-xl transition-smooth mt-6 border-t">
+          <div class="form-group">
+            <label class="form-label">Company Name</label>
+            <input type="text" class="form-input" value="Flume Enterprises" placeholder="Enter company name">
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" value="admin@flume.example.com" placeholder="Enter email">
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="tel" class="form-input" value="+61 2 1234 5678" placeholder="Enter phone number">
+          </div>
+          
+          <button class="btn btn-primary">Save Changes</button>
+        </div>
+        
+        <div class="glass-card mb-4">
+          <h2 class="mb-3">Notification Preferences</h2>
+          
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 0.75rem;">
             <div>
-              <p class="font-medium">Two-Factor Authentication</p>
-              <p class="text-sm text-muted">Add an extra layer of security</p>
+              <div style="font-weight: 600; margin-bottom: 0.25rem;">Email Notifications</div>
+              <div style="font-size: 0.875rem; color: var(--text-secondary);">Receive email alerts for important events</div>
             </div>
-            <label class="switch">
-              <input type="checkbox">
-              <span class="switch-slider"></span>
+            <label style="position: relative; display: inline-block; width: 48px; height: 24px;">
+              <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
+              <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--azure-blue); transition: 0.3s; border-radius: 24px;">
+                <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; transition: 0.3s; border-radius: 50%;"></span>
+              </span>
+            </label>
+          </div>
+          
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 0.75rem;">
+            <div>
+              <div style="font-weight: 600; margin-bottom: 0.25rem;">Compliance Alerts</div>
+              <div style="font-size: 0.875rem; color: var(--text-secondary);">Get notified about compliance status changes</div>
+            </div>
+            <label style="position: relative; display: inline-block; width: 48px; height: 24px;">
+              <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
+              <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--azure-blue); transition: 0.3s; border-radius: 24px;">
+                <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; transition: 0.3s; border-radius: 50%;"></span>
+              </span>
+            </label>
+          </div>
+          
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+            <div>
+              <div style="font-weight: 600; margin-bottom: 0.25rem;">Weekly Reports</div>
+              <div style="font-size: 0.875rem; color: var(--text-secondary);">Receive weekly summary reports</div>
+            </div>
+            <label style="position: relative; display: inline-block; width: 48px; height: 24px;">
+              <input type="checkbox" style="opacity: 0; width: 0; height: 0;">
+              <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border-color); transition: 0.3s; border-radius: 24px;">
+                <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; transition: 0.3s; border-radius: 50%;"></span>
+              </span>
             </label>
           </div>
         </div>
+        
+        <div class="glass-card">
+          <h2 class="mb-3">Security</h2>
+          
+          <div class="form-group">
+            <label class="form-label">Current Password</label>
+            <input type="password" class="form-input" placeholder="Enter current password">
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <input type="password" class="form-input" placeholder="Enter new password">
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Confirm New Password</label>
+            <input type="password" class="form-input" placeholder="Confirm new password">
+          </div>
+          
+          <button class="btn btn-primary">Update Password</button>
+        </div>
+        
       </div>
-    </div>
-
-    <!-- Danger Zone -->
-    <div class="glass-card mt-8 animate-fade-in" style="border: 2px solid var(--alert);">
-      <h2 class="text-2xl font-bold mb-4 text-alert">Danger Zone</h2>
-      <p class="text-sm text-muted mb-6">These actions are irreversible. Please proceed with caution.</p>
-      <div class="flex gap-4">
-        <button class="btn btn-ghost" style="border: 1px solid var(--alert); color: var(--alert);">
-          Export All Data
-        </button>
-        <button class="btn" style="background: var(--alert); color: white;">
-          Delete Organization
-        </button>
-      </div>
-    </div>
-  </main>
-
-  <script src="/supply-chain-static/common.js"></script>
-  <script>
-    // Inject navbar when page loads
-    document.addEventListener('DOMContentLoaded', function() {
-      const navbarContainer = document.getElementById('navbar-container');
-      if (navbarContainer) {
-        navbarContainer.innerHTML = renderNavbar('settings');
-      }
-    });
-  </script>
+      
+    </main>
+    
+  </div>
+  
+  <script src="/supply-chain-static/common_4.js"></script>
 </body>
 </html>
