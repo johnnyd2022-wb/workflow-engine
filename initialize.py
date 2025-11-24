@@ -291,6 +291,371 @@ def create_crm_tasks_table():
 
     create_table(table_name, columns)
 
+def create_supply_chain_processes_table():
+    table_name = "supply_chain_processes"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_name": "TEXT", # name of the process (e.g., "Gin Distillation", "Botanical Mixing")
+        "process_description": "TEXT", # detailed description of the process
+        "process_type": "TEXT", # type of process (e.g., "manufacturing", "packaging", "quality_control")
+        "process_status": "TEXT", # 'active', 'inactive', 'archived'
+        "process_category": "TEXT", # category for grouping processes
+        "process_notes": "TEXT", # additional notes about the process
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_inputs_table():
+    table_name = "supply_chain_inputs"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_id": "INTEGER", # foreign key to supply_chain_processes
+        "input_name": "TEXT", # name of the input (e.g., "Juniper Berries", "Neutral Spirit")
+        "input_type": "TEXT", # type of input (e.g., "raw_material", "intermediate_product", "equipment")
+        "input_quantity": "DOUBLE PRECISION", # quantity of input
+        "input_unit": "TEXT", # unit of measurement (e.g., "kg", "liters", "pieces")
+        "input_specifications": "JSONB", # additional specifications as JSON
+        "input_source": "TEXT", # where the input comes from
+        "input_batch_number": "TEXT", # batch or lot number for traceability
+        "input_expiry_date": "DATE", # expiry date if applicable
+        "input_status": "TEXT", # 'available', 'consumed', 'expired', 'quarantined'
+        "execution_options": "JSONB", # JSON object with execution options for each field (e.g., {"name": "template", "quantity": "prompt", "unit": "template"})
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_outputs_table():
+    table_name = "supply_chain_outputs"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_id": "INTEGER", # foreign key to supply_chain_processes
+        "output_name": "TEXT", # name of the output (e.g., "Gin Batch A", "Bottled Product")
+        "output_type": "TEXT", # type of output (e.g., "finished_product", "intermediate_product", "waste")
+        "output_quantity": "DOUBLE PRECISION", # quantity of output
+        "output_unit": "TEXT", # unit of measurement
+        "output_specifications": "JSONB", # additional specifications as JSON
+        "output_batch_number": "TEXT", # batch or lot number for traceability
+        "output_quality_status": "TEXT", # 'passed', 'failed', 'pending', 'quarantined'
+        "output_destination": "TEXT", # where the output goes next
+        "output_flow_through": "BOOLEAN DEFAULT FALSE", # whether this output flows through to connected processes
+        "output_flow_through_fields": "JSONB", # which specific fields flow through as JSON
+        "execution_options": "JSONB", # JSON object with execution options for each field (e.g., {"type": "template", "volume": "prompt", "measure": "template"})
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_connections_table():
+    table_name = "supply_chain_connections"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_process_id": "INTEGER", # parent process this connection belongs to
+        "from_sub_process_id": "INTEGER", # source sub-process
+        "to_sub_process_id": "INTEGER", # destination sub-process
+        "from_output_id": "INTEGER", # specific output from source sub-process
+        "to_input_id": "INTEGER", # specific input to destination sub-process
+        "connection_type": "TEXT", # type of connection (e.g., "direct", "storage", "transport")
+        "connection_status": "TEXT", # 'active', 'inactive', 'blocked'
+        "connection_notes": "TEXT", # additional notes about the connection
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_traceability_table():
+    table_name = "supply_chain_traceability"
+
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "trace_id": "TEXT", # unique trace identifier
+        "item_name": "TEXT", # name of the item being traced
+        "item_type": "TEXT", # type of item (e.g., "batch", "product", "ingredient")
+        "current_location": "TEXT", # current location in the supply chain
+        "current_process_id": "INTEGER", # current process
+        "trace_path": "JSONB", # complete path through the supply chain
+        "trace_status": "TEXT", # 'active', 'completed', 'lost'
+        "trace_notes": "TEXT", # additional trace information
+        "uid": "TEXT"
+    }
+
+    create_table(table_name, columns)
+
+def create_supply_chain_process_executions_table():
+    """Table to track actual executions of processes with batch data"""
+    table_name = "supply_chain_process_executions"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_id": "INTEGER", # foreign key to supply_chain_processes
+        "execution_batch_number": "TEXT", # unique batch number for this execution
+        "execution_status": "TEXT", # 'planned', 'in_progress', 'completed', 'failed', 'cancelled'
+        "execution_start_time": "TIMESTAMP", # when execution started
+        "execution_end_time": "TIMESTAMP", # when execution completed
+        "execution_notes": "TEXT", # notes about this specific execution
+        "execution_variables": "JSONB", # custom variables (VAT number, operator, etc.)
+        "execution_quality_checks": "JSONB", # quality check results
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_inputs_table():
+    """Table to track actual inputs used in process executions"""
+    table_name = "supply_chain_execution_inputs"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "execution_id": "INTEGER", # foreign key to supply_chain_process_executions
+        "input_template_id": "INTEGER", # foreign key to supply_chain_inputs (template)
+        "actual_input_name": "TEXT", # actual name used (may differ from template)
+        "actual_input_quantity": "DOUBLE PRECISION", # actual quantity used
+        "actual_input_unit": "TEXT", # actual unit used
+        "actual_input_batch_number": "TEXT", # actual batch number of input
+        "actual_input_source": "TEXT", # actual source of input
+        "input_consumption_time": "TIMESTAMP", # when input was consumed
+        "input_quality_status": "TEXT", # quality status of this input
+        "input_notes": "TEXT", # notes about this specific input usage
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_outputs_table():
+    """Table to track actual outputs produced in process executions"""
+    table_name = "supply_chain_execution_outputs"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "execution_id": "INTEGER", # foreign key to supply_chain_process_executions
+        "output_template_id": "INTEGER", # foreign key to supply_chain_outputs (template)
+        "actual_output_name": "TEXT", # actual name produced
+        "actual_output_quantity": "DOUBLE PRECISION", # actual quantity produced
+        "actual_output_unit": "TEXT", # actual unit
+        "actual_output_batch_number": "TEXT", # actual batch number produced
+        "actual_output_quality_status": "TEXT", # actual quality status
+        "actual_output_destination": "TEXT", # where this output actually went
+        "output_production_time": "TIMESTAMP", # when output was produced
+        "output_notes": "TEXT", # notes about this specific output
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_flow_through_table():
+    """Table to track flow-through data from executions"""
+    table_name = "supply_chain_execution_flow_through"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "source_execution_id": "INTEGER", # foreign key to supply_chain_sub_executions
+        "source_output_id": "INTEGER", # foreign key to supply_chain_outputs
+        "target_process_id": "INTEGER", # foreign key to supply_chain_sub_processes (where it flows to)
+        "flow_through_data": "JSONB", # actual prompted values and flow-through configuration
+        "flow_through_status": "TEXT", # 'pending', 'processed', 'failed'
+        "flow_through_notes": "TEXT", # notes about this flow-through
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_process_templates_table():
+    """Table to store process templates with default inputs/outputs"""
+    table_name = "supply_chain_process_templates"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "process_id": "INTEGER", # foreign key to supply_chain_processes
+        "template_name": "TEXT", # name of this template version
+        "template_version": "TEXT", # version number
+        "template_status": "TEXT", # 'draft', 'active', 'archived'
+        "default_inputs": "JSONB", # default input specifications
+        "default_outputs": "JSONB", # default output specifications
+        "default_variables": "JSONB", # default variable definitions
+        "template_notes": "TEXT", # notes about this template
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_dag_layout_table():
+    """Table to store DAG layout data for visual editor"""
+    table_name = "supply_chain_dag_layout"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "layout_data": "JSONB", # JSON data containing node positions and layout info
+        "layout_timestamp": "TIMESTAMP", # when this layout was saved
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_parent_processes_table():
+    """Table to store parent processes"""
+    table_name = "supply_chain_parent_processes"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_process_name": "TEXT",
+        "parent_process_description": "TEXT",
+        "parent_process_type": "TEXT",
+        "parent_process_status": "TEXT",
+        "parent_process_category": "TEXT",
+        "parent_process_notes": "TEXT",
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_sub_processes_table():
+    """Table to store sub-processes"""
+    table_name = "supply_chain_sub_processes"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_process_id": "INTEGER",
+        "sub_process_name": "TEXT",
+        "sub_process_description": "TEXT",
+        "sub_process_type": "TEXT",
+        "sub_process_status": "TEXT",
+        "sub_process_category": "TEXT",
+        "sub_process_notes": "TEXT",
+        "execution_order": "INTEGER",
+        "is_managed": "BOOLEAN",
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_field_options_table():
+    """Table to store field options for dynamic dropdowns"""
+    table_name = "supply_chain_field_options"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "field_type": "TEXT NOT NULL",
+        "option_value": "TEXT NOT NULL",
+        "option_label": "TEXT",
+        "is_system_default": "BOOLEAN DEFAULT FALSE",
+        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_parent_executions_table():
+    """Table to store parent process executions"""
+    table_name = "supply_chain_parent_executions"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_process_id": "INTEGER",
+        "execution_batch_id": "TEXT", # Human-friendly batch identifier (e.g., "Gin Batch #2024-001")
+        "execution_status": "TEXT", # 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
+        "execution_start_time": "TIMESTAMP",
+        "execution_end_time": "TIMESTAMP",
+        "execution_notes": "TEXT",
+        "parent_execution_ids": "JSONB", # Array of parent execution IDs for lineage tracking
+        "sales_mapping_status": "TEXT DEFAULT 'unmapped'", # 'unmapped', 'partial', 'complete'
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_sub_executions_table():
+    """Table to store sub-process executions"""
+    table_name = "supply_chain_sub_executions"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_execution_id": "INTEGER", # Foreign key to supply_chain_parent_executions
+        "sub_process_id": "INTEGER", # Foreign key to supply_chain_sub_processes
+        "execution_status": "TEXT", # 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
+        "execution_start_time": "TIMESTAMP",
+        "execution_end_time": "TIMESTAMP",
+        "execution_notes": "TEXT",
+        "execution_data": "JSONB", # Store actual input/output data from execution
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_sales_mapping_table():
+    """Table to map executions to sales for full traceability"""
+    table_name = "supply_chain_execution_sales_mapping"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "execution_id": "INTEGER NOT NULL", # Links to supply_chain_parent_executions.id
+        "sales_id": "INTEGER NOT NULL", # Links to sales_product.id
+        "product_name": "TEXT NOT NULL", # Specific product sold
+        "quantity_sold": "DOUBLE PRECISION",
+        "batch_reference": "TEXT", # Human-readable batch identifier
+        "mapping_type": "TEXT DEFAULT 'auto'", # 'auto', 'manual', 'fifo'
+        "mapping_confidence": "DOUBLE PRECISION DEFAULT 1.0", # Confidence score for automatic mappings
+        "mapping_notes": "TEXT", # Notes about the mapping
+        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
+def create_supply_chain_execution_lineage_table():
+    """Table to store execution lineage relationships for efficient tracing"""
+    table_name = "supply_chain_execution_lineage"
+    
+    columns = {
+        "id": "SERIAL PRIMARY KEY",
+        "date": "DATE",
+        "action": "TEXT",
+        "parent_execution_id": "INTEGER NOT NULL", # Parent execution
+        "child_execution_id": "INTEGER NOT NULL", # Child execution
+        "relationship_type": "TEXT DEFAULT 'direct'", # 'direct', 'inherited', 'split', 'merged'
+        "flow_through_data": "JSONB", # Data that flowed from parent to child
+        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "uid": "TEXT"
+    }
+    
+    create_table(table_name, columns)
+
 def create_sales_product_samples_table():
     table_name = "sales_product_samples"
 
@@ -835,6 +1200,24 @@ def main():
     create_crm_follow_ups_table()
     create_crm_log_table()
     create_crm_tasks_table()
+    create_supply_chain_processes_table()
+    create_supply_chain_inputs_table()
+    create_supply_chain_outputs_table()
+    create_supply_chain_connections_table()
+    create_supply_chain_traceability_table()
+    create_supply_chain_process_executions_table()
+    create_supply_chain_execution_inputs_table()
+    create_supply_chain_execution_outputs_table()
+    create_supply_chain_execution_flow_through_table()
+    create_supply_chain_process_templates_table()
+    create_supply_chain_dag_layout_table()
+    create_supply_chain_parent_processes_table()
+    create_supply_chain_sub_processes_table()
+    create_supply_chain_field_options_table()
+    create_supply_chain_parent_executions_table()
+    create_supply_chain_sub_executions_table()
+    create_supply_chain_execution_sales_mapping_table()
+    create_supply_chain_execution_lineage_table()
     # Export the current date's data to the Excel file
     
     current_date = datetime.date.today()
