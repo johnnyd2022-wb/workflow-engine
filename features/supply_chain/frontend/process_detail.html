@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Details - Whistlebird Supply Chain</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            background-attachment: fixed;
+            color: var(--text-color);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0.5rem 1rem;
+            width: 100%;
+        }
+
+        .nav-bar {
+            background: linear-gradient(135deg, var(--card-background) 0%, rgba(26, 26, 26, 0.95) 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-bar h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-color);
+            background-color: rgba(255, 51, 102, 0.1);
+        }
+
+        .process-header {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .process-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 1rem;
+        }
+
+        .process-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .meta-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .meta-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.25rem;
+        }
+
+        .meta-value {
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-block;
+        }
+
+        .status-active {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-inactive {
+            background: rgba(156, 163, 175, 0.2);
+            color: #9ca3af;
+            border: 1px solid rgba(156, 163, 175, 0.3);
+        }
+
+        .status-archived {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .section {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 0.9rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+        }
+
+        .btn-small:last-child {
+            margin-right: 0;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .data-table td {
+            color: var(--text-secondary);
+        }
+
+        .data-table tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--card-background);
+            margin: 5% auto;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .close {
+            color: var(--text-secondary);
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover {
+            color: var(--primary-color);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background: rgba(255, 51, 102, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .success-message {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state h3 {
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0.5rem;
+            }
+
+            .nav-bar h1 {
+                font-size: 2rem;
+            }
+
+            .process-header,
+            .section {
+                padding: 1rem;
+            }
+
+            .process-meta {
+                grid-template-columns: 1fr;
+            }
+
+            .data-table {
+                font-size: 0.8rem;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 0.5rem;
+            }
+
+            .modal-content {
+                margin: 10% auto;
+                padding: 1rem;
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="container">
+            <h1>Process Details</h1>
+            <div class="nav-links">
+                <a href="/supply-chain" class="nav-link">← Back to Supply Chain</a>
+                <a href="/" class="nav-link">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% if error %}
+        <div class="error-message">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        {% if process %}
+        <div class="process-header">
+            <h1 class="process-title">{{ process[1] }}</h1>
+            <div class="process-meta">
+                <div class="meta-item">
+                    <span class="meta-label">Type</span>
+                    <span class="meta-value">{{ process[3] or 'Not specified' }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Category</span>
+                    <span class="meta-value">{{ process[5] or 'Not specified' }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Status</span>
+                    <span class="status-badge status-{{ process[4] or 'inactive' }}">
+                        {{ process[4] or 'inactive' }}
+                    </span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Created</span>
+                    <span class="meta-value">{{ process[7].strftime('%Y-%m-%d') if process[7] else 'Unknown' }}</span>
+                </div>
+            </div>
+            {% if process[2] %}
+            <div class="meta-item">
+                <span class="meta-label">Description</span>
+                <span class="meta-value">{{ process[2] }}</span>
+            </div>
+            {% endif %}
+            {% if process[6] %}
+            <div class="meta-item">
+                <span class="meta-label">Notes</span>
+                <span class="meta-value">{{ process[6] }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Inputs Section -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">Inputs</h2>
+                <button class="btn" onclick="openCreateInputModal()">+ Add Input</button>
+            </div>
+            
+            {% if inputs %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Quantity</th>
+                        <th>Unit</th>
+                        <th>Source</th>
+                        <th>Batch</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for input in inputs %}
+                    <tr>
+                        <td><strong>{{ input[3] }}</strong></td>
+                        <td>{{ input[4] or 'N/A' }}</td>
+                        <td>{{ input[5] or 'N/A' }}</td>
+                        <td>{{ input[6] or 'N/A' }}</td>
+                        <td>{{ input[8] or 'N/A' }}</td>
+                        <td>{{ input[9] or 'N/A' }}</td>
+                        <td>
+                            <span class="status-badge status-{{ input[11] or 'available' }}">
+                                {{ input[11] or 'available' }}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-secondary btn-small" onclick="editInput({{ input[0] }})">✏️ Edit</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteInput({{ input[0] }}, '{{ input[3] }}')">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <h3>No inputs defined</h3>
+                <p>Add inputs to define what materials or resources this process requires.</p>
+                <button class="btn" onclick="openCreateInputModal()" style="margin-top: 1rem;">+ Add Input</button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Outputs Section -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">Outputs</h2>
+                <button class="btn" onclick="openCreateOutputModal()">+ Add Output</button>
+            </div>
+            
+            {% if outputs %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Quantity</th>
+                        <th>Unit</th>
+                        <th>Batch</th>
+                        <th>Quality</th>
+                        <th>Destination</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for output in outputs %}
+                    <tr>
+                        <td><strong>{{ output[3] }}</strong></td>
+                        <td>{{ output[4] or 'N/A' }}</td>
+                        <td>{{ output[5] or 'N/A' }}</td>
+                        <td>{{ output[6] or 'N/A' }}</td>
+                        <td>{{ output[7] or 'N/A' }}</td>
+                        <td>
+                            <span class="status-badge status-{{ output[8] or 'pending' }}">
+                                {{ output[8] or 'pending' }}
+                            </span>
+                        </td>
+                        <td>{{ output[9] or 'N/A' }}</td>
+                        <td>
+                            <button class="btn btn-secondary btn-small" onclick="editOutput({{ output[0] }})">✏️ Edit</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteOutput({{ output[0] }}, '{{ output[3] }}')">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <h3>No outputs defined</h3>
+                <p>Add outputs to define what this process produces.</p>
+                <button class="btn" onclick="openCreateOutputModal()" style="margin-top: 1rem;">+ Add Output</button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Connections Section -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">Connections</h2>
+                <button class="btn" onclick="openCreateConnectionModal()">+ Add Connection</button>
+            </div>
+            
+            {% if connections %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>From Process</th>
+                        <th>To Process</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for connection in connections %}
+                    <tr>
+                        <td>{{ connection[8] or 'Unknown' }}</td>
+                        <td>{{ connection[9] or 'Unknown' }}</td>
+                        <td>{{ connection[5] or 'N/A' }}</td>
+                        <td>
+                            <span class="status-badge status-{{ connection[6] or 'active' }}">
+                                {{ connection[6] or 'active' }}
+                            </span>
+                        </td>
+                        <td>{{ connection[7] or 'N/A' }}</td>
+                        <td>
+                            <button class="btn btn-secondary btn-small" onclick="editConnection({{ connection[0] }})">✏️ Edit</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteConnection({{ connection[0] }}, '{{ connection[8] }}', '{{ connection[9] }}')">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <h3>No connections defined</h3>
+                <p>Add connections to link this process with other processes in your supply chain.</p>
+                <button class="btn" onclick="openCreateConnectionModal()" style="margin-top: 1rem;">+ Add Connection</button>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="error-message">
+            <strong>Error:</strong> Process not found
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Create Input Modal -->
+    <div id="createInputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Add Input</h3>
+                <span class="close" onclick="closeCreateInputModal()">&times;</span>
+            </div>
+            <form id="createInputForm">
+                <input type="hidden" name="process_id" value="{{ process[0] if process else '' }}">
+                <div class="form-group">
+                    <label class="form-label" for="inputName">Input Name *</label>
+                    <input type="text" id="inputName" name="input_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="inputType">Input Type</label>
+                    <select id="inputType" name="input_type" class="form-select">
+                        <option value="raw_material">Raw Material</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="energy">Energy</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="inputQuantity">Quantity</label>
+                    <input type="number" id="inputQuantity" name="input_quantity" class="form-input" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="inputUnit">Unit</label>
+                    <input type="text" id="inputUnit" name="input_unit" class="form-input" placeholder="e.g., kg, liters, pieces">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="inputSource">Source</label>
+                    <input type="text" id="inputSource" name="input_source" class="form-input" placeholder="Where does this input come from?">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="inputBatchNumber">Batch Number</label>
+                    <input type="text" id="inputBatchNumber" name="input_batch_number" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="inputStatus">Status</label>
+                    <select id="inputStatus" name="input_status" class="form-select">
+                        <option value="available">Available</option>
+                        <option value="consumed">Consumed</option>
+                        <option value="expired">Expired</option>
+                        <option value="quarantined">Quarantined</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateInputModal()">Cancel</button>
+                    <button type="submit" class="btn">Add Input</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Output Modal -->
+    <div id="createOutputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Add Output</h3>
+                <span class="close" onclick="closeCreateOutputModal()">&times;</span>
+            </div>
+            <form id="createOutputForm">
+                <input type="hidden" name="process_id" value="{{ process[0] if process else '' }}">
+                <div class="form-group">
+                    <label class="form-label" for="outputName">Output Name *</label>
+                    <input type="text" id="outputName" name="output_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="outputType">Output Type</label>
+                    <select id="outputType" name="output_type" class="form-select">
+                        <option value="finished_product">Finished Product</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="waste">Waste</option>
+                        <option value="byproduct">Byproduct</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="outputQuantity">Quantity</label>
+                    <input type="number" id="outputQuantity" name="output_quantity" class="form-input" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="outputUnit">Unit</label>
+                    <input type="text" id="outputUnit" name="output_unit" class="form-input" placeholder="e.g., kg, liters, pieces">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="outputBatchNumber">Batch Number</label>
+                    <input type="text" id="outputBatchNumber" name="output_batch_number" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="outputQualityStatus">Quality Status</label>
+                    <select id="outputQualityStatus" name="output_quality_status" class="form-select">
+                        <option value="pending">Pending</option>
+                        <option value="passed">Passed</option>
+                        <option value="failed">Failed</option>
+                        <option value="quarantined">Quarantined</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="outputDestination">Destination</label>
+                    <input type="text" id="outputDestination" name="output_destination" class="form-input" placeholder="Where does this output go next?">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateOutputModal()">Cancel</button>
+                    <button type="submit" class="btn">Add Output</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Connection Modal -->
+    <div id="createConnectionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Add Connection</h3>
+                <span class="close" onclick="closeCreateConnectionModal()">&times;</span>
+            </div>
+            <form id="createConnectionForm">
+                <input type="hidden" name="from_process_id" value="{{ process[0] if process else '' }}">
+                <div class="form-group">
+                    <label class="form-label" for="toProcessId">To Process *</label>
+                    <select id="toProcessId" name="to_process_id" class="form-select" required>
+                        <option value="">Select a process...</option>
+                        <!-- This would be populated with available processes -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="connectionType">Connection Type</label>
+                    <select id="connectionType" name="connection_type" class="form-select">
+                        <option value="direct">Direct</option>
+                        <option value="storage">Storage</option>
+                        <option value="transport">Transport</option>
+                        <option value="quality_check">Quality Check</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="connectionStatus">Status</label>
+                    <select id="connectionStatus" name="connection_status" class="form-select">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="connectionNotes">Notes</label>
+                    <textarea id="connectionNotes" name="connection_notes" class="form-textarea"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateConnectionModal()">Cancel</button>
+                    <button type="submit" class="btn">Add Connection</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Input Modal -->
+    <div id="editInputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Input</h3>
+                <span class="close" onclick="closeEditInputModal()">&times;</span>
+            </div>
+            <form id="editInputForm">
+                <input type="hidden" id="editInputId" name="input_id">
+                <div class="form-group">
+                    <label class="form-label" for="editInputName">Input Name *</label>
+                    <input type="text" id="editInputName" name="input_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputType">Input Type</label>
+                    <select id="editInputType" name="input_type" class="form-select">
+                        <option value="raw_material">Raw Material</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="equipment">Equipment</option>
+                        <option value="energy">Energy</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputQuantity">Quantity</label>
+                    <input type="number" id="editInputQuantity" name="input_quantity" class="form-input" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputUnit">Unit</label>
+                    <input type="text" id="editInputUnit" name="input_unit" class="form-input" placeholder="e.g., kg, liters, pieces">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputSource">Source</label>
+                    <input type="text" id="editInputSource" name="input_source" class="form-input" placeholder="Where does this input come from?">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputBatchNumber">Batch Number</label>
+                    <input type="text" id="editInputBatchNumber" name="input_batch_number" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editInputStatus">Status</label>
+                    <select id="editInputStatus" name="input_status" class="form-select">
+                        <option value="available">Available</option>
+                        <option value="consumed">Consumed</option>
+                        <option value="expired">Expired</option>
+                        <option value="quarantined">Quarantined</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditInputModal()">Cancel</button>
+                    <button type="submit" class="btn">Update Input</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Output Modal -->
+    <div id="editOutputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Output</h3>
+                <span class="close" onclick="closeEditOutputModal()">&times;</span>
+            </div>
+            <form id="editOutputForm">
+                <input type="hidden" id="editOutputId" name="output_id">
+                <div class="form-group">
+                    <label class="form-label" for="editOutputName">Output Name *</label>
+                    <input type="text" id="editOutputName" name="output_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputType">Output Type</label>
+                    <select id="editOutputType" name="output_type" class="form-select">
+                        <option value="finished_product">Finished Product</option>
+                        <option value="intermediate_product">Intermediate Product</option>
+                        <option value="waste">Waste</option>
+                        <option value="byproduct">Byproduct</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputQuantity">Quantity</label>
+                    <input type="number" id="editOutputQuantity" name="output_quantity" class="form-input" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputUnit">Unit</label>
+                    <input type="text" id="editOutputUnit" name="output_unit" class="form-input" placeholder="e.g., kg, liters, pieces">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputBatchNumber">Batch Number</label>
+                    <input type="text" id="editOutputBatchNumber" name="output_batch_number" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputQualityStatus">Quality Status</label>
+                    <select id="editOutputQualityStatus" name="output_quality_status" class="form-select">
+                        <option value="pending">Pending</option>
+                        <option value="passed">Passed</option>
+                        <option value="failed">Failed</option>
+                        <option value="quarantined">Quarantined</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editOutputDestination">Destination</label>
+                    <input type="text" id="editOutputDestination" name="output_destination" class="form-input" placeholder="Where does this output go next?">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditOutputModal()">Cancel</button>
+                    <button type="submit" class="btn">Update Output</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Connection Modal -->
+    <div id="editConnectionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Connection</h3>
+                <span class="close" onclick="closeEditConnectionModal()">&times;</span>
+            </div>
+            <form id="editConnectionForm">
+                <input type="hidden" id="editConnectionId" name="connection_id">
+                <div class="form-group">
+                    <label class="form-label" for="editConnectionType">Connection Type</label>
+                    <select id="editConnectionType" name="connection_type" class="form-select">
+                        <option value="direct">Direct</option>
+                        <option value="storage">Storage</option>
+                        <option value="transport">Transport</option>
+                        <option value="quality_check">Quality Check</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editConnectionStatus">Status</label>
+                    <select id="editConnectionStatus" name="connection_status" class="form-select">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="editConnectionNotes">Notes</label>
+                    <textarea id="editConnectionNotes" name="connection_notes" class="form-textarea"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditConnectionModal()">Cancel</button>
+                    <button type="submit" class="btn">Update Connection</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Modal functions
+        function openCreateInputModal() {
+            document.getElementById('createInputModal').style.display = 'block';
+        }
+
+        function closeCreateInputModal() {
+            document.getElementById('createInputModal').style.display = 'none';
+            document.getElementById('createInputForm').reset();
+        }
+
+        function openCreateOutputModal() {
+            document.getElementById('createOutputModal').style.display = 'block';
+        }
+
+        function closeCreateOutputModal() {
+            document.getElementById('createOutputModal').style.display = 'none';
+            document.getElementById('createOutputForm').reset();
+        }
+
+        function openCreateConnectionModal() {
+            document.getElementById('createConnectionModal').style.display = 'block';
+        }
+
+        function closeCreateConnectionModal() {
+            document.getElementById('createConnectionModal').style.display = 'none';
+            document.getElementById('createConnectionForm').reset();
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const inputModal = document.getElementById('createInputModal');
+            const outputModal = document.getElementById('createOutputModal');
+            const connectionModal = document.getElementById('createConnectionModal');
+            
+            if (event.target === inputModal) {
+                closeCreateInputModal();
+            }
+            if (event.target === outputModal) {
+                closeCreateOutputModal();
+            }
+            if (event.target === connectionModal) {
+                closeCreateConnectionModal();
+            }
+        }
+
+        // Form submissions
+        document.getElementById('createInputForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/supply-chain/inputs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeCreateInputModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error creating input: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error creating input: ' + error.message);
+            }
+        });
+
+        document.getElementById('createOutputForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/supply-chain/outputs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeCreateOutputModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error creating output: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error creating output: ' + error.message);
+            }
+        });
+
+        document.getElementById('createConnectionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/supply-chain/connections', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeCreateConnectionModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error creating connection: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error creating connection: ' + error.message);
+            }
+        });
+
+        // Edit modal functions
+        function openEditInputModal() {
+            document.getElementById('editInputModal').style.display = 'block';
+        }
+
+        function closeEditInputModal() {
+            document.getElementById('editInputModal').style.display = 'none';
+            document.getElementById('editInputForm').reset();
+        }
+
+        function openEditOutputModal() {
+            document.getElementById('editOutputModal').style.display = 'block';
+        }
+
+        function closeEditOutputModal() {
+            document.getElementById('editOutputModal').style.display = 'none';
+            document.getElementById('editOutputForm').reset();
+        }
+
+        function openEditConnectionModal() {
+            document.getElementById('editConnectionModal').style.display = 'block';
+        }
+
+        function closeEditConnectionModal() {
+            document.getElementById('editConnectionModal').style.display = 'none';
+            document.getElementById('editConnectionForm').reset();
+        }
+
+        // Edit functions
+        async function editInput(inputId) {
+            try {
+                const response = await fetch(`/api/supply-chain/inputs/${inputId}`);
+                if (response.ok) {
+                    const input = await response.json();
+                    
+                    // Populate edit form
+                    document.getElementById('editInputId').value = input.id;
+                    document.getElementById('editInputName').value = input.input_name;
+                    document.getElementById('editInputType').value = input.input_type;
+                    document.getElementById('editInputQuantity').value = input.input_quantity;
+                    document.getElementById('editInputUnit').value = input.input_unit;
+                    document.getElementById('editInputSource').value = input.input_source;
+                    document.getElementById('editInputBatchNumber').value = input.input_batch_number;
+                    document.getElementById('editInputStatus').value = input.input_status;
+                    
+                    openEditInputModal();
+                } else {
+                    alert('Error loading input details');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error loading input details: ' + error.message);
+            }
+        }
+
+        async function editOutput(outputId) {
+            try {
+                const response = await fetch(`/api/supply-chain/outputs/${outputId}`);
+                if (response.ok) {
+                    const output = await response.json();
+                    
+                    // Populate edit form
+                    document.getElementById('editOutputId').value = output.id;
+                    document.getElementById('editOutputName').value = output.output_name;
+                    document.getElementById('editOutputType').value = output.output_type;
+                    document.getElementById('editOutputQuantity').value = output.output_quantity;
+                    document.getElementById('editOutputUnit').value = output.output_unit;
+                    document.getElementById('editOutputBatchNumber').value = output.output_batch_number;
+                    document.getElementById('editOutputQualityStatus').value = output.output_quality_status;
+                    document.getElementById('editOutputDestination').value = output.output_destination;
+                    
+                    openEditOutputModal();
+                } else {
+                    alert('Error loading output details');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error loading output details: ' + error.message);
+            }
+        }
+
+        async function editConnection(connectionId) {
+            try {
+                const response = await fetch(`/api/supply-chain/connections/${connectionId}`);
+                if (response.ok) {
+                    const connection = await response.json();
+                    
+                    // Populate edit form
+                    document.getElementById('editConnectionId').value = connection.id;
+                    document.getElementById('editConnectionType').value = connection.connection_type;
+                    document.getElementById('editConnectionStatus').value = connection.connection_status;
+                    document.getElementById('editConnectionNotes').value = connection.connection_notes;
+                    
+                    openEditConnectionModal();
+                } else {
+                    alert('Error loading connection details');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error loading connection details: ' + error.message);
+            }
+        }
+
+        // Delete functions
+        async function deleteInput(inputId, inputName) {
+            if (confirm(`Are you sure you want to delete the input "${inputName}"?`)) {
+                try {
+                    const response = await fetch(`/api/supply-chain/inputs/${inputId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert('Input deleted successfully!');
+                        window.location.reload();
+                    } else {
+                        const errorData = await response.json();
+                        alert('Error deleting input: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting input: ' + error.message);
+                }
+            }
+        }
+
+        async function deleteOutput(outputId, outputName) {
+            if (confirm(`Are you sure you want to delete the output "${outputName}"?`)) {
+                try {
+                    const response = await fetch(`/api/supply-chain/outputs/${outputId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert('Output deleted successfully!');
+                        window.location.reload();
+                    } else {
+                        const errorData = await response.json();
+                        alert('Error deleting output: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting output: ' + error.message);
+                }
+            }
+        }
+
+        async function deleteConnection(connectionId, fromProcess, toProcess) {
+            if (confirm(`Are you sure you want to delete the connection from "${fromProcess}" to "${toProcess}"?`)) {
+                try {
+                    const response = await fetch(`/api/supply-chain/connections/${connectionId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert('Connection deleted successfully!');
+                        window.location.reload();
+                    } else {
+                        const errorData = await response.json();
+                        alert('Error deleting connection: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting connection: ' + error.message);
+                }
+            }
+        }
+
+        // Edit form submissions
+        document.getElementById('editInputForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const inputId = data.input_id;
+            
+            try {
+                const response = await fetch(`/api/supply-chain/inputs/${inputId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeEditInputModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error updating input: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating input: ' + error.message);
+            }
+        });
+
+        document.getElementById('editOutputForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const outputId = data.output_id;
+            
+            try {
+                const response = await fetch(`/api/supply-chain/outputs/${outputId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeEditOutputModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error updating output: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating output: ' + error.message);
+            }
+        });
+
+        document.getElementById('editConnectionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const connectionId = data.connection_id;
+            
+            try {
+                const response = await fetch(`/api/supply-chain/connections/${connectionId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeEditConnectionModal();
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error updating connection: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating connection: ' + error.message);
+            }
+        });
+
+        // Update modal close handlers
+        window.onclick = function(event) {
+            const inputModal = document.getElementById('createInputModal');
+            const outputModal = document.getElementById('createOutputModal');
+            const connectionModal = document.getElementById('createConnectionModal');
+            const editInputModal = document.getElementById('editInputModal');
+            const editOutputModal = document.getElementById('editOutputModal');
+            const editConnectionModal = document.getElementById('editConnectionModal');
+            
+            if (event.target === inputModal) {
+                closeCreateInputModal();
+            }
+            if (event.target === outputModal) {
+                closeCreateOutputModal();
+            }
+            if (event.target === connectionModal) {
+                closeCreateConnectionModal();
+            }
+            if (event.target === editInputModal) {
+                closeEditInputModal();
+            }
+            if (event.target === editOutputModal) {
+                closeEditOutputModal();
+            }
+            if (event.target === editConnectionModal) {
+                closeEditConnectionModal();
+            }
+        }
+    </script>
+</body>
+</html>

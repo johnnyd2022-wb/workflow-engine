@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LAL Audit</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            background-attachment: fixed;
+            color: var(--text-color);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                circle at 50% 50%,
+                rgba(255, 51, 102, 0.08) 0%,
+                transparent 70%
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 1rem;
+            width: 100%;
+        }
+
+        .nav-bar {
+            background-color: transparent;
+            padding: 2rem 0;
+            width: 100%;
+            margin-bottom: 2rem;
+        }
+
+        .nav-bar h1 {
+            color: var(--text-color);
+            margin: 0;
+            font-size: 2.5rem;
+            background: none;
+            -webkit-text-fill-color: var(--text-color);
+            text-align: center;
+        }
+
+        .main-content {
+            width: 100%;
+            padding-top: 1rem;
+        }
+
+        .data-tables {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .side-by-side-tables {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: nowrap;
+            width: 100%;
+            padding: 0 1rem;
+        }
+
+        .half-width-table {
+            width: 49.5%;
+            min-width: 0;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 0;
+            background: var(--card-background);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            table-layout: fixed;
+        }
+
+        .data-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .data-table tbody {
+            display: block;
+            max-height: 400px; /* This will show roughly 10 rows */
+            overflow-y: auto;
+        }
+
+        .data-table thead tr {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .data-table tbody tr {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .data-table th {
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            font-weight: 600;
+            padding: 0.75rem;
+            text-align: left;
+            font-size: 0.875rem;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table td {
+            padding: 0.75rem;
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.875rem;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tbody tr {
+            transition: background-color 0.3s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: var(--table-row-hover);
+        }
+
+        .table-title {
+            color: var(--text-color);
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 1rem 0;
+            letter-spacing: -0.02em;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .back-button {
+            padding: 1.25rem 2.5rem;
+            background-color: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-color);
+            font-size: 1.125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .back-button:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+            background-color: rgba(255, 51, 102, 0.1);
+        }
+
+        .back-button::before {
+            content: '←';
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .back-button:hover::before {
+            transform: translateX(-4px);
+        }
+
+        /* Enhanced mobile styles */
+        @media (max-width: 768px) {
+            .nav-bar {
+                padding: 0.75rem 0;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                margin-bottom: 1rem;
+                background: linear-gradient(to bottom, 
+                    var(--background-color) 0%,
+                    rgba(10, 10, 10, 0.95) 50%,
+                    rgba(10, 10, 10, 0) 100%);
+            }
+
+            .main-content {
+                padding-top: 0.5rem;
+            }
+
+            .container {
+                padding: 0.5rem;
+            }
+
+            .nav-bar h1 {
+                font-size: 2rem;
+            }
+
+            .data-tables {
+                gap: 2.5rem;
+            }
+
+            .table-title {
+                font-size: 1.25rem;
+                position: sticky;
+                top: 3.5rem;
+                background: var(--background-color);
+                padding: 0.5rem 0;
+                margin: 0 0 0.5rem 0;
+                z-index: 90;
+            }
+
+            .data-table {
+                display: block;
+                background: transparent;
+                box-shadow: none;
+            }
+
+            .data-table thead {
+                display: none;
+            }
+
+            .data-table tbody {
+                display: block;
+            }
+
+            .data-table tr {
+                display: block;
+                background: var(--card-background);
+                margin-bottom: 1rem;
+                border-radius: 12px;
+                box-shadow: var(--shadow);
+            }
+
+            .data-table td {
+                display: grid;
+                grid-template-columns: 50% 50%;
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid var(--border-color);
+                white-space: normal;
+            }
+
+            .data-table td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: var(--text-secondary);
+            }
+
+            .data-table tr[style*="bold"] {
+                background: var(--table-header-bg);
+            }
+
+            .data-table tr[style*="bold"] td::before {
+                color: var(--text-color);
+            }
+
+            .data-table td:last-child {
+                border-bottom: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-bar h1 {
+                font-size: 1.75rem;
+            }
+
+            .table-title {
+                font-size: 1.125rem;
+                top: 3rem;
+            }
+
+            .data-table td {
+                padding: 0.625rem 0.875rem;
+                font-size: 0.875rem;
+            }
+
+            .back-button {
+                padding: 0.875rem 1.75rem;
+                font-size: 0.9375rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="container">
+            <h1>LAL Audit</h1>
+        </div>
+    </nav>
+    
+    <div class="main-content">
+        <div class="container">
+            <div class="data-tables">
+                <h2 class="table-title">LAL Totals</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>LAL Purchased</th>
+                            <th>LAL lodged with customs</th>
+                            <th>LAL in Sold Bottles</th>
+                            <th>Checks / balances</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="LAL Purchased">{{ ngs_audit_get_purchased_data }}</td>
+                            <td data-label="LAL lodged with customs">{{ ngs_audit_get_customs_lodgements_data }}</td>
+                            <td data-label="LAL in Sold Bottles">{{ ngs_audit_bottles_sold_data }}</td>
+                            <td data-label="Summary">
+                                {% set include_samples = 0 %}
+                                {% set total_accounted = (ngs_audit_get_customs_lodgements_data +
+                                    ngs_audit_get_current_month_sold_bottles_data +
+                                    (include_samples * ngs_audit_get_samples_consumed_data) +
+                                    ngs_audit_get_vat_breakdown_lal_remaining_data +
+                                    ngs_audit_get_lal_bottles_not_sold_data +
+                                    ngs_audit_get_distillation_experiments_data +
+                                    ngs_audit_get_premix_lal_data +
+                                    ngs_audit_get_lal_flavor_experiments_data +
+                                    ngs_audit_get_ex_stock_storage_data +
+                                    ngs_audit_get_purchased_remaining_data) %}
+                                </div>
+                                {% set diff = (ngs_audit_get_purchased_data - total_accounted) | round(3) %}
+                                {{ diff }}
+                                {% if diff != 0 %}
+                                <br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    {% if diff > 0 %}
+                                    ({{ diff | round(3) }} LAL unaccounted)
+                                    {% else %}
+                                    ({{ (-diff) | round(3) }} LAL overaccounted)
+                                    {% endif %}
+                                </span>
+                                {% endif %}
+                                <br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    Breakdown:<br>
+                                    • LAL lodged with customs: {{ ngs_audit_get_customs_lodgements_data | round(3) }}<br>
+                                    • LAL in bottles sold this month: {{ ngs_audit_get_current_month_sold_bottles_data | round(3) }}<br>
+                                    • LAL in samples to lodge: {{ ngs_audit_get_samples_consumed_data | round(3) }}<br>
+                                    • LAL in VATs: {{ ngs_audit_get_vat_breakdown_lal_remaining_data | round(3) }}<br>
+                                    • LAL in Bottles stored: {{ ngs_audit_get_lal_bottles_not_sold_data | round(3) }}<br>
+                                    • LAL in Distillations: {{ ngs_audit_get_flavor_lal_remaining_data | round(3) }}<br>
+                                    • LAL in Premixes: {{ ngs_audit_get_premix_lal_data | round(3) }}<br>
+                                    • LAL in Flavor Experiments: {{ ngs_audit_get_lal_flavor_experiments_data | round(3) }}<br>
+                                    • LAL in Distillation Experiments: {{ ngs_audit_get_distillation_experiments_data | round(3) }}<br>
+                                    • LAL in Ex-stock storage: {{ ngs_audit_get_ex_stock_storage_data | round(3) }}<br>
+                                    • LAL in Pure NGS: {{ ngs_audit_get_purchased_remaining_data | round(3) }}<br>
+                                    • Total accounted: {{ total_accounted | round(3) }}
+                                </span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">LAL Breakdown - Current State</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>LAL NGS Remaining (Pure)</th>
+                            <th>LAL in bottles sold this month (not yet lodged)</th>
+                            <th>LAL in samples to lodge from this month</th>
+                            <th>LAL in Distillations</th>
+                            <th>LAL in VATs</th>
+                            <th>LAL in stored bottles</th>
+                            <th>LAL in Premixes</th>
+                            <th>LAL in Flavor Experiments</th>
+                            <th>LAL in Distillation Experiments</th>
+                            <th>LAL in Ex-stock storage</th>
+
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="LAL NGS Remaining (pure)">{{ ngs_audit_get_purchased_remaining_data }}</td>
+                            <td data-label="LAL in bottles sold this month">{{ ngs_audit_get_current_month_sold_bottles_data }}</td>
+                            <td data-label="LAL in samples to lodge">{{ ngs_audit_get_samples_consumed_data }}</td>
+                            <td data-label="LAL in Distillations">
+                                {{ ngs_audit_get_flavor_lal_remaining_data | round(3) }}<br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    Distillation Codes:<br>
+                                    {% for code in ngs_audit_get_flavor_remaining_data %}
+                                    • {{ code[0] }}<br>
+                                    {% endfor %}
+                                </span>
+                            </td>
+                            <td data-label="LAL in VATs">
+                                {{ ngs_audit_get_vat_breakdown_lal_remaining_data | round(3) }}<br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    VATs:<br>
+                                    {% for vat in ngs_audit_get_vat_remaining_data %}
+                                    • {{ vat }}<br>
+                                    {% endfor %}
+                                </span>
+                            </td>
+                            <td data-label="LAL in Bottles">
+                                {{ ngs_audit_get_lal_bottles_not_sold_data | round(3) }}<br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    Bottles Stored:<br>
+                                    • {{ ngs_audit_get_bottles_stored_data }}<br>
+                                </span>
+                            </td>
+                            <td data-label="LAL in Premix">
+                                {{ ngs_audit_get_premix_lal_data | round(3) }}<br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    Container IDs:<br>
+                                    {% for container_id in ngs_audit_get_premix_container_ids_data %}
+                                    • {{ container_id }}<br>
+                                    {% endfor %}
+                            <td data-label="LAL in Flavor Experiments">
+                                {{ ngs_audit_get_lal_flavor_experiments_data | round(3) }}<br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    Flavor Codes:<br>
+                                    {% for code in ngs_audit_get_flavor_experiments_flavor_codes_data %}
+                                    • {{ code[0] }}<br>
+                                    {% endfor %}
+                                </span>
+                            </td>
+                            <td data-label="LAL in Distillation Experiments">
+                                {{ ngs_audit_get_distillation_experiments_data | round(3) }}<br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    Experiment IDs:<br>
+                                    {% for id in ngs_audit_get_distillation_experiments_get_experiment_id_data %}
+                                    • {{ id }}<br>
+                                    {% endfor %}
+                                </span>
+                            </td>
+                            <td data-label="LAL in Ex-stock storage">
+                                {{ ngs_audit_get_ex_stock_storage_data | round(3) }}<br>
+                                <span style="color: var(--text-secondary); font-size: 0.875rem;">
+                                    Storage IDs:<br>
+                                    {% for storage_id, volume, abv in ngs_audit_get_ex_stock_storage_ids_data %}
+                                    • {{ storage_id }}<br>
+                                    &nbsp;&nbsp;&nbsp;&nbsp;• {{ volume | round(3) }}L - {{ abv }}%<br>
+                                    {% endfor %}
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Customs lodgements breakdown</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>LAL from Sales</th>
+                            <th>LAL from Samples</th>
+                            <th>LAL lodged with Customs</th>
+                            <th>Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in ngs_audit_populate_lodgements_summary_table_data %}
+                        <tr>
+                            <td data-label="Date">{{ row[0] }}</td>
+                            <td data-label="Sales LAL">{{ row[1] }}</td>
+                            <td data-label="Samples LAL">{{ row[2] }}</td>
+                            <td data-label="Customs LAL">{{ row[3] }}</td>
+                            <td data-label="Difference">{{ row[4] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="side-by-side-tables">
+                <div class="half-width-table">
+                    <h2 class="table-title">Neutral spirit purchases</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Supplier</th>
+                                <th>Litres Purchased</th>
+                                <th>ABV</th>
+                                <th>LAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in ngs_audit_populate_lal_purchased_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="Supplier">{{ row[1] }}</td>
+                                <td data-label="Litres Purchased">{{ row[2] }}</td>
+                                <td data-label="ABV">{{ row[3] }}</td>
+                                <td data-label="LAL">{{ row[4] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="half-width-table">
+                    <h2 class="table-title">Customs lodgements</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date Period</th>
+                                <th>Litres Lodged</th>
+                                <th>Lodged ABV</th>
+                                <th>LAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in ngs_audit_populate_lal_lodged_with_customs_table_data %}
+                            <tr>
+                                <td data-label="Date Period">{{ row[0] }}</td>
+                                <td data-label="Litres Lodged">{{ row[1] }}</td>
+                                <td data-label="Lodged ABV">{{ row[2] }}</td>
+                                <td data-label="LAL">{{ row[3] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="side-by-side-tables">
+                <div class="half-width-table">
+                    <h2 class="table-title">Sold products</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Buyer</th>
+                                <th>Bottles Sold</th>
+                                <th>ABV</th>
+                                <th>Bottle Size</th>
+                                <th>LAL</th>
+                            </tr>
+                        </thead>
+                        <tbody> 
+                            {% for row in ngs_audit_populate_sales_product_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="Buyer">{{ row[1] }}</td>
+                                <td data-label="Bottles Sold">{{ row[2] }}</td>
+                                <td data-label="ABV">{{ row[3] }}</td>
+                                <td data-label="Bottle Size">{{ row[4] }}</td>
+                                <td data-label="LAL">{{ row[5] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="half-width-table">
+                    <h2 class="table-title">Samples consumed breakdown</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Flavor Code</th>
+                                <th>Number of Bottles</th>
+                                <th>Bottle Size</th>
+                                <th>ABV</th>
+                                <th>LAL</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in ngs_audit_get_samples_consumed_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="Flavor Code">{{ row[1] }}</td>
+                                <td data-label="Number of Bottles">{{ row[2] }}</td>
+                                <td data-label="Bottle Size">{{ row[3] }}</td>
+                                <td data-label="ABV">{{ row[4] }}</td>
+                                <td data-label="LAL">{{ row[5] }}</td>
+                                <td data-label="Notes">{{ row[6] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="side-by-side-tables">
+                <div class="half-width-table">
+                    <h2 class="table-title">Distillations</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Flavor Code</th>
+                                <th>Flavor Batch</th>
+                                <th>LAL</th>
+                            </tr>
+                        </thead>
+                        <tbody> 
+                            {% for row in ngs_audit_get_distillations_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="Flavor Code">{{ row[1] }}</td>
+                                <td data-label="Flavor Batch">{{ row[2] }}</td>
+                                <td data-label="LAL">{{ row[3] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="half-width-table">
+                    <h2 class="table-title">Mixng VATs</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>ABV</th>
+                                <th>VAT Batch</th>
+                                <th>Volume</th>
+                                <th>Distillation Flavor Batch</th>
+                                <th>LAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in ngs_audit_get_mixing_vats_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="ABV">{{ row[1] }}</td>
+                                <td data-label="VAT Batch">{{ row[2] }}</td>
+                                <td data-label="Volume">{{ row[3] }}</td>
+                                <td data-label="Distillation Flavor Batch">{{ row[4] }}</td>
+                                <td data-label="LAL">{{ row[5] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="side-by-side-tables">
+                <div class="half-width-table">
+                    <h2 class="table-title">Bottling</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Bottles Stored</th>
+                                <th>ABV</th>
+                                <th>Bottle Size</th>
+                                <th>VAT Batch</th>
+                                <th>Bottle Batch</th>
+                                <th>LAL</th>
+                            </tr>
+                        </thead>
+                        <tbody> 
+                            {% for row in ngs_audit_get_bottling_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="Bottles Stored">{{ row[1] }}</td>
+                                <td data-label="ABV">{{ row[2] }}</td>
+                                <td data-label="Bottle Size">{{ row[3] }}</td>
+                                <td data-label="VAT Batch">{{ row[4] }}</td>
+                                <td data-label="Bottle Batch">{{ row[5] }}</td>
+                                <td data-label="LAL">{{ row[6] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="half-width-table">
+                    <h2 class="table-title">Flavor Experiments</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Flavor Code</th>
+                                <th>LAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in ngs_audit_get_flavor_experiments_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="Flavor Code">{{ row[1] }}</td>
+                                <td data-label="LAL">{{ row[2] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="side-by-side-tables">
+                <div class="half-width-table">
+                    <h2 class="table-title">Premixes</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Alcohol Volume (L)</th>
+                                <th>Alcohol ABV</th>
+                                <th>LAL</th>
+                                <th>Container ID</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody> 
+                            {% for row in ngs_audit_get_premix_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="Alcohol Volume (L)">{{ row[1] }}</td>
+                                <td data-label="Alcohol ABV">{{ row[2] }}</td>
+                                <td data-label="LAL">{{ row[3] }}</td>
+                                <td data-label="Container ID">{{ row[4] }}</td>
+                                <td data-label="Notes">{{ row[5] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="half-width-table">
+                    <h2 class="table-title">Ex-stock storage</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Storage ID</th>
+                                <th>Product Name</th>
+                                <th>Bottles Stored</th>
+                                <th>Bottle Size</th>
+                                <th>ABV</th>
+                                <th>LAL</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in ngs_audit_get_ex_stock_storage_table_data %}
+                            <tr>
+                                <td data-label="Date">{{ row[0] }}</td>
+                                <td data-label="Storage ID">{{ row[1] }}</td>
+                                <td data-label="Product Name">{{ row[2] }}</td>
+                                <td data-label="Bottles Stored">{{ row[3] }}</td>
+                                <td data-label="Bottle Size">{{ row[4] }}</td>
+                                <td data-label="ABV">{{ row[5] }}</td>
+                                <td data-label="LAL">{{ row[6] }}</td>
+                                <td data-label="Notes">{{ row[7] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div>
+                <h2 class="table-title">Distillation Experiments</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>ID</th>
+                            <th>Alcohol Used (L)</th>
+                            <th>ABV</th>
+                            <th>Alcohol Yield (L)</th>
+                            <th>Alcohol Yield ABV</th>
+                            <th>Flavor Codes (if applicable)</th>
+                            <th>LAL</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody> 
+                        {% for row in ngs_audit_get_distillation_experiments_table_data %}
+                        <tr>
+                            <td data-label="Date">{{ row[0] }}</td>
+                            <td data-label="ID">{{ row[1] }}</td>
+                            <td data-label="Alcohol Used (L)">{{ row[2] }}</td>
+                            <td data-label="ABV">{{ row[3] }}</td>
+                            <td data-label="Alcohol Yield (L)">{{ row[4] }}</td>
+                            <td data-label="Alcohol Yield ABV">{{ row[5] }}</td>
+                            <td data-label="Flavor Codes (if applicable)">{{ row[6] }}</td>
+                            <td data-label="LAL">{{ row[7] }}</td>
+                            <td data-label="Notes">{{ row[8] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="button-container">
+                <form action="/back-button-audit-tools" method="post">
+                    <button type="submit" class="back-button">Back to Audit Tools</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

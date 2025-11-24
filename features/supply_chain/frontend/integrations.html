@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Integrations - Flume</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/supply-chain-static/styles_2.css">
+</head>
+<body>
+  <!-- Navigation -->
+  <div id="navbar-container"></div>
+
+  <!-- Main Content -->
+  <main class="container py-8">
+    <!-- Header -->
+    <div class="mb-8 animate-fade-in">
+      <h1 class="text-4xl font-bold mb-2">Integrations</h1>
+      <p class="text-muted">Connect your tools and automate your supply chain flow</p>
+    </div>
+
+    <!-- Integration Cards -->
+    <div class="grid md-grid-cols-2 mb-8">
+      <!-- Xero -->
+      <div class="glass-card hover animate-fade-in">
+        <div class="flex items-start justify-between mb-4">
+          <div style="flex: 1;">
+            <div class="flex items-center mb-2" style="gap: 0.75rem;">
+              <h3 class="text-xl font-bold">Xero</h3>
+              <div class="flex items-center text-xs text-success" style="gap: 0.25rem;">
+                <div class="status-dot success animate-pulse"></div>
+                Connected
+              </div>
+            </div>
+            <p class="text-sm text-muted">Sync invoices and financial data automatically</p>
+            <p class="text-xs text-muted mt-2">Last synced: 2 minutes ago</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <div class="flex mt-4" style="gap: 0.5rem;">
+          <button class="btn btn-glass btn-sm" style="flex: 1;">Configure</button>
+          <button class="btn btn-ghost btn-sm" style="flex: 1;">Disconnect</button>
+        </div>
+      </div>
+
+      <!-- MYOB -->
+      <div class="glass-card hover animate-fade-in">
+        <div class="flex items-start justify-between mb-4">
+          <div style="flex: 1;">
+            <div class="flex items-center mb-2" style="gap: 0.75rem;">
+              <h3 class="text-xl font-bold">MYOB</h3>
+              <div class="flex items-center text-xs text-success" style="gap: 0.25rem;">
+                <div class="status-dot success animate-pulse"></div>
+                Connected
+              </div>
+            </div>
+            <p class="text-sm text-muted">Connect your accounting and inventory systems</p>
+            <p class="text-xs text-muted mt-2">Last synced: 1 hour ago</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <div class="flex mt-4" style="gap: 0.5rem;">
+          <button class="btn btn-glass btn-sm" style="flex: 1;">Configure</button>
+          <button class="btn btn-ghost btn-sm" style="flex: 1;">Disconnect</button>
+        </div>
+      </div>
+
+      <!-- WooCommerce -->
+      <div class="glass-card hover animate-fade-in">
+        <div class="flex items-start justify-between mb-4">
+          <div style="flex: 1;">
+            <div class="flex items-center mb-2" style="gap: 0.75rem;">
+              <h3 class="text-xl font-bold">WooCommerce</h3>
+              <div class="flex items-center text-xs text-muted" style="gap: 0.25rem;">
+                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+                Available
+              </div>
+            </div>
+            <p class="text-sm text-muted">Track orders from creation to delivery</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <button class="btn btn-hero w-full mt-4">Connect</button>
+      </div>
+
+      <!-- Shopify -->
+      <div class="glass-card hover animate-fade-in">
+        <div class="flex items-start justify-between mb-4">
+          <div style="flex: 1;">
+            <div class="flex items-center mb-2" style="gap: 0.75rem;">
+              <h3 class="text-xl font-bold">Shopify</h3>
+              <div class="flex items-center text-xs text-muted" style="gap: 0.25rem;">
+                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+                Available
+              </div>
+            </div>
+            <p class="text-sm text-muted">E-commerce order and inventory sync</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <button class="btn btn-hero w-full mt-4">Connect</button>
+      </div>
+
+      <!-- SAP -->
+      <div class="glass-card hover animate-fade-in">
+        <div class="flex items-start justify-between mb-4">
+          <div style="flex: 1;">
+            <div class="flex items-center mb-2" style="gap: 0.75rem;">
+              <h3 class="text-xl font-bold">SAP</h3>
+              <div class="flex items-center text-xs text-muted" style="gap: 0.25rem;">
+                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+                Available
+              </div>
+            </div>
+            <p class="text-sm text-muted">Enterprise resource planning integration</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <button class="btn btn-hero w-full mt-4">Connect</button>
+      </div>
+
+      <!-- QuickBooks -->
+      <div class="glass-card hover animate-fade-in">
+        <div class="flex items-start justify-between mb-4">
+          <div style="flex: 1;">
+            <div class="flex items-center mb-2" style="gap: 0.75rem;">
+              <h3 class="text-xl font-bold">QuickBooks</h3>
+              <div class="flex items-center text-xs text-muted" style="gap: 0.25rem;">
+                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+                Available
+              </div>
+            </div>
+            <p class="text-sm text-muted">Accounting and financial management</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <button class="btn btn-hero w-full mt-4">Connect</button>
+      </div>
+    </div>
+
+    <!-- Sync Settings -->
+    <div class="glass-card animate-fade-in">
+      <h2 class="text-2xl font-bold mb-6">Sync Settings</h2>
+      <div class="space-y-4">
+        <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
+          <div>
+            <p class="font-medium">Automatic Sync</p>
+            <p class="text-sm text-muted">Sync data automatically every hour</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
+          <div>
+            <p class="font-medium">Real-time Updates</p>
+            <p class="text-sm text-muted">Push changes immediately to connected systems</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <div class="flex items-center justify-between p-4 rounded-xl transition-smooth">
+          <div>
+            <p class="font-medium">Sync Notifications</p>
+            <p class="text-sm text-muted">Get notified when syncs complete or fail</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/supply-chain-static/common.js"></script>
+  <script>
+    // Inject navbar when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      const navbarContainer = document.getElementById('navbar-container');
+      if (navbarContainer) {
+        navbarContainer.innerHTML = renderNavbar('integrations');
+      }
+    });
+  </script>
+</body>
+</html>

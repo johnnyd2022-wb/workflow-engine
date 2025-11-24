@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whistlebird Revenue Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            background-attachment: fixed;
+            color: var(--text-color);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                circle at 50% 50%,
+                rgba(255, 51, 102, 0.08) 0%,
+                transparent 70%
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+            width: 100%;
+        }
+
+        .nav-bar {
+            background-color: transparent;
+            padding: 2rem 0;
+            width: 100%;
+            margin-bottom: 2rem;
+        }
+
+        .nav-bar h1 {
+            color: var(--text-color);
+            margin: 0;
+            font-size: 2.5rem;
+            background: none;
+            -webkit-text-fill-color: var(--text-color);
+            text-align: center;
+        }
+
+        .main-content {
+            width: 100%;
+            padding-top: 1rem;
+        }
+
+        .data-tables {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 0;
+            background: var(--card-background);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .data-table th {
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            font-weight: 600;
+            padding: 1.25rem;
+            text-align: left;
+            font-size: 1.125rem;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table td {
+            padding: 1rem 1.25rem;
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 1rem;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tbody tr {
+            transition: background-color 0.3s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: var(--table-row-hover);
+        }
+
+        .table-title {
+            color: var(--text-color);
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 1rem 0;
+            letter-spacing: -0.02em;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .back-button {
+            padding: 1.25rem 2.5rem;
+            background-color: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-color);
+            font-size: 1.125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .back-button:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+            background-color: rgba(255, 51, 102, 0.1);
+        }
+
+        .back-button::before {
+            content: '←';
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .back-button:hover::before {
+            transform: translateX(-4px);
+        }
+
+        /* Enhanced mobile styles */
+        @media (max-width: 768px) {
+            .nav-bar {
+                padding: 0.75rem 0;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                margin-bottom: 1rem;
+                background: linear-gradient(to bottom, 
+                    var(--background-color) 0%,
+                    rgba(10, 10, 10, 0.95) 50%,
+                    rgba(10, 10, 10, 0) 100%);
+            }
+
+            .main-content {
+                padding-top: 0.5rem;
+            }
+
+            .container {
+                padding: 0.5rem;
+            }
+
+            .nav-bar h1 {
+                font-size: 2rem;
+            }
+
+            .data-tables {
+                gap: 2.5rem;
+            }
+
+            .table-title {
+                font-size: 1.25rem;
+                position: sticky;
+                top: 3.5rem;
+                background: var(--background-color);
+                padding: 0.5rem 0;
+                margin: 0 0 0.5rem 0;
+                z-index: 90;
+            }
+
+            .data-table {
+                display: block;
+                background: transparent;
+                box-shadow: none;
+            }
+
+            .data-table thead {
+                display: none;
+            }
+
+            .data-table tbody {
+                display: block;
+            }
+
+            .data-table tr {
+                display: block;
+                background: var(--card-background);
+                margin-bottom: 1rem;
+                border-radius: 12px;
+                box-shadow: var(--shadow);
+            }
+
+            .data-table td {
+                display: grid;
+                grid-template-columns: 50% 50%;
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid var(--border-color);
+                white-space: normal;
+            }
+
+            .data-table td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: var(--text-secondary);
+            }
+
+            .data-table tr[style*="bold"] {
+                background: var(--table-header-bg);
+            }
+
+            .data-table tr[style*="bold"] td::before {
+                color: var(--text-color);
+            }
+
+            .data-table td:last-child {
+                border-bottom: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-bar h1 {
+                font-size: 1.75rem;
+            }
+
+            .table-title {
+                font-size: 1.125rem;
+                top: 3rem;
+            }
+
+            .data-table td {
+                padding: 0.625rem 0.875rem;
+                font-size: 0.875rem;
+            }
+
+            .back-button {
+                padding: 0.875rem 1.75rem;
+                font-size: 0.9375rem;
+            }
+        }
+
+        /* Add specific styling for detailed cost breakdown table */
+        .detailed-cost-table {
+            font-size: 0.9rem; /* Slightly smaller font for detailed table */
+            margin: 0 auto; /* Center the table */
+            max-width: 95%; /* Prevent table from touching edges */
+        }
+
+        .detailed-cost-table th,
+        .detailed-cost-table td {
+            padding: 0.75rem 0.5rem; /* Reduce padding */
+            white-space: nowrap; /* Prevent text wrapping */
+        }
+
+        .detailed-cost-table th {
+            font-size: 0.9rem; /* Smaller header text */
+        }
+
+        /* Target hit indicator styles */
+        .target-hit {
+            position: relative;
+            width: 24px;
+            height: 24px;
+            margin: 0 auto;
+        }
+
+        .tick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;
+            height: 16px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-in-out forwards;
+        }
+
+        .tick::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 12px;
+            background-color: #00FF00;
+            transform: rotate(45deg) translate(4px, -2px);
+        }
+
+        .tick::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 6px;
+            background-color: #00FF00;
+            transform: rotate(-45deg) translate(-2px, 4px);
+        }
+
+        .cross {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;
+            height: 16px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-in-out forwards;
+        }
+
+        .cross::before,
+        .cross::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 3px;
+            background-color: #FF3366;
+            top: 50%;
+            left: 50%;
+        }
+
+        .cross::before {
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+
+        .cross::after {
+            transform: translate(-50%, -50%) rotate(-45deg);
+        }
+
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+
+        /* Maintain mobile responsiveness */
+        @media (max-width: 768px) {
+            .detailed-cost-table {
+                max-width: 100%;
+                font-size: 1rem;
+            }
+
+            .detailed-cost-table th,
+            .detailed-cost-table td {
+                padding: 0.75rem 1rem;
+                white-space: normal;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="container">
+            <h1>Revenue Report</h1>
+        </div>
+    </nav>
+    
+    <div class="main-content">
+        <div class="container">
+            <div class="data-tables">
+                <h2 class="table-title">Revenue Trend</h2>
+                <div class="chart-container" style="position: relative; height:400px; width:100%; margin-bottom: 2rem;">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Monthly Targets</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Required Monthly Bottles</th>
+                            <th>Required Monthly Revenue</th>
+                            <th>Average Revenue per Bottle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-label="Required Monthly Bottles">{{ monthly_targets.required_bottles }} bottles</td>
+                            <td data-label="Required Monthly Revenue">${{ "%.2f"|format(monthly_targets.required_revenue) }}</td>
+                            <td data-label="Average Revenue per Bottle (excl. GST)">${{ "%.2f"|format(monthly_targets.revenue_per_bottle) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Monthly Revenue Summary</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Total Revenue</th>
+                            <th>GST</th>
+                            <th>Duty (LAL)</th>
+                            <th>Bottles Sold</th>
+                            <th>Target Sales Hit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in monthly_revenue %}
+                            <tr{% if month.month == 'Total' %} style="font-weight: bold;" {% endif %}>
+                                <td data-label="Month">{{ month.month }}</td>
+                                <td data-label="Total Revenue">${{ "%.2f"|format(month.revenue) }}</td>
+                                <td data-label="GST">${{ "%.2f"|format(month.gst) }}</td>
+                                <td data-label="Duty (LAL)">${{ "%.2f"|format(month.duty) }}</td>
+                                <td data-label="Bottles Sold">{{ month.bottles }}</td>
+                                <td data-label="Target Sales Hit">
+                                    {% if month.month != 'Total' %}
+                                        {% set month_date = month.month.split(' ') %}
+                                        {% set month_name = month_date[0] %}
+                                        {% set year = month_date[1]|int %}
+                                        {% if year > 2025 or (year == 2025 and month_name in ['February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']) %}
+                                            {% if month.revenue >= monthly_targets.required_revenue %}
+                                                <div class="target-hit">
+                                                    <div class="tick"></div>
+                                                </div>
+                                            {% else %}
+                                                <div class="target-hit">
+                                                    <div class="cross"></div>
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Business Costs & Profitability</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Revenue($)</th>
+                            <th>GST</th>
+                            <th>Recurring Costs ($)</th>
+                            <th>One-off Costs ($)</th>
+                            <th>Variable Costs ($)</th>
+                            <th>Total Costs ($)</th>
+                            <th>Profit ($)</th>
+                            <th>Profit Margin (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in monthly_revenue %}
+                            <tr{% if month.month == 'Total' %} style="font-weight: bold;" {% endif %}>
+                                <td data-label="Month">{{ month.month }}</td>
+                                <td data-label="Revenue ($)">${{ "%.2f"|format(month.revenue) }}</td>
+                                <td data-label="GST">${{ "%.2f"|format(month.gst) }}</td>
+                                {% if month.cost_breakdown is defined %}
+                                    <td data-label="Recurring Costs ($)">${{ "%.2f"|format(month.cost_breakdown.fixed_costs.values()|sum) }}</td>
+                                    <td data-label="One-off Costs ($)">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.values()|sum) }}</td>
+                                    <td data-label="Variable Costs ($)">${{ "%.2f"|format(month.cost_breakdown.variable_costs.values()|sum) }}</td>
+                                {% else %}
+                                    <td data-label="Recurring Costs ($)">-</td>
+                                    <td data-label="One-off Costs ($)">-</td>
+                                    <td data-label="Variable Costs ($)">-</td>
+                                {% endif %}
+                                <td data-label="Total Costs ($)">${{ "%.2f"|format(month.costs) }}</td>
+                                <td data-label="Profit ($)">${{ "%.2f"|format(month.profit) }}</td>
+                                <td data-label="Profit Margin (%)">{{ "%.1f"|format(month.profit_margin) }}%</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Detailed Cost Breakdown</h2>
+                <h3 class="table-subtitle">Fixed Recurring Costs (monthly)</h3>
+                <table class="data-table detailed-cost-table">
+                    <thead>
+                        <tr>
+                            <th>Premise</th>
+                            <th>Power</th>
+                            <th>Gmail</th>
+                            <th>Bank Fees</th>
+                            <th>Website</th>
+                            <th>Accountants</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if monthly_revenue and monthly_revenue[0].cost_breakdown is defined %}
+                            <tr>
+                                <td data-label="Premise">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.premise|default(0)) }}</td>
+                                <td data-label="Power">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.variable_costs.power|default(0)) }}</td>
+                                <td data-label="Gmail">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.gmail|default(0)) }}</td>
+                                <td data-label="Bank Fees">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.bank_fees|default(0)) }}</td>
+                                <td data-label="Website">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.website|default(0)) }}</td>
+                                <td data-label="Accountants">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.accountants|default(0)) }}</td>
+                                <td data-label="Total">${{ "%.2f"|format(monthly_revenue[0].cost_breakdown.fixed_costs.values()|sum + monthly_revenue[0].cost_breakdown.variable_costs.power|default(0)) }}</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+
+                <h3 class="table-subtitle">Product Costs</h3>
+                <table class="data-table detailed-cost-table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Bottles</th>
+                            <th>Importing Bottles</th>
+                            <th>Corks</th>
+                            <th>Labels</th>
+                            <th>Heatshrink</th>
+                            <th>Case Boxes</th>
+                            <th>Ethanol</th>
+                            <th>Botanicals</th>
+                            <th>Duty</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in monthly_revenue %}
+                            {% if month.cost_breakdown is defined %}
+                                <tr{% if month.month == 'Total' %} style="font-weight: bold;" {% endif %}>
+                                    <td data-label="Month">{{ month.month }}</td>
+                                    <td data-label="Bottles">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.bottles|default(0)) }}</td>
+                                    <td data-label="Importing Bottles">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.importing_bottles|default(0)) }}</td>
+                                    <td data-label="Corks">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.corks|default(0)) }}</td>
+                                    <td data-label="Labels">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.labels|default(0)) }}</td>
+                                    <td data-label="Heatshrink">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.heatshrink|default(0)) }}</td>
+                                    <td data-label="Case Boxes">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.case_boxes|default(0)) }}</td>
+                                    <td data-label="Ethanol">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.ethanol|default(0)) }}</td>
+                                    <td data-label="Botanicals">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.botanicals|default(0)) }}</td>
+                                    <td data-label="Duty">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.duty|default(0)) }}</td>
+                                    <td data-label="Total">${{ "%.2f"|format(month.cost_breakdown.business_costs_one_off.values()|sum) }}</td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Bottle Order & Lease Tracker</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Cost & Revenue</th>
+                            <th>Bottle Requirements</th>
+                            <th>Lease Information</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set last_month = monthly_revenue[0] if monthly_revenue and monthly_revenue[0].month != 'Total' else monthly_revenue[1] if monthly_revenue|length > 1 else None %}
+                        {% set total_cost_per_bottle = last_month.cost_breakdown.total_one_off_costs_no_gst / last_month.bottles if last_month and last_month.cost_breakdown is defined and last_month.bottles > 0 else 0 %}
+                        {% set profit_per_bottle = monthly_targets.revenue_per_bottle - total_cost_per_bottle %}
+                        {% set bottle_sales_for_10k_order_tracker = bottle_sales_for_10k_order_tracker %}
+                        
+                        {# Calculate months until Feb 2026 #}
+                        {% set current_month = last_month.month.split(' ')[0] if last_month else 'January' %}
+                        {% set current_year = last_month.month.split(' ')[1]|int if last_month else 2025 %}
+                        {% set month_map = {'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6, 'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12} %}
+                        {% set current_month_num = month_map[current_month] %}
+                        {% set months_until_lease_end = (2026 - current_year) * 12 + (2 - current_month_num) %}
+                        {% set total_lease_costs = (last_month.cost_breakdown.fixed_costs.premise + last_month.cost_breakdown.variable_costs.power) * months_until_lease_end if last_month and last_month.cost_breakdown is defined else 0 %}
+                        {% set bottles_for_lease = total_lease_costs / profit_per_bottle if profit_per_bottle > 0 else 0 %}
+                        
+                        {# Cost and Revenue Information #}
+                        <tr>
+                            <td data-label="Revenue/Bottle">Revenue per Bottle: ${{ "%.2f"|format(monthly_targets.revenue_per_bottle) }}</td>
+                            <td data-label="Bottles for Savings">Bottles needed for 10k bottle order: {{ bottle_sales_for_10k_order_tracker|round(0) }}</td>
+                            <td data-label="Monthly Premise">Monthly Premise Cost: ${{ "%.2f"|format(last_month.cost_breakdown.fixed_costs.premise) if last_month and last_month.cost_breakdown is defined else 0 }}</td>
+                        </tr>
+                        <tr>
+                            <td data-label="Total Cost/Bottle">Total Cost per Bottle: ${{ "%.2f"|format(total_cost_per_bottle) }}</td>
+                            <td data-label="Bottles for Lease">Bottles needed for lease: {{ bottles_for_lease|round(0) }}</td>
+                            <td data-label="Monthly Power">Monthly Power Cost: ${{ "%.2f"|format(last_month.cost_breakdown.variable_costs.power) if last_month and last_month.cost_breakdown is defined else 0 }}</td>
+                        </tr>
+                        <tr>
+                            <td data-label="Profit/Bottle">Profit per Bottle: ${{ "%.2f"|format(profit_per_bottle) }}</td>
+                            <td data-label="Total Bottles">Total Bottles Required: {{ (bottle_sales_for_10k_order_tracker + bottles_for_lease)|round(0) }}</td>
+                            <td data-label="Total Lease">Remaining Lease Costs: ${{ "%.2f"|format(total_lease_costs) }}</td>
+                        </tr>
+                        <tr>
+                            <td data-label="Duty/Bottle">Duty per Bottle: ${{ "%.2f"|format(last_month.cost_breakdown.duty_per_bottle) if last_month and last_month.cost_breakdown is defined else 0 }}</td>
+                            <td data-label="Break Even">Break-even at ${{ "%.2f"|format(monthly_targets.revenue_per_bottle) }}: {{ monthly_targets.required_bottles }} bottles/month</td>
+                            <td data-label="Months Left">Months until lease end (Feb 2026): {{ months_until_lease_end }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="button-container">
+                <form action="/back-button-data-tools" method="post">
+                    <button type="submit" class="back-button">Back to Data Tools</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Chart.js library and initialize the chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const ctx = document.getElementById('revenueChart');
+        
+        // Extract data from the table
+        const monthlyData = {{ monthly_revenue|tojson|safe }};
+        const months = monthlyData.slice(0, -1).map(item => item.month); // Exclude total row
+        const revenue = monthlyData.slice(0, -1).map(item => item.revenue);
+        const profitMargin = monthlyData.slice(0, -1).map(item => item.profit_margin);
+
+        // Create the chart
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: months.reverse(),
+                datasets: [{
+                    label: 'Monthly Revenue (NZD)',
+                    data: revenue.reverse(),
+                    borderColor: '#FF3366',
+                    backgroundColor: 'rgba(255, 51, 102, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#FF3366',
+                    pointBorderColor: '#FFFFFF',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Profit Margin (%)',
+                    data: profitMargin.reverse(),
+                    borderColor: '#3366FF',
+                    backgroundColor: 'rgba(51, 102, 255, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointBackgroundColor: '#3366FF',
+                    pointBorderColor: '#FFFFFF',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#FFFFFF'
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(26, 26, 26, 0.9)',
+                        titleColor: '#FFFFFF',
+                        bodyColor: '#FFFFFF',
+                        borderColor: '#2A2A2A',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: function(context) {
+                                if (context.dataset.label === 'Monthly Revenue (NZD)') {
+                                    return `Revenue: $${context.raw.toFixed(2)}`;
+                                } else {
+                                    return `Profit Margin: ${context.raw.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#FFFFFF'
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            callback: function(value) {
+                                return '$' + value.toFixed(2);
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            callback: function(value) {
+                                return value.toFixed(1) + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,378 @@
+/* styles.css */
+
+/* Use a modern color palette */
+.white-label {
+    color: black;
+}
+
+/* Use CSS variables for common values */
+:root {
+    --primary-color: #007bff;
+    --background-color: #f2f2f2;
+    --text-color: #ffffff;
+    --form-text-color: #000000; /* Change to black */
+}
+
+/* Use flexbox for modern layout */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /*background-image: url('/static/images/background-image.jpg'); */
+    background-size: cover;
+    background-image: linear-gradient(0deg, rgb(94, 5, 4),rgb(253, 19, 61));
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: var(--background-color);
+}
+
+/* Add a media query for smaller screens to change the background image */
+@media (max-width: 768px) {
+    .button-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-top: 10px; /* Adjust margin as needed */
+	background-image: linear-gradient(0deg, rgb(94, 5, 4),rgb(253, 19, 61));
+	background-blend-mode: overlay; /* Blend mode for the background */
+	max-width: 100%;
+    }
+
+    .top-right-button {
+        width: 100%; /* Make buttons full width for smaller screens */
+    }
+
+    .bottom-right-button {
+        margin-top: 10px; /* Add some space between the buttons */
+        width: 100%; /* Make buttons full width for smaller screens */
+    }
+}
+
+/* Create a modern card-style form container */
+.form-container {
+    width: 100; /* Adjust width for smaller screens */
+    padding: 20px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    color: var(--form-text-color); /* Set text color to black */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* Align labels and inputs to the left */
+    gap: 15px; /* Space between items */
+    flex-wrap: wrap; /* Allow items to wrap when width exceeds container */
+    position: relative; /* Set to relative positioning to allow absolute positioning for the image */
+    max-width: 400px; /* Set a maximum width to keep content readable */
+    margin: 0 auto; /* Center the form */
+}
+
+/* Modern typography */
+.form-container label,
+.form-container select,
+.form-container input {
+    margin-bottom: 15px;
+    max-width: 100%; /* Set maximum width for input fields */
+    width: 100%; /* Take up full available width */
+    box-sizing: border-box; /* Include padding and border in width */
+}
+
+/* Modern button styling */
+.button-container {
+    display: flex;
+    justify-content: center; /* Center the button on smaller screens */
+    margin-top: 20px;
+}
+
+.button {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    background-color: var(--primary-color);
+    color: #fff;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+}
+
+.button:hover {
+    background-color: darken(var(--primary-color), 10%);
+}
+
+/* Modern table design */
+.data-table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.data-table th, .data-table td {
+    padding: 10px;
+    border: 1px solid #ccc;
+    text-align: left;
+    font-size: 14px;
+}
+
+.data-table th {
+    background-color: var(--background-color);
+    font-weight: bold;
+}
+
+.data-table tr:hover {
+    background-color: #f9f9f9;
+}
+
+/* Modern title styling */
+.title-container {
+    text-align: center;
+    margin: 20px;
+}
+
+.title-container h1 {
+    margin: 0;
+    padding: 10px;
+    font-weight: bold;
+    color: var(--text-color);
+}
+
+/* Modern button positioning */
+.top-right-button {
+    margin: 10px;
+}
+
+.bottom-right-button {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+}
+
+/* Use media queries for different screen sizes */
+@media (max-width: 768px) {
+    /* Adjust styles for smaller screens */
+    .form-container {
+        width: 90%; /* Adjust width for smaller screens */
+        padding: 10px; /* Adjust padding for smaller screens */
+    }
+
+    /* Adjust other styles as needed */
+}
+
+/* Invoice Styles */
+.invoice-item {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.invoice-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0f0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.invoice-number {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+}
+
+.invoice-date {
+    color: #666;
+    font-size: 14px;
+}
+
+.invoice-status {
+    background: #28a745;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.invoice-summary-details {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.invoice-summary-row {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: nowrap;
+    min-height: 24px;
+    width: 100%;
+    box-sizing: border-box;
+    clear: both;
+}
+
+.invoice-summary-row:last-child {
+    margin-bottom: 0;
+}
+
+.invoice-summary-label {
+    font-weight: bold;
+    color: #555;
+    flex-shrink: 0;
+    min-width: 120px;
+    display: inline-block;
+    float: left;
+}
+
+.invoice-summary-value {
+    color: #333;
+    font-weight: 600;
+    text-align: right;
+    flex-shrink: 0;
+    display: inline-block;
+    float: right;
+}
+
+.invoice-products {
+    margin-bottom: 15px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.invoice-products-header {
+    display: grid !important;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 15px;
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+    font-weight: bold;
+    color: #555;
+    background: #f8f9fa;
+    border-radius: 6px 6px 0 0;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.product-col-header {
+    text-align: center;
+    display: block;
+}
+
+.invoice-product-row {
+    display: grid !important;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 15px;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    align-items: center;
+    min-height: 40px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.invoice-product-row:last-child {
+    border-bottom: none;
+}
+
+.invoice-product-row:hover {
+    background: #f8f9fa;
+}
+
+.product-col {
+    color: #333;
+    text-align: center;
+    word-wrap: break-word;
+}
+
+.invoice-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.invoice-action-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.btn-view {
+    background: #007bff;
+    color: white;
+}
+
+.btn-view:hover {
+    background: #0056b3;
+}
+
+.btn-download {
+    background: #28a745;
+    color: white;
+}
+
+.btn-download:hover {
+    background: #1e7e34;
+}
+
+/* Force invoice layout to work correctly */
+.invoice-summary-details .invoice-summary-row {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+}
+
+.invoice-summary-details .invoice-summary-label,
+.invoice-summary-details .invoice-summary-value {
+    display: inline-block !important;
+    float: none !important;
+    clear: none !important;
+}
+
+.invoice-products .invoice-products-header,
+.invoice-products .invoice-product-row {
+    display: grid !important;
+    grid-template-columns: 2fr 1fr 1fr 1fr !important;
+    grid-auto-flow: row !important;
+}
+
+.invoice-products .product-col-header,
+.invoice-products .product-col {
+    display: block !important;
+    float: none !important;
+    clear: none !important;
+}
+
+
+
+

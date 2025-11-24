@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add flavor</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='add_flavor.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+    <h1>Add flavor</h1>
+    </div>
+    <div class="form-container">
+            <form action="/add-flavor" method="post" id="addFlavorForm">
+            <label for="flavorCode">Flavor Code (WBXX):</label>
+                <select name="flavorCode" id="flavorCodeSelect">
+                    <option value="" selected disabled>Select a flavor code</option>
+                    {% for flavorCode in previous_flavor_codes %}
+                    <option value="{{ flavorCode }}">{{ flavorCode }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="flavorCode" id="flavorCode" placeholder="New Flavor Code">
+		<label for="flavorBatchCode">Flavor batch code</label>
+		    <select name="flavorBatchCode" id="flavorBatchCodeSelect">
+			<option value="" selected disabled>Previous flavor batch codes</option>
+			{% for flavorBatchCode in previous_flavor_batch_codes %}
+			<option value="{{ flavorBatchCode }}" selected disabled>{{ flavorBatchCode }}</option>
+			{% endfor %}
+		    </select>
+		    <input type="text" name="flavorBatchCode" id="flavorBatchCode" placeholder="Enter new flavor batch code i.e WF01">
+		<label for="clearingAmount">Clearing added (ml):</label>
+		<input type="number" id="clearingAmount" name="clearingAmount" placeholder="Enter clearing amount(ml)" required>
+		<label for="clearingAbv">Clearing ABV%:</label>
+		<input type="float" id="clearingAbv" name="clearingAbv" placeholder="Enter clearing ABV%" required>
+		<label for="flavorStored">Total flavor Stored (ml):</label>
+                <input type="number" id="flavorStored" name="flavorStored" placeholder="Enter total flavor stored" required>
+                
+                <!-- Ingredient Selection Section -->
+                <div id="ingredientSelectionSection">
+                    <div class="ingredientCodeDropdowns">
+                        <!-- Dropdowns for ingredient codes will be dynamically populated here -->
+                    </div>
+                </div>
+
+
+                <button type="button" id="addIngredientButton">Add Another Ingredient</button>
+
+		<button type="submit"> Add Entry</button>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-product-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to Product tools</button>
+        </form>
+
+    </div>
+
+        <script>
+            $(document).ready(function () {
+		var recipes = {{ recipes|tojson|safe }};
+                var availableIngredients = {{ available_ingredients|tojson|safe }};
+                // Define recipes
+                var recipes = {
+                    'WB25 (Wildflower)': [
+                        'juniper berries', 'orris root', 'coriander seeds', 'whole nutmeg (organic)', 'lemon juice', 'orange peel - dried', 'hibiscus flowers', 'liquorice root', 'grapefruit juice', 'green tea', 'cardamom pods', 'lemon peel', 'persian black lime', 'sumac berries - ground', 'lemon myrtle', 'dried mango slices', 'dried apple ring', 'elderflower'
+                    ]
+                    // Define recipes for other flavor codes here
+                };
+
+		$('#flavorCodeSelect').change(function () {
+		    var selectedFlavorCode = $(this).val();
+		    var recipe = recipes[selectedFlavorCode];
+		    var ingredientDropdowns = $('.ingredientCodeDropdowns');
+
+		    // Clear existing ingredient code dropdowns
+		    ingredientDropdowns.empty();
+
+		    if (recipe) {
+			// Loop through the ingredients and add ingredient code dropdowns
+			for (var i = 0; i < recipe.length; i++) {
+			    var selectedIngredient = recipe[i];
+			    var ingredientCodes = availableIngredients.filter(function (ingredient) {
+				return ingredient.ingredient_name === selectedIngredient;
+			    });
+
+			    var ingredientHeading = $('<p>', {
+                                class: 'ingredient-heading',
+                                text: selectedIngredient
+                            });
+
+			    $('.ingredientCodeDropdowns').append(ingredientHeading);
+
+			    if (ingredientCodes.length > 0) {
+				console.log(ingredientCodes);
+
+			        var ingredientCodeDropdown = $('<select>', {
+				    name: 'ingredientCodeSelection[]',
+				    class: 'ingredientCodeSelect',
+			        });
+
+			        // Add a default option
+			        ingredientCodeDropdown.append($('<option>', {
+				    value: '',
+				    text: 'Select an ingredient code'
+			        }));
+
+			        // Populate the ingredient code dropdown with options
+			        $.each(ingredientCodes, function (index, code) {
+				    ingredientCodeDropdown.append($('<option>', {
+				        value: code.ingredient_code,
+				        text: code.ingredient_code
+				    }));
+			        });
+
+			        $('.ingredientCodeDropdowns').append(ingredientCodeDropdown);
+			    }
+			}
+		    }
+		});
+
+		// Add another ingredient button logic
+		$('#addIngredientButton').click(function () {
+		    var newIndex = $('.ingredientCodeSelect').length;
+		    var ingredientCodeDropdown = $('<select>', {
+			name: 'ingredientCodeSelection[]',
+			class: 'ingredientCodeSelect',
+		    });
+
+		    // Add a default option
+		    ingredientCodeDropdown.append($('<option>', {
+			value: '',
+			text: 'Select an ingredient code'
+		    }));
+
+		    // Append the new ingredient code dropdown
+		    ingredientDropdowns.append(ingredientHeading);
+		    ingredientDropdowns.append('<br>');
+		    $('.ingredientCodeDropdowns').append(ingredientCodeDropdown);
+		});
+
+            });
+        </script>
+
+</body>
+</html>

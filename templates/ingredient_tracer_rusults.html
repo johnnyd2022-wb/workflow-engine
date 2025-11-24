@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ingredient tracer</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles_raw_data.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Ingredient tracer</h1>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Ingredient name</th>
+		    <th>Supplier</th>
+		    <th>Quantity (grams)</th>
+		    <th>Entry date</th>
+		    <th>Expiry</th>
+		    <th>Ingredient codes</th>
+                    <th>Flavor Batch</th>
+		    <th>Vat Batch</th>
+                    <th>Bottle Batches</th>
+                    <th>Buyers</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in trace_results %}
+                <tr>
+                    <td>{{ result.ingredient }}</td>
+		    <td>{{ result.supplier }}</td>
+		    <td>{{ result.quantity }}</td>
+		    <td>{{ result.entry_date }}</td>
+		    <td>{{ result.expiry }}</td>
+		    <td>{{ result.ingredient_codes }}</td>
+                    <td>{{ result.flavor_batches }}</td>
+		    <td>{{ result.vat_batches }}</td>
+                    <td>{{ result.bottle_batches }}</td>
+                    <td>{{ result.sales }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-audit-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to audit tools</button>
+        </form>
+
+    </div>
+
+</body>
+</html>

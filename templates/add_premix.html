@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add premix</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+    <h1>Add premix</h1>
+    </div>
+    <div class="form-container">
+        <form action="/add-premix" method="post" id="addPremix">
+	    <input type="text" name="notes" id="notes" placeholder="Add premix notes here">
+            <label for="alcoholVolume">Enter alcohol volume (L)</label>
+            <input type="float" id="alcoholVolume" name="alcoholVolume" placeholder="Enter alcohol volume (L)">
+            <label for="alcoholAbv">Alcohol ABV%</label>
+            <input type="float" id="alcoholAbv" name="alcoholAbv" placeholder="Enter alcohol ABV%">
+            <label for="containerId">Container ID</label>
+            <input type="text" id="containerId" name="containerId" placeholder="Enter container ID">
+            <button type="submit"> Add Entry</button>
+        </form>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-product-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to Product tools</button>
+        </form>
+
+    </div>
+
+</body>
+</html>

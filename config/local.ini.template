@@ -1,0 +1,26 @@
+[app]
+environment = local
+debug = true
+host = 0.0.0.0
+port = 5005
+
+[database]
+host = localhost
+port = 5401
+name = whistlebird_db_test
+user = postgres
+password = YOUR_PASSWORD_HERE
+
+[xero]
+client_id = YOUR_LOCAL_XERO_CLIENT_ID
+client_secret = YOUR_LOCAL_XERO_CLIENT_SECRET
+
+[email]
+sender_email = your-email@example.com
+receiver_email = your-email@example.com
+
+[features]
+invoice_button_enabled = true
+schedule_enabled = true
+crm_enabled = true
+supply_chain_enabled = true

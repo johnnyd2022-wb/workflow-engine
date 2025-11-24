@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trace ingredients</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+</head>
+<body>
+    <h1>Trace ingredients to see where they go!</h1>
+    
+    <div class="form-container">
+        <form action="/ingredient-tracer" method="post" class="form" id="ingredientTracerForm">
+            <label for="" class="white-label">Enter ingredient:</label>
+            <select name="ingredients" id="ingredientSelect">
+                <option value="" selected disabled>Select an ingredient</option>
+                {% for ingredient in ingredients %}
+                <option value="{{ ingredient }}">{{ ingredient }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit">Trace ingredrient</button>
+        </form>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-audit-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to audit tools</button>
+        </form>
+
+    </div>
+
+</body>
+</html>

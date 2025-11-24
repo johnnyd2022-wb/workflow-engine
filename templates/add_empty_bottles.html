@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add empty bottles to inventory</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+</head>
+<body>
+    <h1>Add empty bottles to inventory</h1>
+    
+    <div class="form-container">
+        <form action="/add-empty-bottles" method="post" class="form" id="emptyBottlesForm">
+            <label for="supplier" class="white-label">Supplier:</label>
+            <select name="supplier" id="supplierSelect">
+                <option value="" selected disabled>Select a supplier</option>
+                {% for supplier in previous_suppliers %}
+                <option value="{{ supplier }}">{{ supplier }}</option>
+                {% endfor %}
+            </select>
+            
+	    <button type="button" onclick="location.href='/add-supplier-form'">Add a new supplier</button>
+            <div style="margin-bottom: 10px;"></div>
+
+	    <label for="emptyBottlesCount" class="white-label">Number of Bottles:</label>
+            <input type="number" id="emptyBottlesCount" name="emptyBottlesCount" required>
+            <button type="submit">Add Bottles</button>
+        </form>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-product-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to Product tools</button>
+        </form>
+
+    </div>
+
+</body>
+</html>

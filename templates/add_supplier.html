@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add new supplier</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+    <h1>Add new supplier</h1>
+    </div>
+
+    <div class="form-container">
+	    <form action="/add-supplier" method="post">
+            <label for="supplier">Existing suppliers:</label>
+                <select name="supplier" id="supplierSelect">
+                    <option value="" selected disabled>Select a supplier</option>
+                    {% for supplier in previous_suppliers %}
+                    <option value="{{ supplier }}" selected disabled>{{ supplier }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="new_supplier" placeholder="New Supplier">
+                <label for="supplierContact">Supplier contact (human name):</label>
+                <input type="text" name="supplierContact" placeholder="Main contact name">
+		<label for="supplierLocation">Supplier location:</label>
+		<input type="text" name="supplierLocation" placeholder="Wellington?">
+		<label for="supplierNumber">Supplier number:</label>
+		<input type="number" name="supplierNumber" placeholder="64223861921 <-- include country code">
+		<label for="supplierType">Supplier type</label>
+		<select name="supplierType" id="supplierTyoe">
+			<option value="" selected disabled>Select a supplier type</option>
+			{% for supplier_type in supplier_type %}
+			<option value="{{ supplier_type }}">{{ supplier_type }}</option>
+			{% endfor %}
+		</select>
+		<button type="submit"> Add new supplier</button>
+        </form>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-data-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to Data tools</button>
+        </form>
+
+    </div>
+
+</body>
+</html>

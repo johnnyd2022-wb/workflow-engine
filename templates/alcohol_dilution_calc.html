@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+    <title>Alcohol Dilution Calculator</title>
+    <script>
+        function calculateDilution() {
+            // Get user inputs
+            var startingABV = parseFloat(document.getElementById("starting_abv").value);
+            var targetABV = parseFloat(document.getElementById("target_abv").value);
+            var targetLitres = parseFloat(document.getElementById("target_litres_of_alcohol").value);
+
+            // Check if inputs are valid numbers
+            if (isNaN(startingABV) || isNaN(targetABV) || isNaN(targetLitres)) {
+                alert("Please enter valid numeric values.");
+                return;
+            }
+
+            // Calculate total_litres_of_alcohol and total_litres_of_water
+            var totalLitresAlcohol = (targetLitres * targetABV) / startingABV;
+            var totalLitresWater = targetLitres - totalLitresAlcohol;
+
+            // Display the results on the webpage
+            document.getElementById("result_alcohol").innerHTML = "Total Litres of Alcohol: " + totalLitresAlcohol.toFixed(3) + " liters";
+            document.getElementById("result_water").innerHTML = "Total Litres of Water: " + totalLitresWater.toFixed(3) + " liters";
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+    <h1>Alcohol Dilution Calculator</h1>
+    </div>
+    <div class="form-container">
+            <form action="/alcohol-dilution-calc" method="post" id="alcoholDilutionCalcForm">
+    <form>
+        <label for="starting_abv">Starting ABV (%):</label>
+        <input type="number" id="starting_abv" step="0.01" required><br><br>
+        
+        <label for="target_abv">Target ABV (%):</label>
+        <input type="number" id="target_abv" step="0.01" required><br><br>
+        
+        <label for="target_litres_of_alcohol">Target Litres of Alcohol:</label>
+        <input type="number" id="target_litres_of_alcohol" step="0.01" required><br><br>
+        
+        <input type="button" value="Calculate" onclick="calculateDilution()">
+    </form>
+
+    <div id="result_alcohol"></div>
+    <div id="result_water"></div>
+
+    <div class="button-container">
+        <form action="/back-button-calculations" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to calculators</button>
+        </form>
+    </div>
+
+</body>
+</html>

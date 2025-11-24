@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Distillation experiment</title>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        label {
+            color: black; /* Set the color to white */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+    <h1>Distillation experiment</h1>
+    </div>
+    <div class="form-container">
+        <form action="/add-distillation-experiment" method="post" id="addExperiment">
+	    <input type="text" name="experimentSummary" id="experimentSummary" placeholder="Add experiment summary notes here">
+        <label for="experimentId">Experiment ID:</label>
+        <input type="text" id="experimentId" name="experimentId" placeholder="Enter experiment ID">
+            <label for="totalAlcoholUsed">Total alcohol used</label>
+            <input type="float" id="alcoholAmount" name="alcoholAmount" placeholder="Enter volume of alcohol used (L)">
+	    <input type="float" id="bottlesUsed" name="bottlesUsed" placeholder="Enter bottles used (if applicable)">
+        <label for="bottleAbv">Bottle ABV%</label>
+        <input type="float" id="bottleAbv" name="bottleAbv" placeholder="Enter bottle ABV%">
+        <label for="alcoholAbv">Experiment Wash ABV%</label>
+        <input type="float" id="alcoholAbv" name="alcoholAbv" placeholder="Enter distillation wash used in experiment - ABV%">
+        
+        <label for="flavorCode">Flavor Code (XXXX):</label>
+                <select name="flavorCode[]" id="flavorCodeSelect">
+                    <option value="" selected disabled>Select a flavor code</option>
+                    {% for flavorCode in previous_flavor_codes %}
+                    <option value="{{ flavorCode }}">{{ flavorCode }}</option>
+                    {% endfor %}
+                </select>
+            <button type="button" id="addflavorCode">Add Another Flavor Code</button>
+            <div id="flavorCodeContainer"></div>
+
+            <button type="submit"> Add Entry</button>
+        </form>
+    </div>
+
+    <div class="button-container">
+        <form action="/back-button-product-tools" method="post" class="form">
+            <button type="submit" class="top-right-button">Back to Product tools</button>
+        </form>
+
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Counter for tracking the number of added flavor code selections
+            var flavorCodeCounter = 0; // Initialize to 0
+
+            // Add an event listener to the "Add Another Flavor Code" button
+            document.getElementById("addflavorCode").addEventListener("click", function () {
+                flavorCodeCounter++;
+
+                // Create a new select element for flavor code
+		var newSelect = document.createElement("select");
+		newSelect.name = "flavorCode[]";
+		newSelect.className = "flavorCode";
+		newSelect.innerHTML = document.getElementById("flavorCodeSelect").innerHTML;
+
+		// Create a new div to contain the select element
+		var newDiv = document.createElement("div");
+		newDiv.appendChild(newSelect);
+
+		// Append the new div to the flavorCodeContainer
+		document.getElementById("flavorCodeContainer").appendChild(newDiv);
+	    });
+	});
+    </script>
+
+</body>
+</html>

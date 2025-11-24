@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Add a link to the CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='terminal.css') }}">
+
+    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    <title>Database Terminal</title>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Database Terminal</h1>
+    </div>
+
+    <div id="terminal-container"></div>
+
+    <script>
+	    // Ensure the DOM is ready before executing JavaScript
+	    document.addEventListener('DOMContentLoaded', function() {
+		var term = new Terminal();
+		term.open(document.getElementById('terminal-container'));
+
+		var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+		socket.on('connect', function() {
+		    console.log('Connected to Socket.IO server');
+		});
+
+		socket.on('output', function(data) {
+		    console.log("Received data:", data); // Print the fetched data to the console for debugging
+
+		    var output = JSON.parse(data);
+
+		    // Construct the table header
+		    var table = output.columns.join(' | ') + '\n';
+
+		    // Construct the separator row
+		    var separator = ' | '.repeat(table.length) + '\n';
+
+		    // Construct the table rows
+		    output.rows.forEach(function(row) {
+			table += '\n' + row.join(' | ') + '\n';
+		    });
+
+		    // Combine the header, separator, and rows
+		    var outputText = table + separator;
+
+		    // Write the output to the terminal
+		    term.write(outputText);
+
+		    // Add a new prompt after displaying the output
+		    term.prompt();
+
+		    // Scroll the terminal to the bottom
+		    term.scrollToTop();
+		});
+		// Prompt symbol to indicate terminal is ready for input
+		term.prompt = () => {
+		    term.write('\r\n$ '); // Display $ as the prompt
+		};
+
+		term.prompt(); // Display the initial prompt when the terminal is opened
+
+		// Accumulate user input until Enter is pressed
+		var commandBuffer = '';
+		term.onData(function(data) {
+		    // If Enter is pressed, send the accumulated command to the server
+		    if (data === '\r') {
+			socket.emit('command', commandBuffer);
+			commandBuffer = ''; // Clear the command buffer
+			term.writeln(''); // Add a new line after sending the command
+			term.prompt(); // Add a new prompt after displaying the output
+		    } else if (data.charCodeAt(0) === 127) {
+			// Handle backspace key
+			if (commandBuffer.length > 0) {
+			    // Remove the last character from the command buffer and erase it from the terminal
+			    commandBuffer = commandBuffer.slice(0, -1);
+			    term.write('\b \b'); // Move cursor back, overwrite character with space, move cursor back again
+			}
+		    } else {
+			// Otherwise, append the character to the command buffer and display it
+			commandBuffer += data;
+			term.write(data);
+		    }
+		});
+
+	    });
+    </script>
+</body>
+</html>

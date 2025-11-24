@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Customs Lodgements</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            background-attachment: fixed;
+            color: var(--text-color);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(
+                circle at 50% 50%,
+                rgba(255, 51, 102, 0.08) 0%,
+                transparent 70%
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+            width: 100%;
+        }
+
+        .nav-bar {
+            background-color: transparent;
+            padding: 2rem 0;
+            width: 100%;
+            margin-bottom: 2rem;
+        }
+
+        .nav-bar h1 {
+            color: var(--text-color);
+            margin: 0;
+            font-size: 2.5rem;
+            background: none;
+            -webkit-text-fill-color: var(--text-color);
+            text-align: center;
+        }
+
+        .main-content {
+            width: 100%;
+            padding-top: 1rem;
+        }
+
+        .data-tables {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 0;
+            background: var(--card-background);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .data-table th {
+            background: var(--table-header-bg);
+            color: var(--text-color);
+            font-weight: 600;
+            padding: 1.25rem;
+            text-align: left;
+            font-size: 1.125rem;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table td {
+            padding: 1rem 1.25rem;
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 1rem;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tbody tr {
+            transition: background-color 0.3s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: var(--table-row-hover);
+        }
+
+        .table-title {
+            color: var(--text-color);
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 1rem 0;
+            letter-spacing: -0.02em;
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .back-button {
+            padding: 1.25rem 2.5rem;
+            background-color: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-color);
+            font-size: 1.125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .back-button:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+            background-color: rgba(255, 51, 102, 0.1);
+        }
+
+        .back-button::before {
+            content: '←';
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .back-button:hover::before {
+            transform: translateX(-4px);
+        }
+
+        @media (max-width: 768px) {
+            .nav-bar {
+                padding: 0.75rem 0;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                margin-bottom: 1rem;
+                background: linear-gradient(to bottom, 
+                    var(--background-color) 0%,
+                    rgba(10, 10, 10, 0.95) 50%,
+                    rgba(10, 10, 10, 0) 100%);
+            }
+
+            .main-content {
+                padding-top: 0.5rem;
+            }
+
+            .container {
+                padding: 0.5rem;
+            }
+
+            .nav-bar h1 {
+                font-size: 2rem;
+            }
+
+            .data-tables {
+                gap: 2.5rem;
+            }
+
+            .table-title {
+                font-size: 1.25rem;
+                position: sticky;
+                top: 3.5rem;
+                background: var(--background-color);
+                padding: 0.5rem 0;
+                margin: 0 0 0.5rem 0;
+                z-index: 90;
+            }
+
+            .data-table {
+                display: block;
+                background: transparent;
+                box-shadow: none;
+            }
+
+            .data-table thead {
+                display: none;
+            }
+
+            .data-table tbody {
+                display: block;
+            }
+
+            .data-table tr {
+                display: block;
+                background: var(--card-background);
+                margin-bottom: 1rem;
+                border-radius: 12px;
+                box-shadow: var(--shadow);
+            }
+
+            .data-table td {
+                display: grid;
+                grid-template-columns: 50% 50%;
+                padding: 0.75rem 1rem;
+                border-bottom: 1px solid var(--border-color);
+                white-space: normal;
+            }
+
+            .data-table td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: var(--text-secondary);
+            }
+
+            .data-table tr[style*="bold"] {
+                background: var(--table-header-bg);
+            }
+
+            .data-table tr[style*="bold"] td::before {
+                color: var(--text-color);
+            }
+
+            .data-table td:last-child {
+                border-bottom: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav-bar h1 {
+                font-size: 1.75rem;
+            }
+
+            .table-title {
+                font-size: 1.125rem;
+                top: 3rem;
+            }
+
+            .data-table td {
+                padding: 0.625rem 0.875rem;
+                font-size: 0.875rem;
+            }
+
+            .back-button {
+                padding: 0.875rem 1.75rem;
+                font-size: 0.9375rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="container">
+            <h1>Customs Lodgements</h1>
+        </div>
+    </nav>
+    
+    <div class="main-content">
+        <div class="container">
+            <div class="data-tables">
+                <h2 class="table-title">Lodgements Trend</h2>
+                <div class="chart-container" style="position: relative; height:400px; width:100%; margin-bottom: 2rem;">
+                    <canvas id="lodgementsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="data-tables">
+                <h2 class="table-title">Customs Lodgements</h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date Period</th>
+                            <th>Lodged Volume (L)</th>
+                            <th>Lodged ABV (%)</th>
+                            <th>LAL (L)</th>
+                            <th>Bottles</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lodgement in customs_lodgements %}
+                            <tr>
+                                <td data-label="Date Period">{{ lodgement[0] }}</td>
+                                <td data-label="Lodged Volume (L)">{{ "%.2f"|format(lodgement[1]) }}</td>
+                                <td data-label="Lodged ABV (%)">{{ "%.2f"|format(lodgement[2]) }}</td>
+                                <td data-label="LAL (L)">{{ "%.2f"|format(lodgement[3]) }}</td>
+                                <td data-label="Bottles">{{ "%.0f"|format(lodgement[4]) }}</td>
+                            </tr>
+                        {% endfor %}
+                        <tr style="font-weight: bold; background-color: var(--table-header-bg);">
+                            <td data-label="Total">Total</td>
+                            <td data-label="Total Volume">{{ "%.3f"|format(customs_lodgements|map(attribute='1')|sum) }}L</td>
+                            <td data-label="Lodged ABV (%)">N/A</td>
+                            <td data-label="Total LAL">{{ "%.3f"|format(customs_lodgements|map(attribute='3')|sum) }}L</td>
+                            <td data-label="Total Bottles">{{ "%.0f"|format(customs_lodgements|map(attribute='4')|sum) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="button-container">
+                <form action="/back-button-audit-tools" method="post">
+                    <button type="submit" class="back-button">Back to Audit Tools</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Chart.js library and initialize the chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const ctx = document.getElementById('lodgementsChart');
+        
+        // Extract data from the table
+        const lodgementsData = {{ customs_lodgements|tojson|safe }};
+        const months = lodgementsData.map(item => item[0]); // Date Period
+        const volumes = lodgementsData.map(item => item[1]); // Lodged Volume
+        const lal = lodgementsData.map(item => item[3]); // LAL
+        const bottles = lodgementsData.map(item => item[4]); // Bottles
+
+        // Create the chart
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: months.reverse(),
+                datasets: [{
+                    label: 'Lodged Volume (L)',
+                    data: volumes.reverse(),
+                    borderColor: '#FF3366',
+                    backgroundColor: 'rgba(255, 51, 102, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#FF3366',
+                    pointBorderColor: '#FFFFFF',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'LAL (L)',
+                    data: lal.reverse(),
+                    borderColor: '#3366FF',
+                    backgroundColor: 'rgba(51, 102, 255, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointBackgroundColor: '#3366FF',
+                    pointBorderColor: '#FFFFFF',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y1'
+                },
+                {
+                    label: 'Bottles',
+                    data: bottles.reverse(),
+                    borderColor: '#33FF66',
+                    backgroundColor: 'rgba(51, 255, 102, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointBackgroundColor: '#33FF66',
+                    pointBorderColor: '#FFFFFF',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y2'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#FFFFFF'
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(26, 26, 26, 0.9)',
+                        titleColor: '#FFFFFF',
+                        bodyColor: '#FFFFFF',
+                        borderColor: '#2A2A2A',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: function(context) {
+                                if (context.dataset.label === 'Lodged Volume (L)') {
+                                    return `Volume: ${context.raw.toFixed(2)}L`;
+                                } else if (context.dataset.label === 'LAL (L)') {
+                                    return `LAL: ${context.raw.toFixed(2)}L`;
+                                } else {
+                                    return `Bottles: ${context.raw.toFixed(0)}`;
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#FFFFFF'
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            callback: function(value) {
+                                return value.toFixed(2) + 'L';
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            callback: function(value) {
+                                return value.toFixed(2) + 'L';
+                            }
+                        }
+                    },
+                    y2: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            callback: function(value) {
+                                return value.toFixed(0);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

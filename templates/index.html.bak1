@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whistlebird Inventory</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles_index.css') }}">
+</head>
+<body>
+
+    <header>
+        <div class="container">
+            <h1 class="title">Whistlebird Inventory</h1>
+        </div>
+    </header>
+
+    <div class="background-container">
+        <div class="background-image"></div>
+        <div class="overlay-image"></div>
+    </div>
+
+    <div class="container btn-container">
+        <form action="/initialize" method="post" class="form">
+            <button type="submit" class="btn">Initialize database</button>
+        </form>
+        <form action="/data-tools" method="post" class="form">
+            <button class="btn">Data tools</button>
+        </form>
+        <form action="/ingredient-tools" method="post" class="form">
+            <button class="btn">Ingredient tools</button>
+        </form>
+        <form action="/product-tools" method="post" class="form">
+            <button class="btn">Product tools</button>
+        </form>
+        <form action="/buys-sells" method="post" class="form">
+            <button class="btn">Buys / Sells</button>
+        </form>
+        <form action="/calculation-tools" method="post" class="form">
+            <button class="btn">Calculators</button>
+        </form>
+        <form action="/download-csv" method="post" class="form">
+            <button class="btn">Download data to csv</button>
+        </form>
+    </div>
+
+    <!-- Delete entry form -->
+    <div class="container btn-container">
+        <button id="deleteEntryButton" class="btn bottom-right-button">Delete entry</button>
+    </div>
+
+    <!-- Delete form container -->
+    <div id="deleteFormContainer" class="container" style="display: none;">
+        <form action="/delete-entry" method="post" class="form">
+            <label for="deleteId" class="white-label">Enter ID to Delete:</label>
+            <input type="number" id="deleteId" name="deleteId" required>
+            <button type="submit" class="btn">Delete</button>
+        </form>
+    </div>
+
+    <script>
+        // Script for the delete entry button
+        document.getElementById("deleteEntryButton").addEventListener("click", function() {
+            var deleteFormContainer = document.getElementById("deleteFormContainer");
+            deleteFormContainer.style.display = "block";
+        });
+    </script>
+
+</body>
+</html>
+

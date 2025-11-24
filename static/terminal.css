@@ -1,0 +1,88 @@
+/* terminal.css */
+
+/* Body styles */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0; /* Set a light background color */
+}
+
+/* Container styles */
+.container {
+    text-align: center;
+    padding: 20px;
+}
+
+/* Terminal container styles */
+#terminal-container {
+    width: auto;
+    height: auto; /* Set the height of the terminal container */
+    overflow: auto;
+    background-color: #000; /* Set the background color to black */
+    color: #fff; /* Set the text color to white */
+    overflow-y: 100%; /* Add scrollbars when content exceeds the height */
+    overflow-x: 100%;
+    user-select: none;
+    padding: 10px; /* Add padding to the terminal container */
+    box-sizing: border-box; /* Include padding and border in the total width and height */
+}
+
+/* Terminal input styles */
+#terminal-container .xterm-cursor {
+    background-color: #fff; /* Set the cursor background color to white */
+}
+
+/* Terminal prompt styles */
+#terminal-container .xterm-prompt {
+    color: #00ff00; /* Set the prompt color to green */
+}
+
+/* Apply these styles to adjust the xterm-viewport */
+.xterm-viewport {
+    height: 100%; /* Allow the viewport to expand vertically */
+    width: 100%;
+    background-color: black;
+    color: white;
+    overflow-y: auto; /* Show vertical scrollbar if content exceeds the height */
+}
+
+/* Apply these styles to adjust the xterm-scroll-area */
+.xterm-scroll-area {
+    height: auto !important ; /* Allow the scroll area to expand vertically */
+}
+
+/* Define styles for the terminal output */
+.table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.table th,
+.table td {
+    padding: 8px;
+    text-align: left;
+}
+
+/* Define styles for the table headers */
+.table th {
+    background-color: #0074d9; /* Blue background for headers */
+    color: white; /* White text color for headers */
+}
+
+/* Define styles for alternating rows */
+.table tr:nth-child(even) {
+    background-color: #f2f2f2; /* Light gray background for even rows */
+}
+
+/* Define styles for table borders */
+.table th,
+.table td {
+    border: 1px solid #ddd; /* Gray border for cells */
+}
+
+/* Define styles for terminal prompt */
+.prompt {
+    color: #00FF00; /* Green color for prompt */
+}
