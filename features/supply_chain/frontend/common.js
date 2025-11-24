@@ -35,7 +35,7 @@ function renderNavbar(activePage = '') {
   return `
     <nav class="navbar">
       <div class="container">
-        <a href="/supply-chain" class="navbar-logo">
+        <a href="/supply-chain-lovable" class="navbar-logo">
           <div class="navbar-logo-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
               <path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3V7z"></path>
