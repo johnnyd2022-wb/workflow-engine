@@ -656,7 +656,34 @@
 
         /* Log Entry Modal Styles */
         .log-entry-modal {
-            max-width: 600px;
+            max-width: 900px;
+            width: 90vw;
+            max-height: 90vh;
+        }
+
+        .log-entry-modal .modal-body {
+            max-height: 70vh;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        /* Responsive improvements for log entry modal */
+        @media (max-width: 768px) {
+            .log-entry-modal {
+                width: 95vw;
+                max-width: 95vw;
+                margin: 1rem;
+            }
+            
+            .log-entry-modal .modal-body {
+                max-height: 60vh;
+                padding: 0.5rem;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
         }
 
         .log-form {
@@ -717,7 +744,7 @@
 
         .form-group textarea {
             resize: vertical;
-            min-height: 80px;
+            min-height: 120px;
             font-family: inherit;
         }
 
@@ -1732,6 +1759,58 @@
             background: var(--primary-hover);
             transform: translateY(-1px);
             box-shadow: 0 2px 6px rgba(255, 51, 102, 0.3);
+        }
+
+        /* Missing Product Badge Styling */
+        .missing-product-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: #ff6b6b;
+            color: white;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .missing-product-badge:contains("Solstice") {
+            background: #ff9f43;
+        }
+
+        .missing-product-badge:contains("Wildflower") {
+            background: #ff6b6b;
+        }
+
+        .missing-product-badge:contains("Both") {
+            background: #ee5a52;
+        }
+
+        /* Customers Without Products Modal Styling */
+        .customers-without-products-modal {
+            max-width: 95vw;
+            width: 95vw;
+            max-height: 90vh;
+        }
+
+        .customers-without-products-container {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .missing-products-cell {
+            text-align: center;
+        }
+
+        .no-customers-without-products {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .no-customers-without-products p {
+            font-size: 1.1rem;
+            margin: 0;
         }
 
         /* Follow-up Alert Banner */
@@ -3266,6 +3345,11 @@
                      <div class="stat-label">Existing customers to follow-up</div>
                      <div class="stat-hint">Click to view details</div>
                  </div>
+                <div class="stat-card clickable-stat" onclick="viewCustomersWithoutProducts()">
+                     <div class="stat-number">{{ customers_without_products_count[0][0] if customers_without_products_count else 0 }}</div>
+                     <div class="stat-label">Customers Without All Products</div>
+                     <div class="stat-hint">Click to view details</div>
+                 </div>
             </div>
 
             <!-- Customer Search Modal (Hidden by default) -->
@@ -3737,6 +3821,84 @@
                     
                     <div class="modal-footer">
                         <button class="secondary-button" onclick="closeNewCustomersModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Customers Without All Products Modal (Hidden by default) -->
+            <div id="customersWithoutProductsModal" class="modal" style="display: none;">
+                <div class="modal-content customers-without-products-modal">
+                    <div class="modal-header">
+                        <h2>Customers Without All Products</h2>
+                        <span class="close-button" onclick="closeCustomersWithoutProductsModal()">&times;</span>
+                    </div>
+                    
+                    <div class="customers-without-products-container">
+                        {% if customers_without_products %}
+                            <div class="table-container">
+                                <table class="customer-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Missing Products</th>
+                                            <th>Recent Activity</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for customer in customers_without_products %}
+                                        <tr class="customer-row">
+                                            <td class="customer-name-cell">{{ customer[0] }}</td>
+                                            <td class="missing-products-cell">
+                                                <span class="missing-product-badge">{{ customer[1] }}</span>
+                                            </td>
+                                            <td class="recent-activity-cell">
+                                                {% set customer_name = customer[0] %}
+                                                {% if customer_recent_activity and customer_name in customer_recent_activity %}
+                                                    {% set activity = customer_recent_activity[customer_name] %}
+                                                    <div class="activity-summary">
+                                                        {% if activity.logs %}
+                                                            <a href="/crm-customer-page?customer_name={{ customer_name|urlencode }}&tab=call-logs" class="activity-badge logs-badge" title="Recent CRM Logs: {{ activity.logs|length }} - Click to view">
+                                                                📞 {{ activity.logs|length }} call{{ 's' if activity.logs|length != 1 else '' }}
+                                                            </a>
+                                                        {% endif %}
+                                                        {% if activity.follow_ups %}
+                                                            <a href="/crm-customer-page?customer_name={{ customer_name|urlencode }}&tab=follow-ups" class="activity-badge follow-ups-badge" title="Recent Follow-ups: {{ activity.follow_ups|length }} - Click to view">
+                                                                ✅ {{ activity.follow_ups|length }} follow-up{{ 's' if activity.follow_ups|length != 1 else '' }}
+                                                            </a>
+                                                        {% endif %}
+                                                        {% if not activity.logs and not activity.follow_ups %}
+                                                            <span class="activity-badge no-activity-badge">No recent activity</span>
+                                                        {% endif %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="activity-badge no-activity-badge">No recent activity</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="action-cell">
+                                                <div class="action-buttons">
+                                                    <button class="action-btn log-call-btn" onclick="logCallForCustomer('{{ customer[0] }}')">
+                                                        📞 Log Call
+                                                    </button>
+                                                    <button class="action-btn view-profile-btn" onclick="viewCustomerProfile('{{ customer[0] }}')">
+                                                        👤 View Profile
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="no-customers-without-products">
+                                <p>All customers have purchased both Solstice and Wildflower products.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button class="secondary-button" onclick="closeCustomersWithoutProductsModal()">Close</button>
                     </div>
                 </div>
             </div>
@@ -5005,6 +5167,15 @@
             document.getElementById('newCustomersModal').style.display = 'none';
         }
 
+        // Customers Without Products Modal Functions
+        function viewCustomersWithoutProducts() {
+            document.getElementById('customersWithoutProductsModal').style.display = 'block';
+        }
+
+        function closeCustomersWithoutProductsModal() {
+            document.getElementById('customersWithoutProductsModal').style.display = 'none';
+        }
+
         function viewRevenueReport() {
             document.getElementById('revenueReportModal').style.display = 'block';
             initializeRevenueChart();
@@ -5435,6 +5606,7 @@
             const totalDueTasksModal = document.getElementById('totalDueTasksModal');
             const activeCustomersModal = document.getElementById('activeCustomersModal');
             const newCustomersModal = document.getElementById('newCustomersModal');
+            const customersWithoutProductsModal = document.getElementById('customersWithoutProductsModal');
             const confirmationModal = document.getElementById('confirmationModal');
             const successModal = document.getElementById('successModal');
             const processMatchConfirmationModal = document.getElementById('processMatchConfirmationModal');
@@ -5465,6 +5637,9 @@
             }
             if (event.target == newCustomersModal) {
                 closeNewCustomersModal();
+            }
+            if (event.target == customersWithoutProductsModal) {
+                closeCustomersWithoutProductsModal();
             }
             if (event.target == confirmationModal) {
                 closeConfirmationModal();
