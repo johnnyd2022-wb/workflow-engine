@@ -1,12 +1,11 @@
 import os
 import datetime
-import pandas as pd
 import psycopg2
 import re
 from sqlalchemy import create_engine
 from io import StringIO  # Add this import statement for StringIO
 import docker
-from config_loader import config
+from app.utils.config_loader import config
 
 def calculate_numeric_precision_scale(series):
     max_digits = series.apply(lambda x: len(str(x).replace('.', '')) if not pd.isna(x) else 0).max()

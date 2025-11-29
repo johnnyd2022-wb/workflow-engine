@@ -3,12 +3,10 @@ import json
 from datetime import date
 import datetime
 import threading
-import schedule
 import time
 from flask import Flask, render_template, redirect, url_for, request, send_file
 import subprocess
 from initialize import db_conn
-from database_insert import insert_data
 from flask import Flask, render_template, jsonify, redirect, request, session, url_for, Response, stream_with_context
 import os
 # Import xero client stuff here
@@ -22,7 +20,7 @@ from xml.etree import ElementTree as ET
 import io
 import zipfile
 import math
-from config_loader import config
+from app.utils.config_loader import config
 
 # Import CRM blueprint
 from features.crm.backend.backend import crm_bp

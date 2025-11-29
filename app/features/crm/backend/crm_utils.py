@@ -3,7 +3,7 @@ CRM-specific utility functions.
 Contains business logic and validation specific to CRM features.
 '''
 
-from shared.backend.api_helpers import api_response
+from app.utils.api_helpers import api_response
 
 
 def validate_customer_exists(connection, cursor, customer_name):

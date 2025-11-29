@@ -12,10 +12,10 @@ This system implements the execution-centric lineage approach discussed in the C
 
 The system uses several new database tables:
 
-- **`supply_chain_parent_executions`** - Stores parent process executions with batch IDs
-- **`supply_chain_sub_executions`** - Stores sub-process executions linked to parent executions
-- **`supply_chain_execution_sales_mapping`** - Maps executions to sales for full traceability
-- **`supply_chain_execution_lineage`** - Stores execution lineage relationships
+- **`workflow_engine_parent_executions`** - Stores parent process executions with batch IDs
+- **`workflow_engine_sub_executions`** - Stores sub-process executions linked to parent executions
+- **`workflow_engine_execution_sales_mapping`** - Maps executions to sales for full traceability
+- **`workflow_engine_execution_lineage`** - Stores execution lineage relationships
 
 ### Key Features
 
@@ -51,21 +51,21 @@ http://localhost:5000/supply-chain/execution-tracing
 The system provides several API endpoints:
 
 #### Execution Lineage
-- `GET /api/supply-chain/executions/{id}/lineage` - Get full execution lineage tree
-- `GET /api/supply-chain/executions/{id}/sales` - Get linked sales for an execution
+- `GET /api/workflow-engine/executions/{id}/lineage` - Get full execution lineage tree
+- `GET /api/workflow-engine/executions/{id}/sales` - Get linked sales for an execution
 
 #### Sales Integration
-- `GET /api/supply-chain/sales/unmapped` - Get sales without execution mapping
-- `POST /api/supply-chain/sales/{id}/auto-map` - Attempt automatic mapping
-- `GET /api/supply-chain/sales/{id}/trace` - Trace sales back to source
+- `GET /api/workflow-engine/sales/unmapped` - Get sales without execution mapping
+- `POST /api/workflow-engine/sales/{id}/auto-map` - Attempt automatic mapping
+- `GET /api/workflow-engine/sales/{id}/trace` - Trace sales back to source
 
 #### Search & Statistics
-- `GET /api/supply-chain/traceability/search` - Search executions, sales, or batches
-- `GET /api/supply-chain/executions/stats` - Get execution statistics
+- `GET /api/workflow-engine/traceability/search` - Search executions, sales, or batches
+- `GET /api/workflow-engine/executions/stats` - Get execution statistics
 
 #### Mapping Operations
-- `POST /api/supply-chain/executions/{id}/map-sales` - Map execution to sales
-- `GET /api/supply-chain/sales/{id}/suggestions` - Get execution suggestions
+- `POST /api/workflow-engine/executions/{id}/map-sales` - Map execution to sales
+- `GET /api/workflow-engine/sales/{id}/suggestions` - Get execution suggestions
 
 ## 📊 Usage Examples
 

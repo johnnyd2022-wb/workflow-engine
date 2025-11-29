@@ -1,6 +1,7 @@
 import os
 import configparser
-from typing import Dict, Any
+from typing import Any
+from pathlib import Path
 
 class Config:
     """Configuration loader for environment-specific settings"""
@@ -12,9 +13,12 @@ class Config:
     
     def load_config(self):
         """Load configuration based on environment"""
-        config_file = f'config/{self.environment}.ini'
+        # Get the app directory (where this module is located)
+        # This works regardless of the current working directory
+        app_dir = Path(__file__).parent.parent
+        config_file = app_dir / 'config' / f'{self.environment}.ini'
         
-        if not os.path.exists(config_file):
+        if not config_file.exists():
             raise FileNotFoundError(f"Configuration file {config_file} not found")
         
         self.config.read(config_file)
