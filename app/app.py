@@ -1,16 +1,21 @@
 import sys
+import os
+
+# Add parent directory to path so 'app' can be imported as a package
+# This is needed when running app/app.py directly
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
 import json
 from datetime import date
 import datetime
 import threading
-import schedule
 import time
 from flask import Flask, render_template, redirect, url_for, request, send_file
 import subprocess
-from initialize import db_conn
-from database_insert import insert_data
+from app.initialize import db_conn
 from flask import Flask, render_template, jsonify, redirect, request, session, url_for, Response, stream_with_context
-import os
 # Import xero client stuff here
 from xero_python.api_client import ApiClient
 from xero_python.accounting import AccountingApi
@@ -22,7 +27,7 @@ from xml.etree import ElementTree as ET
 import io
 import zipfile
 import math
-from config_loader import config
+from app.utils.config_loader import config
 
 # Import CRM blueprint
 from features.crm.backend.backend import crm_bp
@@ -128,7 +133,7 @@ def healthcheck():
 # Function to call the main() function from initialize.py
 def initialize_database():
     python_executable = sys.executable
-    initialize_script = "initialize.py"
+    initialize_script = "app/initialize.py"
     result = subprocess.run([python_executable, initialize_script], capture_output=True, text=True)
     
     if result.returncode != 0:
@@ -153,9 +158,23 @@ def initialize():
 if __name__ == '__main__':
     # Run the app on all available network interfaces (0.0.0.0)
     # Use configuration for host, port, and debug settings
+    
+    # Resolve SSL certificate paths relative to app.py location
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    cert_file = os.path.join(app_dir, 'tls', 'wb_cert.pem')
+    key_file = os.path.join(app_dir, 'tls', 'wb_cert.key')
+    
+    # Only use SSL if certificate files exist
+    ssl_context = None
+    if os.path.exists(cert_file) and os.path.exists(key_file):
+        ssl_context = (cert_file, key_file)
+        print(f"✅ SSL enabled with certificates: {cert_file}")
+    else:
+        print(f"⚠️  SSL certificates not found at {cert_file} or {key_file}, running without SSL")
+    
     app.run(
         host=config.host,
         port=config.port,
         debug=config.debug,
-        ssl_context=('tls/wb_cert.pem', 'tls/wb_cert.key')
+        ssl_context=ssl_context
     )

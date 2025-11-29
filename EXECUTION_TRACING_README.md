@@ -12,10 +12,10 @@ This system implements the execution-centric lineage approach discussed in the C
 
 The system uses several new database tables:
 
-- **`supply_chain_parent_executions`** - Stores parent process executions with batch IDs
-- **`supply_chain_sub_executions`** - Stores sub-process executions linked to parent executions
-- **`supply_chain_execution_sales_mapping`** - Maps executions to sales for full traceability
-- **`supply_chain_execution_lineage`** - Stores execution lineage relationships
+- **`workflow_executions`** - Stores parent process executions with batch IDs
+- **`workflow_sub_executions`** - Stores sub-process executions linked to parent executions
+- **`workflow_execution_sales_mapping`** - Maps executions to sales for full traceability
+- **`workflow_execution_lineage`** - Stores execution lineage relationships
 
 ### Key Features
 
