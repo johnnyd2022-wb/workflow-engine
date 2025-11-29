@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, DateTime, func
+from sqlalchemy import Column, DateTime, Integer, String, func
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
+
 
 class User(Base):
     __tablename__ = "users"
@@ -9,6 +10,7 @@ class User(Base):
     username = Column(String(50), nullable=False, unique=True)
     email = Column(String(120), nullable=False, unique=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 
 class Customer(Base):
     __tablename__ = "customers"

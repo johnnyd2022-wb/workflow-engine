@@ -7,10 +7,12 @@
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 stages:
 - test
-sast:
-  stage: test
+
 include:
 - template: Security/SAST.gitlab-ci.yml
+
+sast:
+  stage: test
 
 # Check for dependency updates
 check_dependency_updates:
@@ -22,3 +24,18 @@ check_dependency_updates:
     - schedules
     - merge_requests
   allow_failure: true
+
+# Run ruff linter
+# Note: This checks only. To auto-fix locally, run: uv run workflow lint --fix
+ruff:
+  stage: test
+  image: python:3.12-bullseye
+  script:
+    - pip install uv
+    - uv sync --extra dev
+    - uv run ruff check app/
+    - uv run ruff format --check app/
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
