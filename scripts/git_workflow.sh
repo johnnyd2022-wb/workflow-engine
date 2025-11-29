@@ -32,7 +32,7 @@ print_error() {
 # Function to check if we're in the right directory
 check_directory() {
     if [ ! -f "app.py" ] || [ ! -d "config" ]; then
-        print_error "Please run this script from the wb_local directory"
+        print_error "Please run this script from the workflow-engine directory"
         exit 1
     fi
 }
@@ -90,7 +90,7 @@ deploy_test() {
         print_success "Test environment deployed successfully!"
         print_status "Browse to: https://test-inventory.whistlebird.co.nz"
     else
-        print_error "Test deployment failed healthcheck. Check logs with: docker logs wb_inv_test"
+        print_error "Test deployment failed healthcheck. Check logs with: docker logs workflow-engine-test"
         exit 1
     fi
 }
@@ -138,7 +138,7 @@ deploy_prod() {
             print_warning "Failed to push tag to remote, but deployment is healthy"
         fi
     else
-        print_error "Production deployment failed healthcheck. Check logs with: docker logs wb_inv_prod"
+        print_error "Production deployment failed healthcheck. Check logs with: docker logs workflow-engine-prod"
         print_warning "Removing local tag since deployment failed"
         git tag -d "$tag_name"
         exit 1
@@ -169,14 +169,14 @@ status() {
     fi
 
     # Check test environment
-    if docker ps --format "table {{.Names}}" | grep -q "wb_inv_test"; then
+    if docker ps --format "table {{.Names}}" | grep -q "workflow-engine-test"; then
         print_success "TEST: Running (Docker)"
     else
         print_warning "TEST: Not running"
     fi
 
     # Check production environment
-    if docker ps --format "table {{.Names}}" | grep -q "wb_inv_prod"; then
+    if docker ps --format "table {{.Names}}" | grep -q "workflow-engine-prod"; then
         print_success "PRODUCTION: Running (Docker)"
     else
         print_warning "PRODUCTION: Not running"

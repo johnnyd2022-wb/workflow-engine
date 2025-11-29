@@ -2,24 +2,24 @@
 
 # Test environment runner
 export WB_ENVIRONMENT=test
-echo "🧪 Starting WhistleBird app in TEST environment..."
+echo "🧪 Starting Workflow Engine app in TEST environment..."
 echo "Environment: $WB_ENVIRONMENT"
 echo "Config file: config/$WB_ENVIRONMENT.ini"
 
 # Build and run Docker container for test
-docker stop $(docker ps -aqf "name=wb_inv_test") 2>/dev/null || true
-docker rm $(docker ps -aqf "name=wb_inv_test") 2>/dev/null || true
+docker stop $(docker ps -aqf "name=workflow-engine-test") 2>/dev/null || true
+docker rm $(docker ps -aqf "name=workflow-engine-test") 2>/dev/null || true
 
 # Build Docker image for test environment
-docker build --target test -f Dockerfile.multi -t wb_inv:test .
+docker build --target test -f Dockerfile.multi -t workflow-engine:test .
 
 # Run Docker container
 docker run -d \
-    --name wb_inv_test \
-    -p 5001:5001 \
+    --name workflow-engine-test \
+    -p 8001:8001 \
     -e WB_ENVIRONMENT=test \
-    wb_inv:test
+    workflow-engine:test
 
-echo "✅ Test environment started on port 5001"
-echo "View logs with: docker logs -f wb_inv_test"
-echo "Browse to: https://test-inventory.whistlebird.co.nz"
+echo "✅ Test environment started on port 8001"
+echo "View logs with: docker logs -f workflow-engine-test"
+echo "Browse to: https://test-workflow-engine.whistlebird.co.nz"

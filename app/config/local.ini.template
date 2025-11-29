@@ -2,12 +2,12 @@
 environment = local
 debug = true
 host = 0.0.0.0
-port = 5005
+port = 8005
 
 [database]
 host = localhost
-port = 5401
-name = whistlebird_db_test
+port = 8401
+name = workflow-engine
 user = postgres
 password = YOUR_PASSWORD_HERE
 

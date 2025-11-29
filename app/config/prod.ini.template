@@ -6,8 +6,8 @@ port = 5000
 
 [database]
 host = host.docker.internal
-port = 5432
-name = whistlebird_db_prod
+port = 8432
+name = workflow-engine
 user = postgres
 password = YOUR_PASSWORD_HERE
 
