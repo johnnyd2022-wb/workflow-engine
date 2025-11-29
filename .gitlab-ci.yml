@@ -11,3 +11,14 @@ sast:
   stage: test
 include:
 - template: Security/SAST.gitlab-ci.yml
+
+# Check for dependency updates
+check_dependency_updates:
+  image: python:3.12-bullseye
+  script:
+    - pip install uv
+    - uv lock --check
+  only:
+    - schedules
+    - merge_requests
+  allow_failure: true
