@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
 
 from flask import request, jsonify
-from shared.backend.api_helpers import (
+from app.utils.api_helpers import (
     api_response, validate_api_input, handle_database_operation,
     validate_string_field
 )

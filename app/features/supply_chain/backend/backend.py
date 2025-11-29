@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify
-from initialize import db_conn
+from app.initialize import db_conn
 import json
 from datetime import datetime, date
 

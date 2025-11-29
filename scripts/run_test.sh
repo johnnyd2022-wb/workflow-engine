@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Test environment runner
-export WB_ENVIRONMENT=test
+export ENVIRONMENT=test
 echo "🧪 Starting Workflow Engine app in TEST environment..."
-echo "Environment: $WB_ENVIRONMENT"
-echo "Config file: config/$WB_ENVIRONMENT.ini"
+echo "Environment: $ENVIRONMENT"
+echo "Config file: config/$ENVIRONMENT.ini"
 
 # Build and run Docker container for test
 docker stop $(docker ps -aqf "name=workflow-engine-test") 2>/dev/null || true
@@ -17,7 +17,7 @@ docker build --target test -f Dockerfile.multi -t workflow-engine:test .
 docker run -d \
     --name workflow-engine-test \
     -p 8001:8001 \
-    -e WB_ENVIRONMENT=test \
+    -e ENVIRONMENT=test \
     workflow-engine:test
 
 echo "✅ Test environment started on port 8001"

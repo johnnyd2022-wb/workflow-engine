@@ -7,18 +7,37 @@ class Config:
     
     def __init__(self):
         self.config = configparser.ConfigParser()
-        self.environment = os.getenv('WB_ENVIRONMENT', 'local')
+        self.environment = os.getenv('ENVIRONMENT', 'local')
         self.load_config()
     
     def load_config(self):
         """Load configuration based on environment"""
-        config_file = f'config/{self.environment}.ini'
+        # Determine the base directory (project root)
+        # config_loader.py is at app/utils/config_loader.py
+        # Go up two levels to get to project root
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         
-        if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Configuration file {config_file} not found")
+        # Try multiple possible paths for the config file
+        possible_paths = [
+            os.path.join(base_dir, 'app', 'config', f'{self.environment}.ini'),  # From project root: app/config/{env}.ini
+            f'app/config/{self.environment}.ini',  # Relative from /app working directory
+            f'config/{self.environment}.ini',      # Fallback: config/{env}.ini
+        ]
+        
+        config_file = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                config_file = path
+                break
+        
+        if not config_file:
+            raise FileNotFoundError(
+                f"Configuration file for environment '{self.environment}' not found. "
+                f"Tried: {', '.join(possible_paths)}"
+            )
         
         self.config.read(config_file)
-        print(f"✅ Loaded configuration for environment: {self.environment}")
+        print(f"✅ Loaded configuration for environment: {self.environment} from {config_file}")
     
     def get(self, section: str, key: str, fallback: Any = None) -> str:
         """Get a configuration value"""

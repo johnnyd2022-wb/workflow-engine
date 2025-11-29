@@ -106,7 +106,7 @@ def handle_database_operation(f):
     def wrapper(*args, **kwargs):
         connection, cursor = None, None
         try:
-            from initialize import db_conn
+            from app.initialize import db_conn
             connection, cursor = db_conn()
             
             # Call the function with connection and cursor as first arguments
