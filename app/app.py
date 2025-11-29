@@ -14,7 +14,7 @@ import threading
 import time
 from flask import Flask, render_template, redirect, url_for, request, send_file
 import subprocess
-from app.initialize import db_conn
+from initialize import db_conn
 from flask import Flask, render_template, jsonify, redirect, request, session, url_for, Response, stream_with_context
 # Import xero client stuff here
 from xero_python.api_client import ApiClient
