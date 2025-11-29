@@ -16,6 +16,11 @@ dependencies = [
     "xero-python==4.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+]
+
 [project.scripts]
 workflow = "app.cli:cli"
 
@@ -28,3 +33,30 @@ include = ["app*"]
 
 [tool.uv]
 package = true
+
+[tool.ruff]
+# Enable pycodestyle (E, W), Pyflakes (F), and isort (I) rules by default
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+# Set the maximum line length
+line-length = 120
+
+# Exclude common directories
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "migrations",
+    "node_modules",
+]
+
+[tool.ruff.per-file-ignores]
+# Allow longer lines in tests
+"**/tests/**" = ["E501"]
+"**/test_*.py" = ["E501"]
+
+[tool.ruff.isort]
+known-first-party = ["app"]
