@@ -1,33 +1,33 @@
-# Multi-stage Dockerfile for both test and production environments
-FROM python:3.12-slim as base
+# Multi-stage Dockerfile for test and production
+FROM python:3.12-bullseye as base
 
 LABEL maintainer="johnny@whistlebird.co.nz"
 
 # Set timezone
-RUN ln -snf /usr/share/zoneinfo/Pacific/Auckland /etc/localtime && echo Pacific/Auckland > /etc/timezone
-
-# Update and install Python and curl
-RUN apt-get -y update && apt-get install -y python3 python3-pip curl
+RUN ln -snf /usr/share/zoneinfo/Pacific/Auckland /etc/localtime \
+    && echo Pacific/Auckland > /etc/timezone
 
 # Set working directory
 WORKDIR /app
 
-# Copy project files
+# Copy project files needed for dependency install
 COPY pyproject.toml uv.lock ./
 
 # Install uv
 RUN pip install uv
 
-# Install dependencies from lockfile
+# Sync dependencies exactly as in lockfile
 RUN uv sync --frozen
 
-# Copy application files
+# Copy the rest of your application code
 COPY . .
 
 # Test environment stage
 FROM base as test
 ENV ENVIRONMENT=test
 EXPOSE 8001
+
+# Optional healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f -k https://localhost:8001/healthcheck || exit 1
 CMD ["uv", "run", "workflow", "start"]

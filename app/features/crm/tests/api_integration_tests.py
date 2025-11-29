@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 # Import Flask app and initialize
 try:
     from app import app
-    from initialize import db_conn
+    from app.initialize import db_conn
 except ImportError as e:
     print(f"Could not import app or db_conn: {e}")
     print("Make sure you're running from the project root directory")

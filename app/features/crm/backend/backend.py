@@ -14,7 +14,7 @@ INVOICE_BUTTON_ENABLED = config.invoice_button_enabled
 @crm_bp.route('/crm', methods=['GET', 'POST'])
 def crm():
     print("Accessed /crm route")
-    from initialize import db_conn
+    from app.initialize import db_conn
     from app import get_monthly_revenue_data
     connection, cursor = db_conn()
 
@@ -448,7 +448,7 @@ def crm():
 def auto_sync_missing_customers():
     """Automatically sync any customers that exist in sales data but not in CRM"""
     print("Starting auto-sync of missing customers...")
-    from initialize import db_conn
+    from app.initialize import db_conn
     connection, cursor = db_conn()
     
     try:
@@ -709,7 +709,7 @@ def auto_sync_missing_customers():
 def crm_handle_potential_match():
     """Handle potential duplicate customer matches from modal"""
     print("Accessed /crm-handle-potential-match route")
-    from initialize import db_conn
+    from app.initialize import db_conn
     connection, cursor = db_conn()
     
     data = request.get_json()
@@ -800,7 +800,7 @@ def crm_handle_potential_match():
 @crm_bp.route('/crm-create-customer', methods=['POST'])
 def crm_create_customer():
     print("Accessed /crm-create-customer route")
-    from initialize import db_conn
+    from app.initialize import db_conn
     connection, cursor = db_conn()
     
     data = request.get_json()
@@ -843,7 +843,7 @@ def customer_page_redirect_response(customer_name):
 @crm_bp.route('/crm-customer-page', methods=['GET', 'POST'])
 def crm_customer_page():
     print("Accessed /crm-customer-page route")
-    from initialize import db_conn
+    from app.initialize import db_conn
     connection, cursor = db_conn()
 
     try:
@@ -1107,7 +1107,7 @@ def crm_customer_page():
 @crm_bp.route('/crm-sync-existing-customers', methods=['POST'])
 def crm_sync_existing_customers():
     print("Accessed /crm-sync-existing-customers route")
-    from initialize import db_conn
+    from app.initialize import db_conn
     connection, cursor = db_conn()
     
     try:
@@ -1193,7 +1193,7 @@ def crm_sync_existing_customers():
 def update_existing_customers_with_invoices():
     """Update existing customers in CRM with their invoice data"""
     print("Updating existing customers with invoice data...")
-    from initialize import db_conn
+    from app.initialize import db_conn
     connection, cursor = db_conn()
     
     try:
@@ -1256,7 +1256,7 @@ def update_existing_customers_with_invoices():
 def get_customer_invoices(customer_name):
     """Internal function to get customer invoice data"""
     print(f"Getting invoices for customer: {customer_name}")
-    from initialize import db_conn
+    from app.initialize import db_conn
     connection, cursor = db_conn()
     
     try:
@@ -1355,7 +1355,7 @@ def crm_customer_invoices():
 @crm_bp.route('/crm-customer-invoice-data', methods=['POST'])
 def crm_customer_invoice_data():
     print("Accessed /crm-customer-invoice-data route")
-    from initialize import db_conn
+    from app.initialize import db_conn
     connection, cursor = db_conn()
     
     
@@ -1402,7 +1402,7 @@ def crm_update_customer_field():
                 "message": f"Field '{field}' is not allowed"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -1460,7 +1460,7 @@ def crm_update_follow_up_task():
                 "message": "Missing task_id"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -1548,7 +1548,7 @@ def crm_delete_follow_up_task():
                 "message": "Missing task_id"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -1613,7 +1613,7 @@ def crm_create_follow_up_task():
                 "message": "Missing follow_up_task"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -1677,7 +1677,7 @@ def crm_create_call_log():
                 "message": "Missing log_notes"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -1749,7 +1749,7 @@ def crm_add_contact():
                 "message": "Missing contact_name"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -1847,7 +1847,7 @@ def crm_update_contact():
                 "message": "Missing contact_id"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -1932,7 +1932,7 @@ def crm_delete_contact():
                 "message": "Missing contact_id"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -2015,7 +2015,7 @@ def crm_reorder_contacts():
                 "message": "Invalid direction. Must be 'up' or 'down'"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -2117,7 +2117,7 @@ def crm_mark_task_completed():
                 "message": "Missing customer_name"
             }), 400
         
-        from initialize import db_conn
+        from app.initialize import db_conn
         connection, cursor = db_conn()
         
         try:
@@ -2161,7 +2161,6 @@ def crm_mark_task_completed():
             "success": False,
             "message": f"Server error: {str(e)}"
         }), 500
-
 # Import support modules to register their routes
 try:
     from .support import alias  # Import alias routes

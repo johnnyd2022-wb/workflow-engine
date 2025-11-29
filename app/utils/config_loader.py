@@ -8,7 +8,7 @@ class Config:
     
     def __init__(self):
         self.config = configparser.ConfigParser()
-        self.environment = os.getenv('WB_ENVIRONMENT', 'local')
+        self.environment = os.getenv('ENVIRONMENT', 'local')
         self.load_config()
     
     def load_config(self):
@@ -22,7 +22,7 @@ class Config:
             raise FileNotFoundError(f"Configuration file {config_file} not found")
         
         self.config.read(config_file)
-        print(f"✅ Loaded configuration for environment: {self.environment}")
+        print(f"✅ Loaded configuration for environment: {self.environment} from {config_file}")
     
     def get(self, section: str, key: str, fallback: Any = None) -> str:
         """Get a configuration value"""

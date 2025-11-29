@@ -7,7 +7,7 @@ for full supply chain traceability.
 
 import json
 from datetime import datetime, timedelta
-from initialize import db_conn
+from app.initialize import db_conn
 
 def attempt_automatic_sales_mapping(sales_id, products_data=None):
     """
