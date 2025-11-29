@@ -1,4 +1,3 @@
-import datetime
 import json
 
 from flask import Blueprint, jsonify, render_template, request
@@ -23,8 +22,6 @@ def crm():
     try:
         # Auto-sync any missing customers from sales data before loading CRM
         print("Checking for missing customers and auto-syncing...")
-        potential_matches = auto_sync_missing_customers()
-
         # Get all customers from CRM system (existing + potential)
         cursor.execute("""
             SELECT DISTINCT customer, customer_email, customer_phone, customer_address, primary_contact
@@ -36,9 +33,9 @@ def crm():
 
         # Get existing customers with sales (for statistics)
         cursor.execute("""
-            SELECT DISTINCT b.buyer 
+            SELECT DISTINCT b.buyer
             FROM buyers b
-            INNER JOIN sales_product sp ON b.buyer = sp.buyer 
+            INNER JOIN sales_product sp ON b.buyer = sp.buyer
             ORDER BY b.buyer
         """)
         existing_customers = cursor.fetchall()
@@ -52,10 +49,10 @@ def crm():
         # Get detailed active customers this month with product breakdown
         cursor.execute("""
             WITH customer_stats AS (
-                SELECT 
-                    b.buyer, 
-                    b.buyer_email, 
-                    b.primary_contact, 
+                SELECT
+                    b.buyer,
+                    b.buyer_email,
+                    b.primary_contact,
                     b.buyer_phone,
                     COUNT(sp.date) as purchase_count,
                     SUM((SELECT COALESCE(SUM((value->>'quantity')::int), 0) FROM jsonb_each(sp.products->'products'))) as total_bottles,
@@ -68,7 +65,7 @@ def crm():
                 GROUP BY b.buyer, b.buyer_email, b.primary_contact, b.buyer_phone
             ),
             product_breakdown AS (
-                SELECT 
+                SELECT
                     sp.buyer,
                     jsonb_agg(
                         jsonb_build_object(
@@ -84,7 +81,7 @@ def crm():
                 AND sp.notes LIKE '%INV%'
                 GROUP BY sp.buyer
             )
-            SELECT 
+            SELECT
                 cs.buyer,
                 cs.buyer_email,
                 cs.primary_contact,
@@ -128,10 +125,10 @@ def crm():
                 GROUP BY buyer
             ),
             new_customer_stats AS (
-                SELECT 
-                    b.buyer, 
-                    b.buyer_email, 
-                    b.primary_contact, 
+                SELECT
+                    b.buyer,
+                    b.buyer_email,
+                    b.primary_contact,
                     b.buyer_phone,
                     fp.first_purchase_date,
                     COUNT(sp.date) as purchase_count,
@@ -145,7 +142,7 @@ def crm():
                 GROUP BY b.buyer, b.buyer_email, b.primary_contact, b.buyer_phone, fp.first_purchase_date
             ),
             product_breakdown AS (
-                SELECT 
+                SELECT
                     sp.buyer,
                     jsonb_agg(
                         jsonb_build_object(
@@ -162,7 +159,7 @@ def crm():
                 AND sp.notes LIKE '%INV%'
                 GROUP BY sp.buyer
             )
-            SELECT 
+            SELECT
                 ncs.buyer,
                 ncs.buyer_email,
                 ncs.primary_contact,
@@ -240,7 +237,7 @@ def crm():
             cursor.execute(
                 """
                 SELECT customer, log_date, log_type, log_notes, log_status
-                FROM crm_logs 
+                FROM crm_logs
                 WHERE customer = ANY(%s)
                 AND log_date >= CURRENT_DATE - INTERVAL '30 days'
                 ORDER BY customer, log_date DESC
@@ -253,7 +250,7 @@ def crm():
             cursor.execute(
                 """
                 SELECT customer, follow_up_date, follow_up_type, follow_up_notes, follow_up_status, follow_up_priority
-                FROM crm_follow_ups 
+                FROM crm_follow_ups
                 WHERE customer = ANY(%s)
                 AND follow_up_date >= CURRENT_DATE - INTERVAL '30 days'
                 ORDER BY customer, follow_up_date DESC
@@ -302,8 +299,8 @@ def crm():
                 SELECT id, customer, follow_up_date, follow_up_priority, follow_up_status, follow_up_notes, follow_up_type
                 FROM crm_follow_ups
                 WHERE follow_up_status != 'completed'
-                ORDER BY 
-                    CASE 
+                ORDER BY
+                    CASE
                         WHEN follow_up_date IS NULL THEN 1
                         ELSE 0
                     END,
@@ -348,14 +345,14 @@ def crm():
                 )
                 AND buyer NOT IN ('WHISTLEBIRD INTERNAL (Personal)', 'Mainfreight Ltd', 'POST HASTE LTD')
             )
-            SELECT 
+            SELECT
                 c.buyer,
-                CASE 
+                CASE
                     WHEN c.buyer IN (SELECT buyer FROM customers_without_solstice) AND c.buyer NOT IN (SELECT buyer FROM customers_without_wildflower) THEN 'Without Solstice'
                     WHEN c.buyer IN (SELECT buyer FROM customers_without_wildflower) AND c.buyer NOT IN (SELECT buyer FROM customers_without_solstice) THEN 'Without Wildflower'
                     ELSE 'Without Both'
                 END as missing_products,
-                CASE 
+                CASE
                     WHEN c.buyer IN (SELECT buyer FROM customers_without_solstice) AND c.buyer NOT IN (SELECT buyer FROM customers_without_wildflower) THEN 1
                     WHEN c.buyer IN (SELECT buyer FROM customers_without_wildflower) AND c.buyer NOT IN (SELECT buyer FROM customers_without_solstice) THEN 2
                     ELSE 3
@@ -430,7 +427,6 @@ def crm():
             existing_customer_follow_ups=existing_customer_follow_ups,
             customer_recent_activity=customer_recent_activity,
             follow_ups_due=follow_ups_due,
-            potential_matches=potential_matches,
             monthly_revenue=monthly_revenue,
             customers_without_products=customers_without_products,
             customers_without_products_count=customers_without_products_count,
@@ -449,7 +445,6 @@ def crm():
             existing_customer_follow_ups=[],
             customer_recent_activity={},
             follow_ups_due=[],
-            potential_matches=[],
             monthly_revenue=[],
             customers_without_products=[],
             customers_without_products_count=[],
@@ -460,852 +455,12 @@ def crm():
         if connection:
             connection.close()
 
-
-def auto_sync_missing_customers():
-    """Automatically sync any customers that exist in sales data but not in CRM"""
-    print("Starting auto-sync of missing customers...")
-    from app.initialize import db_conn
-
-    connection, cursor = db_conn()
-
-    try:
-        # Get existing customers from CRM with case-insensitive comparison
-        cursor.execute("""
-            SELECT DISTINCT LOWER(customer) as customer_lower, customer
-            FROM crm_customers
-            WHERE customer IS NOT NULL AND customer != ''
-        """)
-        crm_customers = cursor.fetchall()
-        crm_customer_names_lower = [customer[0] for customer in crm_customers]
-        crm_customer_names_original = [customer[1] for customer in crm_customers]
-        print(f"Found {len(crm_customer_names_original)} existing customers in CRM")
-
-        # Get customers from sales data with case-insensitive comparison
-        cursor.execute("""
-            SELECT DISTINCT LOWER(buyer) as buyer_lower, buyer
-            FROM sales_product
-            WHERE buyer IS NOT NULL AND buyer != '' AND buyer != 'WHISTLEBIRD INTERNAL (Personal)'
-            AND notes LIKE '%INV%'
-        """)
-        sales_customers = cursor.fetchall()
-        sales_customer_names_lower = [customer[0] for customer in sales_customers]
-        sales_customer_names_original = [customer[1] for customer in sales_customers]
-        print(f"Found {len(sales_customer_names_original)} customers in sales data")
-
-        # Debug: Show a sample of what's in the buyers table for comparison
-        print("\nDebug: Checking buyers table structure...")
-        cursor.execute("""
-            SELECT COUNT(*) as total_buyers
-            FROM buyers
-            WHERE buyer IS NOT NULL AND buyer != ''
-        """)
-        total_buyers = cursor.fetchone()[0]
-        print(f"Total buyers in buyers table: {total_buyers}")
-
-        # Get all existing customers with their aliases for comprehensive checking
-        cursor.execute("""
-            SELECT customer, aliases
-            FROM crm_customers
-            WHERE customer IS NOT NULL AND customer != ''
-        """)
-        customers_with_aliases = cursor.fetchall()
-
-        # Build a comprehensive list of all customer names and aliases (lowercase for comparison)
-        all_existing_names_lower = set()
-        for customer, aliases in customers_with_aliases:
-            all_existing_names_lower.add(customer.lower())
-            if aliases:
-                for alias in aliases:
-                    all_existing_names_lower.add(alias.lower())
-
-        print(f"Total existing customer names and aliases: {len(all_existing_names_lower)}")
-
-        # Find missing customers using case-insensitive comparison against all names and aliases
-        missing_customers = []
-        for i, customer_name_lower in enumerate(sales_customer_names_lower):
-            if customer_name_lower not in all_existing_names_lower:
-                missing_customers.append(sales_customer_names_original[i])
-
-        print(f"Found {len(missing_customers)} customers to auto-sync")
-
-        # Check for potential duplicate matches using word-based similarity
-        # Also check against existing aliases
-        potential_matches = []
-        for missing_customer in missing_customers:
-            missing_words = set(missing_customer.lower().split())
-            if len(missing_words) >= 2:  # Only check customers with 2+ words
-                customer_matches = []
-
-                for existing_customer, aliases in customers_with_aliases:
-                    # Check similarity with main customer name
-                    existing_words = set(existing_customer.lower().split())
-                    common_words = missing_words.intersection(existing_words)
-                    total_unique_words = missing_words.union(existing_words)
-                    similarity = len(common_words) / len(total_unique_words) if total_unique_words else 0
-
-                    # Also check against aliases if they exist
-                    if aliases:
-                        for alias in aliases:
-                            alias_words = set(alias.lower().split())
-                            alias_common_words = missing_words.intersection(alias_words)
-                            alias_total_words = missing_words.union(alias_words)
-                            alias_similarity = (
-                                len(alias_common_words) / len(alias_total_words) if alias_total_words else 0
-                            )
-                            similarity = max(similarity, alias_similarity)
-
-                    # Flag as potential match if 60%+ word similarity and at least 2 common words
-                    if similarity >= 0.6 and len(common_words) >= 2:
-                        customer_matches.append(
-                            {
-                                "existing_customer": existing_customer,
-                                "similarity": similarity,
-                                "common_words": list(common_words),
-                            }
-                        )
-
-                # Sort matches by similarity (highest first)
-                customer_matches.sort(key=lambda x: x["similarity"], reverse=True)
-
-                if customer_matches:
-                    potential_matches.append(
-                        {
-                            "new_customer": missing_customer,
-                            "matches": customer_matches[:5],  # Limit to top 5 matches
-                        }
-                    )
-
-        # Remove potential matches from missing customers list
-        potential_match_names = [match["new_customer"] for match in potential_matches]
-        safe_to_sync = [customer for customer in missing_customers if customer not in potential_match_names]
-
-        print(f"Found {len(potential_matches)} potential duplicate matches")
-        print(f"Found {len(safe_to_sync)} customers safe to auto-sync")
-
-        # Debug: Show the list of customers we're about to process
-        print("\nCustomers to process:")
-        for i, customer in enumerate(safe_to_sync, 1):
-            print(f"  {i}. '{customer}'")
-
-        # Debug: Show potential matches that were found
-        if potential_matches:
-            print("\nPotential matches found (requires manual review):")
-            for i, match in enumerate(potential_matches, 1):
-                print(f"  {i}. '{match['new_customer']}' has {len(match['matches'])} potential matches:")
-                for j, potential_match in enumerate(match["matches"], 1):
-                    print(
-                        f"    {j}. '{potential_match['existing_customer']}' ({potential_match['similarity']:.1%} similarity)"
-                    )
-
-        # Sync safe customers
-        synced_count = 0
-        for customer_name in safe_to_sync:
-            print(f"\n--- Processing customer: {customer_name} ---")
-            try:
-                # Debug: Show the exact SQL query being executed
-                sql_query = """
-                    SELECT DISTINCT(buyer), buyer_email, buyer_phone, buyer_address, primary_contact
-                    FROM buyers
-                    WHERE LOWER(buyer) = LOWER(%s)
-                """
-                print(f"Executing SQL: {sql_query.strip()}")
-                print(f"With parameter: '{customer_name}'")
-
-                # Get customer details from buyers table with case-insensitive comparison
-                cursor.execute(sql_query, (customer_name,))
-                buyer_data = cursor.fetchone()
-
-                print(f"SQL result: {buyer_data}")
-
-                if buyer_data:
-                    buyer, buyer_email, buyer_phone, buyer_address, primary_contact = buyer_data
-                    print(f"Found buyer data: {buyer}")
-
-                    # Insert missing customer into crm_customers table
-                    insert_data(
-                        table_name="crm_customers",
-                        audit_action="Auto-syncing Customer from Sales Data",
-                        customer=buyer,
-                        customer_email=buyer_email,
-                        customer_phone=buyer_phone,
-                        customer_address=buyer_address,
-                        primary_contact=primary_contact,
-                    )
-
-                    print(f"✓ Auto-synced customer: {buyer}")
-                    synced_count += 1
-                else:
-                    print(f"⚠ Warning: No data found for customer {customer_name} in buyers table")
-
-                    # Debug: Let's check what's actually in the buyers table for this customer
-                    print(f"Debug: Checking buyers table for variations of '{customer_name}'")
-
-                    # Try a broader search to see what's in the buyers table
-                    cursor.execute(
-                        """
-                        SELECT DISTINCT buyer 
-                        FROM buyers 
-                        WHERE LOWER(buyer) LIKE LOWER(%s)
-                        ORDER BY buyer
-                    """,
-                        (f"%{customer_name}%",),
-                    )
-                    similar_buyers = cursor.fetchall()
-                    print(f"Debug: Found {len(similar_buyers)} similar buyers:")
-                    for similar in similar_buyers:
-                        print(f"  - '{similar[0]}'")
-
-                    # Check if this is a case where the sales name is a subset of a buyers name
-                    # (e.g., "R&D 2007 LIMITED" vs "R&D 2007 LIMITED (CENTRE CITY WINES & SPIRITS)")
-                    potential_extended_matches = []
-                    for similar_buyer in similar_buyers:
-                        similar_name = similar_buyer[0]
-                        # Check if the sales customer name is contained within the buyers name
-                        if customer_name.lower() in similar_name.lower():
-                            potential_extended_matches.append(similar_name)
-
-                    if potential_extended_matches:
-                        print(f"⚠ Found potential extended name matches for '{customer_name}':")
-                        for match in potential_extended_matches:
-                            print(f"  - '{match}' (contains '{customer_name}')")
-
-                        # Add these to potential matches for manual review
-                        extended_matches = []
-                        for match in potential_extended_matches:
-                            extended_matches.append(
-                                {
-                                    "existing_customer": match,
-                                    "similarity": 0.9,  # High similarity since it's a subset
-                                    "common_words": [customer_name.lower()],
-                                }
-                            )
-
-                        # Check if this customer already has potential matches
-                        existing_potential_match = None
-                        for pm in potential_matches:
-                            if pm["new_customer"] == customer_name:
-                                existing_potential_match = pm
-                                break
-
-                        if existing_potential_match:
-                            # Add to existing matches
-                            existing_potential_match["matches"].extend(extended_matches)
-                            existing_potential_match["matches"].sort(key=lambda x: x["similarity"], reverse=True)
-                        else:
-                            # Create new potential match entry
-                            potential_matches.append({"new_customer": customer_name, "matches": extended_matches})
-
-                        print("  → Added to potential matches for manual review")
-
-                    # Also try searching by individual words
-                    words = customer_name.lower().split()
-                    if len(words) >= 2:
-                        print(f"Debug: Searching by individual words: {words}")
-                        for word in words:
-                            if len(word) > 2:  # Only search for words longer than 2 characters
-                                cursor.execute(
-                                    """
-                                    SELECT buyer 
-                                    FROM buyers 
-                                    WHERE LOWER(buyer) LIKE LOWER(%s)
-                                    ORDER BY buyer
-                                """,
-                                    (f"%{word}%",),
-                                )
-                                word_matches = cursor.fetchall()
-                                if word_matches:
-                                    print(f"  Word '{word}' matches:")
-                                    for match in word_matches[:5]:  # Limit to first 5 matches
-                                        print(f"    - '{match[0]}'")
-
-            except Exception as e:
-                print(f"❌ Error auto-syncing customer {customer_name}: {e}")
-                continue
-
-        print(f"Successfully auto-synced {synced_count} out of {len(safe_to_sync)} safe customers")
-
-        return potential_matches
-
-    except Exception as e:
-        print(f"❌ Error in auto_sync_missing_customers: {e}")
-        if connection:
-            connection.rollback()
-        return []
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-
-@crm_bp.route("/crm-handle-potential-match", methods=["POST"])
-def crm_handle_potential_match():
-    """Handle potential duplicate customer matches from modal"""
-    print("Accessed /crm-handle-potential-match route")
-    from app.initialize import db_conn
-
-    connection, cursor = db_conn()
-
-    data = request.get_json()
-    action = data.get("action")  # "alias" or "create_new"
-    new_customer_name = data.get("new_customer_name")
-    existing_customer_name = data.get("existing_customer_name")
-
-    try:
-        if action == "alias":
-            # Add new_customer_name as alias to existing_customer_name
-            print(f"Adding '{new_customer_name}' as alias to '{existing_customer_name}'")
-
-            # Get current aliases for the existing customer
-            cursor.execute(
-                """
-                SELECT aliases FROM crm_customers 
-                WHERE customer = %s
-            """,
-                (existing_customer_name,),
-            )
-            result = cursor.fetchone()
-
-            current_aliases = result[0] if result and result[0] else []
-
-            # Add the new alias if it's not already there
-            if new_customer_name not in current_aliases:
-                current_aliases.append(new_customer_name)
-
-                # Update the aliases array
-                cursor.execute(
-                    """
-                    UPDATE crm_customers 
-                    SET aliases = %s 
-                    WHERE customer = %s
-                """,
-                    (current_aliases, existing_customer_name),
-                )
-
-                connection.commit()
-                print(f"✓ Added '{new_customer_name}' as alias to '{existing_customer_name}'")
-                return jsonify(
-                    {"success": True, "message": f"'{new_customer_name}' added as alias to '{existing_customer_name}'"}
-                )
-            else:
-                return jsonify(
-                    {
-                        "success": True,
-                        "message": f"'{new_customer_name}' is already an alias for '{existing_customer_name}'",
-                    }
-                )
-
-        elif action == "create_new":
-            # Create new customer entry
-            print(f"Creating new customer: {new_customer_name}")
-
-            # Get customer details from buyers table
-            cursor.execute(
-                """
-                SELECT buyer, buyer_email, buyer_phone, buyer_address, primary_contact
-                FROM buyers
-                WHERE LOWER(buyer) = LOWER(%s)
-            """,
-                (new_customer_name,),
-            )
-            buyer_data = cursor.fetchone()
-
-            if buyer_data:
-                buyer, buyer_email, buyer_phone, buyer_address, primary_contact = buyer_data
-
-                # Insert customer into crm_customers table
-                insert_data(
-                    table_name="crm_customers",
-                    audit_action="Manual Creation of New Customer",
-                    customer=buyer,
-                    customer_email=buyer_email,
-                    customer_phone=buyer_phone,
-                    customer_address=buyer_address,
-                    primary_contact=primary_contact,
-                )
-
-                print(f"✓ Created new customer: {buyer}")
-                return jsonify({"success": True, "message": f"Customer {buyer} created successfully"})
-            else:
-                return jsonify({"success": False, "message": f"No data found for customer {new_customer_name}"})
-
-        else:
-            return jsonify({"success": False, "message": "Invalid action"})
-
-    except Exception as e:
-        print(f"❌ Error handling potential match: {e}")
-        if connection:
-            connection.rollback()
-        return jsonify({"success": False, "message": f"Error: {str(e)}"})
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-
-@crm_bp.route("/crm-create-customer", methods=["POST"])
-def crm_create_customer():
-    print("Accessed /crm-create-customer route")
-    from app.initialize import db_conn
-
-    connection, cursor = db_conn()
-
-    data = request.get_json()
-    customer_name = data.get("customer_name")
-    customer_email = data.get("customer_email")
-    customer_phone = data.get("customer_phone")
-    customer_address = data.get("customer_address")
-    primary_contact = data.get("primary_contact")
-    customer_converted = data.get("customer_converted")
-    customer_last_contact = datetime.date.today()
-    customer_notes = data.get("customer_notes")
-
-    # Insert customer into crm_customer table
-    insert_data(
-        table_name="crm_customers",
-        audit_action="Create new CRM Customer",
-        customer=customer_name,
-        primary_contact=primary_contact,
-        customer_address=customer_address,
-        customer_phone=customer_phone,
-        customer_email=customer_email,
-        customer_status=customer_converted,
-        customer_last_contact=customer_last_contact,
-        customer_notes=customer_notes,
-    )
-
-    # Fetch and insert follow-up task only if checkbox is checked
-    if data.get("add_follow_up") == "yes":
-        follow_up_task = data.get("follow_up_task")
-        follow_up_date = data.get("follow_up_date")
-        follow_up_priority = data.get("follow_up_priority")
-        follow_up_type = data.get("follow_up_type")
-        follow_up_status = data.get("follow_up_status")
-
-        # Insert follow-up task into crm_follow_ups table
-        insert_data(
-            table_name="crm_follow_ups",
-            audit_action="Create Follow-up Tasks",
-            customer=customer_name,
-            follow_up_date=follow_up_date,
-            follow_up_priority=follow_up_priority,
-            follow_up_status=follow_up_status,
-            follow_up_notes=follow_up_task,
-            follow_up_type=follow_up_type,
-        )
-
-    return jsonify(
-        {
-            "success": True,
-            "message": "Customer created successfully",
-            "redirect_url": customer_page_redirect_response(customer_name),
-        }
-    )
-
-
 def customer_page_redirect_response(customer_name):
     """
     Helper function to create a standardized redirect URL for customer page.
     Can be called from multiple places in the CRM.
     """
     return f"/crm-customer-page?customer_name={customer_name}"
-
-
-@crm_bp.route("/crm-customer-page", methods=["GET", "POST"])
-def crm_customer_page():
-    print("Accessed /crm-customer-page route")
-    from app.initialize import db_conn
-
-    connection, cursor = db_conn()
-
-    try:
-        print("Starting customer page load...")
-
-        # Handle both GET (from URL) and POST (from form) data
-        if request.method == "POST":
-            if request.is_json:
-                data = request.get_json()
-                customer_name = data.get("customer_name")
-            else:
-                customer_name = request.form.get("customer_name")
-        else:
-            # GET request - get customer name from URL parameters
-            customer_name = request.args.get("customer_name")
-
-        print(f"Customer name received: {customer_name}")
-
-        if not customer_name:
-            print("No customer name provided")
-            return render_template(
-                "/customer_detail.html",
-                customer_info=None,
-                follow_up_tasks=None,
-                customer_invoice_data=None,
-                call_logs=None,
-                invoice_button_enabled=INVOICE_BUTTON_ENABLED,
-                customer_trends=None,
-                customer_growth=None,
-                error_message="No customer name provided",
-            )
-
-        # Fetch customer information from crm_customers table
-        print(f"Fetching customer info for: {customer_name}")
-        cursor.execute(
-            """
-            SELECT customer, customer_email, customer_phone,
-            customer_address, primary_contact, customer_status, customer_last_contact, customer_notes, aliases, contacts
-            FROM crm_customers WHERE customer = %s
-        """,
-            (customer_name,),
-        )
-        customer_info = cursor.fetchall()
-
-        print(f"Customer info found: {len(customer_info)} records")
-
-        # If customer doesn't exist in CRM, try to sync them from sales data
-        if not customer_info:
-            print(f"Customer {customer_name} not found in CRM, attempting to sync from sales data...")
-            try:
-                # Check if customer exists in sales data
-                cursor.execute(
-                    """
-                    SELECT DISTINCT buyer
-                    FROM sales_product
-                    WHERE buyer = %s AND notes LIKE '%INV%'
-                """,
-                    (customer_name,),
-                )
-                sales_customer = cursor.fetchone()
-
-                if sales_customer:
-                    print(f"Customer {customer_name} found in sales data, syncing to CRM...")
-
-                    # Get customer details from buyers table
-                    cursor.execute(
-                        """
-                        SELECT buyer, buyer_email, buyer_phone, buyer_address, primary_contact
-                        FROM buyers
-                        WHERE buyer = %s
-                    """,
-                        (customer_name,),
-                    )
-                    buyer_data = cursor.fetchone()
-
-                    if buyer_data:
-                        buyer, buyer_email, buyer_phone, buyer_address, primary_contact = buyer_data
-
-                        # Insert customer into crm_customers table
-                        insert_data(
-                            table_name="crm_customers",
-                            audit_action="Auto-syncing Customer from Sales Data",
-                            customer=buyer,
-                            customer_email=buyer_email,
-                            customer_phone=buyer_phone,
-                            customer_address=buyer_address,
-                            primary_contact=primary_contact,
-                        )
-
-                        print(f"✓ Auto-synced customer: {buyer}")
-
-                        # Update the customer with their invoice data
-                        try:
-                            # Get invoice data for this customer
-                            cursor.execute(
-                                """
-                                SELECT DISTINCT notes
-                                FROM sales_product
-                                WHERE buyer = %s AND notes LIKE '%%INV%%'
-                                ORDER BY notes DESC
-                            """,
-                                (customer_name,),
-                            )
-                            customer_invoices = cursor.fetchall()
-
-                            if customer_invoices:
-                                # Clean invoice numbers and convert to JSON
-                                cleaned_invoices = []
-                                for invoice in customer_invoices:
-                                    if invoice[0]:
-                                        cleaned_number = str(invoice[0]).replace("{", "").replace("}", "").strip()
-                                        cleaned_invoices.append(cleaned_number)
-
-                                if cleaned_invoices:
-                                    import json
-
-                                    invoices_json = json.dumps(cleaned_invoices)
-
-                                    # Update the customer record with invoice data
-                                    cursor.execute(
-                                        """
-                                        UPDATE crm_customers
-                                        SET invoices = %s
-                                        WHERE customer = %s
-                                    """,
-                                        (invoices_json, customer_name),
-                                    )
-
-                                    print(f"✓ Updated invoices for auto-synced customer: {customer_name}")
-                        except Exception as e:
-                            print(f"⚠ Warning: Could not update invoices for {customer_name}: {e}")
-
-                        # Fetch the newly created customer info
-                        cursor.execute(
-                            """
-                            SELECT customer, customer_email, customer_phone,
-                            customer_address, primary_contact, customer_status, customer_last_contact, customer_notes
-                            FROM crm_customers WHERE customer = %s
-                        """,
-                            (customer_name,),
-                        )
-                        customer_info = cursor.fetchall()
-
-                        print(f"Customer info now available: {len(customer_info)} records")
-                    else:
-                        print(f"⚠ Warning: Customer {customer_name} not found in buyers table")
-                else:
-                    print(f"⚠ Warning: Customer {customer_name} not found in sales data")
-
-            except Exception as e:
-                print(f"❌ Error auto-syncing customer {customer_name}: {e}")
-
-        if customer_info:
-            print(f"Customer info fields: {len(customer_info[0]) if customer_info[0] else 0}")
-
-        # Fetch follow-up tasks from crm_follow_ups table
-        print(f"Fetching follow-up tasks for: {customer_name}")
-        cursor.execute(
-            """
-            SELECT id, customer, follow_up_date, follow_up_priority, follow_up_status, follow_up_notes, follow_up_type
-            FROM crm_follow_ups WHERE customer = %s
-        """,
-            (customer_name,),
-        )
-        follow_up_tasks = cursor.fetchall()
-
-        print(f"Follow-up tasks found: {len(follow_up_tasks)} records")
-
-        # Fetch call logs from crm_logs table
-        print(f"Fetching call logs for: {customer_name}")
-        cursor.execute(
-            """
-            SELECT id, customer, log_date, log_type, log_notes
-            FROM crm_logs WHERE customer = %s
-            ORDER BY log_date DESC, id DESC
-        """,
-            (customer_name,),
-        )
-        call_logs = cursor.fetchall()
-
-        print(f"Call logs found: {len(call_logs)} records")
-
-        # Fetch customer invoice info
-        print(f"Fetching invoice data for: {customer_name}")
-        customer_invoice_data = get_customer_invoices(customer_name)
-
-        print(f"Invoice data found: {len(customer_invoice_data) if customer_invoice_data else 0} records")
-
-        # Calculate totals for the overview section
-        total_bottles = 0
-        total_revenue = 0.0
-        product_breakdown = {}  # Dictionary to store product totals
-
-        if customer_invoice_data and customer_invoice_data[1]:
-            for invoice in customer_invoice_data[1]:
-                if invoice[4]:  # bottles_sold
-                    total_bottles += invoice[4]
-                if invoice[5]:  # total_nzd
-                    total_revenue += float(invoice[6])
-
-                # Process product breakdown from product_details (index 3)
-                if invoice[3]:  # product_details is a list of dictionaries
-                    for product in invoice[3]:
-                        product_name = product.get("name", "Unknown Product")
-                        quantity = product.get("quantity", 0)
-
-                        if product_name in product_breakdown:
-                            product_breakdown[product_name] += quantity
-                        else:
-                            product_breakdown[product_name] = quantity
-
-        print(f"Calculated totals - Bottles: {total_bottles}, Revenue: {total_revenue}")
-        print(f"Product breakdown: {product_breakdown}")
-
-        # Process contacts data
-        customer_contacts = []
-        if customer_info and customer_info[0] and customer_info[0][9]:  # contacts column (index 9)
-            try:
-                contacts_data = customer_info[0][9]
-                if isinstance(contacts_data, str):
-                    import json
-
-                    contacts_data = json.loads(contacts_data)
-
-                if isinstance(contacts_data, list):
-                    customer_contacts = contacts_data
-                print(f"Found {len(customer_contacts)} contacts for customer")
-            except Exception as e:
-                print(f"Error parsing contacts data: {e}")
-                customer_contacts = []
-
-        # Get individual customer sales trends data
-        print(f"Fetching sales trends data for customer: {customer_name}")
-        try:
-            import os
-            import sys
-
-            # Add the parent directory to the path to import customer_sales_trends
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
-            if parent_dir not in sys.path:
-                sys.path.append(parent_dir)
-
-            from customer_sales_trends import get_customer_growth_trends, get_individual_customer_trends
-
-            customer_trends = get_individual_customer_trends(customer_name)
-            customer_growth = get_customer_growth_trends(customer_name)
-            print("✓ Sales trends data fetched successfully")
-        except Exception as e:
-            print(f"⚠ Warning: Could not fetch sales trends data: {e}")
-            customer_trends = None
-            customer_growth = None
-
-        print("Rendering customer detail template...")
-        return render_template(
-            "customer_detail.html",
-            customer_info=customer_info,
-            follow_up_tasks=follow_up_tasks,
-            customer_invoice_data=customer_invoice_data,
-            call_logs=call_logs,
-            customer_name=customer_name,
-            total_bottles=total_bottles,
-            total_revenue=total_revenue,
-            product_breakdown=product_breakdown,
-            customer_contacts=customer_contacts,
-            customer_trends=customer_trends,
-            customer_growth=customer_growth,
-            invoice_button_enabled=INVOICE_BUTTON_ENABLED,
-        )
-
-    except Exception as e:
-        print(f"❌ Error in crm_customer_page: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return render_template(
-            "customer_detail.html",
-            customer_info=None,
-            follow_up_tasks=None,
-            customer_invoice_data=None,
-            call_logs=None,
-            invoice_button_enabled=INVOICE_BUTTON_ENABLED,
-            total_bottles=0,
-            total_revenue=0.0,
-            product_breakdown={},
-            customer_contacts=[],
-            customer_trends=None,
-            customer_growth=None,
-            error_message=f"Error loading customer data: {str(e)}",
-        )
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
-
-@crm_bp.route("/crm-sync-existing-customers", methods=["POST"])
-def crm_sync_existing_customers():
-    print("Accessed /crm-sync-existing-customers route")
-    from app.initialize import db_conn
-
-    connection, cursor = db_conn()
-
-    try:
-        print("Starting customer sync process...")
-
-        # Fetch existing customers from crm_customers table
-        cursor.execute("""
-            SELECT DISTINCT(customer)
-            FROM crm_customers
-            WHERE customer IS NOT NULL AND customer != ''
-            ORDER BY customer
-        """)
-        crm_customers = cursor.fetchall()
-        crm_customer_names = [customer[0] for customer in crm_customers]
-        print(f"Found {len(crm_customer_names)} existing customers in CRM")
-
-        # Fetch existing customers from sales_product table
-        cursor.execute("""
-            SELECT DISTINCT(buyer)
-            FROM sales_product
-            WHERE notes LIKE '%INV%'
-            ORDER BY buyer
-        """)
-        existing_customers_from_sales = cursor.fetchall()
-        print(f"Found {len(existing_customers_from_sales)} customers in sales data")
-
-        # Compare existing customers from crm_customers and sales_product tables
-        missing_customers = []
-        for customer in existing_customers_from_sales:
-            if customer[0] not in crm_customer_names:
-                missing_customers.append(customer[0])
-
-        print(f"Found {len(missing_customers)} customers to sync")
-
-        # Fetch and insert missing customer data from buyers table
-        synced_count = 0
-        for customer_name in missing_customers:
-            try:
-                cursor.execute(
-                    """
-                    SELECT buyer, buyer_email, buyer_phone, buyer_address, primary_contact
-                    FROM buyers
-                    WHERE buyer = %s
-                """,
-                    (customer_name,),
-                )
-                customer_data = cursor.fetchone()
-
-                if customer_data:
-                    buyer, buyer_email, buyer_phone, buyer_address, primary_contact = customer_data
-
-                    # Insert missing customer into crm_customers table
-                    insert_data(
-                        table_name="crm_customers",
-                        audit_action="Syncing Existing Customers into CRM",
-                        customer=buyer,
-                        customer_email=buyer_email,
-                        customer_phone=buyer_phone,
-                        customer_address=buyer_address,
-                        primary_contact=primary_contact,
-                    )
-
-                    print(f"✓ Synced customer: {buyer}")
-                    synced_count += 1
-                else:
-                    print(f"⚠ Warning: No data found for customer {customer_name} in buyers table")
-            except Exception as e:
-                print(f"❌ Error syncing customer {customer_name}: {e}")
-                continue
-
-        print(f"Successfully synced {synced_count} out of {len(missing_customers)} customers")
-
-        # Update existing customers with their invoice data
-        print("Updating existing customers with invoice data...")
-        update_existing_customers_with_invoices()
-
-    except Exception as e:
-        print(f"❌ Error in crm_sync_existing_customers: {e}")
-        if connection:
-            connection.rollback()
-        raise
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
 
 def update_existing_customers_with_invoices():
     """Update existing customers in CRM with their invoice data"""
@@ -1390,10 +545,10 @@ def get_customer_invoices(customer_name):
         # Extract invoice data: Match buyer and invoices containing "INV"
         cursor.execute(
             """
-            SELECT 
-                buyer, 
-                notes, 
-                date, 
+            SELECT
+                buyer,
+                notes,
+                date,
                 jsonb_agg(
                     jsonb_build_object(
                         'name', p.key,
@@ -1404,7 +559,7 @@ def get_customer_invoices(customer_name):
                 ) AS product_details,
                 COALESCE(SUM((p.value->>'quantity')::int), 0) AS bottles_sold,
                 COALESCE(SUM((p.value->>'total_nzd')::numeric), 0) AS total_nzd,
-                invoice_total, 
+                invoice_total,
                 invoice_gst
             FROM sales_product,
                  jsonb_each(products->'products') AS p(key, value)
@@ -1445,7 +600,7 @@ def get_customer_invoices(customer_name):
         customer_invoice_info.append(customer_invoice_data)
 
         # Convert to a simple list of invoice numbers for JSONB storage
-        invoice_list = [invoice[0] for invoice in cleaned_invoices if invoice[0]]
+        [invoice[0] for invoice in cleaned_invoices if invoice[0]]
 
         # Note: Invoice data is fetched for display only
         # The invoices field in crm_customers should be updated during customer sync, not here
@@ -1681,113 +836,6 @@ def crm_delete_follow_up_task():
     except Exception as e:
         print(f"❌ Error in crm_delete_follow_up_task: {e}")
         return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
-
-
-@crm_bp.route("/crm-create-follow-up-task", methods=["POST"])
-def crm_create_follow_up_task():
-    print("Accessed /crm-create-follow-up-task route")
-
-    try:
-        data = request.get_json()
-        customer_name = data.get("customer_name")
-        follow_up_task = data.get("follow_up_task")
-        follow_up_date = data.get("follow_up_date")
-        follow_up_priority = data.get("follow_up_priority")
-        follow_up_type = data.get("follow_up_type")
-        follow_up_status = data.get("follow_up_status")
-
-        if not customer_name:
-            return jsonify({"success": False, "message": "Missing customer_name"}), 400
-
-        if not follow_up_task:
-            return jsonify({"success": False, "message": "Missing follow_up_task"}), 400
-
-        from app.initialize import db_conn
-
-        connection, cursor = db_conn()
-
-        try:
-            # Insert follow-up task into crm_follow_ups table
-            insert_data(
-                table_name="crm_follow_ups",
-                audit_action="Create Follow-up Task",
-                customer=customer_name,
-                follow_up_date=follow_up_date,
-                follow_up_priority=follow_up_priority,
-                follow_up_status=follow_up_status,
-                follow_up_notes=follow_up_task,
-                follow_up_type=follow_up_type,
-            )
-
-            connection.commit()
-
-            return jsonify({"success": True, "message": "Follow-up task created successfully"})
-
-        except Exception as e:
-            print(f"❌ Database error: {e}")
-            connection.rollback()
-            return jsonify({"success": False, "message": f"Database error: {str(e)}"}), 500
-        finally:
-            if cursor:
-                cursor.close()
-            if connection:
-                connection.close()
-
-    except Exception as e:
-        print(f"❌ Error in crm_create_follow_up_task: {e}")
-        return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
-
-
-@crm_bp.route("/crm-create-call-log", methods=["POST"])
-def crm_create_call_log():
-    print("Accessed /crm-create-call-log route")
-
-    try:
-        data = request.get_json()
-        customer_name = data.get("customer_name") or data.get("customer")
-        log_date = data.get("log_date")
-        log_type = data.get("log_type")
-        log_notes = data.get("log_notes")
-
-        if not customer_name:
-            return jsonify({"success": False, "message": "Missing customer"}), 400
-
-        if not log_notes:
-            return jsonify({"success": False, "message": "Missing log_notes"}), 400
-
-        from app.initialize import db_conn
-
-        connection, cursor = db_conn()
-
-        try:
-            # Insert call log into crm_logs table
-            insert_data(
-                table_name="crm_logs",
-                audit_action=f"Recording call logs for {customer_name}",
-                customer=customer_name,
-                log_date=log_date,
-                log_type=log_type,
-                log_notes=log_notes,
-            )
-
-            connection.commit()
-
-            return jsonify({"success": True, "message": "Call log created successfully"})
-
-        except Exception as e:
-            print(f"❌ Database error: {e}")
-            connection.rollback()
-            return jsonify({"success": False, "message": f"Database error: {str(e)}"}), 500
-        finally:
-            if cursor:
-                cursor.close()
-            if connection:
-                connection.close()
-
-    except Exception as e:
-        print(f"❌ Error in crm_create_call_log: {e}")
-        return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
-
 
 @crm_bp.route("/crm-add-contact", methods=["POST"])
 def crm_add_contact():
@@ -2123,8 +1171,8 @@ def crm_mark_task_completed():
         try:
             # Update the task status to 'completed' in crm_follow_ups table
             update_query = """
-                UPDATE crm_follow_ups 
-                SET follow_up_status = 'completed' 
+                UPDATE crm_follow_ups
+                SET follow_up_status = 'completed'
                 WHERE id = %s AND customer = %s
             """
             cursor.execute(update_query, (task_id, customer_name))
@@ -2153,7 +1201,7 @@ def crm_mark_task_completed():
 
 # Import support modules to register their routes
 try:
-    from .support import alias  # Import alias routes
+    from .support import alias  # noqa: F401  # Import alias routes to register them
 
     print("✓ Alias support routes registered")
 except ImportError as e:

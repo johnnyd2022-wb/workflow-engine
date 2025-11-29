@@ -46,7 +46,7 @@ def list_customer_aliases(connection, cursor, customer_name):
         # Get current aliases for the customer
         cursor.execute(
             """
-            SELECT aliases FROM crm_customers 
+            SELECT aliases FROM crm_customers
             WHERE customer = %s
         """,
             (customer_name,),
@@ -96,7 +96,7 @@ def get_customer_alias(connection, cursor, customer_name, alias_name):
         # Get current aliases for the customer
         cursor.execute(
             """
-            SELECT aliases FROM crm_customers 
+            SELECT aliases FROM crm_customers
             WHERE customer = %s
         """,
             (customer_name,),
@@ -151,7 +151,7 @@ def create_customer_alias(connection, cursor, customer_name):
         # Get current aliases for the customer
         cursor.execute(
             """
-            SELECT aliases FROM crm_customers 
+            SELECT aliases FROM crm_customers
             WHERE customer = %s
         """,
             (customer_name,),
@@ -174,8 +174,8 @@ def create_customer_alias(connection, cursor, customer_name):
         # Update the aliases array
         cursor.execute(
             """
-            UPDATE crm_customers 
-            SET aliases = %s 
+            UPDATE crm_customers
+            SET aliases = %s
             WHERE customer = %s
         """,
             (current_aliases, customer_name),
@@ -243,7 +243,7 @@ def update_customer_alias(connection, cursor, customer_name, alias_name):
         # Get current aliases for the customer
         cursor.execute(
             """
-            SELECT aliases FROM crm_customers 
+            SELECT aliases FROM crm_customers
             WHERE customer = %s
         """,
             (customer_name,),
@@ -269,8 +269,8 @@ def update_customer_alias(connection, cursor, customer_name, alias_name):
         # Update the aliases array
         cursor.execute(
             """
-            UPDATE crm_customers 
-            SET aliases = %s 
+            UPDATE crm_customers
+            SET aliases = %s
             WHERE customer = %s
         """,
             (current_aliases, customer_name),
@@ -328,7 +328,7 @@ def delete_customer_alias(connection, cursor, customer_name, alias_name):
         # Get current aliases for the customer
         cursor.execute(
             """
-            SELECT aliases FROM crm_customers 
+            SELECT aliases FROM crm_customers
             WHERE customer = %s
         """,
             (customer_name,),
@@ -347,8 +347,8 @@ def delete_customer_alias(connection, cursor, customer_name, alias_name):
         # Update the aliases array
         cursor.execute(
             """
-            UPDATE crm_customers 
-            SET aliases = %s 
+            UPDATE crm_customers
+            SET aliases = %s
             WHERE customer = %s
         """,
             (current_aliases, customer_name),

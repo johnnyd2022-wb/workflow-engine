@@ -6,6 +6,7 @@ for full supply chain traceability.
 """
 
 import json
+import uuid
 from datetime import timedelta
 
 from app.initialize import db_conn
@@ -68,7 +69,7 @@ def attempt_automatic_sales_mapping(sales_id, products_data=None):
                        pp.parent_process_name
                 FROM supply_chain_parent_executions pe
                 LEFT JOIN supply_chain_parent_processes pp ON pe.parent_process_id = pp.id
-                WHERE pe.execution_batch_id ILIKE %s 
+                WHERE pe.execution_batch_id ILIKE %s
                    OR pe.execution_batch_id ILIKE %s
                 ORDER BY pe.execution_start_time DESC
                 LIMIT 5
@@ -130,7 +131,7 @@ def attempt_automatic_sales_mapping(sales_id, products_data=None):
             cursor.execute(
                 """
                 UPDATE supply_chain_parent_executions
-                SET sales_mapping_status = CASE 
+                SET sales_mapping_status = CASE
                     WHEN sales_mapping_status = 'unmapped' THEN 'partial'
                     WHEN sales_mapping_status = 'partial' THEN 'complete'
                     ELSE sales_mapping_status
@@ -320,7 +321,7 @@ def create_manual_sales_mapping(
         cursor.execute(
             """
             UPDATE supply_chain_parent_executions
-            SET sales_mapping_status = CASE 
+            SET sales_mapping_status = CASE
                 WHEN sales_mapping_status = 'unmapped' THEN 'partial'
                 WHEN sales_mapping_status = 'partial' THEN 'complete'
                 ELSE sales_mapping_status
@@ -344,7 +345,3 @@ def create_manual_sales_mapping(
             cursor.close()
         if connection:
             connection.close()
-
-
-# Import uuid at the top of the file
-import uuid

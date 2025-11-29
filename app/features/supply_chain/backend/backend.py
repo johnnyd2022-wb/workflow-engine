@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import date, datetime
 
 from flask import Blueprint, jsonify, render_template, request
@@ -43,7 +44,7 @@ def supply_chain():
     try:
         # Get all parent processes
         cursor.execute("""
-            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+            SELECT id, parent_process_name, parent_process_description, parent_process_type,
                    parent_process_status, parent_process_category, parent_process_notes, date
             FROM supply_chain_parent_processes
             ORDER BY parent_process_name
@@ -112,7 +113,7 @@ def supply_chain_lovable():
     try:
         # Get all parent processes
         cursor.execute("""
-            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+            SELECT id, parent_process_name, parent_process_description, parent_process_type,
                    parent_process_status, parent_process_category, parent_process_notes, date
             FROM supply_chain_parent_processes
             ORDER BY parent_process_name
@@ -230,7 +231,7 @@ def parent_process_detail(parent_process_id):
         # Get parent process details
         cursor.execute(
             """
-            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+            SELECT id, parent_process_name, parent_process_description, parent_process_type,
                    parent_process_status, parent_process_category, parent_process_notes, date
             FROM supply_chain_parent_processes
             WHERE id = %s
@@ -252,7 +253,7 @@ def parent_process_detail(parent_process_id):
         cursor.execute(
             """
             SELECT id, sub_process_name, sub_process_description, sub_process_type,
-                   sub_process_status, sub_process_category, sub_process_notes, 
+                   sub_process_status, sub_process_category, sub_process_notes,
                    execution_order, date
             FROM supply_chain_sub_processes
             WHERE parent_process_id = %s
@@ -298,7 +299,7 @@ def parent_process_detail(parent_process_id):
         # Get total count of executions for this parent process
         cursor.execute(
             """
-            SELECT COUNT(*) FROM supply_chain_parent_executions 
+            SELECT COUNT(*) FROM supply_chain_parent_executions
             WHERE parent_process_id = %s
         """,
             (parent_process_id,),
@@ -343,9 +344,9 @@ def parent_process_visual_view(parent_process_id):
         # Get parent process details
         cursor.execute(
             """
-            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+            SELECT id, parent_process_name, parent_process_description, parent_process_type,
                    parent_process_status, parent_process_category, parent_process_notes
-            FROM supply_chain_parent_processes 
+            FROM supply_chain_parent_processes
             WHERE id = %s
         """,
             (parent_process_id,),
@@ -377,8 +378,8 @@ def sub_process_detail(sub_process_id):
         # Get sub process details
         cursor.execute(
             """
-            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_description, 
-                   s.sub_process_type, s.sub_process_status, s.sub_process_category, 
+            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_description,
+                   s.sub_process_type, s.sub_process_status, s.sub_process_category,
                    s.sub_process_notes, s.execution_order, s.date,
                    p.parent_process_name
             FROM supply_chain_sub_processes s
@@ -605,7 +606,7 @@ def save_layout():
         # Check if layout already exists for this parent process
         cursor.execute(
             """
-            SELECT id FROM supply_chain_dag_layout 
+            SELECT id FROM supply_chain_dag_layout
             WHERE layout_data::text LIKE %s
         """,
             (f'%"parentProcessId":{parent_process_id}%',),
@@ -617,7 +618,7 @@ def save_layout():
             # Update existing layout
             cursor.execute(
                 """
-                UPDATE supply_chain_dag_layout 
+                UPDATE supply_chain_dag_layout
                 SET layout_data = %s, layout_timestamp = %s, action = 'update'
                 WHERE id = %s
             """,
@@ -627,7 +628,7 @@ def save_layout():
             # Create new layout
             cursor.execute(
                 """
-                INSERT INTO supply_chain_dag_layout 
+                INSERT INTO supply_chain_dag_layout
                 (date, action, layout_data, layout_timestamp, uid)
                 VALUES (%s, %s, %s, %s, %s)
             """,
@@ -653,8 +654,8 @@ def load_layout(parent_process_id):
 
         cursor.execute(
             """
-            SELECT layout_data, layout_timestamp 
-            FROM supply_chain_dag_layout 
+            SELECT layout_data, layout_timestamp
+            FROM supply_chain_dag_layout
             WHERE layout_data::text LIKE %s
             ORDER BY layout_timestamp DESC
             LIMIT 1
@@ -693,7 +694,7 @@ def update_execution_order():
         for order, sub_process_id in enumerate(execution_order, 1):
             cursor.execute(
                 """
-                UPDATE supply_chain_sub_processes 
+                UPDATE supply_chain_sub_processes
                 SET execution_order = %s, action = 'update_order'
                 WHERE id = %s AND parent_process_id = %s
             """,
@@ -719,7 +720,7 @@ def get_inputs_by_parent(parent_process_id):
 
         cursor.execute(
             """
-            SELECT i.id, i.sub_process_id, i.input_name, i.input_type, 
+            SELECT i.id, i.sub_process_id, i.input_name, i.input_type,
                    i.input_specifications, i.input_quantity, i.input_unit, i.input_status,
                    sp.sub_process_name
             FROM supply_chain_inputs i
@@ -766,7 +767,7 @@ def get_outputs_by_parent(parent_process_id):
 
         cursor.execute(
             """
-            SELECT o.id, o.sub_process_id, o.output_name, o.output_type, 
+            SELECT o.id, o.sub_process_id, o.output_name, o.output_type,
                    o.output_specifications, o.output_quantity, o.output_unit, o.output_quality_status,
                    sp.sub_process_name
             FROM supply_chain_outputs o
@@ -813,7 +814,7 @@ def get_connections_by_parent(parent_process_id):
 
         cursor.execute(
             """
-            SELECT c.id, c.from_sub_process_id, c.to_sub_process_id, c.connection_type, 
+            SELECT c.id, c.from_sub_process_id, c.to_sub_process_id, c.connection_type,
                    c.connection_notes, c.connection_status,
                    sp_from.sub_process_name as from_process_name,
                    sp_to.sub_process_name as to_process_name
@@ -862,7 +863,7 @@ def process_detail(process_id):
         # Get process details
         cursor.execute(
             """
-            SELECT id, process_name, process_description, process_type, 
+            SELECT id, process_name, process_description, process_type,
                    process_status, process_category, process_notes, date
             FROM supply_chain_processes
             WHERE id = %s
@@ -947,8 +948,8 @@ def create_process():
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_processes 
-            (date, action, process_name, process_description, process_type, 
+            INSERT INTO supply_chain_processes
+            (date, action, process_name, process_description, process_type,
              process_status, process_category, process_notes, is_managed, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
@@ -990,7 +991,7 @@ def get_process(process_id):
 
         cursor.execute(
             """
-            SELECT id, process_name, process_description, process_type, 
+            SELECT id, process_name, process_description, process_type,
                    process_status, process_category, process_notes, date, flow_through_enabled, is_managed
             FROM supply_chain_processes
             WHERE id = %s
@@ -1036,7 +1037,7 @@ def update_process(process_id):
 
         cursor.execute(
             """
-            UPDATE supply_chain_processes 
+            UPDATE supply_chain_processes
             SET process_name = %s, process_description = %s, process_type = %s,
                 process_status = %s, process_category = %s, process_notes = %s,
                 action = 'update', date = %s
@@ -1133,7 +1134,7 @@ def get_flow_through_outputs():
         connection, cursor = db_conn()
 
         cursor.execute("""
-            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity,
                    o.output_unit, o.output_specifications, o.output_batch_number,
                    o.output_destination, o.output_flow_through_fields, o.execution_options,
                    p.sub_process_name
@@ -1239,7 +1240,7 @@ def create_flow_through_inputs(output_id):
         # Get the output details
         cursor.execute(
             """
-            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity,
                    o.output_unit, o.output_specifications, o.output_batch_number,
                    o.output_destination, o.output_flow_through_fields, o.execution_options,
                    p.sub_process_name
@@ -1301,7 +1302,7 @@ def create_flow_through_inputs(output_id):
         cursor.execute(
             """
             SELECT to_sub_process_id, connection_type
-            FROM supply_chain_connections 
+            FROM supply_chain_connections
             WHERE from_sub_process_id = %s AND connection_status = 'active'
         """,
             (process_id,),
@@ -1341,9 +1342,9 @@ def create_flow_through_inputs(output_id):
             # Check if this input already exists (for update) or create new
             cursor.execute(
                 """
-                SELECT id, input_name, input_type, input_quantity, input_unit, 
+                SELECT id, input_name, input_type, input_quantity, input_unit,
                        input_specifications, input_batch_number
-                FROM supply_chain_inputs 
+                FROM supply_chain_inputs
                 WHERE process_id = %s AND input_source = %s
             """,
                 (to_sub_process_id, f"Flow-through from {source_process_name}"),
@@ -1355,8 +1356,8 @@ def create_flow_through_inputs(output_id):
                 # Update existing input
                 cursor.execute(
                     """
-                    UPDATE supply_chain_inputs 
-                    SET input_name = %s, input_type = %s, input_quantity = %s, 
+                    UPDATE supply_chain_inputs
+                    SET input_name = %s, input_type = %s, input_quantity = %s,
                         input_unit = %s, input_specifications = %s, input_batch_number = %s,
                         execution_options = %s, date = CURRENT_DATE, action = 'update'
                     WHERE id = %s
@@ -1384,9 +1385,9 @@ def create_flow_through_inputs(output_id):
                 # Create new input
                 cursor.execute(
                     """
-                    INSERT INTO supply_chain_inputs 
-                    (date, action, process_id, input_name, input_type, input_quantity, 
-                     input_unit, input_specifications, input_source, input_batch_number, 
+                    INSERT INTO supply_chain_inputs
+                    (date, action, process_id, input_name, input_type, input_quantity,
+                     input_unit, input_specifications, input_source, input_batch_number,
                      input_status, execution_options, uid)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
@@ -1446,7 +1447,7 @@ def sync_flow_through_for_process(process_id):
         # Get all outputs from this process that have flow-through enabled
         cursor.execute(
             """
-            SELECT id FROM supply_chain_outputs 
+            SELECT id FROM supply_chain_outputs
             WHERE process_id = %s AND output_flow_through = TRUE
         """,
             (process_id,),
@@ -1468,7 +1469,7 @@ def sync_flow_through_for_process(process_id):
                 # Get the output details
                 cursor.execute(
                     """
-                    SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                    SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity,
                            o.output_unit, o.output_specifications, o.output_batch_number,
                            o.output_destination, o.output_flow_through_fields, o.execution_options,
                            p.sub_process_name
@@ -1508,7 +1509,7 @@ def create_automatic_inputs_for_flow_through(process_id, connection, cursor):
         # Get all outputs from this process that have flow-through enabled
         cursor.execute(
             """
-            SELECT id FROM supply_chain_outputs 
+            SELECT id FROM supply_chain_outputs
             WHERE process_id = %s AND output_flow_through = TRUE
         """,
             (process_id,),
@@ -1553,12 +1554,12 @@ def create_flow_through_inputs_internal(output_id, connection, cursor):
         # Get the output details with flow-through fields
         cursor.execute(
             """
-            SELECT id, process_id, output_name, output_type, output_quantity, output_unit, 
+            SELECT id, process_id, output_name, output_type, output_quantity, output_unit,
                    output_specifications, output_batch_number, output_destination,
                    output_flow_through_fields, execution_options
-            FROM supply_chain_outputs 
-            WHERE id = %s AND output_flow_through = TRUE 
-            AND output_flow_through_fields IS NOT NULL 
+            FROM supply_chain_outputs
+            WHERE id = %s AND output_flow_through = TRUE
+            AND output_flow_through_fields IS NOT NULL
             AND output_flow_through_fields != '{}' AND output_flow_through_fields != 'null'
         """,
             (output_id,),
@@ -1618,7 +1619,7 @@ def create_flow_through_inputs_internal(output_id, connection, cursor):
         cursor.execute(
             """
             SELECT to_sub_process_id, connection_type
-            FROM supply_chain_connections 
+            FROM supply_chain_connections
             WHERE from_sub_process_id = %s AND connection_status = 'active'
         """,
             (process_id,),
@@ -1658,9 +1659,9 @@ def create_flow_through_inputs_internal(output_id, connection, cursor):
             # Check if this input already exists (for update) or create new
             cursor.execute(
                 """
-                SELECT id, input_name, input_type, input_quantity, input_unit, 
+                SELECT id, input_name, input_type, input_quantity, input_unit,
                        input_specifications, input_batch_number
-                FROM supply_chain_inputs 
+                FROM supply_chain_inputs
                 WHERE process_id = %s AND input_source = %s
             """,
                 (to_sub_process_id, f"Flow-through from {source_process_name}"),
@@ -1672,8 +1673,8 @@ def create_flow_through_inputs_internal(output_id, connection, cursor):
                 # Update existing input
                 cursor.execute(
                     """
-                    UPDATE supply_chain_inputs 
-                    SET input_name = %s, input_type = %s, input_quantity = %s, 
+                    UPDATE supply_chain_inputs
+                    SET input_name = %s, input_type = %s, input_quantity = %s,
                         input_unit = %s, input_specifications = %s, input_batch_number = %s,
                         execution_options = %s, date = CURRENT_DATE, action = 'update'
                     WHERE id = %s
@@ -1701,9 +1702,9 @@ def create_flow_through_inputs_internal(output_id, connection, cursor):
                 # Create new input
                 cursor.execute(
                     """
-                    INSERT INTO supply_chain_inputs 
-                    (date, action, process_id, input_name, input_type, input_quantity, 
-                     input_unit, input_specifications, input_source, input_batch_number, 
+                    INSERT INTO supply_chain_inputs
+                    (date, action, process_id, input_name, input_type, input_quantity,
+                     input_unit, input_specifications, input_source, input_batch_number,
                      input_status, execution_options, uid)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
@@ -1755,7 +1756,7 @@ def cleanup_orphaned_flow_through_inputs(process_id, connection, cursor):
         # Get all current connections FROM this process
         cursor.execute(
             """
-            SELECT to_sub_process_id FROM supply_chain_connections 
+            SELECT to_sub_process_id FROM supply_chain_connections
             WHERE from_sub_process_id = %s AND connection_status = 'active'
         """,
             (process_id,),
@@ -1767,7 +1768,7 @@ def cleanup_orphaned_flow_through_inputs(process_id, connection, cursor):
         # Find all flow-through inputs that claim to be from this process
         cursor.execute(
             """
-            SELECT id, process_id, input_name FROM supply_chain_inputs 
+            SELECT id, process_id, input_name FROM supply_chain_inputs
             WHERE input_source = %s
         """,
             (f"Flow-through from {source_process_name}",),
@@ -1823,7 +1824,7 @@ def update_process_flow_through(process_id):
 
         cursor.execute(
             """
-            UPDATE supply_chain_processes 
+            UPDATE supply_chain_processes
             SET flow_through_enabled = %s, action = 'update', date = CURRENT_DATE
             WHERE id = %s
         """,
@@ -1867,7 +1868,7 @@ def check_process_has_connections(process_id):
         # Check for connections (as from_process or to_process)
         cursor.execute(
             """
-            SELECT COUNT(*) FROM supply_chain_connections 
+            SELECT COUNT(*) FROM supply_chain_connections
             WHERE from_process_id = %s OR to_process_id = %s
         """,
             (process_id, process_id),
@@ -1877,7 +1878,7 @@ def check_process_has_connections(process_id):
         # Check for inputs
         cursor.execute(
             """
-            SELECT COUNT(*) FROM supply_chain_inputs 
+            SELECT COUNT(*) FROM supply_chain_inputs
             WHERE process_id = %s
         """,
             (process_id,),
@@ -1887,7 +1888,7 @@ def check_process_has_connections(process_id):
         # Check for outputs
         cursor.execute(
             """
-            SELECT COUNT(*) FROM supply_chain_outputs 
+            SELECT COUNT(*) FROM supply_chain_outputs
             WHERE process_id = %s
         """,
             (process_id,),
@@ -1993,7 +1994,7 @@ def move_process_to_unmanaged(process_id):
         print("Moving process to unmanaged...")
         cursor.execute(
             """
-            UPDATE supply_chain_processes 
+            UPDATE supply_chain_processes
             SET is_managed = FALSE, action = 'update', date = CURRENT_DATE
             WHERE id = %s
         """,
@@ -2035,7 +2036,7 @@ def update_process_managed_status(process_id):
 
         cursor.execute(
             """
-            UPDATE supply_chain_processes 
+            UPDATE supply_chain_processes
             SET is_managed = %s, action = 'update', date = CURRENT_DATE
             WHERE id = %s
         """,
@@ -2072,7 +2073,7 @@ def get_inputs():
         if process_id:
             cursor.execute(
                 """
-                SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
+                SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity,
                        i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
                        i.input_expiry_date, i.input_status, p.process_name
                 FROM supply_chain_inputs i
@@ -2084,7 +2085,7 @@ def get_inputs():
             )
         else:
             cursor.execute("""
-                SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
+                SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity,
                        i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
                        i.input_expiry_date, i.input_status, p.process_name
                 FROM supply_chain_inputs i
@@ -2132,7 +2133,7 @@ def get_input(input_id):
 
         cursor.execute(
             """
-            SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity, 
+            SELECT i.id, i.process_id, i.input_name, i.input_type, i.input_quantity,
                    i.input_unit, i.input_specifications, i.input_source, i.input_batch_number,
                    i.input_expiry_date, i.input_status, i.execution_options, p.process_name
             FROM supply_chain_inputs i
@@ -2191,7 +2192,7 @@ def update_input(input_id):
         # Update input
         cursor.execute(
             """
-            UPDATE supply_chain_inputs 
+            UPDATE supply_chain_inputs
             SET input_name = %s, input_type = %s, input_quantity = %s, input_unit = %s,
                 input_specifications = %s, input_source = %s, input_batch_number = %s,
                 input_expiry_date = %s, input_status = %s, execution_options = %s,
@@ -2272,8 +2273,8 @@ def create_input():
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_inputs 
-            (date, action, process_id, input_name, input_type, input_quantity, 
+            INSERT INTO supply_chain_inputs
+            (date, action, process_id, input_name, input_type, input_quantity,
              input_unit, input_specifications, input_source, input_batch_number,
              input_expiry_date, input_status, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -2322,7 +2323,7 @@ def get_outputs():
         if process_id:
             cursor.execute(
                 """
-                SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity,
                        o.output_unit, o.output_specifications, o.output_batch_number,
                        o.output_quality_status, o.output_destination, o.flow_through_enabled,
                        o.flow_through_fields, p.process_name
@@ -2335,7 +2336,7 @@ def get_outputs():
             )
         else:
             cursor.execute("""
-                SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+                SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity,
                        o.output_unit, o.output_specifications, o.output_batch_number,
                        o.output_quality_status, o.output_destination, o.flow_through_enabled,
                        o.flow_through_fields, p.process_name
@@ -2385,7 +2386,7 @@ def get_output(output_id):
 
         cursor.execute(
             """
-            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity, 
+            SELECT o.id, o.process_id, o.output_name, o.output_type, o.output_quantity,
                    o.output_unit, o.output_specifications, o.output_batch_number,
                    o.output_quality_status, o.output_destination, o.output_flow_through,
                    o.output_flow_through_fields, o.execution_options, p.process_name
@@ -2447,7 +2448,7 @@ def update_output(output_id):
         # Update output
         cursor.execute(
             """
-            UPDATE supply_chain_outputs 
+            UPDATE supply_chain_outputs
             SET output_name = %s, output_type = %s, output_quantity = %s, output_unit = %s,
                 output_specifications = %s, output_batch_number = %s,
                 output_quality_status = %s, output_destination = %s, output_flow_through = %s,
@@ -2476,8 +2477,8 @@ def update_output(output_id):
         # This ensures field updates (like execution options) are reflected in connected inputs
         cursor.execute(
             """
-            SELECT id, output_name, output_flow_through, output_flow_through_fields 
-            FROM supply_chain_outputs 
+            SELECT id, output_name, output_flow_through, output_flow_through_fields
+            FROM supply_chain_outputs
             WHERE process_id = %s AND output_flow_through = TRUE
         """,
             (process_id,),
@@ -2556,9 +2557,9 @@ def create_output():
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_outputs 
-            (date, action, process_id, output_name, output_type, output_quantity, 
-             output_unit, output_specifications, output_batch_number, 
+            INSERT INTO supply_chain_outputs
+            (date, action, process_id, output_name, output_type, output_quantity,
+             output_unit, output_specifications, output_batch_number,
              output_quality_status, output_destination, flow_through_enabled, flow_through_fields, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
@@ -2611,7 +2612,7 @@ def get_connections():
         connection, cursor = db_conn()
 
         cursor.execute("""
-            SELECT c.id, c.from_process_id, c.to_process_id, c.connection_type, 
+            SELECT c.id, c.from_process_id, c.to_process_id, c.connection_type,
                    c.connection_status, c.connection_notes,
                    fp.process_name as from_process_name,
                    tp.process_name as to_process_name
@@ -2659,7 +2660,7 @@ def create_connection():
         # Check if connection already exists
         cursor.execute(
             """
-            SELECT id FROM supply_chain_connections 
+            SELECT id FROM supply_chain_connections
             WHERE from_sub_process_id = %s AND to_sub_process_id = %s AND connection_type = %s
         """,
             (data.get("from_sub_process_id"), data.get("to_sub_process_id"), data.get("connection_type", "direct")),
@@ -2672,8 +2673,8 @@ def create_connection():
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_connections 
-            (date, action, parent_process_id, from_sub_process_id, to_sub_process_id, from_output_id, 
+            INSERT INTO supply_chain_connections
+            (date, action, parent_process_id, from_sub_process_id, to_sub_process_id, from_output_id,
              to_input_id, connection_type, connection_status, connection_notes, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
@@ -2702,7 +2703,7 @@ def create_connection():
         if from_sub_process_id:
             cursor.execute(
                 """
-                UPDATE supply_chain_sub_processes 
+                UPDATE supply_chain_sub_processes
                 SET is_managed = TRUE, action = 'update', date = CURRENT_DATE
                 WHERE id = %s
             """,
@@ -2712,7 +2713,7 @@ def create_connection():
         if to_sub_process_id:
             cursor.execute(
                 """
-                UPDATE supply_chain_sub_processes 
+                UPDATE supply_chain_sub_processes
                 SET is_managed = TRUE, action = 'update', date = CURRENT_DATE
                 WHERE id = %s
             """,
@@ -2745,7 +2746,7 @@ def get_all_traces():
         connection, cursor = db_conn()
 
         cursor.execute("""
-            SELECT t.id, t.trace_id, t.item_name, t.item_type, t.current_location, 
+            SELECT t.id, t.trace_id, t.item_name, t.item_type, t.current_location,
                    t.current_process_id, t.trace_path, t.trace_status, t.trace_notes,
                    p.process_name
             FROM supply_chain_traceability t
@@ -2798,7 +2799,7 @@ def update_trace(trace_id):
         # Update trace
         cursor.execute(
             """
-            UPDATE supply_chain_traceability 
+            UPDATE supply_chain_traceability
             SET item_name = %s, item_type = %s, current_location = %s,
                 current_process_id = %s, trace_path = %s, trace_status = %s,
                 trace_notes = %s, date = NOW(), action = 'update'
@@ -2865,8 +2866,8 @@ def create_trace():
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_traceability 
-            (date, action, trace_id, item_name, item_type, current_location, 
+            INSERT INTO supply_chain_traceability
+            (date, action, trace_id, item_name, item_type, current_location,
              current_process_id, trace_path, trace_status, trace_notes, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
@@ -2909,7 +2910,7 @@ def get_trace(trace_id):
 
         cursor.execute(
             """
-            SELECT id, trace_id, item_name, item_type, current_location, 
+            SELECT id, trace_id, item_name, item_type, current_location,
                    current_process_id, trace_path, trace_status, trace_notes, date
             FROM supply_chain_traceability
             WHERE trace_id = %s
@@ -2991,7 +2992,7 @@ def get_connection(connection_id):
 
         cursor.execute(
             """
-            SELECT c.id, c.from_process_id, c.to_process_id, c.connection_type, 
+            SELECT c.id, c.from_process_id, c.to_process_id, c.connection_type,
                    c.connection_status, c.connection_notes, c.from_output_id, c.to_input_id,
                    fp.process_name as from_process_name,
                    tp.process_name as to_process_name
@@ -3047,7 +3048,7 @@ def update_connection(connection_id):
         # Update connection
         cursor.execute(
             """
-            UPDATE supply_chain_connections 
+            UPDATE supply_chain_connections
             SET connection_type = %s, connection_status = %s, connection_notes = %s,
                 from_output_id = %s, to_input_id = %s, date = NOW(), action = 'update'
             WHERE id = %s
@@ -3091,8 +3092,8 @@ def activate_process(process_id):
         # Create process template if it doesn't exist
         cursor.execute(
             """
-            INSERT INTO supply_chain_process_templates 
-            (date, action, process_id, template_name, template_version, template_status, 
+            INSERT INTO supply_chain_process_templates
+            (date, action, process_id, template_name, template_version, template_status,
              default_inputs, default_outputs, default_variables, template_notes, uid)
             VALUES (NOW(), 'create', %s, %s, '1.0', 'active', %s, %s, %s, %s, %s)
             ON CONFLICT (process_id) DO UPDATE SET
@@ -3117,7 +3118,7 @@ def activate_process(process_id):
         # Update process status to active
         cursor.execute(
             """
-            UPDATE supply_chain_processes 
+            UPDATE supply_chain_processes
             SET process_status = 'active', date = NOW(), action = 'activate'
             WHERE id = %s
         """,
@@ -3147,8 +3148,8 @@ def execute_process(process_id):
         # Check if process exists and is active
         cursor.execute(
             """
-            SELECT id, process_name, process_status 
-            FROM supply_chain_processes 
+            SELECT id, process_name, process_status
+            FROM supply_chain_processes
             WHERE id = %s
         """,
             (process_id,),
@@ -3167,8 +3168,8 @@ def execute_process(process_id):
         # Create execution record
         cursor.execute(
             """
-            INSERT INTO supply_chain_process_executions 
-            (date, action, process_id, execution_batch_number, execution_status, 
+            INSERT INTO supply_chain_process_executions
+            (date, action, process_id, execution_batch_number, execution_status,
              execution_start_time, execution_notes, execution_variables, uid)
             VALUES (NOW(), 'create', %s, %s, 'in_progress', NOW(), %s, %s, %s)
             RETURNING id
@@ -3188,10 +3189,10 @@ def execute_process(process_id):
         for input_data in data.get("execution_inputs", []):
             cursor.execute(
                 """
-                INSERT INTO supply_chain_execution_inputs 
+                INSERT INTO supply_chain_execution_inputs
                 (date, action, execution_id, input_template_id, actual_input_name,
                  actual_input_quantity, actual_input_unit, actual_input_batch_number,
-                 actual_input_source, input_consumption_time, input_quality_status, 
+                 actual_input_source, input_consumption_time, input_quality_status,
                  input_notes, uid)
                 VALUES (NOW(), 'create', %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s)
             """,
@@ -3245,10 +3246,10 @@ def complete_execution(execution_id):
         for output_data in data.get("execution_outputs", []):
             cursor.execute(
                 """
-                INSERT INTO supply_chain_execution_outputs 
+                INSERT INTO supply_chain_execution_outputs
                 (date, action, execution_id, output_template_id, actual_output_name,
                  actual_output_quantity, actual_output_unit, actual_output_batch_number,
-                 actual_output_quality_status, actual_output_destination, 
+                 actual_output_quality_status, actual_output_destination,
                  output_production_time, output_notes, uid)
                 VALUES (NOW(), 'create', %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
             """,
@@ -3269,7 +3270,7 @@ def complete_execution(execution_id):
         # Update execution status
         cursor.execute(
             """
-            UPDATE supply_chain_process_executions 
+            UPDATE supply_chain_process_executions
             SET execution_status = 'completed', execution_end_time = NOW(),
                 execution_quality_checks = %s, date = NOW(), action = 'complete'
             WHERE id = %s
@@ -3489,7 +3490,7 @@ def auto_link_connection(connection_id):
                     # Update connection to link specific output to input
                     cursor.execute(
                         """
-                        UPDATE supply_chain_connections 
+                        UPDATE supply_chain_connections
                         SET from_output_id = %s, to_input_id = %s, date = NOW(), action = 'auto_link'
                         WHERE id = %s
                     """,
@@ -3564,7 +3565,7 @@ def save_dag_layout():
         # Check if layout already exists for this parent process using UID
         cursor.execute(
             """
-            SELECT id FROM supply_chain_dag_layout 
+            SELECT id FROM supply_chain_dag_layout
             WHERE uid = %s
         """,
             (f"parent_{parent_process_id}",),
@@ -3576,7 +3577,7 @@ def save_dag_layout():
             # Update existing layout
             cursor.execute(
                 """
-                UPDATE supply_chain_dag_layout 
+                UPDATE supply_chain_dag_layout
                 SET layout_data = %s, layout_timestamp = %s, action = 'update'
                 WHERE uid = %s
             """,
@@ -3586,7 +3587,7 @@ def save_dag_layout():
             # Create new layout
             cursor.execute(
                 """
-                INSERT INTO supply_chain_dag_layout 
+                INSERT INTO supply_chain_dag_layout
                 (date, action, layout_data, layout_timestamp, uid)
                 VALUES (%s, %s, %s, %s, %s)
             """,
@@ -3615,8 +3616,8 @@ def get_dag_layout(parent_process_id):
 
         cursor.execute(
             """
-            SELECT layout_data, layout_timestamp 
-            FROM supply_chain_dag_layout 
+            SELECT layout_data, layout_timestamp
+            FROM supply_chain_dag_layout
             WHERE uid = %s
             ORDER BY layout_timestamp DESC
             LIMIT 1
@@ -3672,8 +3673,8 @@ def create_parent_process():
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_parent_processes 
-            (date, action, parent_process_name, parent_process_description, parent_process_type, 
+            INSERT INTO supply_chain_parent_processes
+            (date, action, parent_process_name, parent_process_description, parent_process_type,
              parent_process_status, parent_process_category, parent_process_notes, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
@@ -3714,7 +3715,7 @@ def get_parent_process(parent_process_id):
 
         cursor.execute(
             """
-            SELECT id, parent_process_name, parent_process_description, parent_process_type, 
+            SELECT id, parent_process_name, parent_process_description, parent_process_type,
                    parent_process_status, parent_process_category, parent_process_notes, date
             FROM supply_chain_parent_processes
             WHERE id = %s
@@ -3758,7 +3759,7 @@ def update_parent_process(parent_process_id):
 
         cursor.execute(
             """
-            UPDATE supply_chain_parent_processes 
+            UPDATE supply_chain_parent_processes
             SET parent_process_name = %s, parent_process_description = %s, parent_process_type = %s,
                 parent_process_status = %s, parent_process_category = %s, parent_process_notes = %s,
                 action = 'update', date = %s
@@ -3907,7 +3908,7 @@ def update_sub_process_managed_status(sub_process_id):
 
         cursor.execute(
             """
-            UPDATE supply_chain_sub_processes 
+            UPDATE supply_chain_sub_processes
             SET is_managed = %s, action = 'update', date = CURRENT_DATE
             WHERE id = %s
         """,
@@ -3949,8 +3950,8 @@ def create_sub_process_input(sub_process_id):
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_inputs 
-            (date, action, process_id, input_name, input_type, input_quantity, 
+            INSERT INTO supply_chain_inputs
+            (date, action, process_id, input_name, input_type, input_quantity,
              input_unit, input_specifications, input_source, input_batch_number,
              input_expiry_date, input_status, execution_options, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -3989,7 +3990,7 @@ def create_sub_process_input(sub_process_id):
         # Mark sub-process as managed when input is added
         cursor.execute(
             """
-            UPDATE supply_chain_sub_processes 
+            UPDATE supply_chain_sub_processes
             SET is_managed = TRUE, action = 'update', date = CURRENT_DATE
             WHERE id = %s
         """,
@@ -4019,8 +4020,8 @@ def create_sub_process_output(sub_process_id):
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_outputs 
-            (date, action, process_id, output_name, output_type, output_quantity, 
+            INSERT INTO supply_chain_outputs
+            (date, action, process_id, output_name, output_type, output_quantity,
              output_unit, output_specifications, output_destination, output_batch_number,
              output_quality_status, output_flow_through, output_flow_through_fields, execution_options, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -4050,7 +4051,7 @@ def create_sub_process_output(sub_process_id):
         # Mark sub-process as managed when output is added
         cursor.execute(
             """
-            UPDATE supply_chain_sub_processes 
+            UPDATE supply_chain_sub_processes
             SET is_managed = TRUE, action = 'update', date = CURRENT_DATE
             WHERE id = %s
         """,
@@ -4063,7 +4064,7 @@ def create_sub_process_output(sub_process_id):
         # This ensures field updates (like execution options) are reflected in connected inputs
         cursor.execute(
             """
-            SELECT id FROM supply_chain_outputs 
+            SELECT id FROM supply_chain_outputs
             WHERE process_id = %s AND output_flow_through = TRUE
         """,
             (sub_process_id,),
@@ -4101,8 +4102,8 @@ def create_sub_process():
 
         cursor.execute(
             """
-            INSERT INTO supply_chain_sub_processes 
-            (date, action, parent_process_id, sub_process_name, sub_process_description, sub_process_type, 
+            INSERT INTO supply_chain_sub_processes
+            (date, action, parent_process_id, sub_process_name, sub_process_description, sub_process_type,
              sub_process_status, sub_process_category, sub_process_notes, execution_order, is_managed, uid)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
@@ -4146,8 +4147,8 @@ def get_sub_process(sub_process_id):
 
         cursor.execute(
             """
-            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_description, 
-                   s.sub_process_type, s.sub_process_status, s.sub_process_category, 
+            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_description,
+                   s.sub_process_type, s.sub_process_status, s.sub_process_category,
                    s.sub_process_notes, s.execution_order, s.date, s.is_managed,
                    p.parent_process_name
             FROM supply_chain_sub_processes s
@@ -4197,7 +4198,7 @@ def update_sub_process(sub_process_id):
 
         cursor.execute(
             """
-            UPDATE supply_chain_sub_processes 
+            UPDATE supply_chain_sub_processes
             SET sub_process_name = %s, sub_process_description = %s, sub_process_type = %s,
                 sub_process_status = %s, sub_process_category = %s, sub_process_notes = %s,
                 execution_order = %s, action = 'update', date = %s
@@ -4294,8 +4295,8 @@ def get_sub_process_inputs(sub_process_id):
         connection, cursor = db_conn()
         cursor.execute(
             """
-            SELECT id, process_id, input_name, input_type, input_quantity, 
-                   input_unit, input_specifications, input_source, input_batch_number, 
+            SELECT id, process_id, input_name, input_type, input_quantity,
+                   input_unit, input_specifications, input_source, input_batch_number,
                    input_expiry_date, input_status, execution_options, uid
             FROM supply_chain_inputs
             WHERE process_id = %s
@@ -4341,9 +4342,9 @@ def get_sub_process_outputs(sub_process_id):
         connection, cursor = db_conn()
         cursor.execute(
             """
-            SELECT id, process_id, output_name, output_type, output_quantity, 
-                   output_unit, output_specifications, output_batch_number, 
-                   output_quality_status, output_destination, output_flow_through, 
+            SELECT id, process_id, output_name, output_type, output_quantity,
+                   output_unit, output_specifications, output_batch_number,
+                   output_quality_status, output_destination, output_flow_through,
                    output_flow_through_fields, uid
             FROM supply_chain_outputs
             WHERE process_id = %s
@@ -4389,7 +4390,7 @@ def get_sub_process_connections(sub_process_id):
         connection, cursor = db_conn()
         cursor.execute(
             """
-            SELECT c.id, c.parent_process_id, c.from_sub_process_id, c.to_sub_process_id, 
+            SELECT c.id, c.parent_process_id, c.from_sub_process_id, c.to_sub_process_id,
                    c.connection_type, c.connection_status, c.connection_notes,
                    sp_from.sub_process_name as from_process_name,
                    sp_to.sub_process_name as to_process_name
@@ -4436,7 +4437,7 @@ def get_sub_processes_by_parent(parent_process_id):
 
         cursor.execute(
             """
-            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_type, 
+            SELECT s.id, s.parent_process_id, s.sub_process_name, s.sub_process_type,
                    s.sub_process_status, s.sub_process_category, s.execution_order, s.is_managed,
                    p.parent_process_name
             FROM supply_chain_sub_processes s
@@ -4493,7 +4494,7 @@ def create_parent_execution(parent_process_id):
         # Create parent execution
         cursor.execute(
             """
-            INSERT INTO supply_chain_parent_executions 
+            INSERT INTO supply_chain_parent_executions
             (parent_process_id, execution_status, execution_start_time, date, action)
             VALUES (%s, 'pending', NOW(), NOW(), 'create')
             RETURNING id
@@ -4505,7 +4506,7 @@ def create_parent_execution(parent_process_id):
         # Get all active sub-processes for this parent process
         cursor.execute(
             """
-            SELECT id FROM supply_chain_sub_processes 
+            SELECT id FROM supply_chain_sub_processes
             WHERE parent_process_id = %s AND sub_process_status = 'active'
             ORDER BY execution_order, sub_process_name
         """,
@@ -4517,7 +4518,7 @@ def create_parent_execution(parent_process_id):
         for sub_process in sub_processes:
             cursor.execute(
                 """
-                INSERT INTO supply_chain_sub_executions 
+                INSERT INTO supply_chain_sub_executions
                 (parent_execution_id, sub_process_id, execution_status, execution_start_time, date, action)
                 VALUES (%s, %s, 'pending', NOW(), NOW(), 'create')
             """,
@@ -4726,7 +4727,7 @@ def execute_sub_execution(sub_execution_id):
         # Update sub-execution status to 'in_progress'
         cursor.execute(
             """
-            UPDATE supply_chain_sub_executions 
+            UPDATE supply_chain_sub_executions
             SET execution_status = 'in_progress', execution_start_time = NOW(), date = NOW(), action = 'execute'
             WHERE id = %s
         """,
@@ -4746,7 +4747,7 @@ def execute_sub_execution(sub_execution_id):
             print(f"Updating parent execution {parent_execution_id} to in_progress")
             cursor.execute(
                 """
-                UPDATE supply_chain_parent_executions 
+                UPDATE supply_chain_parent_executions
                 SET execution_status = 'in_progress', execution_start_time = NOW()
                 WHERE id = %s AND execution_status IN ('pending', 'in_progress')
             """,
@@ -4796,8 +4797,8 @@ def execute_sub_execution(sub_execution_id):
 
             cursor.execute(
                 """
-                INSERT INTO supply_chain_execution_inputs 
-                (execution_id, input_template_id, actual_input_name, 
+                INSERT INTO supply_chain_execution_inputs
+                (execution_id, input_template_id, actual_input_name,
                  actual_input_quantity, actual_input_unit, actual_input_batch_number, date, action)
                 VALUES (%s, %s, %s, %s, %s, %s, NOW(), 'create')
             """,
@@ -4850,7 +4851,7 @@ def update_sub_execution_status(sub_execution_id):
 
         cursor.execute(
             f"""
-            UPDATE supply_chain_sub_executions 
+            UPDATE supply_chain_sub_executions
             SET {", ".join(update_fields)}
             WHERE id = %s
         """,
@@ -4873,7 +4874,7 @@ def update_sub_execution_status(sub_execution_id):
             # Check if all sub-executions for this parent are completed
             cursor.execute(
                 """
-                SELECT COUNT(*) FROM supply_chain_sub_executions 
+                SELECT COUNT(*) FROM supply_chain_sub_executions
                 WHERE parent_execution_id = %s AND execution_status != 'completed'
             """,
                 (parent_execution_id,),
@@ -4886,7 +4887,7 @@ def update_sub_execution_status(sub_execution_id):
                 print(f"All sub-executions completed, updating parent execution {parent_execution_id} to completed")
                 cursor.execute(
                     """
-                    UPDATE supply_chain_parent_executions 
+                    UPDATE supply_chain_parent_executions
                     SET execution_status = 'completed', execution_end_time = NOW()
                     WHERE id = %s
                 """,
@@ -4897,7 +4898,7 @@ def update_sub_execution_status(sub_execution_id):
                 # Check if this was the last sub-execution to complete
                 cursor.execute(
                     """
-                    SELECT COUNT(*) FROM supply_chain_sub_executions 
+                    SELECT COUNT(*) FROM supply_chain_sub_executions
                     WHERE parent_execution_id = %s AND execution_status = 'completed'
                 """,
                     (parent_execution_id,),
@@ -4906,7 +4907,7 @@ def update_sub_execution_status(sub_execution_id):
 
                 cursor.execute(
                     """
-                    SELECT COUNT(*) FROM supply_chain_sub_executions 
+                    SELECT COUNT(*) FROM supply_chain_sub_executions
                     WHERE parent_execution_id = %s
                 """,
                     (parent_execution_id,),
@@ -4917,7 +4918,7 @@ def update_sub_execution_status(sub_execution_id):
                     # All sub-executions are completed, update parent to completed
                     cursor.execute(
                         """
-                        UPDATE supply_chain_parent_executions 
+                        UPDATE supply_chain_parent_executions
                         SET execution_status = 'completed', execution_end_time = NOW()
                         WHERE id = %s
                     """,
@@ -5166,7 +5167,7 @@ def create_field_option():
         # Check if option already exists
         cursor.execute(
             """
-            SELECT id FROM supply_chain_field_options 
+            SELECT id FROM supply_chain_field_options
             WHERE field_type = %s AND option_value = %s
         """,
             (field_type, option_value),
@@ -5177,7 +5178,7 @@ def create_field_option():
         # Create new option
         cursor.execute(
             """
-            INSERT INTO supply_chain_field_options 
+            INSERT INTO supply_chain_field_options
             (field_type, option_value, option_label, is_system_default, uid, created_date, updated_date)
             VALUES (%s, %s, %s, FALSE, %s, NOW(), NOW())
             RETURNING id
@@ -5216,7 +5217,7 @@ def update_field_option(option_id):
         # Check if option exists and is not a system default
         cursor.execute(
             """
-            SELECT is_system_default FROM supply_chain_field_options 
+            SELECT is_system_default FROM supply_chain_field_options
             WHERE id = %s
         """,
             (option_id,),
@@ -5232,7 +5233,7 @@ def update_field_option(option_id):
         # Update option
         cursor.execute(
             """
-            UPDATE supply_chain_field_options 
+            UPDATE supply_chain_field_options
             SET option_value = %s, option_label = %s, updated_date = NOW()
             WHERE id = %s
         """,
@@ -5262,7 +5263,7 @@ def delete_field_option(option_id):
         # Check if option exists and is not a system default
         cursor.execute(
             """
-            SELECT is_system_default FROM supply_chain_field_options 
+            SELECT is_system_default FROM supply_chain_field_options
             WHERE id = %s
         """,
             (option_id,),
@@ -5331,7 +5332,7 @@ def populate_default_field_options():
             # Check if option already exists
             cursor.execute(
                 """
-                SELECT id FROM supply_chain_field_options 
+                SELECT id FROM supply_chain_field_options
                 WHERE field_type = %s AND option_value = %s
             """,
                 (field_type, option_value),
@@ -5341,7 +5342,7 @@ def populate_default_field_options():
                 # Insert new option
                 cursor.execute(
                     """
-                    INSERT INTO supply_chain_field_options 
+                    INSERT INTO supply_chain_field_options
                     (field_type, option_value, option_label, is_system_default)
                     VALUES (%s, %s, %s, %s)
                 """,
@@ -5440,7 +5441,7 @@ def complete_sub_execution_with_outputs(sub_execution_id):
             cursor.execute(
                 """
                 SELECT output_flow_through, output_flow_through_fields
-                FROM supply_chain_outputs 
+                FROM supply_chain_outputs
                 WHERE id = %s AND output_flow_through = TRUE
             """,
                 (output_id,),
@@ -5453,8 +5454,8 @@ def complete_sub_execution_with_outputs(sub_execution_id):
                     # Record flow-through data for connected processes
                     cursor.execute(
                         """
-                        SELECT to_sub_process_id FROM supply_chain_connections 
-                        WHERE from_sub_process_id = (SELECT process_id FROM supply_chain_outputs WHERE id = %s) 
+                        SELECT to_sub_process_id FROM supply_chain_connections
+                        WHERE from_sub_process_id = (SELECT process_id FROM supply_chain_outputs WHERE id = %s)
                         AND connection_status = 'active'
                     """,
                         (output_id,),
@@ -5467,7 +5468,7 @@ def complete_sub_execution_with_outputs(sub_execution_id):
                         cursor.execute(
                             """
                             INSERT INTO supply_chain_execution_flow_through
-                            (source_execution_id, source_output_id, target_process_id, 
+                            (source_execution_id, source_output_id, target_process_id,
                              flow_through_data, date, action)
                             VALUES (%s, %s, %s, %s, NOW(), 'create')
                         """,
@@ -5488,7 +5489,7 @@ def complete_sub_execution_with_outputs(sub_execution_id):
         # Update sub-execution status to 'completed'
         cursor.execute(
             """
-            UPDATE supply_chain_sub_executions 
+            UPDATE supply_chain_sub_executions
             SET execution_status = 'completed', execution_end_time = NOW(), execution_notes = %s, date = NOW(), action = 'complete'
             WHERE id = %s
         """,
@@ -5511,7 +5512,7 @@ def complete_sub_execution_with_outputs(sub_execution_id):
             # Check if all sub-executions for this parent are completed
             cursor.execute(
                 """
-                SELECT COUNT(*) FROM supply_chain_sub_executions 
+                SELECT COUNT(*) FROM supply_chain_sub_executions
                 WHERE parent_execution_id = %s AND execution_status != 'completed'
             """,
                 (parent_execution_id,),
@@ -5524,7 +5525,7 @@ def complete_sub_execution_with_outputs(sub_execution_id):
                 print(f"All sub-executions completed, updating parent execution {parent_execution_id} to completed")
                 cursor.execute(
                     """
-                    UPDATE supply_chain_parent_executions 
+                    UPDATE supply_chain_parent_executions
                     SET execution_status = 'completed', execution_end_time = NOW()
                     WHERE id = %s
                 """,
@@ -5590,7 +5591,7 @@ def update_existing_flow_through_inputs():
                 # Update the input with transformed execution options
                 cursor.execute(
                     """
-                    UPDATE supply_chain_inputs 
+                    UPDATE supply_chain_inputs
                     SET execution_options = %s, date = CURRENT_DATE, action = 'update_flow_through_transform'
                     WHERE id = %s
                 """,

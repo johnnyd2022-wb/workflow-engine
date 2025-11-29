@@ -1,5 +1,6 @@
 import datetime
 
+import pandas as pd
 import psycopg2
 
 from app.utils.config_loader import config
@@ -697,7 +698,6 @@ def create_db_function():
 
 
 def main():
-    df = {}
     connection, cursor = db_conn()
 
     # Create the 'actions' table in the database
@@ -730,35 +730,11 @@ def main():
     # Export the current date's data to the Excel file
 
     current_date = datetime.date.today()
-    current_date_str = current_date.strftime("%d-%m-%Y")
+    current_date.strftime("%d-%m-%Y")
 
     # Close the connection
     connection.close()
 
 
 if __name__ == "__main__":
-    # Use environment-specific Docker configuration
-    if config.docker_enabled:
-        print(f"Loading Docker container for {config.environment} environment...")
-
-        # Get Docker configuration from environment config
-        image_name = config.docker_image_name
-        container_name = config.docker_container_name
-
-        # Port mapping from config
-        ports = {config.docker_host_port: config.docker_container_port}
-
-        # Database environment variables
-        environment = {
-            "POSTGRES_DB": config.db_name,
-            "POSTGRES_USER": config.db_user,
-            "POSTGRES_PASSWORD": config.db_password,
-        }
-
-        load_docker_container(image_name, container_name, ports, environment)
-    else:
-        print(f"Docker container disabled for {config.environment} environment")
-
-    # Run database initialization for all environments
-    print(f"Running database initialization for environment: {config.environment}")
     main()
