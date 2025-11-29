@@ -1,29 +1,29 @@
 #!/bin/bash
 
 # Production environment runner
-export WB_ENVIRONMENT=prod
-echo "🏭 Starting WhistleBird app in PRODUCTION environment..."
-echo "Environment: $WB_ENVIRONMENT"
-echo "Config file: config/$WB_ENVIRONMENT.ini"
+export ENVIRONMENT=prod
+echo "🏭 Starting Workflow Engine app in PRODUCTION environment..."
+echo "Environment: $ENVIRONMENT"
+echo "Config file: config/$ENVIRONMENT.ini"
 
 # Backup current production
-/home/johnny/app_backups.sh
-/home/johnny/db_backups.sh
+/home/johnny/workflow-engine_backups.sh
+/home/johnny/workflow-engine_db_backups.sh
 
 # Build and run Docker container for production
-docker stop $(docker ps -aqf "name=wb_inv_prod") 2>/dev/null || true
-docker rm $(docker ps -aqf "name=wb_inv_prod") 2>/dev/null || true
+docker stop $(docker ps -aqf "name=workflow-engine-prod") 2>/dev/null || true
+docker rm $(docker ps -aqf "name=workflow-engine-prod") 2>/dev/null || true
 
 # Build Docker image for production environment
-docker build --target production -f Dockerfile.multi -t wb_inv:prod .
+docker build --target production -f Dockerfile.multi -t workflow-engine:prod .
 
 # Run Docker container
 docker run -d \
-    --name wb_inv_prod \
-    -p 5000:5000 \
-    -e WB_ENVIRONMENT=prod \
-    wb_inv:prod
+    --name workflow-engine-prod \
+    -p 8000:8000 \
+    -e ENVIRONMENT=prod \
+    workflow-engine:prod
 
-echo "✅ Production environment started on port 5000"
-echo "View logs with: docker logs -f wb_inv_prod"
-echo "Browse to: https://inventory.whistlebird.co.nz"
+echo "✅ Production environment started on port 8000"
+echo "View logs with: docker logs -f workflow-engine-prod"
+echo "Browse to: https://workflow-engine.whistlebird.co.nz"

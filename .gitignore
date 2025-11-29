@@ -54,3 +54,11 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# UV
+
+# Byte-compiled / build files
+build/
+dist/
+*.egg-info/
+*.egg

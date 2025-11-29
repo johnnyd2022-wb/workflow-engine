@@ -1,6 +1,6 @@
-# WhistleBird Deployment Guide
+# Workflow Engine Deployment Guide
 
-This document describes the new Git-based deployment workflow for WhistleBird, replacing the previous bashrc-based approach.
+This document describes the new Git-based deployment workflow for Workflow Engine, replacing the previous bashrc-based approach.
 
 ## Overview
 
@@ -64,7 +64,7 @@ port = 5005|5001|5000
 [database]
 host = localhost|host.docker.internal
 port = 5401|5432
-name = whistlebird_db_test|whistlebird_db_prod
+name = workflow-engine-test|workflow-engine-prod
 user = postgres
 password = YOUR_PASSWORD_HERE
 
