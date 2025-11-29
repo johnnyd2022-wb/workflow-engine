@@ -86,9 +86,9 @@ deploy_test() {
     ./scripts/run_test.sh
     
     # Wait for healthcheck to pass
-    if wait_for_healthcheck 5001; then
+    if wait_for_healthcheck 8001; then
         print_success "Test environment deployed successfully!"
-        print_status "Browse to: https://test-inventory.whistlebird.co.nz"
+        print_status "Browse to: https://test-workflow-engine.whistlebird.co.nz"
     else
         print_error "Test deployment failed healthcheck. Check logs with: docker logs workflow-engine-test"
         exit 1
@@ -125,9 +125,9 @@ deploy_prod() {
     ./scripts/run_prod.sh
     
     # Wait for healthcheck to pass
-    if wait_for_healthcheck 5000; then
+    if wait_for_healthcheck 8000; then
         print_success "Production environment deployed successfully!"
-        print_status "Browse to: https://inventory.whistlebird.co.nz"
+        print_status "Browse to: https://workflow-engine.whistlebird.co.nz"
         print_status "Deployment tagged as: $tag_name"
         
         # Push the tag to remote only after successful healthcheck
@@ -328,7 +328,7 @@ wait_for_healthcheck() {
 
 # Function to show help
 show_help() {
-    echo "WhistleBird Git Workflow"
+    echo "workflow-engine Git Workflow"
     echo ""
     echo "Usage: $0 <command>"
     echo ""
