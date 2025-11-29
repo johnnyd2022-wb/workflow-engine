@@ -455,12 +455,14 @@ def crm():
         if connection:
             connection.close()
 
+
 def customer_page_redirect_response(customer_name):
     """
     Helper function to create a standardized redirect URL for customer page.
     Can be called from multiple places in the CRM.
     """
     return f"/crm-customer-page?customer_name={customer_name}"
+
 
 def update_existing_customers_with_invoices():
     """Update existing customers in CRM with their invoice data"""
@@ -836,6 +838,7 @@ def crm_delete_follow_up_task():
     except Exception as e:
         print(f"❌ Error in crm_delete_follow_up_task: {e}")
         return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
+
 
 @crm_bp.route("/crm-add-contact", methods=["POST"])
 def crm_add_contact():
