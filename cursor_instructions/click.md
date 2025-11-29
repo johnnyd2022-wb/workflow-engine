@@ -9,3 +9,5 @@ I need the following tasks done in this order;
  - create click group for the main app.py function to start the entire app
  - update dockerfile.multi test stage to use new click command to run the application
  - anything else that is required for click that I have missed
+
+If you are unsure about anything just ask.
