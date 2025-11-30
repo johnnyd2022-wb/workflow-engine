@@ -223,7 +223,7 @@ def create_workflow_inputs_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "process_id": "INTEGER",  # foreign key to supply_chain_processes
+        "process_id": "INTEGER",  # foreign key to workflow_engine_processes
         "input_name": "TEXT",  # name of the input (e.g., "Juniper Berries", "Neutral Spirit")
         "input_type": "TEXT",  # type of input (e.g., "raw_material", "intermediate_product", "equipment")
         "input_quantity": "DOUBLE PRECISION",  # quantity of input
@@ -247,7 +247,7 @@ def create_workflow_outputs_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "process_id": "INTEGER",  # foreign key to supply_chain_processes
+        "process_id": "INTEGER",  # foreign key to workflow_engine_processes
         "output_name": "TEXT",  # name of the output (e.g., "Gin Batch A", "Bottled Product")
         "output_type": "TEXT",  # type of output (e.g., "finished_product", "intermediate_product", "waste")
         "output_quantity": "DOUBLE PRECISION",  # quantity of output
@@ -296,9 +296,9 @@ def create_workflow_traceability_table():
         "trace_id": "TEXT",  # unique trace identifier
         "item_name": "TEXT",  # name of the item being traced
         "item_type": "TEXT",  # type of item (e.g., "batch", "product", "ingredient")
-        "current_location": "TEXT",  # current location in the supply chain
+        "current_location": "TEXT",  # current location in the workflow engine
         "current_process_id": "INTEGER",  # current process
-        "trace_path": "JSONB",  # complete path through the supply chain
+        "trace_path": "JSONB",  # complete path through the workflow engine
         "trace_status": "TEXT",  # 'active', 'completed', 'lost'
         "trace_notes": "TEXT",  # additional trace information
         "uid": "TEXT",
@@ -315,7 +315,7 @@ def create_workflow_process_executions_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "process_id": "INTEGER",  # foreign key to supply_chain_processes
+        "process_id": "INTEGER",  # foreign key to workflow_engine_processes
         "execution_batch_number": "TEXT",  # unique batch number for this execution
         "execution_status": "TEXT",  # 'planned', 'in_progress', 'completed', 'failed', 'cancelled'
         "execution_start_time": "TIMESTAMP",  # when execution started
@@ -337,8 +337,8 @@ def create_workflow_execution_inputs_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "execution_id": "INTEGER",  # foreign key to supply_chain_process_executions
-        "input_template_id": "INTEGER",  # foreign key to supply_chain_inputs (template)
+        "execution_id": "INTEGER",  # foreign key to workflow_engine_process_executions
+        "input_template_id": "INTEGER",  # foreign key to workflow_engine_inputs (template)
         "actual_input_name": "TEXT",  # actual name used (may differ from template)
         "actual_input_quantity": "DOUBLE PRECISION",  # actual quantity used
         "actual_input_unit": "TEXT",  # actual unit used
@@ -361,8 +361,8 @@ def create_workflow_execution_outputs_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "execution_id": "INTEGER",  # foreign key to supply_chain_process_executions
-        "output_template_id": "INTEGER",  # foreign key to supply_chain_outputs (template)
+        "execution_id": "INTEGER",  # foreign key to workflow_engine_process_executions
+        "output_template_id": "INTEGER",  # foreign key to workflow_engine_outputs (template)
         "actual_output_name": "TEXT",  # actual name produced
         "actual_output_quantity": "DOUBLE PRECISION",  # actual quantity produced
         "actual_output_unit": "TEXT",  # actual unit
@@ -385,9 +385,9 @@ def create_workflow_execution_flow_through_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "source_execution_id": "INTEGER",  # foreign key to supply_chain_sub_executions
-        "source_output_id": "INTEGER",  # foreign key to supply_chain_outputs
-        "target_process_id": "INTEGER",  # foreign key to supply_chain_sub_processes (where it flows to)
+        "source_execution_id": "INTEGER",  # foreign key to workflow_engine_sub_executions
+        "source_output_id": "INTEGER",  # foreign key to workflow_engine_outputs
+        "target_process_id": "INTEGER",  # foreign key to workflow_engine_sub_processes (where it flows to)
         "flow_through_data": "JSONB",  # actual prompted values and flow-through configuration
         "flow_through_status": "TEXT",  # 'pending', 'processed', 'failed'
         "flow_through_notes": "TEXT",  # notes about this flow-through
@@ -405,7 +405,7 @@ def create_workflow_process_templates_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "process_id": "INTEGER",  # foreign key to supply_chain_processes
+        "process_id": "INTEGER",  # foreign key to workflow_engine_processes
         "template_name": "TEXT",  # name of this template version
         "template_version": "TEXT",  # version number
         "template_status": "TEXT",  # 'draft', 'active', 'archived'
@@ -525,8 +525,8 @@ def create_workflow_sub_executions_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "parent_execution_id": "INTEGER",  # Foreign key to supply_chain_parent_executions
-        "sub_process_id": "INTEGER",  # Foreign key to supply_chain_sub_processes
+        "parent_execution_id": "INTEGER",  # Foreign key to workflow_engine_parent_executions
+        "sub_process_id": "INTEGER",  # Foreign key to workflow_engine_sub_processes
         "execution_status": "TEXT",  # 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
         "execution_start_time": "TIMESTAMP",
         "execution_end_time": "TIMESTAMP",
@@ -546,7 +546,7 @@ def create_workflow_execution_sales_mapping_table():
         "id": "SERIAL PRIMARY KEY",
         "date": "DATE",
         "action": "TEXT",
-        "execution_id": "INTEGER NOT NULL",  # Links to supply_chain_parent_executions.id
+        "execution_id": "INTEGER NOT NULL",  # Links to workflow_engine_parent_executions.id
         "sales_id": "INTEGER NOT NULL",  # Links to sales_product.id
         "product_name": "TEXT NOT NULL",  # Specific product sold
         "quantity_sold": "DOUBLE PRECISION",

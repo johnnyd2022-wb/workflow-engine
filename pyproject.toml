@@ -67,7 +67,7 @@ ignore = ["E501"]  # Ignore line-too-long for now
 "**/test_*.py" = ["E501"]
 # Allow imports after sys.path manipulation (needed for app/app.py)
 "app/app.py" = ["E402"]
-"app/features/supply_chain/backend/sales_execution_mapping.py" = ["E402"]
+"app/features/workflow_engine/backend/sales_execution_mapping.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

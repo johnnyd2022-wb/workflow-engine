@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parent Process Details - Whistlebird Workflow Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            color: var(--text-color);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+        }
+
+        .back-button {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .back-button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .process-info {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+        }
+
+        .process-info h2 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: var(--text-color);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            font-size: 1.1rem;
+            color: var(--text-color);
+        }
+
+        .sub-processes-section {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 30px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+        }
+
+        .sub-processes-section h2 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-left: auto;
+        }
+
+        .add-sub-process-btn, .visual-view-btn, .add-connection-btn, .execute-btn {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .visual-view-btn {
+            background: linear-gradient(135deg, #28a745, #20c997);
+        }
+
+        .execute-btn {
+            background: linear-gradient(135deg, #ff6b35, #f7931e);
+        }
+
+        .add-sub-process-btn:hover, .visual-view-btn:hover, .add-connection-btn:hover, .execute-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .sub-processes-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .sub-processes-table th,
+        .sub-processes-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sub-processes-table th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sub-processes-table tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        .sub-processes-table td {
+            color: var(--text-color);
+        }
+
+        .view-more-section {
+            text-align: center;
+            margin-top: 20px;
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Execution Status Auras with Breathing Effect */
+        .execution-row[data-status="completed"] {
+            position: relative;
+            animation: breathing-glow 3s ease-in-out infinite;
+        }
+
+        .execution-row[data-status="completed"]::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            right: -3px;
+            bottom: -3px;
+            background: linear-gradient(45deg, #10b981, #34d399, #6ee7b7, #a7f3d0);
+            border-radius: 10px;
+            z-index: -1;
+            opacity: 0.6;
+            filter: blur(2px);
+        }
+
+        .execution-row[data-status="completed"]::after {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            right: -1px;
+            bottom: -1px;
+            background: linear-gradient(45deg, #10b981, #34d399);
+            border-radius: 8px;
+            z-index: -1;
+            opacity: 0.8;
+        }
+
+        @keyframes breathing-glow {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(16, 185, 129, 0.3), 
+                           0 0 20px rgba(16, 185, 129, 0.2), 
+                           0 0 30px rgba(16, 185, 129, 0.1);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(16, 185, 129, 0.6), 
+                           0 0 40px rgba(16, 185, 129, 0.4), 
+                           0 0 60px rgba(16, 185, 129, 0.2);
+            }
+        }
+
+        .execution-row[data-status="in_progress"] {
+            position: relative;
+        }
+
+        .execution-row[data-status="in_progress"]::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #f59e0b, #fbbf24, #fcd34d);
+            border-radius: 8px;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        .execution-row[data-status="failed"] {
+            position: relative;
+        }
+
+        .execution-row[data-status="failed"]::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #ef4444, #f87171, #fca5a5);
+            border-radius: 8px;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background-color: var(--bg-color);
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: var(--text-color);
+        }
+
+        .close {
+            color: var(--text-secondary);
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+
+        .close:hover {
+            color: var(--text-color);
+        }
+
+        .modal-body {
+            padding: 0;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .modal-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .modal-table th,
+        .modal-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-table th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            color: var(--text-color);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .modal-table tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        .status-active {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22C55E;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-pending {
+            background: rgba(156, 163, 175, 0.2);
+            color: #6b7280;
+        }
+
+        .status-in_progress {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+
+        .status-completed {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-failed {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .status-inactive {
+            background: rgba(156, 163, 175, 0.2);
+            color: #9CA3AF;
+            border: 1px solid rgba(156, 163, 175, 0.3);
+        }
+
+        .status-archived {
+            background: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--border-color);
+            color: var(--text-color);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: var(--text-color);
+        }
+
+        .empty-state p {
+            font-size: 1rem;
+            margin-bottom: 30px;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #EF4444;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--card-background);
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            position: relative;
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Notification Modal Styles */
+        .modal.notification-modal {
+            z-index: 2000;
+        }
+
+        .notification-content {
+            background: var(--card-background);
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            position: relative;
+            animation: modalSlideIn 0.3s ease;
+            text-align: center;
+        }
+
+        .notification-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .notification-icon.success {
+            color: #4CAF50;
+        }
+
+        .notification-icon.error {
+            color: #f44336;
+        }
+
+        .notification-icon.warning {
+            color: #ff9800;
+        }
+
+        .notification-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text-color);
+        }
+
+        .notification-message {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+
+        .notification-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .notification-buttons.single {
+            justify-content: center;
+        }
+
+        .notification-buttons.single .btn {
+            min-width: 100px;
+        }
+
+        /* Table Styles */
+        .table-container {
+            background: var(--card-background);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            margin-bottom: 30px;
+        }
+
+        .table-container h2 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: var(--card-background);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .close {
+            color: var(--text-secondary);
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            position: absolute;
+            top: 15px;
+            right: 20px;
+        }
+
+        .close:hover {
+            color: var(--text-color);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--background-color);
+            color: var(--text-color);
+            font-size: 1rem;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.2);
+        }
+
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .sub-processes-table {
+                font-size: 0.9rem;
+            }
+
+            .sub-processes-table th,
+            .sub-processes-table td {
+                padding: 10px 8px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .btn {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+
+            .modal-content {
+                margin: 10% auto;
+                padding: 20px;
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Parent Process Details</h1>
+            <a href="/workflow-engine" class="back-button">
+                ← Back to Workflow Engine
+            </a>
+        </div>
+
+        {% if error %}
+            <div class="error-message">
+                <strong>Error:</strong> {{ error }}
+            </div>
+        {% else %}
+            {% if parent_process %}
+                <div class="process-info">
+                    <h2>{{ parent_process[1] }}</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Description</div>
+                            <div class="info-value">{{ parent_process[2] or 'No description provided' }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Type</div>
+                            <div class="info-value">{{ format_type(parent_process[3]) if parent_process[3] else 'Not specified' }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Status</div>
+                            <div class="info-value">
+                                <span class="status-badge status-{{ parent_process[4] }}">
+                                    {{ parent_process[4] }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Category</div>
+                            <div class="info-value">{{ parent_process[5] or 'Not categorized' }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Created Date</div>
+                            <div class="info-value">{{ parent_process[7].strftime('%B %d, %Y') if parent_process[7] else 'Unknown' }}</div>
+                        </div>
+                        {% if parent_process[6] %}
+                        <div class="info-item">
+                            <div class="info-label">Notes</div>
+                            <div class="info-value">{{ parent_process[6] }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="sub-processes-section">
+                    <h2>
+                        Sub Processes
+                        <div class="header-buttons">
+                            <button class="add-sub-process-btn" onclick="addSubProcess()">
+                                + Add Sub Process
+                            </button>
+                            <button class="visual-view-btn" onclick="openVisualView()">
+                                Visual View
+                            </button>
+                        </div>
+                    </h2>
+
+                    {% if sub_processes %}
+                        <table class="sub-processes-table">
+                            <thead>
+                                <tr>
+                                    <th>Order</th>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Category</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sub_process in sub_processes %}
+                                <tr>
+                                    <td>{{ sub_process[7] }}</td>
+                                    <td>
+                                        <strong>{{ sub_process[1] }}</strong>
+                                        {% if sub_process[2] %}
+                                        <br><small style="color: var(--text-secondary);">{{ sub_process[2] }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ format_type(sub_process[3]) if sub_process[3] else 'Not specified' }}</td>
+                                    <td>
+                                        <span class="status-badge status-{{ sub_process[4] }}">
+                                            {{ sub_process[4] }}
+                                        </span>
+                                    </td>
+                                    <td>{{ sub_process[5] or 'Not categorized' }}</td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-secondary" onclick="editSubProcess({{ sub_process[0] }})">
+                                                Edit
+                                            </button>
+                                            <button class="btn btn-danger" onclick="deleteSubProcess({{ sub_process[0] }}, '{{ sub_process[1] }}')">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div class="empty-state">
+                            <h3>No Sub Processes</h3>
+                            <p>This parent process doesn't have any sub processes yet.</p>
+                            <button class="add-sub-process-btn" onclick="addSubProcess()">
+                                + Add First Sub Process
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Executions Section -->
+                <div class="table-container">
+                    <h2>
+                        Executions
+                        <div class="header-buttons">
+                            <button class="btn btn-primary" onclick="executeProcess()">
+                                Initiate New Execution
+                            </button>
+                        </div>
+                    </h2>
+                    {% if executions %}
+                        <table class="sub-processes-table">
+                            <thead>
+                                <tr>
+                                    <th>Execution ID</th>
+                                    <th>Status</th>
+                                    <th>Start Time</th>
+                                    <th>End Time</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for execution in executions %}
+                                <tr class="execution-row" data-status="{{ execution[2] }}">
+                                    <td>{{ execution[0] }}</td>
+                                    <td>
+                                        <span class="status-badge status-{{ execution[2] }}">
+                                            {{ execution[2].replace('_', ' ').title() }}
+                                        </span>
+                                    </td>
+                                    <td>{{ execution[3].strftime('%Y-%m-%d %H:%M') if execution[3] else 'Not started' }}</td>
+                                    <td>{{ execution[4].strftime('%Y-%m-%d %H:%M') if execution[4] else 'Not completed' }}</td>
+                                    <td>{{ execution[5] or 'No notes' }}</td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-primary" onclick="viewExecution({{ execution[0] }})">
+                                                View Details
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% if total_executions > 5 %}
+                            <div class="view-more-section">
+                                <a href="/workflow-engine/parent-process/{{ parent_process[0] }}/executions/summary" class="btn btn-secondary">
+                                    View All {{ total_executions }} Executions
+                                </a>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="empty-state">
+                            <h3>No Executions</h3>
+                            <p>This parent process doesn't have any executions yet.</p>
+                            <button class="btn btn-primary" onclick="executeProcess()">
+                                Initiate First Execution
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="table-container">
+                    <h2>
+                        Connections
+                        <div class="header-buttons">
+                            <button class="add-connection-btn" onclick="addConnection()">
+                                + Add Connection
+                            </button>
+                        </div>
+                    </h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>From Process</th>
+                                <th>To Process</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="connectionsTableBody">
+                            {% if connections %}
+                                {% for connection in connections %}
+                                <tr>
+                                    <td>{{ connection[0] }}</td>
+                                    <td>{{ connection[10] or 'N/A' }}</td>
+                                    <td>{{ connection[11] or 'N/A' }}</td>
+                                    <td>{{ connection[4] or 'N/A' }}</td>
+                                    <td><span class="status-{{ connection[5] or 'inactive' }}">{{ connection[5] or 'inactive' }}</span></td>
+                                    <td>{{ connection[6] or 'N/A' }}</td>
+                                    <td>
+                                        <button class="btn btn-primary btn-small" onclick="editConnection({{ connection[0] }})">Edit</button>
+                                        <button class="btn btn-danger btn-small" onclick="deleteConnection({{ connection[0] }}, '{{ connection[10] }} → {{ connection[11] }}')">Delete</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="7" style="text-align: center;">No connections found</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="error-message">
+                    <strong>Error:</strong> Parent process not found
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <!-- All Executions Modal -->
+
+    <!-- Create Sub Process Modal -->
+    <div id="createSubProcessModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateSubProcessModal()">&times;</span>
+            <h2>Create New Sub Process</h2>
+            <form id="createSubProcessForm">
+                <input type="hidden" id="createSubProcessParentId" name="parent_process_id" value="{{ parent_process[0] }}">
+                <div class="form-group">
+                    <label for="subProcessName">Sub Process Name:</label>
+                    <input type="text" id="subProcessName" name="sub_process_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="subProcessDescription">Description:</label>
+                    <textarea id="subProcessDescription" name="sub_process_description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="subProcessType">Type:</label>
+                    <select id="subProcessType" name="sub_process_type">
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="packaging">Packaging</option>
+                        <option value="quality_control">Quality Control</option>
+                        <option value="logistics">Logistics</option>
+                        <option value="procurement">Procurement</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="subProcessStatus">Status:</label>
+                    <select id="subProcessStatus" name="sub_process_status">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="subProcessCategory">Category:</label>
+                    <input type="text" id="subProcessCategory" name="sub_process_category">
+                </div>
+                <div class="form-group">
+                    <label for="executionOrder">Execution Order:</label>
+                    <input type="number" id="executionOrder" name="execution_order" min="1" value="1">
+                </div>
+                <button type="submit" class="btn btn-primary">Create Sub Process</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Sub Process Modal -->
+    <div id="editSubProcessModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditSubProcessModal()">&times;</span>
+            <h2>Edit Sub Process</h2>
+            <form id="editSubProcessForm">
+                <input type="hidden" id="editSubProcessId" name="sub_process_id">
+                <div class="form-group">
+                    <label for="editSubProcessName">Sub Process Name:</label>
+                    <input type="text" id="editSubProcessName" name="sub_process_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="editSubProcessDescription">Description:</label>
+                    <textarea id="editSubProcessDescription" name="sub_process_description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editSubProcessType">Type:</label>
+                    <select id="editSubProcessType" name="sub_process_type">
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="packaging">Packaging</option>
+                        <option value="quality_control">Quality Control</option>
+                        <option value="logistics">Logistics</option>
+                        <option value="procurement">Procurement</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editSubProcessStatus">Status:</label>
+                    <select id="editSubProcessStatus" name="sub_process_status">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editSubProcessCategory">Category:</label>
+                    <input type="text" id="editSubProcessCategory" name="sub_process_category">
+                </div>
+                <div class="form-group">
+                    <label for="editExecutionOrder">Execution Order:</label>
+                    <input type="number" id="editExecutionOrder" name="execution_order" min="1">
+                </div>
+                <button type="submit" class="btn btn-primary">Update Sub Process</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Connection Modal -->
+    <div id="createConnectionModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateConnectionModal()">&times;</span>
+            <h2>Create New Connection</h2>
+            <form id="createConnectionForm">
+                <input type="hidden" id="createConnectionParentId" name="parent_process_id" value="{{ parent_process[0] }}">
+                <div class="form-group">
+                    <label for="fromSubProcess">From Sub Process:</label>
+                    <select id="fromSubProcess" name="from_sub_process_id" required>
+                        <option value="">Select source sub-process</option>
+                        {% for sub_process in sub_processes %}
+                        <option value="{{ sub_process[0] }}">{{ sub_process[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="toSubProcess">To Sub Process:</label>
+                    <select id="toSubProcess" name="to_sub_process_id" required>
+                        <option value="">Select destination sub-process</option>
+                        {% for sub_process in sub_processes %}
+                        <option value="{{ sub_process[0] }}">{{ sub_process[1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="connectionType">Connection Type:</label>
+                    <select id="connectionType" name="connection_type" required>
+                        <option value="">Select connection type</option>
+                        <option value="direct">Direct</option>
+                        <option value="storage">Storage</option>
+                        <option value="transport">Transport</option>
+                        <option value="batch">Batch</option>
+                        <option value="continuous">Continuous</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="connectionStatus">Status:</label>
+                    <select id="connectionStatus" name="connection_status" required>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="connectionNotes">Notes:</label>
+                    <textarea id="connectionNotes" name="connection_notes" placeholder="Additional notes about this connection"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Connection</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification Modal -->
+    <div id="notificationModal" class="modal notification-modal">
+        <div class="notification-content">
+            <div id="notificationIcon" class="notification-icon"></div>
+            <div id="notificationTitle" class="notification-title"></div>
+            <div id="notificationMessage" class="notification-message"></div>
+            <div id="notificationButtons" class="notification-buttons"></div>
+        </div>
+    </div>
+
+    <script>
+        function openVisualView() {
+            // Navigate to visual view for this parent process
+            window.location.href = `/workflow-engine/parent-process/{{ parent_process[0] }}/visual`;
+        }
+
+        function executeProcess() {
+            // Start process execution
+            console.log('Starting process execution for parent process:', {{ parent_process[0] }});
+            
+            // Create a new parent execution
+            fetch(`/api/workflow-engine/parent-processes/{{ parent_process[0] }}/executions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Navigate to the execution detail page
+                    window.location.href = `/workflow-engine/execution/${data.parent_execution_id}`;
+                } else {
+                    alert('Error creating execution: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error creating execution: ' + error.message);
+            });
+        }
+
+        function viewExecution(executionId) {
+            // Navigate to the execution detail page
+            window.location.href = `/workflow-engine/execution/${executionId}`;
+        }
+
+        function addSubProcess() {
+            // Open the create sub process modal
+            document.getElementById('createSubProcessModal').style.display = 'block';
+        }
+
+        function closeCreateSubProcessModal() {
+            document.getElementById('createSubProcessModal').style.display = 'none';
+            document.getElementById('createSubProcessForm').reset();
+        }
+
+        function editSubProcess(subProcessId) {
+            // Load sub process data and open edit modal
+            fetch(`/api/workflow-engine/sub-processes/${subProcessId}`)
+                .then(response => response.json())
+                .then(subProcess => {
+                    document.getElementById('editSubProcessId').value = subProcess.id;
+                    document.getElementById('editSubProcessName').value = subProcess.sub_process_name;
+                    document.getElementById('editSubProcessDescription').value = subProcess.sub_process_description || '';
+                    document.getElementById('editSubProcessType').value = subProcess.sub_process_type || '';
+                    document.getElementById('editSubProcessStatus').value = subProcess.sub_process_status || 'inactive';
+                    document.getElementById('editSubProcessCategory').value = subProcess.sub_process_category || '';
+                    document.getElementById('editExecutionOrder').value = subProcess.execution_order || 1;
+                    document.getElementById('editSubProcessModal').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error loading sub process:', error);
+                    showError('Error', 'Error loading sub process details');
+                });
+        }
+
+        function closeEditSubProcessModal() {
+            document.getElementById('editSubProcessModal').style.display = 'none';
+            document.getElementById('editSubProcessForm').reset();
+        }
+
+        // Notification functions
+        function showNotification(type, title, message, buttons = []) {
+            const modal = document.getElementById('notificationModal');
+            const icon = document.getElementById('notificationIcon');
+            const titleEl = document.getElementById('notificationTitle');
+            const messageEl = document.getElementById('notificationMessage');
+            const buttonsEl = document.getElementById('notificationButtons');
+            
+            // Set icon based on type
+            icon.className = `notification-icon ${type}`;
+            switch(type) {
+                case 'success':
+                    icon.textContent = '✓';
+                    break;
+                case 'error':
+                    icon.textContent = '✗';
+                    break;
+                case 'warning':
+                    icon.textContent = '⚠';
+                    break;
+                default:
+                    icon.textContent = 'ℹ';
+            }
+            
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            
+            // Clear and add buttons
+            buttonsEl.innerHTML = '';
+            if (buttons.length === 0) {
+                buttonsEl.className = 'notification-buttons single';
+                buttonsEl.innerHTML = '<button class="btn btn-primary" onclick="closeNotification()">OK</button>';
+            } else {
+                buttonsEl.className = 'notification-buttons';
+                buttons.forEach(button => {
+                    const btn = document.createElement('button');
+                    btn.className = `btn ${button.class || 'btn-primary'}`;
+                    btn.textContent = button.text;
+                    btn.onclick = button.onclick;
+                    buttonsEl.appendChild(btn);
+                });
+            }
+            
+            modal.style.display = 'block';
+        }
+        
+        function closeNotification() {
+            document.getElementById('notificationModal').style.display = 'none';
+        }
+        
+        function showSuccess(title, message) {
+            showNotification('success', title, message);
+        }
+        
+        function showError(title, message) {
+            showNotification('error', title, message);
+        }
+        
+        function showWarning(title, message) {
+            showNotification('warning', title, message);
+        }
+
+        // Connection functions
+        function addConnection() {
+            // Open the create connection modal
+            document.getElementById('createConnectionModal').style.display = 'block';
+        }
+
+        function closeCreateConnectionModal() {
+            document.getElementById('createConnectionModal').style.display = 'none';
+            document.getElementById('createConnectionForm').reset();
+        }
+
+        function editConnection(connectionId) {
+            // TODO: Implement edit connection modal
+            console.log('Edit connection:', connectionId);
+        }
+
+        async function deleteConnection(connectionId, connectionName) {
+            const confirmed = await showConfirmDialog(
+                'Delete Connection',
+                `Are you sure you want to delete the connection "${connectionName}"?`,
+                'Delete',
+                'Cancel'
+            );
+            
+            if (!confirmed) return;
+            
+            fetch(`/api/workflow-engine/connections/${connectionId}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (response.ok) {
+                    showSuccess('Success', 'Connection deleted successfully!');
+                    location.reload();
+                } else {
+                    response.json().then(data => {
+                        showError('Error', 'Error deleting connection: ' + data.error);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showError('Error', 'Error deleting connection: ' + error.message);
+            });
+        }
+        
+        // Promise-based confirmation dialog
+        function showConfirmDialog(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {
+            return new Promise((resolve) => {
+                showNotification('warning', title, message, [
+                    {
+                        text: cancelText,
+                        class: 'btn-secondary',
+                        onclick: () => {
+                            closeNotification();
+                            resolve(false);
+                        }
+                    },
+                    {
+                        text: confirmText,
+                        class: 'btn-danger',
+                        onclick: () => {
+                            closeNotification();
+                            resolve(true);
+                        }
+                    }
+                ]);
+            });
+        }
+
+        async function deleteSubProcess(subProcessId, subProcessName) {
+            const confirmed = await showConfirmDialog(
+                'Delete Sub Process',
+                `Are you sure you want to delete "${subProcessName}"? This action cannot be undone.`,
+                'Delete',
+                'Cancel'
+            );
+            
+            if (!confirmed) return;
+            
+            fetch(`/api/workflow-engine/sub-processes/${subProcessId}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (response.ok) {
+                    showSuccess('Success', 'Sub process deleted successfully!');
+                    location.reload();
+                } else {
+                    response.json().then(data => {
+                        showError('Error', 'Error deleting sub process: ' + data.error);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showError('Error', 'Error deleting sub process: ' + error.message);
+            });
+        }
+
+        // Form submissions
+        document.getElementById('createSubProcessForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/api/workflow-engine/sub-processes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success', 'Sub process created successfully!');
+                    closeCreateSubProcessModal();
+                    location.reload();
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error creating sub process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error creating sub process: ' + error.message);
+            }
+        });
+
+        document.getElementById('editSubProcessForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const subProcessId = formData.get('sub_process_id');
+            
+            try {
+                const response = await fetch(`/api/workflow-engine/sub-processes/${subProcessId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success', 'Sub process updated successfully!');
+                    closeEditSubProcessModal();
+                    location.reload();
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error updating sub process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error updating sub process: ' + error.message);
+            }
+        });
+
+        // Form submission for creating connections
+        document.getElementById('createConnectionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/api/workflow-engine/connections', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
+                
+                if (response.ok) {
+                    showSuccess('Success', 'Connection created successfully!');
+                    closeCreateConnectionModal();
+                    location.reload();
+                } else {
+                    const errorData = await response.json();
+                    showError('Error', 'Error creating connection: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error', 'Error creating connection: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>

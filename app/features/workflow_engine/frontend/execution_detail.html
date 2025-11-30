@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Execution Dashboard - Workflow Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            color: #1d1d1f;
+            line-height: 1.6;
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            min-height: calc(100vh - 4rem);
+        }
+
+        .sidebar {
+            position: fixed;
+            left: 2rem;
+            top: 2rem;
+            width: 80px;
+            height: calc(100vh - 4rem);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 0;
+            z-index: 1000;
+        }
+
+        .sidebar-item {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .sidebar-item.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .sidebar-item.active::after {
+            content: '';
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 20px;
+            background: #667eea;
+            border-radius: 2px;
+        }
+
+        .sidebar-icon {
+            width: 24px;
+            height: 24px;
+            fill: #6e6e73;
+        }
+
+        .sidebar-item.active .sidebar-icon {
+            fill: white;
+        }
+
+        .sidebar-label {
+            position: absolute;
+            left: 100%;
+            margin-left: 1rem;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .sidebar-item:hover .sidebar-label {
+            opacity: 1;
+        }
+
+        .content-area {
+            margin-left: 120px;
+            padding: 2rem;
+        }
+
+        .header {
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .header .subtitle {
+            font-size: 1.25rem;
+            color: #6e6e73;
+            font-weight: 400;
+        }
+
+        .execution-status-bar {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            margin-bottom: 3rem;
+            padding: 1.5rem 2rem;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .status-indicator.status-pending {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            color: #92400e;
+        }
+
+        .status-indicator.status-in_progress {
+            background: linear-gradient(135deg, #dbeafe, #93c5fd);
+            color: #1e40af;
+        }
+
+        .status-indicator.status-completed {
+            background: linear-gradient(135deg, #d1fae5, #6ee7b7);
+            color: #065f46;
+        }
+
+        .status-indicator.status-failed {
+            background: linear-gradient(135deg, #fee2e2, #fca5a5);
+            color: #991b1b;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .execution-id {
+            font-size: 1.125rem;
+            color: #6e6e73;
+            font-weight: 500;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .process-tracing {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .process-tracing h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1d1d1f;
+            margin-bottom: 2rem;
+        }
+
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+
+        .flow-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .flow-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.125rem;
+            color: white;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            position: relative;
+        }
+
+        .flow-circle.batch {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        }
+
+        .flow-circle.process {
+            background: linear-gradient(135deg, #ec4899, #be185d);
+        }
+
+        .flow-circle.output {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        }
+
+        .flow-label {
+            font-size: 0.875rem;
+            color: #6e6e73;
+            font-weight: 500;
+        }
+
+        .flow-connector {
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, #e5e7eb, #d1d5db);
+            margin: 0 1rem;
+        }
+
+        .sub-processes {
+            margin-top: 2rem;
+        }
+
+        .sub-processes h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 1.5rem;
+        }
+
+        .sub-process-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .sub-process-card {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .sub-process-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        .sub-process-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .sub-process-name {
+            font-weight: 600;
+            color: #1d1d1f;
+            font-size: 1.125rem;
+        }
+
+        .sub-process-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .sub-process-status.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .sub-process-status.in_progress {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .sub-process-status.completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .sub-process-status.failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .sub-process-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            border: none;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.875rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        .stats-section {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .stats-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stats-card h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 1.5rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1d1d1f;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: #6e6e73;
+            font-weight: 500;
+        }
+
+        .customer-connections {
+            margin-top: 1rem;
+        }
+
+        .customer-card {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .customer-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .customer-info h4 {
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 0.25rem;
+        }
+
+        .customer-info p {
+            font-size: 0.875rem;
+            color: #6e6e73;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(8px);
+        }
+
+        .modal-content {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1d1d1f;
+        }
+
+        .close {
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            color: #6e6e73;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover {
+            color: #1d1d1f;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .add-option-btn {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            margin-left: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .add-option-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                display: none;
+            }
+            
+            .content-area {
+                margin-left: 0;
+            }
+            
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .flow-diagram {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .flow-connector {
+                width: 2px;
+                height: 40px;
+                margin: 0.5rem 0;
+            }
+        }
+
+        /* Batch Input Modal Styles */
+        .batch-section {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .batch-title {
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #111827;
+            background: white;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .form-textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #111827;
+            background: white;
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 20px;
+            border-top: 1px solid #e5e7eb;
+            background: #f9fafb;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-item active">
+                <svg class="sidebar-icon" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                <div class="sidebar-label">Execution</div>
+            </div>
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24">
+                    <path d="M9 12l2 2 4-4"/>
+                    <circle cx="12" cy="12" r="10"/>
+                </svg>
+                <div class="sidebar-label">Processes</div>
+            </div>
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24">
+                    <path d="M18 20V10"/>
+                    <path d="M12 20V4"/>
+                    <path d="M6 20v-6"/>
+                </svg>
+                <div class="sidebar-label">Analytics</div>
+            </div>
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <div class="sidebar-label">Quality</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content-area">
+            <div class="header">
+                <h1>Process Execution</h1>
+                <p class="subtitle">Monitor and manage process execution in real-time</p>
+            </div>
+
+            <!-- Execution Status Bar -->
+            <div class="execution-status-bar">
+                <div class="status-indicator status-{{ execution[2] if execution else 'pending' }}">
+                    <div class="status-dot"></div>
+                    {{ (execution[2] if execution else 'pending').replace('_', ' ').title() }}
+                </div>
+                <div class="execution-id">Execution ID: {{ execution[0] if execution else 'N/A' }}</div>
+            </div>
+
+            <div class="main-content">
+                <!-- Process Tracing Section -->
+                <div class="process-tracing">
+                    <h2>Process Execution</h2>
+                    
+                    <!-- Flow Diagram -->
+                    <div class="flow-diagram">
+                        <div class="flow-step">
+                            <div class="flow-circle batch">Input</div>
+                            <div class="flow-label">Execution {{ execution[0] if execution else 'N/A' }}</div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-circle process">Process</div>
+                            <div class="flow-label">{{ execution[7] if execution else 'Parent Process' }}</div>
+                        </div>
+                        <div class="flow-connector"></div>
+                        <div class="flow-step">
+                            <div class="flow-circle output">Output</div>
+                            <div class="flow-label">{{ sub_executions|length }} Processes</div>
+                        </div>
+                    </div>
+
+                    <!-- Processes -->
+                    <div class="sub-processes">
+                        <h3>Processes</h3>
+                        <div class="sub-process-grid">
+                            {% for sub_execution in sub_executions %}
+                                {% set can_start = sub_execution[3] == 'pending' %}
+                            <div class="sub-process-card">
+                                <div class="sub-process-header">
+                                    <div class="sub-process-name">{{ sub_execution[7] }}</div>
+                                    <div class="sub-process-status {{ sub_execution[3] }}">
+                                        {{ sub_execution[3].replace('_', ' ').title() }}
+                                    </div>
+                                </div>
+                                
+                                <div class="sub-process-actions">
+                                    {% if sub_execution[3] == 'pending' %}
+                                            <button class="btn btn-primary" onclick="startSubExecution({{ sub_execution[0] }})">
+                                                Start
+                                            </button>
+                                    {% elif sub_execution[3] == 'in_progress' %}
+                                        <button class="btn btn-success" onclick="completeSubExecution({{ sub_execution[0] }})">
+                                            Complete
+                                        </button>
+                                        <button class="btn btn-danger" onclick="failSubExecution({{ sub_execution[0] }})">
+                                            Fail
+                                        </button>
+                                    {% elif sub_execution[3] == 'completed' %}
+                                        <span class="btn" style="background: #d1fae5; color: #065f46;">Completed</span>
+                                    {% elif sub_execution[3] == 'failed' %}
+                                        <span class="btn" style="background: #fee2e2; color: #991b1b;">Failed</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Section -->
+                <div class="stats-section">
+                    <!-- Execution Statistics -->
+                    <div class="stats-card">
+                        <h3>Execution Statistics</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value">{{ sub_executions|length }}</div>
+                                <div class="stat-label">Total Processes</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ sub_executions|selectattr('3', 'equalto', 'completed')|list|length }}</div>
+                                <div class="stat-label">Completed</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ sub_executions|selectattr('3', 'equalto', 'in_progress')|list|length }}</div>
+                                <div class="stat-label">In Progress</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ sub_executions|selectattr('3', 'equalto', 'pending')|list|length }}</div>
+                                <div class="stat-label">Pending</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Execution Details -->
+                    <div class="stats-card">
+                        <h3>Execution Details</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value">{{ execution[4].strftime('%H:%M') if execution and execution[4] else 'N/A' }}</div>
+                                <div class="stat-label">Start Time</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ execution[5].strftime('%H:%M') if execution and execution[5] else 'N/A' }}</div>
+                                <div class="stat-label">End Time</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ execution[6].strftime('%m/%d') if execution and execution[6] else 'N/A' }}</div>
+                                <div class="stat-label">Date</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">{{ execution[0] if execution else 'N/A' }}</div>
+                                <div class="stat-label">Execution ID</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Input Modal -->
+    <div id="batchInputModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Execute Sub-Process</h2>
+                <span class="close" onclick="closeBatchInputModal()">&times;</span>
+            </div>
+            <form id="batchInputForm">
+                <div id="inputFields"></div>
+                <div id="outputFields"></div>
+                <div class="form-group">
+                    <label class="form-label" for="executionNotes">Execution Notes</label>
+                    <textarea class="form-textarea" id="executionNotes" name="execution_notes" rows="3" placeholder="Add any notes about this execution..."></textarea>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                    <button type="button" class="btn" onclick="closeBatchInputModal()" style="background: #6e6e73; color: white;">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Execute</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        console.log('Script loading...');
+        let currentSubExecutionId = null;
+
+        function startSubExecution(subExecutionId) {
+            console.log('startSubExecution called with ID:', subExecutionId);
+            console.log('Starting sub-execution:', subExecutionId);
+            
+            // Load prompt data for this sub-execution
+            fetch(`/api/workflow-engine/sub-executions/${subExecutionId}/inputs-outputs`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Received data from API:', data);
+                    if (data.success) {
+                        // Add sub_execution_id to the data
+                        data.sub_execution_id = subExecutionId;
+                        console.log('Data before showing modal:', data);
+                        showBatchInputModal(data);
+                    } else {
+                        alert('Error loading execution data: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error loading execution data: ' + error.message);
+                });
+        }
+
+        console.log('startSubExecution function defined:', typeof startSubExecution);
+
+        // Test if function is available globally
+        window.testStartSubExecution = function() {
+            console.log('Global test function called');
+            if (typeof startSubExecution === 'function') {
+                console.log('startSubExecution is available');
+            } else {
+                console.log('startSubExecution is NOT available');
+            }
+        };
+
+        // Make startSubExecution globally available
+        window.startSubExecution = startSubExecution;
+
+        // Ensure function is available when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, startSubExecution available:', typeof window.startSubExecution);
+        });
+
+        function completeSubExecution(subExecutionId) {
+            // Check if there are output prompts before completing
+            fetch(`/api/workflow-engine/sub-executions/${subExecutionId}/inputs-outputs`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Received data for completion:', data);
+                    if (data.success) {
+                        // Check if there are prompt outputs
+                        if (data.prompt_outputs && data.prompt_outputs.length > 0) {
+                            // Show output prompt modal
+                            data.sub_execution_id = subExecutionId;
+                            data.is_completion = true;
+                            showBatchOutputModal(data);
+                        } else {
+                            // No output prompts, complete directly
+            updateSubExecutionStatus(subExecutionId, 'completed');
+                        }
+                    } else {
+                        alert('Error loading execution data: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error loading execution data: ' + error.message);
+                });
+        }
+
+        function failSubExecution(subExecutionId) {
+            updateSubExecutionStatus(subExecutionId, 'failed');
+        }
+
+        function updateSubExecutionStatus(subExecutionId, status) {
+            fetch(`/api/workflow-engine/sub-executions/${subExecutionId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ status: status })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error updating status: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error updating status: ' + error.message);
+            });
+        }
+
+        function showBatchInputModal(data) {
+            // Remove existing modal if any
+            const existingModal = document.getElementById('batchInputModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Create modal HTML
+            let modalContent = `
+                <div id="batchInputModal" class="modal" style="display: block;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Execute: ${data.sub_process_name || 'Sub-Process'}</h2>
+                            <span class="close" onclick="closeBatchInputModal()">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <p style="color: #6b7280; margin-bottom: 24px;">Provide batch data for inputs and outputs</p>
+                            
+                            <form id="batchInputForm">
+            `;
+            
+            // Add input fields
+            console.log('Processing inputs:', data.prompt_inputs);
+            if (data.prompt_inputs && data.prompt_inputs.length > 0) {
+                modalContent += '<h3 style="margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Inputs</h3>';
+                data.prompt_inputs.forEach(input => {
+                    console.log('Processing input:', input);
+                    modalContent += `
+                        <div class="batch-section">
+                            <div class="batch-title">${input.input_name}</div>
+                    `;
+                    
+                    // Only show fields that are set to "prompt"
+                    const execOptions = input.execution_options || {};
+                    console.log('Input execution options:', execOptions);
+                    
+                    if (execOptions.unit === 'prompt') {
+                        modalContent += `
+                            <div class="form-group">
+                                <label class="form-label">Unit</label>
+                                <select class="form-input" name="input_${input.id}_unit" required data-input-id="${input.id}">
+                                    <option value="">Loading options...</option>
+                                </select>
+                            </div>
+                        `;
+                    }
+                    
+                    if (execOptions.batch === 'prompt') {
+                        modalContent += `
+                            <div class="form-group">
+                                <label class="form-label">Input Batch</label>
+                                <input type="text" class="form-input" name="input_${input.id}_batch" value="${input.input_batch || ''}" required>
+                            </div>
+                        `;
+                    }
+                    
+                    modalContent += `
+                        </div>
+                    `;
+                });
+            }
+            
+            // Add execution notes
+            modalContent += `
+                <h3 style="margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Execution Notes</h3>
+                <div class="form-group">
+                    <textarea class="form-textarea" name="execution_notes" placeholder="Add any notes about this execution..."></textarea>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeBatchInputModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Start Execution</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+            `;
+            
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+            
+            // Populate dropdowns with API call
+            populateDropdowns(data);
+            
+            // Handle form submission
+            document.getElementById('batchInputForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitBatchInput(data.sub_execution_id);
+            });
+        }
+        
+        function showBatchOutputModal(data) {
+            // Remove existing modal if any
+            const existingModal = document.getElementById('batchOutputModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Create modal HTML
+            let modalContent = `
+                <div id="batchOutputModal" class="modal" style="display: block;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Complete: ${data.sub_process_name || 'Sub-Process'}</h2>
+                            <span class="close" onclick="closeBatchOutputModal()">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <p style="color: #6b7280; margin-bottom: 24px;">Provide output data for completion</p>
+                            
+                            <form id="batchOutputForm">
+            `;
+            
+            // Add output fields
+            console.log('Processing outputs:', data.prompt_outputs);
+            if (data.prompt_outputs && data.prompt_outputs.length > 0) {
+                modalContent += '<h3 style="margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Outputs</h3>';
+                data.prompt_outputs.forEach(output => {
+                    console.log('Processing output:', output);
+                    modalContent += `
+                        <div class="batch-section">
+                            <div class="batch-title">${output.output_name}</div>
+                    `;
+                    
+                    // Only show fields that are set to "prompt"
+                    const execOptions = output.execution_options || {};
+                    console.log('Output execution options:', execOptions);
+                    
+                    if (execOptions.unit === 'prompt') {
+                        modalContent += `
+                            <div class="form-group">
+                                <label class="form-label">Unit</label>
+                                <select class="form-input" name="output_${output.id}_unit" required data-output-id="${output.id}">
+                                    <option value="">Loading options...</option>
+                                </select>
+                            </div>
+                        `;
+                    }
+                    
+                    if (execOptions.quantity === 'prompt') {
+                        modalContent += `
+                            <div class="form-group">
+                                <label class="form-label">Quantity</label>
+                                <input type="number" class="form-input" name="output_${output.id}_quantity" value="${output.output_quantity || ''}" step="0.01" required>
+                            </div>
+                        `;
+                    }
+                    
+                    if (execOptions.batch === 'prompt') {
+                        modalContent += `
+                            <div class="form-group">
+                                <label class="form-label">Output Batch</label>
+                                <input type="text" class="form-input" name="output_${output.id}_batch" value="${output.output_batch || ''}" required>
+                            </div>
+                        `;
+                    }
+                    
+                    modalContent += `
+                        </div>
+                    `;
+                });
+            }
+            
+            // Add execution notes
+            modalContent += `
+                <h3 style="margin-bottom: 16px; color: #0f172a; font-size: 16px; font-weight: 600;">Completion Notes</h3>
+                <div class="form-group">
+                    <textarea class="form-textarea" name="execution_notes" placeholder="Add any notes about this completion..."></textarea>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeBatchOutputModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Complete Execution</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+            `;
+            
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+            
+            // Populate dropdowns with API call
+            populateOutputDropdowns(data);
+            
+            // Handle form submission
+            document.getElementById('batchOutputForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitBatchOutput(data.sub_execution_id);
+            });
+        }
+        
+        function populateDropdowns(data) {
+            console.log('Populating dropdowns...');
+            
+            // Get all unit dropdowns
+            const unitDropdowns = document.querySelectorAll('select[name*="_unit"]');
+            console.log(`Found ${unitDropdowns.length} unit dropdowns`);
+            
+            // Fetch field options for units
+            fetch('/api/workflow-engine/field-options/unit')
+                .then(response => response.json())
+                .then(optionsData => {
+                    console.log('Received unit options:', optionsData);
+                    
+                    if (optionsData.success && optionsData.options && optionsData.options.length > 0) {
+                        unitDropdowns.forEach(dropdown => {
+                            // Clear loading option
+                            dropdown.innerHTML = '';
+                            
+                            // Add default option
+                            const defaultOption = document.createElement('option');
+                            defaultOption.value = '';
+                            defaultOption.textContent = 'Select unit...';
+                            dropdown.appendChild(defaultOption);
+                            
+                            // Add options from API
+                            optionsData.options.forEach(option => {
+                                const optionElement = document.createElement('option');
+                                optionElement.value = option.value;
+                                optionElement.textContent = option.label;
+                                dropdown.appendChild(optionElement);
+                            });
+                            
+                            // Set default value if available
+                            const inputId = dropdown.getAttribute('data-input-id');
+                            const input = data.prompt_inputs.find(i => i.id == inputId);
+                            if (input && input.input_unit) {
+                                dropdown.value = input.input_unit;
+                            }
+                        });
+                    } else {
+                        console.log('No unit options found, attempting to populate defaults...');
+                        // Try to populate default options first
+                        fetch('/api/workflow-engine/field-options/populate-defaults', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(populateResult => {
+                            console.log('Populate defaults result:', populateResult);
+                            if (populateResult.success) {
+                                // Retry fetching options after populating defaults
+                                return fetch('/api/workflow-engine/field-options/unit');
+                            } else {
+                                throw new Error('Failed to populate defaults');
+                            }
+            })
+            .then(response => response.json())
+                        .then(retryOptionsData => {
+                            console.log('Retry unit options:', retryOptionsData);
+                            if (retryOptionsData.success && retryOptionsData.options && retryOptionsData.options.length > 0) {
+                                unitDropdowns.forEach(dropdown => {
+                                    dropdown.innerHTML = '';
+                                    const defaultOption = document.createElement('option');
+                                    defaultOption.value = '';
+                                    defaultOption.textContent = 'Select unit...';
+                                    dropdown.appendChild(defaultOption);
+                                    
+                                    retryOptionsData.options.forEach(option => {
+                                        const optionElement = document.createElement('option');
+                                        optionElement.value = option.value;
+                                        optionElement.textContent = option.label;
+                                        dropdown.appendChild(optionElement);
+                                    });
+                                    
+                                    const inputId = dropdown.getAttribute('data-input-id');
+                                    const input = data.prompt_inputs.find(i => i.id == inputId);
+                                    if (input && input.input_unit) {
+                                        dropdown.value = input.input_unit;
+                                    }
+                                });
+                } else {
+                                throw new Error('Still no options after populating defaults');
+                }
+            })
+            .catch(error => {
+                            console.error('Error populating defaults or retrying:', error);
+                            // Final fallback to hardcoded options
+                            unitDropdowns.forEach(dropdown => {
+                                dropdown.innerHTML = `
+                                    <option value="">Select unit...</option>
+                                    <option value="kg">Kilograms</option>
+                                    <option value="g">Grams</option>
+                                    <option value="l">Liters</option>
+                                    <option value="ml">Milliliters</option>
+                                    <option value="pieces">Pieces</option>
+                                `;
+                            });
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading unit options:', error);
+                    // Fallback to default options
+                    unitDropdowns.forEach(dropdown => {
+                        dropdown.innerHTML = `
+                            <option value="">Select unit...</option>
+                            <option value="kg">Kilograms</option>
+                            <option value="g">Grams</option>
+                            <option value="l">Liters</option>
+                            <option value="ml">Milliliters</option>
+                            <option value="pieces">Pieces</option>
+                        `;
+                    });
+                });
+        }
+        
+        function populateOutputDropdowns(data) {
+            console.log('Populating output dropdowns...');
+            
+            // Get all unit dropdowns for outputs
+            const unitDropdowns = document.querySelectorAll('select[name*="output_"][name*="_unit"]');
+            console.log(`Found ${unitDropdowns.length} output unit dropdowns`);
+            
+            // Fetch field options for units
+            fetch('/api/workflow-engine/field-options/unit')
+                .then(response => response.json())
+                .then(optionsData => {
+                    console.log('Received unit options for outputs:', optionsData);
+                    
+                    if (optionsData.success && optionsData.options && optionsData.options.length > 0) {
+                        unitDropdowns.forEach(dropdown => {
+                            // Clear loading option
+                            dropdown.innerHTML = '';
+                            
+                            // Add default option
+                            const defaultOption = document.createElement('option');
+                            defaultOption.value = '';
+                            defaultOption.textContent = 'Select unit...';
+                            dropdown.appendChild(defaultOption);
+                            
+                            // Add options from API
+                            optionsData.options.forEach(option => {
+                                const optionElement = document.createElement('option');
+                                optionElement.value = option.value;
+                                optionElement.textContent = option.label;
+                                dropdown.appendChild(optionElement);
+                            });
+                            
+                            // Set default value if available
+                            const outputId = dropdown.getAttribute('data-output-id');
+                            const output = data.prompt_outputs.find(o => o.id == outputId);
+                            if (output && output.output_unit) {
+                                dropdown.value = output.output_unit;
+                            }
+                        });
+                    } else {
+                        console.log('No unit options found for outputs, attempting to populate defaults...');
+                        // Try to populate default options first
+                        fetch('/api/workflow-engine/field-options/populate-defaults', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(populateResult => {
+                            console.log('Populate defaults result for outputs:', populateResult);
+                            if (populateResult.success) {
+                                // Retry fetching options after populating defaults
+                                return fetch('/api/workflow-engine/field-options/unit');
+                            } else {
+                                throw new Error('Failed to populate defaults');
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(retryOptionsData => {
+                            console.log('Retry unit options for outputs:', retryOptionsData);
+                            if (retryOptionsData.success && retryOptionsData.options && retryOptionsData.options.length > 0) {
+                                unitDropdowns.forEach(dropdown => {
+                                    dropdown.innerHTML = '';
+                                    const defaultOption = document.createElement('option');
+                                    defaultOption.value = '';
+                                    defaultOption.textContent = 'Select unit...';
+                                    dropdown.appendChild(defaultOption);
+                                    
+                                    retryOptionsData.options.forEach(option => {
+                                        const optionElement = document.createElement('option');
+                                        optionElement.value = option.value;
+                                        optionElement.textContent = option.label;
+                                        dropdown.appendChild(optionElement);
+                                    });
+                                    
+                                    const outputId = dropdown.getAttribute('data-output-id');
+                                    const output = data.prompt_outputs.find(o => o.id == outputId);
+                                    if (output && output.output_unit) {
+                                        dropdown.value = output.output_unit;
+                                    }
+                                });
+                    } else {
+                                throw new Error('Still no options after populating defaults');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error populating defaults or retrying for outputs:', error);
+                            // Final fallback to hardcoded options
+                            unitDropdowns.forEach(dropdown => {
+                                dropdown.innerHTML = `
+                                    <option value="">Select unit...</option>
+                                    <option value="kg">Kilograms</option>
+                                    <option value="g">Grams</option>
+                                    <option value="l">Liters</option>
+                                    <option value="ml">Milliliters</option>
+                                    <option value="pieces">Pieces</option>
+                                `;
+                            });
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading unit options for outputs:', error);
+                    // Fallback to default options
+                    unitDropdowns.forEach(dropdown => {
+                        dropdown.innerHTML = `
+                            <option value="">Select unit...</option>
+                            <option value="kg">Kilograms</option>
+                            <option value="g">Grams</option>
+                            <option value="l">Liters</option>
+                            <option value="ml">Milliliters</option>
+                            <option value="pieces">Pieces</option>
+                        `;
+                    });
+                });
+        }
+        
+        function closeBatchOutputModal() {
+            const modal = document.getElementById('batchOutputModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+        
+        function submitBatchOutput(subExecutionId) {
+            const form = document.getElementById('batchOutputForm');
+            const formData = new FormData(form);
+            
+            // Convert form data to JSON
+            const outputData = {};
+            const executionNotes = formData.get('execution_notes');
+            
+            // Process output fields
+            for (let [key, value] of formData.entries()) {
+                if (key.startsWith('output_') && key !== 'execution_notes') {
+                    const parts = key.split('_');
+                    const outputId = parts[1];
+                    const fieldType = parts[2];
+                    
+                    if (!outputData[outputId]) {
+                        outputData[outputId] = {};
+                    }
+                    outputData[outputId][fieldType] = value;
+                }
+            }
+            
+            // Submit to API
+            fetch(`/api/workflow-engine/sub-executions/${subExecutionId}/complete-with-outputs`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                    output_data: outputData,
+                    execution_notes: executionNotes
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                if (data.success) {
+                    closeBatchOutputModal();
+                    location.reload();
+                } else {
+                    alert('Error completing sub-process: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                console.error('Error:', error);
+                alert('Error completing sub-process: ' + error.message);
+            });
+        }
+        
+        function closeBatchInputModal() {
+            const modal = document.getElementById('batchInputModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+        
+        function submitBatchInput(subExecutionId) {
+            const form = document.getElementById('batchInputForm');
+            const formData = new FormData(form);
+            
+            // Convert form data to JSON
+            const batchData = {};
+            const executionNotes = formData.get('execution_notes');
+            
+            // Process input fields
+            for (let [key, value] of formData.entries()) {
+                if (key.startsWith('input_') && key !== 'execution_notes') {
+                    const parts = key.split('_');
+                    const inputId = parts[1];
+                    const fieldType = parts[2];
+                    
+                    if (!batchData[inputId]) {
+                        batchData[inputId] = {};
+                    }
+                    batchData[inputId][fieldType] = value;
+                }
+            }
+            
+            // Submit to API
+            fetch(`/api/workflow-engine/sub-executions/${subExecutionId}/execute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    batch_data: batchData,
+                    execution_notes: executionNotes
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeBatchInputModal();
+                    location.reload();
+                } else {
+                    alert('Error executing sub-process: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error executing sub-process: ' + error.message);
+            });
+        }
+
+        function addCustomOption(fieldType, selectName) {
+            const newOption = prompt(`Enter new ${fieldType} option:`);
+            if (newOption) {
+                // Add to dropdown
+                const select = document.querySelector(`select[name="${selectName}"]`);
+                const option = document.createElement('option');
+                option.value = newOption.toLowerCase().replace(/\s+/g, '_');
+                option.textContent = newOption;
+                select.appendChild(option);
+                select.value = option.value;
+                
+                // Save to database
+                fetch('/api/workflow-engine/field-options', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        field_type: fieldType,
+                        option_value: option.value,
+                        option_label: newOption
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        console.error('Error saving custom option:', data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving custom option:', error);
+                });
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('batchInputModal');
+            if (event.target === modal) {
+                closeBatchInputModal();
+            }
+        }
+    </script>
+</body>
+</html>

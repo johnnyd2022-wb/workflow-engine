@@ -15,8 +15,8 @@ import subprocess
 # Import CRM blueprint
 from features.crm.backend.backend import crm_bp
 
-# Import Supply Chain blueprint
-from features.supply_chain.backend.backend import supply_chain_bp
+# Import Workflow Engine blueprint
+from features.workflow_engine.backend.backend import workflow_engine_bp
 from flask import Flask, redirect, render_template, url_for
 from initialize import db_conn
 
@@ -28,8 +28,8 @@ app = Flask(__name__)
 if config.crm_enabled:
     app.register_blueprint(crm_bp)
 
-if config.supply_chain_enabled:
-    app.register_blueprint(supply_chain_bp)
+if config.workflow_engine_enabled:
+    app.register_blueprint(workflow_engine_bp)
 
 
 # Log feature status from configuration
