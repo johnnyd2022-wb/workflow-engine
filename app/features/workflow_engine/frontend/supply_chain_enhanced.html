@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whistlebird Workflow Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF3366;
+            --primary-hover: #FF1A4D;
+            --secondary-color: #1A1A1A;
+            --background-color: #0A0A0A;
+            --text-color: #FFFFFF;
+            --text-secondary: #A0A0A0;
+            --border-color: #2A2A2A;
+            --card-background: #1A1A1A;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --gradient-start: #FF3366;
+            --gradient-end: #FF1A4D;
+            --table-header-bg: rgba(255, 51, 102, 0.1);
+            --table-row-hover: rgba(255, 51, 102, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: 
+                linear-gradient(135deg, 
+                    rgba(0, 0, 0, 0.65) 0%,
+                    rgba(40, 40, 40, 0.65) 100%),
+                url('https://images.unsplash.com/photo-1527842891421-42eec6e703ea?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D') center/cover no-repeat,
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                ),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.05) 0px,
+                    rgba(255, 255, 255, 0.05) 1px,
+                    transparent 1px,
+                    transparent 8px
+                );
+            color: var(--text-color);
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px 0;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .controls {
+            background: var(--card-background);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 51, 102, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 51, 102, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d, #495057);
+            color: white;
+            box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            color: white;
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+
+        .view-toggle {
+            margin-left: auto;
+        }
+
+        .dag-container {
+            position: relative;
+            height: 700px;
+            background: var(--card-background);
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .dag-svg {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            background: radial-gradient(circle at 20% 80%, rgba(255, 51, 102, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, rgba(255, 51, 102, 0.1) 0%, transparent 50%);
+        }
+
+        .dag-svg:active {
+            cursor: grabbing;
+        }
+
+        .process-node {
+            cursor: grab;
+            transition: all 0.3s ease;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+        }
+
+        .process-node:hover {
+            filter: drop-shadow(0 6px 12px rgba(255, 51, 102, 0.4)) brightness(1.1);
+            transform: scale(1.02);
+        }
+
+        .process-node.dragging {
+            cursor: grabbing;
+            filter: drop-shadow(0 8px 16px rgba(255, 51, 102, 0.6)) brightness(1.2);
+            transform: scale(1.05);
+        }
+
+        .connection-line {
+            stroke: var(--primary-color);
+            stroke-width: 3;
+            fill: none;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+        }
+
+        .connection-line:hover {
+            stroke: var(--primary-hover);
+            stroke-width: 4;
+            filter: drop-shadow(0 3px 6px rgba(255, 51, 102, 0.4));
+        }
+
+        .grid-line {
+            stroke: rgba(255, 255, 255, 0.1);
+            stroke-width: 0.5;
+            opacity: 0.3;
+        }
+
+        .grid-line.major {
+            stroke-width: 1;
+            opacity: 0.5;
+            stroke: rgba(255, 51, 102, 0.2);
+        }
+
+        .table-container {
+            background: var(--card-background);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+        }
+
+        .table-container h2 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: var(--card-background);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .status-active {
+            color: #28a745;
+            font-weight: 600;
+            text-shadow: 0 0 10px rgba(40, 167, 69, 0.3);
+        }
+
+        .status-inactive {
+            color: #dc3545;
+            font-weight: 600;
+            text-shadow: 0 0 10px rgba(220, 53, 69, 0.3);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--card-background);
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            position: relative;
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .close {
+            color: var(--text-secondary);
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover {
+            color: var(--primary-color);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 14px;
+            background: var(--background-color);
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(255, 51, 102, 0.1);
+        }
+
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .view-toggle {
+                margin-left: 0;
+                margin-top: 10px;
+            }
+            
+            .dag-container {
+                height: 500px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Workflow Engine Management</h1>
+            <p>Visual Process Flow & Management System</p>
+        </div>
+        
+        <div class="controls">
+            <button class="btn btn-primary" onclick="openCreateProcessModal()">+ Add Process</button>
+            <button class="btn btn-success" onclick="openAddConnectionModal()">+ Add Connection</button>
+            <button class="btn btn-secondary" onclick="toggleGrid()">Show Grid</button>
+            <button class="btn btn-success" onclick="saveLayout()">Save Layout</button>
+            <button class="btn btn-secondary" onclick="resetLayout()">Reset Layout</button>
+            <div class="view-toggle">
+                <button class="btn btn-primary" id="toggleViewBtn" onclick="toggleView()">Show Visual View</button>
+            </div>
+        </div>
+        
+        <!-- Table View -->
+        <div id="tableView" class="table-container">
+            <h2>Processes</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Category</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="processesTableBody">
+                    {% for process in processes %}
+                    <tr>
+                        <td>{{ process[0] }}</td>
+                        <td>{{ process[1] }}</td>
+                        <td>{{ process[2] or 'N/A' }}</td>
+                        <td>{{ process[3] or 'N/A' }}</td>
+                        <td>
+                            <span class="status-{{ process[4] or 'inactive' }}">
+                                {{ process[4] or 'inactive' }}
+                            </span>
+                        </td>
+                        <td>{{ process[5] or 'N/A' }}</td>
+                        <td>
+                            <button class="btn btn-primary btn-small" onclick="editProcess({{ process[0] }})">Edit</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteProcess({{ process[0] }}, '{{ process[1] }}')">Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <h2>Connections</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>From Process</th>
+                        <th>To Process</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="connectionsTableBody">
+                    <!-- Connections will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Visual View -->
+        <div id="visualView" class="hidden">
+            <div class="dag-container">
+                <svg id="dagSvg" class="dag-svg" viewBox="0 0 1200 700">
+                    <!-- Grid and nodes will be rendered here -->
+                </svg>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Create Process Modal -->
+    <div id="createProcessModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateProcessModal()">&times;</span>
+            <h2>Create New Process</h2>
+            <form id="createProcessForm">
+                <div class="form-group">
+                    <label for="processName">Process Name:</label>
+                    <input type="text" id="processName" name="process_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="processDescription">Description:</label>
+                    <textarea id="processDescription" name="process_description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="processType">Type:</label>
+                    <select id="processType" name="process_type">
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="logistics">Logistics</option>
+                        <option value="quality">Quality Control</option>
+                        <option value="procurement">Procurement</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="processStatus">Status:</label>
+                    <select id="processStatus" name="process_status">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="processCategory">Category:</label>
+                    <input type="text" id="processCategory" name="process_category">
+                </div>
+                <button type="submit" class="btn btn-primary">Create Process</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add Connection Modal -->
+    <div id="addConnectionModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddConnectionModal()">&times;</span>
+            <h2>Add Connection</h2>
+            <form id="addConnectionForm">
+                <div class="form-group">
+                    <label for="fromProcess">From Process:</label>
+                    <select id="fromProcess" name="from_process_id" required>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="toProcess">To Process:</label>
+                    <select id="toProcess" name="to_process_id" required>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="connectionType">Connection Type:</label>
+                    <select id="connectionType" name="connection_type">
+                        <option value="direct">Direct</option>
+                        <option value="conditional">Conditional</option>
+                        <option value="parallel">Parallel</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="connectionStatus">Status:</label>
+                    <select id="connectionStatus" name="connection_status">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="connectionNotes">Notes:</label>
+                    <textarea id="connectionNotes" name="connection_notes"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Connection</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit Process Modal -->
+    <div id="editProcessModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditProcessModal()">&times;</span>
+            <h2>Edit Process</h2>
+            <form id="editProcessForm">
+                <input type="hidden" id="editProcessId" name="process_id">
+                <div class="form-group">
+                    <label for="editProcessName">Process Name:</label>
+                    <input type="text" id="editProcessName" name="process_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="editProcessDescription">Description:</label>
+                    <textarea id="editProcessDescription" name="process_description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editProcessType">Type:</label>
+                    <select id="editProcessType" name="process_type">
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="logistics">Logistics</option>
+                        <option value="quality">Quality Control</option>
+                        <option value="procurement">Procurement</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editProcessStatus">Status:</label>
+                    <select id="editProcessStatus" name="process_status">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editProcessCategory">Category:</label>
+                    <input type="text" id="editProcessCategory" name="process_category">
+                </div>
+                <button type="submit" class="btn btn-primary">Update Process</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let isVisualView = false;
+        let showGrid = false;
+        let nodePositions = {};
+        let connections = [];
+        let draggedNode = null;
+        let dragOffset = { x: 0, y: 0 };
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConnectionsTable();
+            loadPositions();
+        });
+        
+        // View toggle
+        function toggleView() {
+            const tableView = document.getElementById('tableView');
+            const visualView = document.getElementById('visualView');
+            const toggleBtn = document.getElementById('toggleViewBtn');
+            
+            if (isVisualView) {
+                tableView.classList.remove('hidden');
+                visualView.classList.add('hidden');
+                toggleBtn.textContent = 'Show Visual View';
+                isVisualView = false;
+            } else {
+                tableView.classList.add('hidden');
+                visualView.classList.remove('hidden');
+                toggleBtn.textContent = 'Show Table View';
+                isVisualView = true;
+                renderDAG();
+            }
+        }
+        
+        // DAG Rendering
+        async function renderDAG() {
+            const svg = document.getElementById('dagSvg');
+            svg.innerHTML = '';
+            
+            // Add arrow marker definition first
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'arrowhead');
+            marker.setAttribute('markerWidth', '10');
+            marker.setAttribute('markerHeight', '7');
+            marker.setAttribute('refX', '9');
+            marker.setAttribute('refY', '3.5');
+            marker.setAttribute('orient', 'auto');
+            
+            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+            polygon.setAttribute('fill', 'var(--primary-color)');
+            
+            marker.appendChild(polygon);
+            defs.appendChild(marker);
+            svg.appendChild(defs);
+            
+            // Draw grid if enabled
+            if (showGrid) {
+                drawGrid(svg);
+            }
+            
+            // Get processes data
+            const processes = [
+                {% for process in processes %}
+                {
+                    id: {{ process[0] }},
+                    name: "{{ process[1] }}",
+                    type: "{{ process[3] or 'N/A' }}",
+                    status: "{{ process[4] or 'inactive' }}",
+                    category: "{{ process[5] or 'N/A' }}"
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            if (processes.length === 0) {
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', '50%');
+                text.setAttribute('y', '50%');
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('fill', 'var(--text-secondary)');
+                text.setAttribute('font-size', '18');
+                text.setAttribute('font-weight', '600');
+                text.textContent = 'No processes found';
+                svg.appendChild(text);
+                return;
+            }
+            
+            // Create nodes
+            processes.forEach((process, index) => {
+                const x = nodePositions[process.id]?.x || 100 + (index * 250);
+                const y = nodePositions[process.id]?.y || 100;
+                createProcessNode(process, x, y);
+            });
+            
+            // Draw connections
+            await drawConnections();
+        }
+        
+        function createProcessNode(process, x, y) {
+            const svg = document.getElementById('dagSvg');
+            
+            // Create group
+            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            group.setAttribute('class', 'process-node');
+            group.setAttribute('transform', `translate(${x}, ${y})`);
+            group.setAttribute('data-process-id', process.id);
+            
+            // Create rectangle with gradient
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('width', '180');
+            rect.setAttribute('height', '100');
+            rect.setAttribute('rx', '12');
+            rect.setAttribute('fill', 'url(#nodeGradient)');
+            rect.setAttribute('stroke', 'var(--primary-color)');
+            rect.setAttribute('stroke-width', '2');
+            
+            // Create gradient definition
+            const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+            gradient.setAttribute('id', 'nodeGradient');
+            gradient.setAttribute('x1', '0%');
+            gradient.setAttribute('y1', '0%');
+            gradient.setAttribute('x2', '100%');
+            gradient.setAttribute('y2', '100%');
+            
+            const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop1.setAttribute('offset', '0%');
+            stop1.setAttribute('stop-color', 'var(--card-background)');
+            
+            const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop2.setAttribute('offset', '100%');
+            stop2.setAttribute('stop-color', 'var(--secondary-color)');
+            
+            gradient.appendChild(stop1);
+            gradient.appendChild(stop2);
+            
+            // Add gradient to defs if not already there
+            if (!document.getElementById('nodeGradient')) {
+                const defs = svg.querySelector('defs');
+                defs.appendChild(gradient);
+            }
+            
+            // Create text
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', '90');
+            text.setAttribute('y', '45');
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('font-size', '14');
+            text.setAttribute('font-weight', '600');
+            text.setAttribute('fill', 'var(--text-color)');
+            text.textContent = process.name;
+            
+            // Create type text
+            const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            typeText.setAttribute('x', '90');
+            typeText.setAttribute('y', '65');
+            typeText.setAttribute('text-anchor', 'middle');
+            typeText.setAttribute('font-size', '11');
+            typeText.setAttribute('fill', 'var(--text-secondary)');
+            typeText.textContent = process.type;
+            
+            // Create status indicator
+            const statusCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            statusCircle.setAttribute('cx', '160');
+            statusCircle.setAttribute('cy', '20');
+            statusCircle.setAttribute('r', '6');
+            statusCircle.setAttribute('fill', process.status === 'active' ? '#28a745' : '#dc3545');
+            
+            group.appendChild(rect);
+            group.appendChild(text);
+            group.appendChild(typeText);
+            group.appendChild(statusCircle);
+            
+            // Add drag handlers
+            addDragHandlers(group, process);
+            
+            svg.appendChild(group);
+            
+            // Store position
+            nodePositions[process.id] = { x, y, width: 180, height: 100 };
+        }
+        
+        function addDragHandlers(group, process) {
+            group.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                draggedNode = group;
+                group.classList.add('dragging');
+                
+                const svgRect = document.getElementById('dagSvg').getBoundingClientRect();
+                const transform = group.getAttribute('transform');
+                const match = transform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+                
+                if (match) {
+                    const nodeX = parseFloat(match[1]);
+                    const nodeY = parseFloat(match[2]);
+                    dragOffset.x = e.clientX - svgRect.left - nodeX;
+                    dragOffset.y = e.clientY - svgRect.top - nodeY;
+                }
+                
+                // Prevent text selection
+                document.body.style.userSelect = 'none';
+            });
+            
+            // Use a single global mousemove handler for better performance
+            if (!window.dagMouseMoveHandler) {
+                window.dagMouseMoveHandler = (e) => {
+                    if (!draggedNode) return;
+                    
+                    const svgRect = document.getElementById('dagSvg').getBoundingClientRect();
+                    let x = e.clientX - svgRect.left - dragOffset.x;
+                    let y = e.clientY - svgRect.top - dragOffset.y;
+                    
+                    // Snap to grid if enabled
+                    if (showGrid) {
+                        const gridSize = 20;
+                        x = Math.round(x / gridSize) * gridSize;
+                        y = Math.round(y / gridSize) * gridSize;
+                    }
+                    
+                    draggedNode.setAttribute('transform', `translate(${x}, ${y})`);
+                    
+                    // Update position
+                    const processId = draggedNode.getAttribute('data-process-id');
+                    nodePositions[processId] = { x, y, width: 180, height: 100 };
+                    
+                    // Redraw connections only (much faster than full redraw)
+                    redrawConnectionsOnly();
+                };
+                
+                window.dagMouseUpHandler = () => {
+                    if (draggedNode) {
+                        draggedNode.classList.remove('dragging');
+                        draggedNode = null;
+                        document.body.style.userSelect = '';
+                    }
+                };
+                
+                document.addEventListener('mousemove', window.dagMouseMoveHandler);
+                document.addEventListener('mouseup', window.dagMouseUpHandler);
+            }
+        }
+        
+        function drawGrid(svg) {
+            const gridSize = 20;
+            const width = 1200;
+            const height = 700;
+            
+            for (let x = 0; x <= width; x += gridSize) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x);
+                line.setAttribute('y1', 0);
+                line.setAttribute('x2', x);
+                line.setAttribute('y2', height);
+                line.setAttribute('class', x % (gridSize * 5) === 0 ? 'grid-line major' : 'grid-line');
+                svg.appendChild(line);
+            }
+            
+            for (let y = 0; y <= height; y += gridSize) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', 0);
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', width);
+                line.setAttribute('y2', y);
+                line.setAttribute('class', y % (gridSize * 5) === 0 ? 'grid-line major' : 'grid-line');
+                svg.appendChild(line);
+            }
+        }
+        
+        // Calculate connection points on node edges
+        function getConnectionPoints(fromPos, toPos) {
+            const fromCenterX = fromPos.x + 90; // Center of from node (180/2)
+            const fromCenterY = fromPos.y + 50; // Center of from node (100/2)
+            const toCenterX = toPos.x + 90;     // Center of to node
+            const toCenterY = toPos.y + 50;     // Center of to node
+            
+            // Calculate direction vector
+            const dx = toCenterX - fromCenterX;
+            const dy = toCenterY - fromCenterY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance === 0) return { fromX: fromCenterX, fromY: fromCenterY, toX: toCenterX, toY: toCenterY };
+            
+            // Normalize direction vector
+            const unitX = dx / distance;
+            const unitY = dy / distance;
+            
+            // Calculate edge points (90 is half the node width, 50 is half the node height)
+            const fromX = fromCenterX + unitX * 90;
+            const fromY = fromCenterY + unitY * 50;
+            const toX = toCenterX - unitX * 90;
+            const toY = toCenterY - unitY * 50;
+            
+            return { fromX, fromY, toX, toY };
+        }
+        
+        async function drawConnections() {
+            try {
+                const response = await fetch('/api/workflow-engine/connections');
+                if (response.ok) {
+                    connections = await response.json();
+                    console.log('Loaded connections:', connections);
+                    
+                    connections.forEach(connection => {
+                        const fromPos = nodePositions[connection.from_process_id];
+                        const toPos = nodePositions[connection.to_process_id];
+                        
+                        console.log(`Connection ${connection.id}:`, { fromPos, toPos });
+                        
+                        if (fromPos && toPos) {
+                            const points = getConnectionPoints(fromPos, toPos);
+                            
+                            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            line.setAttribute('x1', points.fromX);
+                            line.setAttribute('y1', points.fromY);
+                            line.setAttribute('x2', points.toX);
+                            line.setAttribute('y2', points.toY);
+                            line.setAttribute('class', 'connection-line');
+                            line.setAttribute('data-connection-id', connection.id);
+                            line.setAttribute('stroke', 'var(--primary-color)');
+                            line.setAttribute('stroke-width', '3');
+                            line.setAttribute('marker-end', 'url(#arrowhead)');
+                            
+                            document.getElementById('dagSvg').appendChild(line);
+                            console.log('Added connection line:', line);
+                        } else {
+                            console.log('Missing positions for connection:', connection.id);
+                        }
+                    });
+                } else {
+                    console.error('Failed to load connections:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading connections:', error);
+            }
+        }
+        
+        // Redraw only connections (for better performance during drag)
+        function redrawConnectionsOnly() {
+            // Remove existing connection lines
+            document.querySelectorAll('.connection-line').forEach(line => line.remove());
+            
+            connections.forEach(connection => {
+                const fromPos = nodePositions[connection.from_process_id];
+                const toPos = nodePositions[connection.to_process_id];
+                
+                if (fromPos && toPos) {
+                    const points = getConnectionPoints(fromPos, toPos);
+                    
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', points.fromX);
+                    line.setAttribute('y1', points.fromY);
+                    line.setAttribute('x2', points.toX);
+                    line.setAttribute('y2', points.toY);
+                    line.setAttribute('class', 'connection-line');
+                    line.setAttribute('data-connection-id', connection.id);
+                    line.setAttribute('stroke', 'var(--primary-color)');
+                    line.setAttribute('stroke-width', '3');
+                    line.setAttribute('marker-end', 'url(#arrowhead)');
+                    
+                    document.getElementById('dagSvg').appendChild(line);
+                }
+            });
+        }
+        
+        // Layout functions
+        function toggleGrid() {
+            showGrid = !showGrid;
+            const btn = document.querySelector('button[onclick="toggleGrid()"]');
+            btn.textContent = showGrid ? 'Hide Grid' : 'Show Grid';
+            if (isVisualView) {
+                renderDAG();
+            }
+        }
+        
+        function saveLayout() {
+            localStorage.setItem('dagPositions', JSON.stringify(nodePositions));
+            alert('Layout saved!');
+        }
+        
+        function resetLayout() {
+            localStorage.removeItem('dagPositions');
+            nodePositions = {};
+            if (isVisualView) {
+                renderDAG();
+            }
+        }
+        
+        function loadPositions() {
+            const saved = localStorage.getItem('dagPositions');
+            if (saved) {
+                nodePositions = JSON.parse(saved);
+            }
+        }
+        
+        // Modal functions
+        function openCreateProcessModal() {
+            document.getElementById('createProcessModal').style.display = 'block';
+        }
+        
+        function closeCreateProcessModal() {
+            document.getElementById('createProcessModal').style.display = 'none';
+            document.getElementById('createProcessForm').reset();
+        }
+        
+        function openAddConnectionModal() {
+            document.getElementById('addConnectionModal').style.display = 'block';
+            loadProcessesForConnection();
+        }
+        
+        function closeAddConnectionModal() {
+            document.getElementById('addConnectionModal').style.display = 'none';
+            document.getElementById('addConnectionForm').reset();
+        }
+        
+        function openEditProcessModal() {
+            document.getElementById('editProcessModal').style.display = 'block';
+        }
+        
+        function closeEditProcessModal() {
+            document.getElementById('editProcessModal').style.display = 'none';
+            document.getElementById('editProcessForm').reset();
+        }
+        
+        // Load processes for connection dropdowns
+        function loadProcessesForConnection() {
+            const processes = [
+                {% for process in processes %}
+                { id: {{ process[0] }}, name: "{{ process[1] }}" }{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            
+            const fromSelect = document.getElementById('fromProcess');
+            const toSelect = document.getElementById('toProcess');
+            
+            fromSelect.innerHTML = '<option value="">Select a process</option>';
+            toSelect.innerHTML = '<option value="">Select a process</option>';
+            
+            processes.forEach(process => {
+                const option1 = document.createElement('option');
+                option1.value = process.id;
+                option1.textContent = process.name;
+                fromSelect.appendChild(option1);
+                
+                const option2 = document.createElement('option');
+                option2.value = process.id;
+                option2.textContent = process.name;
+                toSelect.appendChild(option2);
+            });
+        }
+        
+        // Load connections table
+        async function loadConnectionsTable() {
+            try {
+                const response = await fetch('/api/workflow-engine/connections');
+                if (response.ok) {
+                    const connections = await response.json();
+                    const tbody = document.getElementById('connectionsTableBody');
+                    
+                    if (connections.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No connections found</td></tr>';
+                        return;
+                    }
+                    
+                    tbody.innerHTML = '';
+                    connections.forEach(connection => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${connection.id}</td>
+                            <td>${connection.from_process_name || 'N/A'}</td>
+                            <td>${connection.to_process_name || 'N/A'}</td>
+                            <td>${connection.connection_type || 'N/A'}</td>
+                            <td><span class="status-${connection.connection_status || 'inactive'}">${connection.connection_status || 'inactive'}</span></td>
+                            <td>${connection.connection_notes || 'N/A'}</td>
+                            <td>
+                                <button class="btn btn-danger btn-small" onclick="deleteConnection(${connection.id})">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading connections:', error);
+            }
+        }
+        
+        // CRUD operations
+        async function editProcess(processId) {
+            try {
+                const response = await fetch(`/api/workflow-engine/processes/${processId}`);
+                if (response.ok) {
+                    const process = await response.json();
+                    document.getElementById('editProcessId').value = process.id;
+                    document.getElementById('editProcessName').value = process.process_name;
+                    document.getElementById('editProcessDescription').value = process.process_description || '';
+                    document.getElementById('editProcessType').value = process.process_type || '';
+                    document.getElementById('editProcessStatus').value = process.process_status || 'inactive';
+                    document.getElementById('editProcessCategory').value = process.process_category || '';
+                    openEditProcessModal();
+                }
+            } catch (error) {
+                console.error('Error loading process:', error);
+            }
+        }
+        
+        async function deleteProcess(processId, processName) {
+            if (confirm(`Delete process "${processName}"? This will also delete all associated inputs, outputs, and connections.`)) {
+                try {
+                    const response = await fetch(`/api/workflow-engine/processes/${processId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert(`Process "${processName}" deleted successfully!`);
+                        location.reload();
+                    } else {
+                        const errorData = await response.json();
+                        alert('Error deleting process: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting process: ' + error.message);
+                }
+            }
+        }
+        
+        async function deleteConnection(connectionId) {
+            if (confirm('Delete this connection?')) {
+                try {
+                    const response = await fetch(`/api/workflow-engine/connections/${connectionId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        alert('Connection deleted successfully!');
+                        loadConnectionsTable();
+                        if (isVisualView) {
+                            renderDAG();
+                        }
+                    } else {
+                        const errorData = await response.json();
+                        alert('Error deleting connection: ' + errorData.error);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting connection: ' + error.message);
+                }
+            }
+        }
+        
+        // Form submissions
+        document.getElementById('createProcessForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/api/workflow-engine/processes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
+                
+                if (response.ok) {
+                    alert('Process created successfully!');
+                    closeCreateProcessModal();
+                    location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error creating process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error creating process: ' + error.message);
+            }
+        });
+        
+        document.getElementById('addConnectionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('/api/workflow-engine/connections', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
+                
+                if (response.ok) {
+                    alert('Connection created successfully!');
+                    closeAddConnectionModal();
+                    loadConnectionsTable();
+                    if (isVisualView) {
+                        renderDAG();
+                    }
+                } else {
+                    const errorData = await response.json();
+                    alert('Error creating connection: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error creating connection: ' + error.message);
+            }
+        });
+        
+        document.getElementById('editProcessForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const processId = formData.get('process_id');
+            
+            try {
+                const response = await fetch(`/api/workflow-engine/processes/${processId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(Object.fromEntries(formData))
+                });
+                
+                if (response.ok) {
+                    alert('Process updated successfully!');
+                    closeEditProcessModal();
+                    location.reload();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error updating process: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating process: ' + error.message);
+            }
+        });
+        
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
