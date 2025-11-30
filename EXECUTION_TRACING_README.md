@@ -1,6 +1,6 @@
 # Execution-Based Tracing System
 
-A comprehensive supply chain tracing system that enables full traceability from raw materials through manufacturing processes to final sales using execution IDs as the backbone for batch lineage.
+A comprehensive workflow engine tracing system that enables full traceability from raw materials through manufacturing processes to final sales using execution IDs as the backbone for batch lineage.
 
 ## 🎯 Overview
 
@@ -43,7 +43,7 @@ This will create all the required tables for the execution tracing system.
 Navigate to the execution tracing page:
 
 ```
-http://localhost:5000/supply-chain/execution-tracing
+http://localhost:5000/workflow-engine/execution-tracing
 ```
 
 ### 3. API Endpoints
@@ -51,21 +51,21 @@ http://localhost:5000/supply-chain/execution-tracing
 The system provides several API endpoints:
 
 #### Execution Lineage
-- `GET /api/supply-chain/executions/{id}/lineage` - Get full execution lineage tree
-- `GET /api/supply-chain/executions/{id}/sales` - Get linked sales for an execution
+- `GET /api/workflow-engine/executions/{id}/lineage` - Get full execution lineage tree
+- `GET /api/workflow-engine/executions/{id}/sales` - Get linked sales for an execution
 
 #### Sales Integration
-- `GET /api/supply-chain/sales/unmapped` - Get sales without execution mapping
-- `POST /api/supply-chain/sales/{id}/auto-map` - Attempt automatic mapping
-- `GET /api/supply-chain/sales/{id}/trace` - Trace sales back to source
+- `GET /api/workflow-engine/sales/unmapped` - Get sales without execution mapping
+- `POST /api/workflow-engine/sales/{id}/auto-map` - Attempt automatic mapping
+- `GET /api/workflow-engine/sales/{id}/trace` - Trace sales back to source
 
 #### Search & Statistics
-- `GET /api/supply-chain/traceability/search` - Search executions, sales, or batches
-- `GET /api/supply-chain/executions/stats` - Get execution statistics
+- `GET /api/workflow-engine/traceability/search` - Search executions, sales, or batches
+- `GET /api/workflow-engine/executions/stats` - Get execution statistics
 
 #### Mapping Operations
-- `POST /api/supply-chain/executions/{id}/map-sales` - Map execution to sales
-- `GET /api/supply-chain/sales/{id}/suggestions` - Get execution suggestions
+- `POST /api/workflow-engine/executions/{id}/map-sales` - Map execution to sales
+- `GET /api/workflow-engine/sales/{id}/suggestions` - Get execution suggestions
 
 ## 📊 Usage Examples
 
@@ -83,7 +83,7 @@ When a new sale is created with batch information:
 
 ```python
 # This happens automatically when sales are inserted
-from features.supply_chain.backend.sales_execution_mapping import attempt_automatic_sales_mapping
+from features.workflow_engine.backend.sales_execution_mapping import attempt_automatic_sales_mapping
 
 result = attempt_automatic_sales_mapping(sales_id)
 # Returns: {'success': True, 'mappings_created': 2, 'mappings': [...]}
@@ -94,7 +94,7 @@ result = attempt_automatic_sales_mapping(sales_id)
 For complex scenarios, manual mapping is available:
 
 ```python
-from features.supply_chain.backend.sales_execution_mapping import create_manual_sales_mapping
+from features.workflow_engine.backend.sales_execution_mapping import create_manual_sales_mapping
 
 result = create_manual_sales_mapping(
     execution_id=123,
@@ -128,9 +128,9 @@ result = create_manual_sales_mapping(
 
 The tracing page (`execution_tracing.html`) provides:
 
-- **Modern Design**: Glassmorphism UI consistent with existing supply chain pages
+- **Modern Design**: Glassmorphism UI consistent with existing workflow engine pages
 - **Interactive Search**: Search executions, sales, or batches
-- **Visual Flow**: DAG visualization showing supply chain flow
+- **Visual Flow**: DAG visualization showing workflow engine flow
 - **Statistics Dashboard**: Live statistics on executions and mappings
 - **Mapping Interface**: Easy-to-use interface for manual mapping
 
@@ -138,7 +138,7 @@ The tracing page (`execution_tracing.html`) provides:
 
 - **Search Section**: Find any execution, sale, or batch
 - **Statistics Grid**: Live statistics on system status
-- **Flow Diagram**: Visual representation of supply chain flow
+- **Flow Diagram**: Visual representation of workflow engine flow
 - **Execution Tree**: Hierarchical display of executions
 - **Sales Panel**: Show linked sales with batch information
 - **Mapping Modal**: Interface for creating manual mappings
@@ -213,8 +213,8 @@ When adding new features:
 
 ## 📝 License
 
-This system is part of the larger supply chain management application and follows the same licensing terms.
+This system is part of the larger workflow engine management application and follows the same licensing terms.
 
 ---
 
-**Note**: This system implements the execution-centric lineage approach discussed in the ChatGPT conversation, providing a clean, scalable solution for supply chain traceability that works for any business type.
+**Note**: This system implements the execution-centric lineage approach discussed in the ChatGPT conversation, providing a clean, scalable solution for workflow engine traceability that works for any business type.

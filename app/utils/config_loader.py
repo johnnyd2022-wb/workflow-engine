@@ -174,8 +174,8 @@ class Config:
         return self.getboolean("features", "crm_enabled", True)
 
     @property
-    def supply_chain_enabled(self) -> bool:
-        return self.getboolean("features", "supply_chain_enabled", True)
+    def workflow_engine_enabled(self) -> bool:
+        return self.getboolean("features", "workflow_engine_enabled", True)
 
     @property
     def db_readonly_user(self) -> str:
