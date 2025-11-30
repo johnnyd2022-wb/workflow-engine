@@ -1,5 +1,6 @@
 import configparser
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,9 @@ class Config:
     def __init__(self):
         self.config = configparser.ConfigParser()
         self.environment = os.getenv("ENVIRONMENT", "local")
+        self._keepass_creds: dict | None = None
         self.load_config()
+        self._load_keepass_creds()
 
     def load_config(self):
         """Load configuration based on environment"""
@@ -24,6 +27,45 @@ class Config:
 
         self.config.read(config_file)
         print(f"✅ Loaded configuration for environment: {self.environment} from {config_file}")
+
+    def _load_keepass_creds(self):
+        """Attempt to load database credentials from KeePassXC"""
+        # Only try KeePassXC for local environment
+        if self.environment != "local":
+            return
+
+        try:
+            # Import the keepass function from scripts
+            scripts_dir = Path(__file__).parent.parent.parent / "scripts"
+            if (scripts_dir / "local_secrets.py").exists():
+                sys.path.insert(0, str(scripts_dir))
+                from local_secrets import get_keepass_entry
+
+                # Enable verbose logging if KEEPASS_VERBOSE env var is set
+                verbose = os.getenv("KEEPASS_VERBOSE", "").lower() in ("1", "true", "yes")
+                creds = get_keepass_entry(verbose=verbose)
+                if creds and "Password" in creds:
+                    password = creds["Password"]
+                    # Only use KeePassXC if we got a valid password (not empty or "PROTECTED")
+                    if password and password != "PROTECTED" and password.strip():
+                        self._keepass_creds = creds
+                        print("✅ Loaded database credentials from KeePassXC")
+                    else:
+                        if verbose:
+                            print(f"⚠️  KeePassXC password is '{password}', using config file credentials")
+                        else:
+                            print("ℹ️  KeePassXC not available or database locked, using config file credentials")
+                else:
+                    if verbose:
+                        print(f"⚠️  KeePassXC returned: {creds}, using config file credentials")
+                    else:
+                        print("ℹ️  KeePassXC not available or database locked, using config file credentials")
+        except Exception as e:
+            # Log error if verbose, otherwise silently fail and use config file
+            if os.getenv("KEEPASS_VERBOSE", "").lower() in ("1", "true", "yes"):
+                print(f"⚠️  KeePassXC error: {e}, using config file credentials")
+            else:
+                print("ℹ️  KeePassXC not available or database locked, using config file credentials")
 
     def get(self, section: str, key: str, fallback: Any = None) -> str:
         """Get a configuration value"""
@@ -71,10 +113,16 @@ class Config:
 
     @property
     def db_user(self) -> str:
+        # Try KeePassXC first, fallback to config file
+        if self._keepass_creds and "Username" in self._keepass_creds:
+            return self._keepass_creds["Username"]
         return self.get("database", "user", "postgres")
 
     @property
     def db_password(self) -> str:
+        # Try KeePassXC first, fallback to config file
+        if self._keepass_creds and "Password" in self._keepass_creds:
+            return self._keepass_creds["Password"]
         return self.get("database", "password", "")
 
     @property
@@ -128,6 +176,26 @@ class Config:
     @property
     def supply_chain_enabled(self) -> bool:
         return self.getboolean("features", "supply_chain_enabled", True)
+
+    @property
+    def db_readonly_user(self) -> str:
+        """Read-only database user (for reporting/read-only connections)"""
+        # Try KeePassXC first (look for ReadonlyUsername or Notes field), fallback to config
+        if self._keepass_creds:
+            # Check if there's a readonly username in Notes or a separate field
+            if "ReadonlyUsername" in self._keepass_creds:
+                return self._keepass_creds["ReadonlyUsername"]
+            # Could also parse Notes field if it contains readonly credentials
+        return self.get("database", "readonly_user", self.db_user)
+
+    @property
+    def db_readonly_password(self) -> str:
+        """Read-only database password (for reporting/read-only connections)"""
+        # Try KeePassXC first (look for ReadonlyPassword or Notes field), fallback to config
+        if self._keepass_creds:
+            if "ReadonlyPassword" in self._keepass_creds:
+                return self._keepass_creds["ReadonlyPassword"]
+        return self.get("database", "readonly_password", self.db_password)
 
 
 # Global config instance

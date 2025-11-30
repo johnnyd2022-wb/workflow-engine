@@ -22,6 +22,12 @@ dev = [
     "ruff>=0.1.0",
 ]
 
+# System Dependencies (not managed by uv):
+# - keepassxc: Required for local secrets management (includes keepassxc-cli)
+#   Install: sudo apt install keepassxc (Ubuntu/WSL)
+#           brew install keepassxc (macOS)
+#   See README.md for installation instructions
+
 [project.scripts]
 workflow = "app.cli:cli"
 
