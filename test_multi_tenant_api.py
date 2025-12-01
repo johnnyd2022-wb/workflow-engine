@@ -21,6 +21,17 @@ def print_response(title, response):
     print(f"{title}")
     print(f"{'=' * 60}")
     print(f"Status: {response.status_code}")
+
+    # Print cookies if any
+    if response.cookies:
+        print("Cookies received:")
+        for cookie in response.cookies:
+            cookie_value = cookie.value[:100] + ("..." if len(cookie.value) > 100 else "")
+            print(f"  - {cookie.name}: {cookie_value}")
+            http_only = cookie.has_nonstandard_attr("HttpOnly")
+            print(f"    Domain: {cookie.domain}, Path: {cookie.path}, Secure: {cookie.secure}, HttpOnly: {http_only}")
+        print()
+
     try:
         print(f"Response:\n{json.dumps(response.json(), indent=2)}")
     except (ValueError, requests.exceptions.JSONDecodeError):
@@ -49,8 +60,10 @@ def main():
         ),
     )
 
-    if session.cookies.get("session"):
-        print("✅ Session cookie received")
+    # Print session cookie details if received
+    session_cookie = session.cookies.get("session")
+    if session_cookie:
+        print(f"✅ Session cookie received: {session_cookie[:100]}{'...' if len(session_cookie) > 100 else ''}")
 
     # 2. Get Current User
     print_response("2. GET CURRENT USER", session.get(f"{BASE_URL}/auth/me"))
