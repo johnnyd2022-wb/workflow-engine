@@ -12,24 +12,14 @@ import datetime
 # Import xero client stuff here
 import subprocess
 
-# Import CRM blueprint
-from features.crm.backend.backend import crm_bp
-
-# Import Workflow Engine blueprint
-from features.workflow_engine.backend.backend import workflow_engine_bp
-from flask import Flask, redirect, render_template, url_for
+from flask import redirect, render_template, url_for
 from initialize import db_conn
 
+from app.api.app_factory import create_app
 from app.utils.config_loader import config
 
-app = Flask(__name__)
-
-# Register blueprints conditionally based on config
-if config.crm_enabled:
-    app.register_blueprint(crm_bp)
-
-if config.workflow_engine_enabled:
-    app.register_blueprint(workflow_engine_bp)
+# Create app using factory (blueprints are registered in create_app)
+app = create_app()
 
 
 # Log feature status from configuration
