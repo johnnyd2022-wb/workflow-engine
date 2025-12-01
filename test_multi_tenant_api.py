@@ -26,7 +26,7 @@ def print_response(title, response):
     if response.cookies:
         print("Cookies received:")
         for cookie in response.cookies:
-            cookie_value = cookie.value[:100] + ("..." if len(cookie.value) > 100 else "")
+            cookie_value = cookie.value
             print(f"  - {cookie.name}: {cookie_value}")
             http_only = cookie.has_nonstandard_attr("HttpOnly")
             print(f"    Domain: {cookie.domain}, Path: {cookie.path}, Secure: {cookie.secure}, HttpOnly: {http_only}")
@@ -63,7 +63,7 @@ def main():
     # Print session cookie details if received
     session_cookie = session.cookies.get("session")
     if session_cookie:
-        print(f"✅ Session cookie received: {session_cookie[:100]}{'...' if len(session_cookie) > 100 else ''}")
+        print(f"✅ Session cookie received: {session_cookie}")
 
     # 2. Get Current User
     print_response("2. GET CURRENT USER", session.get(f"{BASE_URL}/auth/me"))
