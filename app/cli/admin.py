@@ -1,14 +1,14 @@
 """Admin CLI commands for organisations and users"""
 
-import click
 from uuid import UUID
 
-from app.core.db import db_session, engine
-from app.core.db.models.models import Base
-from app.core.db.repositories.organisation_repo import OrganisationRepository
-from app.core.db.repositories.user_repo import UserRepository
+import click
+
+from app.core.db import db_session
 from app.core.db.models.organisation import OrganisationStatus
 from app.core.db.models.user import UserRole
+from app.core.db.repositories.organisation_repo import OrganisationRepository
+from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
 
@@ -63,11 +63,7 @@ def create_user(org_id, email, password, role):
         password_hash = auth_service.hash_password(password)
         user_role = UserRole.ADMIN if role == "admin" else UserRole.MEMBER
         user = user_repo.create_user(
-            org_id=org_uuid,
-            email=email,
-            password_hash=password_hash,
-            role=user_role,
-            is_active=True
+            org_id=org_uuid, email=email, password_hash=password_hash, role=user_role, is_active=True
         )
 
         click.echo(f"✅ Created user: {user.email} (ID: {user.id}, Role: {user.role.value})")
@@ -142,4 +138,3 @@ def list_users(org_id, active_only):
         click.echo(f"❌ Failed to list users: {e}", err=True)
     finally:
         db.close()
-

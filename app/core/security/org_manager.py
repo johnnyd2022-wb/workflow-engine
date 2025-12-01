@@ -1,6 +1,7 @@
 """Organisation management service"""
 
 from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from app.core.db.models.organisation import Organisation, OrganisationStatus
@@ -19,12 +20,7 @@ class OrgManager:
         self.user_repo = UserRepository(db)
         self.auth_service = AuthService(db)
 
-    def create_org_with_admin_user(
-        self,
-        org_name: str,
-        admin_email: str,
-        password: str
-    ) -> tuple[Organisation, User]:
+    def create_org_with_admin_user(self, org_name: str, admin_email: str, password: str) -> tuple[Organisation, User]:
         """Create a new organisation with an admin user"""
         # Check if org name already exists
         existing_org = self.org_repo.get_org_by_name(org_name)
@@ -42,11 +38,7 @@ class OrgManager:
         # Create admin user
         password_hash = AuthService.hash_password(password)
         admin_user = self.user_repo.create_user(
-            org_id=org.id,
-            email=admin_email,
-            password_hash=password_hash,
-            role=UserRole.ADMIN,
-            is_active=True
+            org_id=org.id, email=admin_email, password_hash=password_hash, role=UserRole.ADMIN, is_active=True
         )
 
         return org, admin_user
@@ -59,4 +51,3 @@ class OrgManager:
 
         # Update session would be handled by the middleware/route
         return True
-

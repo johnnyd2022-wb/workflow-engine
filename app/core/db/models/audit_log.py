@@ -2,7 +2,8 @@
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, JSON, Text
+
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
@@ -10,6 +11,7 @@ from app.core.db.models.models import Base
 
 class AuditLog(Base):
     """Audit log model for tracking user actions"""
+
     __tablename__ = "audit_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -26,4 +28,3 @@ class AuditLog(Base):
             f"<AuditLog(id={self.id}, org_id={self.org_id}, user_id={self.user_id}, "
             f"action={self.action}, entity={self.entity})>"
         )
-

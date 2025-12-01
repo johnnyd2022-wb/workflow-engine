@@ -1,6 +1,7 @@
 """Audit logging utility"""
 
 from uuid import UUID
+
 from flask import g
 
 from app.core.db import db_session
@@ -13,7 +14,7 @@ def log_action(
     entity_id: UUID | None = None,
     metadata: dict | None = None,
     org_id: UUID | None = None,
-    user_id: UUID | None = None
+    user_id: UUID | None = None,
 ) -> None:
     """
     Log an action to the audit log.
@@ -37,12 +38,7 @@ def log_action(
     try:
         audit_repo = AuditRepository(db)
         audit_repo.write_log(
-            org_id=org_id,
-            user_id=user_id,
-            action=action,
-            entity=entity,
-            entity_id=entity_id,
-            metadata=metadata
+            org_id=org_id, user_id=user_id, action=action, entity=entity, entity_id=entity_id, metadata=metadata
         )
         db.commit()
     except Exception as e:
@@ -52,4 +48,3 @@ def log_action(
         db.rollback()
     finally:
         db.close()
-

@@ -3,14 +3,15 @@
 import hashlib
 import hmac
 import secrets
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+
 from flask import g, session
 from sqlalchemy.orm import Session
 
 from app.core.db.models.user import User
-from app.core.db.repositories.user_repo import UserRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
+from app.core.db.repositories.user_repo import UserRepository
 
 
 class AuthService:
@@ -62,7 +63,7 @@ class AuthService:
             "org_id": str(user.org_id),
             "email": user.email,
             "role": user.role.value,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
         return session_data
 
@@ -89,4 +90,3 @@ class AuthService:
             return UUID(session["org_id"])
 
         return None
-

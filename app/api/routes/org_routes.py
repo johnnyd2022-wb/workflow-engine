@@ -1,15 +1,16 @@
 """Organisation routes"""
 
-from flask import Blueprint, request, jsonify, g
 from uuid import UUID
 
+from flask import Blueprint, g, jsonify, request
+
 from app.core.db import db_session
-from app.core.db.repositories.organisation_repo import OrganisationRepository
-from app.core.db.repositories.user_repo import UserRepository
 from app.core.db.models.organisation import OrganisationStatus
 from app.core.db.models.user import UserRole
+from app.core.db.repositories.organisation_repo import OrganisationRepository
+from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
-from app.core.security.permissions import requires_auth, requires_role, requires_org_scope
+from app.core.security.permissions import requires_auth, requires_org_scope, requires_role
 from app.core.utils.log_action import log_action
 
 org_bp = Blueprint("org", __name__, url_prefix="/org")
@@ -23,15 +24,17 @@ def get_current_org():
     if not g.current_org:
         return jsonify({"error": "Organisation not found"}), 404
 
-    return jsonify({
-        "organisation": {
-            "id": str(g.current_org.id),
-            "name": g.current_org.name,
-            "status": g.current_org.status.value,
-            "created_at": g.current_org.created_at.isoformat(),
-            "updated_at": g.current_org.updated_at.isoformat()
+    return jsonify(
+        {
+            "organisation": {
+                "id": str(g.current_org.id),
+                "name": g.current_org.name,
+                "status": g.current_org.status.value,
+                "created_at": g.current_org.created_at.isoformat(),
+                "updated_at": g.current_org.updated_at.isoformat(),
+            }
         }
-    }), 200
+    ), 200
 
 
 @org_bp.route("", methods=["PATCH"])
@@ -68,23 +71,14 @@ def update_org():
             return jsonify({"error": "Failed to update organisation"}), 500
 
         # Log update
-        log_action(
-            "update",
-            "organisation",
-            org.id,
-            {"name": name, "status": status_str},
-            org.id,
-            g.current_user.id
-        )
+        log_action("update", "organisation", org.id, {"name": name, "status": status_str}, org.id, g.current_user.id)
 
-        return jsonify({
-            "message": "Organisation updated successfully",
-            "organisation": {
-                "id": str(org.id),
-                "name": org.name,
-                "status": org.status.value
+        return jsonify(
+            {
+                "message": "Organisation updated successfully",
+                "organisation": {"id": str(org.id), "name": org.name, "status": org.status.value},
             }
-        }), 200
+        ), 200
 
     except Exception as e:
         db.rollback()
@@ -103,18 +97,20 @@ def list_users():
         user_repo = UserRepository(db)
         users = user_repo.list_users_for_org(g.current_org_id, active_only=False)
 
-        return jsonify({
-            "users": [
-                {
-                    "id": str(user.id),
-                    "email": user.email,
-                    "role": user.role.value,
-                    "is_active": user.is_active,
-                    "created_at": user.created_at.isoformat()
-                }
-                for user in users
-            ]
-        }), 200
+        return jsonify(
+            {
+                "users": [
+                    {
+                        "id": str(user.id),
+                        "email": user.email,
+                        "role": user.role.value,
+                        "is_active": user.is_active,
+                        "created_at": user.created_at.isoformat(),
+                    }
+                    for user in users
+                ]
+            }
+        ), 200
 
     except Exception as e:
         return jsonify({"error": f"Failed to list users: {str(e)}"}), 500
@@ -159,25 +155,18 @@ def create_user():
         # Create user
         password_hash = auth_service.hash_password(password)
         user = user_repo.create_user(
-            org_id=g.current_org_id,
-            email=email,
-            password_hash=password_hash,
-            role=role,
-            is_active=True
+            org_id=g.current_org_id, email=email, password_hash=password_hash, role=role, is_active=True
         )
 
         # Log creation
         log_action("create", "user", user.id, {"email": email, "role": role_str}, g.current_org_id, g.current_user.id)
 
-        return jsonify({
-            "message": "User created successfully",
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "role": user.role.value,
-                "is_active": user.is_active
+        return jsonify(
+            {
+                "message": "User created successfully",
+                "user": {"id": str(user.id), "email": user.email, "role": user.role.value, "is_active": user.is_active},
             }
-        }), 201
+        ), 201
 
     except Exception as e:
         db.rollback()
@@ -226,4 +215,3 @@ def delete_user(user_id: str):
         return jsonify({"error": f"Failed to delete user: {str(e)}"}), 500
     finally:
         db.close()
-

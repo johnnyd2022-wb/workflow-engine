@@ -2,7 +2,7 @@
 
 import click
 
-from . import api, lint, migrations, admin
+from . import admin, api, lint, migrations
 
 
 @click.group()

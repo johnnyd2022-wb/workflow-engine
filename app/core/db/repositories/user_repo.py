@@ -1,6 +1,7 @@
 """User repository with tenancy enforcement"""
 
 from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from app.core.db.models.user import User, UserRole
@@ -13,21 +14,10 @@ class UserRepository:
         self.db = db
 
     def create_user(
-        self,
-        org_id: UUID,
-        email: str,
-        password_hash: str,
-        role: UserRole = UserRole.MEMBER,
-        is_active: bool = True
+        self, org_id: UUID, email: str, password_hash: str, role: UserRole = UserRole.MEMBER, is_active: bool = True
     ) -> User:
         """Create a new user (must belong to an organisation)"""
-        user = User(
-            org_id=org_id,
-            email=email,
-            password_hash=password_hash,
-            role=role,
-            is_active=is_active
-        )
+        user = User(org_id=org_id, email=email, password_hash=password_hash, role=role, is_active=is_active)
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
@@ -51,7 +41,7 @@ class UserRepository:
         """List all users for an organisation (tenancy enforced)"""
         query = self.db.query(User).filter(User.org_id == org_id)
         if active_only:
-            query = query.filter(User.is_active == True)
+            query = query.filter(User.is_active.is_(True))  # SQLAlchemy boolean comparison
         return query.all()
 
     def update_user(
@@ -61,7 +51,7 @@ class UserRepository:
         email: str | None = None,
         password_hash: str | None = None,
         role: UserRole | None = None,
-        is_active: bool | None = None
+        is_active: bool | None = None,
     ) -> User | None:
         """Update user (tenancy enforced - must match org_id)"""
         user = self.get_user_by_id(user_id, org_id=org_id)
@@ -90,4 +80,3 @@ class UserRepository:
         user.is_active = False
         self.db.commit()
         return True
-

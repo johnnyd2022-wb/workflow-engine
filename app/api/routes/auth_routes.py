@@ -1,7 +1,8 @@
 """Authentication routes"""
 
-from flask import Blueprint, request, jsonify, session
 from uuid import UUID
+
+from flask import Blueprint, jsonify, request, session
 
 from app.core.db import db_session
 from app.core.security.auth_service import AuthService
@@ -40,19 +41,13 @@ def signup():
         # Log signup
         log_action("signup", "organisation", org.id, {"org_name": org_name}, org.id, user.id)
 
-        return jsonify({
-            "message": "Organisation and admin user created successfully",
-            "organisation": {
-                "id": str(org.id),
-                "name": org.name,
-                "status": org.status.value
-            },
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "role": user.role.value
+        return jsonify(
+            {
+                "message": "Organisation and admin user created successfully",
+                "organisation": {"id": str(org.id), "name": org.name, "status": org.status.value},
+                "user": {"id": str(user.id), "email": user.email, "role": user.role.value},
             }
-        }), 201
+        ), 201
 
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -94,15 +89,12 @@ def login():
         # Log login
         log_action("login", "user", user.id, None, user.org_id, user.id)
 
-        return jsonify({
-            "message": "Login successful",
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "role": user.role.value,
-                "org_id": str(user.org_id)
+        return jsonify(
+            {
+                "message": "Login successful",
+                "user": {"id": str(user.id), "email": user.email, "role": user.role.value, "org_id": str(user.org_id)},
             }
-        }), 200
+        ), 200
 
     except ValueError as e:
         return jsonify({"error": f"Invalid org_id: {str(e)}"}), 400
@@ -138,18 +130,21 @@ def get_current_user():
     if not g.current_user:
         return jsonify({"error": "Not authenticated"}), 401
 
-    return jsonify({
-        "user": {
-            "id": str(g.current_user.id),
-            "email": g.current_user.email,
-            "role": g.current_user.role.value,
-            "org_id": str(g.current_user.org_id),
-            "is_active": g.current_user.is_active
-        },
-        "organisation": {
-            "id": str(g.current_org.id),
-            "name": g.current_org.name,
-            "status": g.current_org.status.value
-        } if g.current_org else None
-    }), 200
-
+    return jsonify(
+        {
+            "user": {
+                "id": str(g.current_user.id),
+                "email": g.current_user.email,
+                "role": g.current_user.role.value,
+                "org_id": str(g.current_user.org_id),
+                "is_active": g.current_user.is_active,
+            },
+            "organisation": {
+                "id": str(g.current_org.id),
+                "name": g.current_org.name,
+                "status": g.current_org.status.value,
+            }
+            if g.current_org
+            else None,
+        }
+    ), 200
