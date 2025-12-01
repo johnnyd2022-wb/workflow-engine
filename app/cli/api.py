@@ -24,8 +24,8 @@ from app.utils.config_loader import config  # noqa: E402
 def get_ssl_context():
     """Get SSL context paths relative to app directory"""
     app_dir_path = Path(__file__).parent.parent
-    cert_file = app_dir_path / "tls" / "wb_cert.pem"
-    key_file = app_dir_path / "tls" / "wb_cert.key"
+    cert_file = app_dir_path / "tls" / "app_cert.pem"
+    key_file = app_dir_path / "tls" / "app_cert.key"
     return (str(cert_file), str(key_file))
 
 

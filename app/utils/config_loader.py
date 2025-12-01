@@ -109,7 +109,7 @@ class Config:
 
     @property
     def db_name(self) -> str:
-        return self.get("database", "name", "whistlebird_db")
+        return self.get("database", "name", "workflow-engine-test-db")
 
     @property
     def db_user(self) -> str:
