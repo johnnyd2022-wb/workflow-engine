@@ -169,21 +169,9 @@ This will:
 - Use `.gitignore` to exclude sensitive configuration
 
 ### Environment Variables
-- The `WB_ENVIRONMENT` variable controls which config file is loaded
+- The `ENVIRONMENT` variable controls which config file is loaded
 - Set automatically by the deployment scripts
 - Can be overridden manually if needed
-
-## Migration from Old System
-
-### Replacing bashrc Functions
-
-The old bashrc functions are replaced by:
-
-| Old Function | New Command |
-|-------------|-------------|
-| `wb_test_build()` | `./scripts/git_workflow.sh test` |
-| `wb_app_build()` | `./scripts/git_workflow.sh prod` |
-| `wb_db_restore` | `./scripts/git_workflow.sh restore-db` |
 
 ### Benefits of New System
 
@@ -203,22 +191,6 @@ The old bashrc functions are replaced by:
    # Run setup to create config files
    ./scripts/setup_config.sh
    ```
-
-2. **Docker Container Issues**
-   ```bash
-   # Check container status
-   docker ps -a
-   
-   # View logs
-   docker logs wb_inv_test
-   docker logs wb_inv_prod
-   ```
-
-3. **Port Conflicts**
-   - Local: 5005
-   - Test: 5001  
-   - Production: 5000
-   - Make sure these ports are available
 
 ### Environment Status
 

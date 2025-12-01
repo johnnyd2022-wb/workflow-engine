@@ -156,8 +156,8 @@ if __name__ == "__main__":
 
     # Resolve SSL certificate paths relative to app.py location
     app_dir = os.path.dirname(os.path.abspath(__file__))
-    cert_file = os.path.join(app_dir, "tls", "wb_cert.pem")
-    key_file = os.path.join(app_dir, "tls", "wb_cert.key")
+    cert_file = os.path.join(app_dir, "tls", "app_cert.pem")
+    key_file = os.path.join(app_dir, "tls", "app_cert.key")
 
     # Only use SSL if certificate files exist
     ssl_context = None

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Git-based workflow for WhistleBird environments
+# Git-based workflow for Workflow Engine environments
 # This replaces the bashrc functions with a cleaner Git-based approach
 
 set -e  # Exit on any error
