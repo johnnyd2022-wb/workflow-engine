@@ -27,9 +27,9 @@ class OrgManager:
         if existing_org:
             raise ValueError(f"Organisation with name '{org_name}' already exists")
 
-        # Check if email already exists
+        # Check if email already exists (only check active users to allow reusing emails from deleted accounts)
         existing_user = self.user_repo.get_user_by_email(admin_email)
-        if existing_user:
+        if existing_user and existing_user.is_active:
             raise ValueError(f"User with email '{admin_email}' already exists")
 
         # Create organisation

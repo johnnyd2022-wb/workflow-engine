@@ -17,8 +17,10 @@ class OrganisationRepository:
         """Create a new organisation"""
         org = Organisation(name=name, status=status)
         self.db.add(org)
+        self.db.flush()  # Flush to get the ID without committing
+        # Access id to ensure it's loaded
+        _ = org.id
         self.db.commit()
-        self.db.refresh(org)
         return org
 
     def get_org_by_id(self, org_id: UUID) -> Organisation | None:
@@ -49,8 +51,15 @@ class OrganisationRepository:
         if status is not None:
             org.status = status
 
+        # Commit changes - updated_at will be set by onupdate trigger
         self.db.commit()
-        self.db.refresh(org)
+
+        # Expire only the updated_at attribute to force reload from DB
+        # This is more efficient than re-querying the entire object
+        self.db.expire(org, ["updated_at"])
+        # Access updated_at to trigger lazy load while object is still bound to session
+        _ = org.updated_at
+
         return org
 
     def delete_org(self, org_id: UUID) -> bool:

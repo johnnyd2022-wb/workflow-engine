@@ -38,14 +38,22 @@ def signup():
         session_data = auth_service.generate_session(user)
         session.update(session_data)
 
+        # Extract values before any potential session issues
+        org_id = str(org.id)
+        org_name_val = org.name
+        org_status = org.status.value
+        user_id = str(user.id)
+        user_email = user.email
+        user_role = user.role.value
+
         # Log signup
         log_action("signup", "organisation", org.id, {"org_name": org_name}, org.id, user.id)
 
         return jsonify(
             {
                 "message": "Organisation and admin user created successfully",
-                "organisation": {"id": str(org.id), "name": org.name, "status": org.status.value},
-                "user": {"id": str(user.id), "email": user.email, "role": user.role.value},
+                "organisation": {"id": org_id, "name": org_name_val, "status": org_status},
+                "user": {"id": user_id, "email": user_email, "role": user_role},
             }
         ), 201
 
@@ -54,8 +62,7 @@ def signup():
     except Exception as e:
         db.rollback()
         return jsonify({"error": f"Failed to create organisation: {str(e)}"}), 500
-    finally:
-        db.close()
+    # Don't close session here - let middleware teardown handle it
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -100,8 +107,7 @@ def login():
         return jsonify({"error": f"Invalid org_id: {str(e)}"}), 400
     except Exception as e:
         return jsonify({"error": f"Login failed: {str(e)}"}), 500
-    finally:
-        db.close()
+    # Don't close session here - let middleware teardown handle it
 
 
 @auth_bp.route("/logout", methods=["POST"])

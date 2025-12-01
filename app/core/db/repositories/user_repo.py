@@ -19,8 +19,10 @@ class UserRepository:
         """Create a new user (must belong to an organisation)"""
         user = User(org_id=org_id, email=email, password_hash=password_hash, role=role, is_active=is_active)
         self.db.add(user)
+        self.db.flush()  # Flush to get the ID without committing
+        # Access id to ensure it's loaded
+        _ = user.id
         self.db.commit()
-        self.db.refresh(user)
         return user
 
     def get_user_by_id(self, user_id: UUID, org_id: UUID | None = None) -> User | None:

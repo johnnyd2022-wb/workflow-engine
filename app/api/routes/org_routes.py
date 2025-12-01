@@ -70,21 +70,25 @@ def update_org():
         if not org:
             return jsonify({"error": "Failed to update organisation"}), 500
 
-        # Log update
+        # Extract values immediately after update (while object is still bound to session)
+        org_id = str(org.id)
+        org_name_val = org.name
+        org_status = org.status.value
+
+        # Log update (using extracted values)
         log_action("update", "organisation", org.id, {"name": name, "status": status_str}, org.id, g.current_user.id)
 
         return jsonify(
             {
                 "message": "Organisation updated successfully",
-                "organisation": {"id": str(org.id), "name": org.name, "status": org.status.value},
+                "organisation": {"id": org_id, "name": org_name_val, "status": org_status},
             }
         ), 200
 
     except Exception as e:
         db.rollback()
         return jsonify({"error": f"Failed to update organisation: {str(e)}"}), 500
-    finally:
-        db.close()
+    # Don't close session here - let middleware teardown handle it
 
 
 @org_bp.route("/users", methods=["GET"])
@@ -97,25 +101,23 @@ def list_users():
         user_repo = UserRepository(db)
         users = user_repo.list_users_for_org(g.current_org_id, active_only=False)
 
-        return jsonify(
+        # Extract values before any potential session issues
+        users_data = [
             {
-                "users": [
-                    {
-                        "id": str(user.id),
-                        "email": user.email,
-                        "role": user.role.value,
-                        "is_active": user.is_active,
-                        "created_at": user.created_at.isoformat(),
-                    }
-                    for user in users
-                ]
+                "id": str(user.id),
+                "email": user.email,
+                "role": user.role.value,
+                "is_active": user.is_active,
+                "created_at": user.created_at.isoformat(),
             }
-        ), 200
+            for user in users
+        ]
+
+        return jsonify({"users": users_data}), 200
 
     except Exception as e:
         return jsonify({"error": f"Failed to list users: {str(e)}"}), 500
-    finally:
-        db.close()
+    # Don't close session here - let middleware teardown handle it
 
 
 @org_bp.route("/users", methods=["POST"])
@@ -158,21 +160,26 @@ def create_user():
             org_id=g.current_org_id, email=email, password_hash=password_hash, role=role, is_active=True
         )
 
+        # Extract values before any potential session issues
+        user_id = str(user.id)
+        user_email = user.email
+        user_role = user.role.value
+        user_is_active = user.is_active
+
         # Log creation
         log_action("create", "user", user.id, {"email": email, "role": role_str}, g.current_org_id, g.current_user.id)
 
         return jsonify(
             {
                 "message": "User created successfully",
-                "user": {"id": str(user.id), "email": user.email, "role": user.role.value, "is_active": user.is_active},
+                "user": {"id": user_id, "email": user_email, "role": user_role, "is_active": user_is_active},
             }
         ), 201
 
     except Exception as e:
         db.rollback()
         return jsonify({"error": f"Failed to create user: {str(e)}"}), 500
-    finally:
-        db.close()
+    # Don't close session here - let middleware teardown handle it
 
 
 @org_bp.route("/users/<user_id>", methods=["DELETE"])
@@ -205,13 +212,16 @@ def delete_user(user_id: str):
         if not success:
             return jsonify({"error": "Failed to delete user"}), 500
 
+        # Extract email before logging (in case of session issues)
+        user_email = user.email
+        user_uuid = user.id
+
         # Log deletion
-        log_action("delete", "user", user.id, {"email": user.email}, g.current_org_id, g.current_user.id)
+        log_action("delete", "user", user_uuid, {"email": user_email}, g.current_org_id, g.current_user.id)
 
         return jsonify({"message": "User deleted successfully"}), 200
 
     except Exception as e:
         db.rollback()
         return jsonify({"error": f"Failed to delete user: {str(e)}"}), 500
-    finally:
-        db.close()
+    # Don't close session here - let middleware teardown handle it
