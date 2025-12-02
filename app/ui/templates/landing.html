@@ -28,7 +28,7 @@
   <!-- Navigation -->
   <nav class="navbar">
     <div class="container">
-      <a href="/workflow-engine" class="navbar-logo">
+      <a href="/" class="navbar-logo">
         <div class="navbar-logo-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
             <path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3V7z"></path>
@@ -39,10 +39,13 @@
         <span class="navbar-logo-text">Flume</span>
       </a>
       
-      <div class="navbar-menu">
-        <a href="/workflow-engine/dashboard">
-          <button class="btn btn-glass">Sign In</button>
-        </a>
+      <div class="navbar-menu" id="navbar-menu">
+        <button class="btn btn-glass" onclick="openModal('loginModal')">Sign In</button>
+        <button class="btn btn-hero" onclick="openModal('signupModal')" style="margin-left: 0.5rem;">Sign Up</button>
+      </div>
+      <div class="navbar-menu" id="navbar-menu-authenticated" style="display: none;">
+        <span class="text-muted" id="user-info" style="margin-right: 1rem;"></span>
+        <button class="btn btn-glass" onclick="handleLogout()">Logout</button>
       </div>
     </div>
   </nav>
@@ -174,10 +177,18 @@
             </div>
           </div>
           
-          <div class="flex flex-col" style="gap: 1rem;">
-            <a href="/workflow-engine/dashboard">
+          <div class="flex flex-col" style="gap: 1rem;" id="hero-buttons">
+            <button class="btn btn-hero btn-lg" style="width: 100%;" onclick="openModal('signupModal')">
+              Get Started
+            </button>
+            <button class="btn btn-glass btn-lg" style="width: 100%;" onclick="openModal('loginModal')">
+              Sign In
+            </button>
+          </div>
+          <div class="flex flex-col" style="gap: 1rem; display: none;" id="hero-buttons-authenticated">
+            <a href="/dashboard">
               <button class="btn btn-hero btn-lg" style="width: 100%;">
-                View Workflow Engine
+                View Dashboard
               </button>
             </a>
             <a href="/workflow-engine/core">
@@ -281,7 +292,7 @@
         <p class="text-xl text-muted mb-8">
           Join leading businesses using Flume for end-to-end visibility
         </p>
-        <a href="/workflow-engine/dashboard">
+        <a href="/dashboard">
           <button class="btn btn-hero btn-lg">
             View Workflow Engine
           </button>
@@ -297,6 +308,391 @@
     </div>
   </footer>
 
+  <!-- Sign Up Modal -->
+  <div id="signupModal" class="modal-overlay">
+    <div class="modal-content glass-card" style="max-width: 28rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 class="text-2xl font-bold">Create Account</h2>
+        <button onclick="closeModal('signupModal')" class="btn btn-ghost" style="padding: 0.5rem;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      
+      <form id="signupForm" onsubmit="handleSignup(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Organization Name</label>
+          <input 
+            type="text" 
+            id="signup-org-name" 
+            name="org_name" 
+            required 
+            class="input"
+            placeholder="Enter your organization name"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          />
+        </div>
+        
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Email</label>
+          <input 
+            type="email" 
+            id="signup-email" 
+            name="email" 
+            required 
+            class="input"
+            placeholder="Enter your email"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          />
+        </div>
+        
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Password</label>
+          <input 
+            type="password" 
+            id="signup-password" 
+            name="password" 
+            required 
+            class="input"
+            placeholder="Create a password"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          />
+        </div>
+        
+        <div id="signup-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
+        
+        <button type="submit" class="btn btn-hero btn-lg" style="width: 100%;">
+          Create Account
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Login Modal -->
+  <div id="loginModal" class="modal-overlay">
+    <div class="modal-content glass-card" style="max-width: 28rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 class="text-2xl font-bold">Sign In</h2>
+        <button onclick="closeModal('loginModal')" class="btn btn-ghost" style="padding: 0.5rem;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      
+      <form id="loginForm" onsubmit="handleLogin(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Email</label>
+          <input 
+            type="email" 
+            id="login-email" 
+            name="email" 
+            required 
+            class="input"
+            placeholder="Enter your email"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          />
+        </div>
+        
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Password</label>
+          <input 
+            type="password" 
+            id="login-password" 
+            name="password" 
+            required 
+            class="input"
+            placeholder="Enter your password"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          />
+        </div>
+        
+        <div id="login-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
+        
+        <button type="submit" class="btn btn-hero btn-lg" style="width: 100%;">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <style>
+    /* Modal Styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    
+    .modal-overlay.active {
+      display: flex;
+    }
+    
+    .modal-content {
+      padding: 2rem;
+      border-radius: 1rem;
+      max-width: 90vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+    
+    @keyframes modalFadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+    
+    .text-error {
+      color: #ef4444;
+      font-size: 0.875rem;
+    }
+    
+    .text-success {
+      color: #10b981;
+      font-size: 0.875rem;
+    }
+  </style>
+
+  <script>
+    // Authentication Functions
+    async function handleSignup(event) {
+      event.preventDefault();
+      
+      const form = event.target;
+      const errorDiv = document.getElementById('signup-error');
+      const submitButton = form.querySelector('button[type="submit"]');
+      
+      const orgName = document.getElementById('signup-org-name').value;
+      const email = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
+      
+      errorDiv.style.display = 'none';
+      submitButton.disabled = true;
+      submitButton.textContent = 'Creating Account...';
+      
+      try {
+        const response = await fetch('/auth/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            org_name: orgName,
+            email: email,
+            password: password
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Success - close modal and update UI
+          closeModal('signupModal');
+          await checkAuthStatus();
+          showSuccessMessage('Account created successfully!');
+        } else {
+          // Show error
+          errorDiv.textContent = data.error || 'Failed to create account';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Network error. Please try again.';
+        errorDiv.style.display = 'block';
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Account';
+      }
+    }
+    
+    async function handleLogin(event) {
+      event.preventDefault();
+      
+      const form = event.target;
+      const errorDiv = document.getElementById('login-error');
+      const submitButton = form.querySelector('button[type="submit"]');
+      
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      
+      errorDiv.style.display = 'none';
+      submitButton.disabled = true;
+      submitButton.textContent = 'Signing In...';
+      
+      try {
+        const response = await fetch('/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email,
+            password: password
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Success - close modal and update UI
+          closeModal('loginModal');
+          await checkAuthStatus();
+          showSuccessMessage('Signed in successfully!');
+        } else {
+          // Show error
+          errorDiv.textContent = data.error || 'Invalid email or password';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Network error. Please try again.';
+        errorDiv.style.display = 'block';
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Sign In';
+      }
+    }
+    
+    async function handleLogout() {
+      try {
+        const response = await fetch('/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        if (response.ok) {
+          await checkAuthStatus();
+          showSuccessMessage('Logged out successfully');
+          window.location.href = '/';
+        }
+      } catch (error) {
+        console.error('Logout error:', error);
+      }
+    }
+    
+    async function checkAuthStatus() {
+      try {
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          updateUIForAuthenticatedUser(data.user, data.organisation);
+        } else {
+          updateUIForUnauthenticatedUser();
+        }
+      } catch (error) {
+        updateUIForUnauthenticatedUser();
+      }
+    }
+    
+    function updateUIForAuthenticatedUser(user, organisation) {
+      // Update navbar
+      document.getElementById('navbar-menu').style.display = 'none';
+      const authMenu = document.getElementById('navbar-menu-authenticated');
+      authMenu.style.display = 'flex';
+      document.getElementById('user-info').textContent = `${user.email} (${organisation.name})`;
+      
+      // Update hero buttons
+      document.getElementById('hero-buttons').style.display = 'none';
+      document.getElementById('hero-buttons-authenticated').style.display = 'flex';
+    }
+    
+    function updateUIForUnauthenticatedUser() {
+      // Update navbar
+      document.getElementById('navbar-menu').style.display = 'flex';
+      document.getElementById('navbar-menu-authenticated').style.display = 'none';
+      
+      // Update hero buttons
+      document.getElementById('hero-buttons').style.display = 'flex';
+      document.getElementById('hero-buttons-authenticated').style.display = 'none';
+    }
+    
+    function openModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+      }
+    }
+    
+    function closeModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+        // Clear form errors
+        const errorDiv = modal.querySelector('[id$="-error"]');
+        if (errorDiv) {
+          errorDiv.style.display = 'none';
+        }
+        // Reset forms
+        const form = modal.querySelector('form');
+        if (form) {
+          form.reset();
+        }
+      }
+    }
+    
+    function showSuccessMessage(message) {
+      // Create a temporary success message
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'glass-card';
+      messageDiv.style.cssText = 'position: fixed; top: 2rem; right: 2rem; padding: 1rem 1.5rem; z-index: 2000; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 0.5rem; color: #10b981;';
+      messageDiv.textContent = message;
+      document.body.appendChild(messageDiv);
+      
+      setTimeout(() => {
+        messageDiv.style.opacity = '0';
+        messageDiv.style.transition = 'opacity 0.3s';
+        setTimeout(() => messageDiv.remove(), 300);
+      }, 3000);
+    }
+    
+    // Close modal when clicking overlay
+    document.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeModal(e.target.id);
+      }
+    });
+    
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const activeModal = document.querySelector('.modal-overlay.active');
+        if (activeModal) {
+          closeModal(activeModal.id);
+        }
+      }
+    });
+    
+    // Check auth status on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      checkAuthStatus();
+    });
+  </script>
+
   <script src="/workflow-engine-static/common.js"></script>
 </body>
 </html>
+

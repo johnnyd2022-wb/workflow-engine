@@ -33,7 +33,7 @@ def signup():
         org_manager = OrgManager(db)
         org, user = org_manager.create_org_with_admin_user(org_name, email, password)
 
-        # Create session
+        # Create session - stores user_id, org_id, user_email, org_name
         auth_service = AuthService(db)
         session_data = auth_service.generate_session(user)
         session.update(session_data)
@@ -89,9 +89,15 @@ def login():
         if not user:
             return jsonify({"error": "Invalid email or password"}), 401
 
-        # Create session
+        # Create session - stores user_id, org_id, user_email, org_name
         session_data = auth_service.generate_session(user)
         session.update(session_data)
+
+        # Extract values before any potential session issues
+        user_id = str(user.id)
+        user_email = user.email
+        user_role = user.role.value
+        user_org_id = str(user.org_id)
 
         # Log login
         log_action("login", "user", user.id, None, user.org_id, user.id)
@@ -99,7 +105,7 @@ def login():
         return jsonify(
             {
                 "message": "Login successful",
-                "user": {"id": str(user.id), "email": user.email, "role": user.role.value, "org_id": str(user.org_id)},
+                "user": {"id": user_id, "email": user_email, "role": user_role, "org_id": user_org_id},
             }
         ), 200
 
@@ -130,27 +136,83 @@ def logout():
 @auth_bp.route("/me", methods=["GET"])
 @requires_auth
 def get_current_user():
-    """Get current authenticated user"""
+    """
+    Get current authenticated user.
+
+    Returns ONLY values from flask.g (populated by middleware).
+    Uses lightweight session values when available (no DB query).
+    Falls back to DB objects only if needed.
+    This is the single source of truth for login status.
+    """
     from flask import g
 
+    # Prefer lightweight session values (already loaded, no DB query)
+    # This makes the endpoint extremely fast
+    if hasattr(g, "user_email") and g.user_email:
+        # Use lightweight session values - fastest path
+        user_email = g.user_email
+        user_role = getattr(g, "current_user", None) and g.current_user.role.value or "Unknown"
+        user_id = getattr(g, "user_id", None) or (
+            str(g.current_user.id) if hasattr(g, "current_user") and g.current_user else None
+        )
+        user_org_id = getattr(g, "org_id", None) or (
+            str(g.current_user.org_id) if hasattr(g, "current_user") and g.current_user else None
+        )
+        user_is_active = g.current_user.is_active if hasattr(g, "current_user") and g.current_user else True
+
+        org_name = getattr(g, "org_name", None) or (
+            g.current_org.name if hasattr(g, "current_org") and g.current_org else "Unknown"
+        )
+        org_status = g.current_org.status.value if hasattr(g, "current_org") and g.current_org else "Unknown"
+        org_id = getattr(g, "org_id", None) or (
+            str(g.current_org.id) if hasattr(g, "current_org") and g.current_org else None
+        )
+
+        org_data = None
+        if org_id:
+            org_data = {"id": org_id, "name": org_name, "status": org_status}
+
+        return jsonify(
+            {
+                "user": {
+                    "id": user_id,
+                    "email": user_email,
+                    "role": user_role,
+                    "org_id": user_org_id,
+                    "is_active": user_is_active,
+                },
+                "organisation": org_data,
+            }
+        ), 200
+
+    # Fallback to DB objects if session values not available
     if not g.current_user:
         return jsonify({"error": "Not authenticated"}), 401
+
+    # Extract values while objects are still bound to session
+    # This prevents "detached instance" errors
+    user_id = str(g.current_user.id)
+    user_email = g.current_user.email
+    user_role = g.current_user.role.value
+    user_org_id = str(g.current_user.org_id)
+    user_is_active = g.current_user.is_active
+
+    org_data = None
+    if g.current_org:
+        org_id = str(g.current_org.id)
+        org_name = g.current_org.name
+        org_status = g.current_org.status.value
+        org_data = {"id": org_id, "name": org_name, "status": org_status}
 
     return jsonify(
         {
             "user": {
-                "id": str(g.current_user.id),
-                "email": g.current_user.email,
-                "role": g.current_user.role.value,
-                "org_id": str(g.current_user.org_id),
-                "is_active": g.current_user.is_active,
+                "id": user_id,
+                "email": user_email,
+                "role": user_role,
+                "org_id": user_org_id,
+                "is_active": user_is_active,
             },
-            "organisation": {
-                "id": str(g.current_org.id),
-                "name": g.current_org.name,
-                "status": g.current_org.status.value,
-            }
-            if g.current_org
-            else None,
+            "organisation": org_data,
         }
     ), 200

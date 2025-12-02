@@ -23,11 +23,23 @@ def setup_tenant_context(app):
 
     @app.before_request
     def load_tenant_context():
-        """Load tenant and user context before each request"""
+        """
+        Load tenant and user context before each request.
+        
+        This is extremely lightweight and loads session values first,
+        only hitting the DB when IDs exist and objects are needed.
+        Follows industry-standard patterns (Stripe, GitHub, Vercel, Notion).
+        """
         # Initialize context
         g.current_user = None
         g.current_org = None
         g.current_org_id = None
+
+        # Load lightweight session values first (no DB query)
+        g.user_id = session.get("user_id")
+        g.org_id = session.get("org_id")
+        g.user_email = session.get("user_email")
+        g.org_name = session.get("org_name")
 
         # Skip static files (including blueprint-specific static handlers)
         # Flask can have static handlers like "admin.static", "crm.static", etc.
@@ -38,6 +50,10 @@ def setup_tenant_context(app):
         if request.endpoint in PUBLIC_ENDPOINTS:
             return
 
+        # Only hit the DB when IDs exist
+        if not g.user_id or not g.org_id:
+            return
+
         db = db_session()
 
         try:
@@ -45,18 +61,16 @@ def setup_tenant_context(app):
             org_id = None
 
             # Load user_id from session
-            if "user_id" in session:
-                try:
-                    user_id = UUID(session["user_id"])
-                except (ValueError, TypeError):
-                    pass
+            try:
+                user_id = UUID(g.user_id)
+            except (ValueError, TypeError):
+                pass
 
             # Load org_id from session
-            if "org_id" in session:
-                try:
-                    org_id = UUID(session["org_id"])
-                except (ValueError, TypeError):
-                    pass
+            try:
+                org_id = UUID(g.org_id)
+            except (ValueError, TypeError):
+                pass
 
             # SECURITY: Only allow X-Org-Id header if NO user is logged in
             # This prevents org_id spoofing when a user is authenticated

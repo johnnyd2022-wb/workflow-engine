@@ -58,11 +58,15 @@ class AuthService:
 
     def generate_session(self, user: User) -> dict:
         """Generate session data for a user"""
+        # Load org to get org_name
+        org = self.org_repo.get_org_by_id(user.org_id)
+        org_name = org.name if org else None
+
         session_data = {
             "user_id": str(user.id),
             "org_id": str(user.org_id),
-            "email": user.email,
-            "role": user.role.value,
+            "user_email": user.email,  # Store as user_email for consistency
+            "org_name": org_name,  # Store org_name for lightweight access
             "created_at": datetime.utcnow().isoformat(),
         }
         return session_data
