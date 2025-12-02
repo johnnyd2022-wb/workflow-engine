@@ -504,10 +504,13 @@
         const data = await response.json();
         
         if (response.ok) {
-          // Success - close modal and update UI
+          // Success - close modal and redirect to dashboard
           closeModal('signupModal');
-          await checkAuthStatus();
           showSuccessMessage('Account created successfully!');
+          // Redirect to dashboard after a brief delay to show success message
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 500);
         } else {
           // Show error
           errorDiv.textContent = data.error || 'Failed to create account';
@@ -551,10 +554,13 @@
         const data = await response.json();
         
         if (response.ok) {
-          // Success - close modal and update UI
+          // Success - close modal and redirect to dashboard
           closeModal('loginModal');
-          await checkAuthStatus();
           showSuccessMessage('Signed in successfully!');
+          // Redirect to dashboard after a brief delay to show success message
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 500);
         } else {
           // Show error
           errorDiv.textContent = data.error || 'Invalid email or password';

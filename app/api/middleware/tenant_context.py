@@ -25,7 +25,7 @@ def setup_tenant_context(app):
     def load_tenant_context():
         """
         Load tenant and user context before each request.
-        
+
         This is extremely lightweight and loads session values first,
         only hitting the DB when IDs exist and objects are needed.
         Follows industry-standard patterns (Stripe, GitHub, Vercel, Notion).
