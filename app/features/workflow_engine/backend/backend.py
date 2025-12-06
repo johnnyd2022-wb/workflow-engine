@@ -174,7 +174,8 @@ def workflow_engine_lovable():
 @workflow_engine_bp.route("/workflow-engine/index")
 def index():
     """Render the index page"""
-    return render_template("index.html")
+    # return render_template("index.html")
+    return render_template("workflow_engine_lovable.html")
 
 
 @workflow_engine_bp.route("/workflow-engine/core")

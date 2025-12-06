@@ -7,7 +7,6 @@ from flask import Blueprint, jsonify, request, session
 from app.core.db import db_session
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
-from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -33,7 +32,7 @@ def signup():
         org_manager = OrgManager(db)
         org, user = org_manager.create_org_with_admin_user(org_name, email, password)
 
-        # Create session
+        # Create session - stores user_id, org_id, user_email, org_name
         auth_service = AuthService(db)
         session_data = auth_service.generate_session(user)
         session.update(session_data)
@@ -89,9 +88,15 @@ def login():
         if not user:
             return jsonify({"error": "Invalid email or password"}), 401
 
-        # Create session
+        # Create session - stores user_id, org_id, user_email, org_name
         session_data = auth_service.generate_session(user)
         session.update(session_data)
+
+        # Extract values before any potential session issues
+        user_id = str(user.id)
+        user_email = user.email
+        user_role = user.role.value
+        user_org_id = str(user.org_id)
 
         # Log login
         log_action("login", "user", user.id, None, user.org_id, user.id)
@@ -99,7 +104,7 @@ def login():
         return jsonify(
             {
                 "message": "Login successful",
-                "user": {"id": str(user.id), "email": user.email, "role": user.role.value, "org_id": str(user.org_id)},
+                "user": {"id": user_id, "email": user_email, "role": user_role, "org_id": user_org_id},
             }
         ), 200
 
@@ -128,29 +133,41 @@ def logout():
 
 
 @auth_bp.route("/me", methods=["GET"])
-@requires_auth
 def get_current_user():
-    """Get current authenticated user"""
-    from flask import g
+    """
+    Public endpoint.
+    Returns authenticated user/org context if logged in.
+    Returns user: null when logged out.
+    Always HTTP 200.
+    """
 
-    if not g.current_user:
-        return jsonify({"error": "Not authenticated"}), 401
+    from flask import current_app, g, jsonify
 
-    return jsonify(
+    # Log user info for debugging (optional: remove or mask IDs in production)
+    if g.user_id:
+        current_app.logger.debug(f"/auth/me called by user_id={g.user_id}, org_id={g.org_id}")
+
+    # Logged-out state
+    if not g.user_id:
+        return jsonify({"user": None, "organisation": None}), 200
+
+    # Logged-in state
+    user = {
+        "id": g.user_id,
+        "email": g.user_email,
+        "role": g.user_role,
+        "org_id": g.org_id,
+        "is_active": g.current_user.is_active if g.current_user else True,
+    }
+
+    org = (
         {
-            "user": {
-                "id": str(g.current_user.id),
-                "email": g.current_user.email,
-                "role": g.current_user.role.value,
-                "org_id": str(g.current_user.org_id),
-                "is_active": g.current_user.is_active,
-            },
-            "organisation": {
-                "id": str(g.current_org.id),
-                "name": g.current_org.name,
-                "status": g.current_org.status.value,
-            }
-            if g.current_org
-            else None,
+            "id": g.org_id,
+            "name": g.org_name,
+            "status": g.org_status,
         }
-    ), 200
+        if g.org_id
+        else None
+    )
+
+    return jsonify({"user": user, "organisation": org}), 200
