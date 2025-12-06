@@ -7,7 +7,6 @@ from flask import Blueprint, jsonify, request, session
 from app.core.db import db_session
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
-from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -134,85 +133,41 @@ def logout():
 
 
 @auth_bp.route("/me", methods=["GET"])
-@requires_auth
 def get_current_user():
     """
-    Get current authenticated user.
-
-    Returns ONLY values from flask.g (populated by middleware).
-    Uses lightweight session values when available (no DB query).
-    Falls back to DB objects only if needed.
-    This is the single source of truth for login status.
+    Public endpoint.
+    Returns authenticated user/org context if logged in.
+    Returns user: null when logged out.
+    Always HTTP 200.
     """
-    from flask import g
 
-    # Prefer lightweight session values (already loaded, no DB query)
-    # This makes the endpoint extremely fast
-    if hasattr(g, "user_email") and g.user_email:
-        # Use lightweight session values - fastest path
-        user_email = g.user_email
-        user_role = getattr(g, "current_user", None) and g.current_user.role.value or "Unknown"
-        user_id = getattr(g, "user_id", None) or (
-            str(g.current_user.id) if hasattr(g, "current_user") and g.current_user else None
-        )
-        user_org_id = getattr(g, "org_id", None) or (
-            str(g.current_user.org_id) if hasattr(g, "current_user") and g.current_user else None
-        )
-        user_is_active = g.current_user.is_active if hasattr(g, "current_user") and g.current_user else True
+    from flask import current_app, g, jsonify
 
-        org_name = getattr(g, "org_name", None) or (
-            g.current_org.name if hasattr(g, "current_org") and g.current_org else "Unknown"
-        )
-        org_status = g.current_org.status.value if hasattr(g, "current_org") and g.current_org else "Unknown"
-        org_id = getattr(g, "org_id", None) or (
-            str(g.current_org.id) if hasattr(g, "current_org") and g.current_org else None
-        )
+    # Log user info for debugging (optional: remove or mask IDs in production)
+    if g.user_id:
+        current_app.logger.debug(f"/auth/me called by user_id={g.user_id}, org_id={g.org_id}")
 
-        org_data = None
-        if org_id:
-            org_data = {"id": org_id, "name": org_name, "status": org_status}
+    # Logged-out state
+    if not g.user_id:
+        return jsonify({"user": None, "organisation": None}), 200
 
-        return jsonify(
-            {
-                "user": {
-                    "id": user_id,
-                    "email": user_email,
-                    "role": user_role,
-                    "org_id": user_org_id,
-                    "is_active": user_is_active,
-                },
-                "organisation": org_data,
-            }
-        ), 200
+    # Logged-in state
+    user = {
+        "id": g.user_id,
+        "email": g.user_email,
+        "role": g.user_role,
+        "org_id": g.org_id,
+        "is_active": g.current_user.is_active if g.current_user else True,
+    }
 
-    # Fallback to DB objects if session values not available
-    if not g.current_user:
-        return jsonify({"error": "Not authenticated"}), 401
-
-    # Extract values while objects are still bound to session
-    # This prevents "detached instance" errors
-    user_id = str(g.current_user.id)
-    user_email = g.current_user.email
-    user_role = g.current_user.role.value
-    user_org_id = str(g.current_user.org_id)
-    user_is_active = g.current_user.is_active
-
-    org_data = None
-    if g.current_org:
-        org_id = str(g.current_org.id)
-        org_name = g.current_org.name
-        org_status = g.current_org.status.value
-        org_data = {"id": org_id, "name": org_name, "status": org_status}
-
-    return jsonify(
+    org = (
         {
-            "user": {
-                "id": user_id,
-                "email": user_email,
-                "role": user_role,
-                "org_id": user_org_id,
-                "is_active": user_is_active,
-            },
-            "organisation": org_data,
+            "id": g.org_id,
+            "name": g.org_name,
+            "status": g.org_status,
         }
-    ), 200
+        if g.org_id
+        else None
+    )
+
+    return jsonify({"user": user, "organisation": org}), 200
