@@ -361,6 +361,19 @@
           />
         </div>
         
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Confirm Password</label>
+          <input 
+            type="password" 
+            id="signup-password-confirm" 
+            name="password_confirm" 
+            required 
+            class="input"
+            placeholder="Confirm your password"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          />
+        </div>
+        
         <div id="signup-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
         
         <button type="submit" class="btn btn-hero btn-lg" style="width: 100%;">
@@ -483,8 +496,17 @@
       const orgName = document.getElementById('signup-org-name').value;
       const email = document.getElementById('signup-email').value;
       const password = document.getElementById('signup-password').value;
+      const passwordConfirm = document.getElementById('signup-password-confirm').value;
       
       errorDiv.style.display = 'none';
+      
+      // Validate passwords match
+      if (password !== passwordConfirm) {
+        errorDiv.textContent = 'Passwords do not match. Please try again.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      
       submitButton.disabled = true;
       submitButton.textContent = 'Creating Account...';
       
@@ -497,7 +519,8 @@
           body: JSON.stringify({
             org_name: orgName,
             email: email,
-            password: password
+            password: password,
+            password_confirm: passwordConfirm
           })
         });
         
