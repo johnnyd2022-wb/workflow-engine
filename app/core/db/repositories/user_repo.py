@@ -82,3 +82,31 @@ class UserRepository:
         user.is_active = False
         self.db.commit()
         return True
+
+    def set_totp_secret(self, user_id: UUID, secret: str) -> User | None:
+        """Set TOTP secret for a user"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.totp_secret = secret
+        self.db.commit()
+        return user
+
+    def enable_two_factor(self, user_id: UUID) -> User | None:
+        """Enable two-factor authentication for a user"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.two_factor_enabled = True
+        self.db.commit()
+        return user
+
+    def disable_two_factor(self, user_id: UUID) -> User | None:
+        """Disable two-factor authentication for a user"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.totp_secret = None
+        user.two_factor_enabled = False
+        self.db.commit()
+        return user

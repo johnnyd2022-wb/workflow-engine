@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime
 from uuid import UUID
 
+import pyotp
 from flask import g, session
 from sqlalchemy.orm import Session
 
@@ -56,16 +57,31 @@ class AuthService:
 
         return user
 
-    def generate_session(self, user: User) -> dict:
-        """Generate session data for a user"""
+    def generate_session(
+        self, user: User = None, user_id: UUID = None, user_email: str = None, org_id: UUID = None
+    ) -> dict:
+        """Generate session data for a user
+
+        Can be called with either a User object or individual values.
+        If user object is provided, it will be used. Otherwise, individual values are used.
+        """
+        # Support both User object and individual parameters
+        if user:
+            user_id = user.id
+            user_email = user.email
+            org_id = user.org_id
+
+        if not user_id or not user_email or not org_id:
+            raise ValueError("Must provide either user object or all of user_id, user_email, org_id")
+
         # Load org to get org_name
-        org = self.org_repo.get_org_by_id(user.org_id)
+        org = self.org_repo.get_org_by_id(org_id)
         org_name = org.name if org else None
 
         session_data = {
-            "user_id": str(user.id),
-            "org_id": str(user.org_id),
-            "user_email": user.email,  # Store as user_email for consistency
+            "user_id": str(user_id),
+            "org_id": str(org_id),
+            "user_email": user_email,  # Store as user_email for consistency
             "org_name": org_name,  # Store org_name for lightweight access
             "created_at": datetime.utcnow().isoformat(),
         }
@@ -94,3 +110,10 @@ class AuthService:
             return UUID(session["org_id"])
 
         return None
+
+    def verify_totp(self, user: User, token: str) -> bool:
+        """Verify a TOTP token for a user"""
+        if not user.totp_secret:
+            return False
+        totp = pyotp.TOTP(user.totp_secret)
+        return totp.verify(token, valid_window=1)

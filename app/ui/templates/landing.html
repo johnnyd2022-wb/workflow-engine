@@ -404,6 +404,7 @@
             id="login-email" 
             name="email" 
             required 
+            autocomplete="off"
             class="input"
             placeholder="Enter your email"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -417,6 +418,7 @@
             id="login-password" 
             name="password" 
             required 
+            autocomplete="new-password"
             class="input"
             placeholder="Enter your password"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -425,7 +427,26 @@
         
         <div id="login-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
         
-        <button type="submit" class="btn btn-hero btn-lg" style="width: 100%;">
+        <!-- 2FA Input (hidden by default) -->
+        <div id="login-2fa-section" style="display: none;">
+          <p style="color: var(--text-secondary); font-size: 0.9375rem; margin-bottom: 1rem;">
+            Enter the 6-digit verification code from your authenticator app to complete sign in.
+          </p>
+          <div>
+            <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Verification Code</label>
+            <input 
+              type="text" 
+              id="login-2fa-code" 
+              class="input"
+              placeholder="000000" 
+              maxlength="6" 
+              pattern="[0-9]{6}"
+              style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+            />
+          </div>
+        </div>
+        
+        <button type="submit" id="login-submit-btn" class="btn btn-hero btn-lg" style="width: 100%;">
           Sign In
         </button>
       </form>
@@ -565,6 +586,7 @@
       try {
         const response = await fetch('/auth/login', {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
           },
@@ -577,6 +599,53 @@
         const data = await response.json();
         
         if (response.ok) {
+          // Check if 2FA is required
+          if (data.requires_2fa) {
+            // Hide both email and password fields, show only 2FA input
+            document.getElementById('login-email').closest('div').style.display = 'none';
+            document.getElementById('login-password').closest('div').style.display = 'none';
+            document.getElementById('login-2fa-section').style.display = 'block';
+            
+            // Update modal title
+            const modalTitle = document.querySelector('#loginModal h2');
+            if (modalTitle) {
+              modalTitle.textContent = 'Enter Verification Code';
+            }
+            
+            submitButton.textContent = 'Verify Code';
+            submitButton.disabled = false;
+            
+            // Override form submission to handle 2FA
+            form.onsubmit = function(e) {
+              e.preventDefault();
+              handle2FALogin(e);
+              return false;
+            };
+            
+            // Also attach direct click handler to button
+            submitButton.onclick = function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+              handle2FALogin(e);
+              return false;
+            };
+            
+            // Allow Enter key in 2FA input to trigger verification
+            const codeInput = document.getElementById('login-2fa-code');
+            const enterHandler = function(e) {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handle2FALogin(e);
+              }
+            };
+            codeInput.removeEventListener('keypress', enterHandler); // Remove if exists
+            codeInput.addEventListener('keypress', enterHandler);
+            
+            // Focus on 2FA input
+            setTimeout(() => codeInput.focus(), 100);
+            return;
+          }
+          
           // Success - close modal and redirect to dashboard
           closeModal('loginModal');
           showSuccessMessage('Signed in successfully!');
@@ -593,8 +662,68 @@
         errorDiv.textContent = 'Network error. Please try again.';
         errorDiv.style.display = 'block';
       } finally {
+        // Only reset if not showing 2FA
+        const login2FASection = document.getElementById('login-2fa-section');
+        if (!login2FASection || login2FASection.style.display === 'none') {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Sign In';
+        }
+      }
+    }
+    
+    async function handle2FALogin(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      
+      const errorDiv = document.getElementById('login-error');
+      const submitButton = document.getElementById('login-submit-btn');
+      const code = document.getElementById('login-2fa-code').value.trim();
+      
+      // Basic validation - backend will also validate
+      if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+        errorDiv.textContent = 'Please enter a valid 6-digit code';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      
+      errorDiv.style.display = 'none';
+      submitButton.disabled = true;
+      submitButton.textContent = 'Verifying...';
+      
+      try {
+        const response = await fetch('/auth/verify-2fa', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token: code })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Success - close modal and redirect to dashboard
+          closeModal('loginModal');
+          showSuccessMessage('Signed in successfully!');
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 500);
+        } else {
+          // Show error
+          errorDiv.textContent = data.error || 'Invalid verification code';
+          errorDiv.style.display = 'block';
+          submitButton.disabled = false;
+          submitButton.textContent = 'Verify Code';
+        }
+      } catch (error) {
+        console.error('2FA verification error:', error);
+        errorDiv.textContent = 'Network error. Please try again.';
+        errorDiv.style.display = 'block';
         submitButton.disabled = false;
-        submitButton.textContent = 'Sign In';
+        submitButton.textContent = 'Verify Code';
       }
     }
     
@@ -662,6 +791,28 @@
       if (modal) {
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
+        
+        // If opening login modal, clear any pending 2FA session
+        // This ensures a fresh start each time the modal is opened
+        if (modalId === 'loginModal') {
+          (async function() {
+            try {
+              const response = await fetch('/auth/2fa/cancel', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                  'Content-Type': 'application/json',
+                }
+              });
+              if (response.ok) {
+                const data = await response.json();
+                console.log('Cleared pending 2FA session on modal open:', data);
+              }
+            } catch (err) {
+              console.error('Error clearing pending 2FA session on modal open:', err);
+            }
+          })();
+        }
       }
     }
     
@@ -675,10 +826,72 @@
         if (errorDiv) {
           errorDiv.style.display = 'none';
         }
-        // Reset forms
+        // Reset forms and 2FA state
         const form = modal.querySelector('form');
         if (form) {
           form.reset();
+        }
+        // Reset 2FA UI if it was shown
+        if (modalId === 'loginModal') {
+          const login2FASection = document.getElementById('login-2fa-section');
+          const submitButton = document.getElementById('login-submit-btn');
+          const emailInput = document.getElementById('login-email');
+          const passwordInput = document.getElementById('login-password');
+          const codeInput = document.getElementById('login-2fa-code');
+          const emailDiv = emailInput ? emailInput.closest('div') : null;
+          const passwordDiv = passwordInput ? passwordInput.closest('div') : null;
+          const modalTitle = document.querySelector('#loginModal h2');
+          
+          // Check if 2FA was pending (section is visible)
+          const was2FAPending = login2FASection && login2FASection.style.display !== 'none';
+          
+          // Explicitly clear all form fields (not just reset, which might not clear browser autofill)
+          if (emailInput) {
+            emailInput.value = '';
+            emailInput.blur();
+          }
+          if (passwordInput) {
+            passwordInput.value = '';
+            passwordInput.blur();
+          }
+          if (codeInput) {
+            codeInput.value = '';
+            codeInput.blur();
+          }
+          
+          if (login2FASection) login2FASection.style.display = 'none';
+          if (emailDiv) emailDiv.style.display = 'block';
+          if (passwordDiv) passwordDiv.style.display = 'block';
+          if (modalTitle) modalTitle.textContent = 'Sign In';
+          
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Sign In';
+            submitButton.onclick = null; // Remove custom handler
+          }
+          // Reset form onsubmit
+          if (form) form.onsubmit = handleLogin;
+          
+          // Always clear pending 2FA session when modal closes (in case it exists)
+          // This ensures no partial authentication state persists
+          // Use await to ensure it completes - this is critical for security
+          (async function() {
+            try {
+              const response = await fetch('/auth/2fa/cancel', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                  'Content-Type': 'application/json',
+                }
+              });
+              if (response.ok) {
+                const data = await response.json();
+                console.log('Cleared pending 2FA session:', data);
+              }
+            } catch (err) {
+              console.error('Error clearing pending 2FA session:', err);
+            }
+          })();
         }
       }
     }

@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/workflow-engine-static/styles_10.css">
+  <link rel="stylesheet" href="/workflow-engine-static/styles_2.css">
 </head>
 <body>
   <!-- Flume UI Version 5 — Liquid Depth Aesthetic with Darker Sidebar -->
@@ -191,12 +192,496 @@
           <button class="btn btn-primary">Update Password</button>
         </div>
         
+        <div class="glass-card" style="margin-top: 1.5rem;">
+          <h2 class="mb-3">Two-Factor Authentication</h2>
+          
+          <div id="2fa-status-section" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 1rem;">
+            <div>
+              <div style="font-weight: 600; margin-bottom: 0.25rem;">Two-Factor Authentication</div>
+              <div style="font-size: 0.875rem; color: var(--text-secondary);" id="2fa-status-text">
+                Status: <span id="2fa-status-value">Loading...</span>
+              </div>
+            </div>
+            <div id="2fa-action-buttons">
+              <button id="enable-2fa-btn" class="btn btn-primary" style="display: none;">Enable 2FA</button>
+              <button id="disable-2fa-btn" class="btn btn-primary" style="display: none;">Disable 2FA</button>
+            </div>
+          </div>
+        </div>
+        
       </div>
       
     </main>
     
   </div>
   
+  <!-- 2FA Enrollment Modal -->
+  <div id="2fa-enrollment-modal" class="modal-overlay">
+    <div class="modal-content glass-card" style="max-width: 32rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 class="text-2xl font-bold">Set Up Two-Factor Authentication</h2>
+        <button id="2fa-close-btn" class="btn btn-ghost" style="padding: 0.5rem;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Step 1: QR Code Display -->
+      <div id="2fa-enrollment-step1" style="display: flex; flex-direction: column; gap: 1rem;">
+        <p style="color: var(--text-secondary); font-size: 0.9375rem;">
+          Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
+        </p>
+        <div style="display: flex; justify-content: center; margin: 1rem 0; padding: 1.5rem; background: #FFFFFF; border-radius: 0.75rem; border: 1px solid rgba(0, 0, 0, 0.1);">
+          <div id="qrcode-container" style="min-height: 256px; min-width: 256px; display: flex; align-items: center; justify-content: center; background: #FFFFFF;"></div>
+        </div>
+        <p style="font-size: 0.875rem; color: var(--text-secondary);">
+          Or enter this code manually: <code id="2fa-secret-text" style="background: rgba(255, 255, 255, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace; font-size: 0.875rem; word-break: break-all;"></code>
+        </p>
+        <p style="font-size: 0.875rem; color: var(--text-secondary);">
+          After scanning, you'll need to enter two consecutive codes from your authenticator app to verify setup.
+        </p>
+        <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
+          <button id="2fa-cancel-btn" class="btn btn-glass" style="flex: 1;">Cancel</button>
+          <button id="2fa-start-verification-btn" class="btn btn-hero" style="flex: 1;">Start Verification</button>
+        </div>
+      </div>
+      
+      <!-- Step 2: First Token Verification -->
+      <div id="2fa-enrollment-step2" style="display: none; flex-direction: column; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--azure-blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600;">1</div>
+          <p style="color: var(--text); font-size: 0.9375rem; margin: 0;">
+            Enter the first 6-digit code from your authenticator app
+          </p>
+        </div>
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">First Code</label>
+          <input 
+            type="text" 
+            id="2fa-verification-code-1" 
+            class="input"
+            placeholder="000000" 
+            maxlength="6" 
+            pattern="[0-9]{6}"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          >
+        </div>
+        <div id="2fa-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
+        <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
+          <button id="2fa-back-to-step1-btn" class="btn btn-glass" style="flex: 1;">Back</button>
+          <button id="2fa-verify-token1-btn" class="btn btn-hero" style="flex: 1;">Verify First Code</button>
+        </div>
+      </div>
+      
+      <!-- Step 3: Second Token Verification -->
+      <div id="2fa-enrollment-step3" style="display: none; flex-direction: column; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--azure-blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600;">2</div>
+          <p style="color: var(--text); font-size: 0.9375rem; margin: 0;">
+            Enter the next 6-digit code from your authenticator app
+          </p>
+        </div>
+        <p style="font-size: 0.875rem; color: var(--text-secondary);">
+          Wait for a new code to appear (codes change every 30 seconds), then enter it below.
+        </p>
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Second Code</label>
+          <input 
+            type="text" 
+            id="2fa-verification-code-2" 
+            class="input"
+            placeholder="000000" 
+            maxlength="6" 
+            pattern="[0-9]{6}"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          >
+        </div>
+        <div id="2fa-error-step3" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
+        <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
+          <button id="2fa-back-to-step2-btn" class="btn btn-glass" style="flex: 1;">Back</button>
+          <button id="2fa-verify-token2-btn" class="btn btn-hero" style="flex: 1;">Verify & Enable 2FA</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  
   <script src="/workflow-engine-static/common_4.js"></script>
+  <script>
+    // 2FA Management
+    let current2FAStatus = false;
+    let enrollmentSecret = null;
+    
+    // Load 2FA status on page load
+    async function load2FAStatus() {
+      try {
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.user) {
+            current2FAStatus = data.user.two_factor_enabled || false;
+            update2FAUI();
+          }
+        }
+      } catch (error) {
+        console.error('Error loading 2FA status:', error);
+      }
+    }
+    
+    function update2FAUI() {
+      const statusValue = document.getElementById('2fa-status-value');
+      const enableBtn = document.getElementById('enable-2fa-btn');
+      const disableBtn = document.getElementById('disable-2fa-btn');
+      
+      if (current2FAStatus) {
+        statusValue.textContent = 'Enabled';
+        statusValue.style.color = 'var(--azure-blue)';
+        enableBtn.style.display = 'none';
+        disableBtn.style.display = 'block';
+      } else {
+        statusValue.textContent = 'Disabled';
+        statusValue.style.color = 'var(--text-secondary)';
+        enableBtn.style.display = 'block';
+        disableBtn.style.display = 'none';
+      }
+    }
+    
+    // Display QR code from backend (generated server-side)
+    function displayQRCode(container, qrCodeDataUrl) {
+      console.log('Displaying QR code from backend, data URL length:', qrCodeDataUrl ? qrCodeDataUrl.length : 0);
+      
+      if (!qrCodeDataUrl) {
+        container.innerHTML = '<p style="color: #ef4444; padding: 1rem; text-align: center;">No QR code data received. Please use the manual code below.</p>';
+        return;
+      }
+      
+      const img = document.createElement('img');
+      img.src = qrCodeDataUrl;
+      img.alt = 'QR Code for 2FA Setup';
+      img.style.width = '256px';
+      img.style.height = '256px';
+      img.style.display = 'block';
+      img.style.margin = '0 auto';
+      
+      // Add error handler for image loading
+      img.onerror = function(e) {
+        console.error('Error loading QR code image:', e);
+        container.innerHTML = '<p style="color: #ef4444; padding: 1rem; text-align: center;">Error displaying QR code image. Please use the manual code below.</p>';
+      };
+      
+      img.onload = function() {
+        console.log('QR code image loaded successfully');
+      };
+      
+      container.innerHTML = '';
+      container.appendChild(img);
+    }
+    
+    // Enable 2FA - Start enrollment
+    document.getElementById('enable-2fa-btn').addEventListener('click', async function() {
+      try {
+        const response = await fetch('/auth/2fa/enroll', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Enrollment response received:', {
+            hasSecret: !!data.secret,
+            hasProvisioningUri: !!data.provisioning_uri,
+            hasQRCode: !!data.qr_code,
+            qrCodeLength: data.qr_code ? data.qr_code.length : 0
+          });
+          
+          enrollmentSecret = data.secret;
+          
+          // Display QR code from backend
+          const qrContainer = document.getElementById('qrcode-container');
+          console.log('QR container element:', qrContainer);
+          
+          if (data.qr_code) {
+            displayQRCode(qrContainer, data.qr_code);
+          } else {
+            console.error('No QR code in response');
+            qrContainer.innerHTML = '<p style="color: #ef4444; padding: 1rem;">No QR code data received. Please use the manual code below.</p>';
+          }
+          
+          // Display secret text
+          document.getElementById('2fa-secret-text').textContent = enrollmentSecret;
+          
+          // Show modal and reset to step 1
+          document.getElementById('2fa-enrollment-modal').classList.add('active');
+          show2FAStep(1);
+        } else {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Failed to start 2FA enrollment'));
+        }
+      } catch (error) {
+        console.error('Error enrolling in 2FA:', error);
+        alert('Error: Failed to start 2FA enrollment. Please try again.');
+      }
+    });
+    
+    // Step navigation functions
+    function show2FAStep(step) {
+      document.getElementById('2fa-enrollment-step1').style.display = step === 1 ? 'flex' : 'none';
+      document.getElementById('2fa-enrollment-step2').style.display = step === 2 ? 'flex' : 'none';
+      document.getElementById('2fa-enrollment-step3').style.display = step === 3 ? 'flex' : 'none';
+      
+      // Clear all inputs and errors
+      document.getElementById('2fa-verification-code-1').value = '';
+      document.getElementById('2fa-verification-code-2').value = '';
+      document.getElementById('2fa-error').style.display = 'none';
+      document.getElementById('2fa-error').textContent = '';
+      document.getElementById('2fa-error-step3').style.display = 'none';
+      document.getElementById('2fa-error-step3').textContent = '';
+      
+      // Focus on the current input
+      if (step === 2) {
+        setTimeout(() => document.getElementById('2fa-verification-code-1').focus(), 100);
+      } else if (step === 3) {
+        setTimeout(() => document.getElementById('2fa-verification-code-2').focus(), 100);
+      }
+    }
+    
+    // Start verification button - move to step 2
+    document.getElementById('2fa-start-verification-btn').addEventListener('click', function() {
+      show2FAStep(2);
+    });
+    
+    // Back to step 1
+    document.getElementById('2fa-back-to-step1-btn').addEventListener('click', function() {
+      show2FAStep(1);
+    });
+    
+    // Back to step 2
+    document.getElementById('2fa-back-to-step2-btn').addEventListener('click', function() {
+      show2FAStep(2);
+    });
+    
+    // Store first token for final verification
+    let firstToken = null;
+    
+    // Verify first token - move to step 3
+    document.getElementById('2fa-verify-token1-btn').addEventListener('click', async function() {
+      const code = document.getElementById('2fa-verification-code-1').value.trim();
+      const errorDiv = document.getElementById('2fa-error');
+      
+      // Clear previous errors
+      errorDiv.style.display = 'none';
+      errorDiv.textContent = '';
+      
+      // Basic validation
+      if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+        errorDiv.textContent = 'Please enter a valid 6-digit code';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      
+      // Store first token and move to step 3
+      firstToken = code;
+      show2FAStep(3);
+    });
+    
+    // Verify second token and enable 2FA
+    document.getElementById('2fa-verify-token2-btn').addEventListener('click', async function() {
+      const code1 = firstToken;
+      const code2 = document.getElementById('2fa-verification-code-2').value.trim();
+      const errorDiv = document.getElementById('2fa-error-step3');
+      
+      // Clear previous errors
+      errorDiv.style.display = 'none';
+      errorDiv.textContent = '';
+      
+      // Basic validation
+      if (!code2 || code2.length !== 6 || !/^\d{6}$/.test(code2)) {
+        errorDiv.textContent = 'Please enter a valid 6-digit code';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      
+      // Ensure codes are different
+      if (code1 === code2) {
+        errorDiv.textContent = 'The second code must be different from the first. Please wait for a new code.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      
+      // Disable button during verification
+      const verifyBtn = document.getElementById('2fa-verify-token2-btn');
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = 'Verifying...';
+      
+      try {
+        const response = await fetch('/auth/2fa/enable', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ token1: code1, token2: code2 })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.enabled) {
+            // Close modal
+            close2FAModal();
+            // Update status
+            current2FAStatus = true;
+            update2FAUI();
+            showSuccessNotification('Two-factor authentication has been enabled successfully!');
+          }
+        } else {
+          const error = await response.json();
+          errorDiv.textContent = error.error || 'Invalid verification code';
+          errorDiv.style.display = 'block';
+          verifyBtn.disabled = false;
+          verifyBtn.textContent = 'Verify & Enable 2FA';
+        }
+      } catch (error) {
+        console.error('Error enabling 2FA:', error);
+        errorDiv.textContent = 'Network error. Please try again.';
+        errorDiv.style.display = 'block';
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'Verify & Enable 2FA';
+      }
+    });
+    
+    // Close modal function
+    function close2FAModal() {
+      document.getElementById('2fa-enrollment-modal').classList.remove('active');
+      enrollmentSecret = null;
+      firstToken = null;
+      show2FAStep(1); // Reset to first step
+    }
+    
+    // Cancel enrollment
+    document.getElementById('2fa-cancel-btn').addEventListener('click', close2FAModal);
+    
+    // Close button
+    document.getElementById('2fa-close-btn').addEventListener('click', close2FAModal);
+    
+    // Disable 2FA
+    document.getElementById('disable-2fa-btn').addEventListener('click', async function() {
+      // Use custom styled confirmation dialog
+      let confirmed = false;
+      const confirmDiv = document.createElement('div');
+      confirmDiv.className = 'modal-overlay active';
+      confirmDiv.innerHTML = `
+        <div class="modal-content glass-card" style="max-width: 28rem;">
+          <h2 style="margin-bottom: 1rem;">Disable Two-Factor Authentication?</h2>
+          <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">This will make your account less secure. Are you sure you want to continue?</p>
+          <div style="display: flex; gap: 0.75rem;">
+            <button id="confirm-cancel" class="btn btn-glass" style="flex: 1;">Cancel</button>
+            <button id="confirm-disable" class="btn btn-hero" style="flex: 1;">Disable</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(confirmDiv);
+      
+      document.getElementById('confirm-cancel').addEventListener('click', function() {
+        confirmDiv.remove();
+      });
+      
+      document.getElementById('confirm-disable').addEventListener('click', function() {
+        confirmed = true;
+        confirmDiv.remove();
+        proceedDisable();
+      });
+      
+      async function proceedDisable() {
+        try {
+          const response = await fetch('/auth/2fa/disable', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.disabled) {
+              current2FAStatus = false;
+              update2FAUI();
+              showSuccessNotification('Two-factor authentication has been disabled.');
+            }
+          } else {
+            const error = await response.json();
+            showSuccessNotification('Error: ' + (error.error || 'Failed to disable 2FA'));
+          }
+        } catch (error) {
+          console.error('Error disabling 2FA:', error);
+          showSuccessNotification('Error: Failed to disable 2FA. Please try again.');
+        }
+      }
+    });
+    
+    // Allow Enter key to submit verification codes
+    const code1Input = document.getElementById('2fa-verification-code-1');
+    const code2Input = document.getElementById('2fa-verification-code-2');
+    
+    if (code1Input) {
+      code1Input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          document.getElementById('2fa-verify-token1-btn').click();
+        }
+      });
+    }
+    
+    if (code2Input) {
+      code2Input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          document.getElementById('2fa-verify-token2-btn').click();
+        }
+      });
+    }
+    
+    // Close modal when clicking outside
+    document.getElementById('2fa-enrollment-modal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        close2FAModal();
+      }
+    });
+    
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const modal = document.getElementById('2fa-enrollment-modal');
+        if (modal.classList.contains('active')) {
+          close2FAModal();
+        }
+      }
+    });
+    
+    // Load 2FA status on page load
+    load2FAStatus();
+    
+    // Show success notification (styled like the app)
+    function showSuccessNotification(message) {
+      const notification = document.createElement('div');
+      notification.className = 'glass-card';
+      notification.style.cssText = 'position: fixed; top: 2rem; right: 2rem; padding: 1rem 1.5rem; z-index: 2000; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 0.5rem; color: #10b981; backdrop-filter: blur(8px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);';
+      notification.textContent = message;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transition = 'opacity 0.3s';
+        setTimeout(() => notification.remove(), 300);
+      }, 3000);
+    }
+  </script>
 </body>
 </html>
