@@ -23,9 +23,13 @@ def signup():
     org_name = data.get("org_name")
     email = data.get("email")
     password = data.get("password")
+    password_confirm = data.get("password_confirm")
 
-    if not org_name or not email or not password:
-        return jsonify({"error": "org_name, email, and password are required"}), 400
+    if not org_name or not email or not password or not password_confirm:
+        return jsonify({"error": "org_name, email, password, and password_confirm are required"}), 400
+
+    if password != password_confirm:
+        return jsonify({"error": "Passwords do not match"}), 400
 
     db = db_session()
     try:
@@ -57,7 +61,21 @@ def signup():
         ), 201
 
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        error_msg = str(e)
+        # Provide more helpful messages for common signup errors
+        if "already exists" in error_msg.lower() and "organisation" in error_msg.lower():
+            return jsonify(
+                {
+                    "error": "An organization with this name already exists. If you're part of this organization, please contact your administrator for access or try logging in instead."
+                }
+            ), 400
+        elif "already exists" in error_msg.lower() and "user" in error_msg.lower() and "email" in error_msg.lower():
+            return jsonify(
+                {
+                    "error": "An account with this email already exists. Please try logging in instead, or use a different email address."
+                }
+            ), 400
+        return jsonify({"error": error_msg}), 400
     except Exception as e:
         db.rollback()
         return jsonify({"error": f"Failed to create organisation: {str(e)}"}), 500
