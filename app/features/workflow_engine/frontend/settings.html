@@ -198,7 +198,7 @@
           <div class="form-group">
             <label class="form-label">Session Timeout</label>
             <div style="display: flex; align-items: center; gap: 1rem;">
-              <input type="number" id="session-timeout-input" class="form-input" min="5" max="240" step="1" style="width: 120px;">
+              <input type="number" id="session-timeout-input" class="form-input" step="1" style="width: 120px;">
               <span style="color: var(--text-secondary);">minutes</span>
             </div>
             <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
@@ -230,6 +230,49 @@
       
     </main>
     
+  </div>
+  
+  <style>
+    @keyframes modalFadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+    
+    #sessionTimeoutModal.active {
+      display: flex !important;
+    }
+  </style>
+  
+  <!-- Session Timeout Modal -->
+  <div id="sessionTimeoutModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 2000; align-items: center; justify-content: center;">
+    <div class="glass-card" style="max-width: 28rem; padding: 2rem; text-align: center; animation: modalFadeIn 0.2s ease-out;">
+      <div style="margin-bottom: 1.5rem;">
+        <div style="width: 64px; height: 64px; margin: 0 auto 1rem; background: rgba(239, 68, 68, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem;">Session Expired</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+          Your session has expired due to inactivity. You will be redirected to the Sign In screen.
+        </p>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: var(--text-secondary); font-size: 0.875rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span id="sessionTimeoutCountdown">Redirecting in 3 seconds...</span>
+        </div>
+      </div>
+    </div>
   </div>
   
   <!-- 2FA Enrollment Modal -->
@@ -327,6 +370,44 @@
   
   <script src="/workflow-engine-static/common_4.js"></script>
   <script>
+    // Global error handler to catch and suppress 401-related errors
+    window.addEventListener('error', function(event) {
+      // Suppress errors related to session timeout
+      if (event.message && (
+        event.message.includes('Session expired') ||
+        event.message.includes('401') ||
+        event.message.includes('Unauthorized')
+      )) {
+        console.log('[Session Timeout] Suppressing error:', event.message);
+        event.preventDefault();
+        // Show modal if not already showing
+        const modal = document.getElementById('sessionTimeoutModal');
+        if (modal && !modal.classList.contains('active')) {
+          showSessionTimeoutModal();
+        }
+        return false;
+      }
+    });
+    
+    // Catch unhandled promise rejections (often from failed fetch calls)
+    window.addEventListener('unhandledrejection', function(event) {
+      // Suppress rejections related to 401/session timeout
+      const reason = event.reason;
+      if (reason && (
+        (typeof reason === 'string' && (reason.includes('401') || reason.includes('Session expired'))) ||
+        (reason.status === 401) ||
+        (reason.message && (reason.message.includes('401') || reason.message.includes('Session expired')))
+      )) {
+        console.log('[Session Timeout] Suppressing unhandled rejection:', reason);
+        event.preventDefault();
+        // Show modal if not already showing
+        const modal = document.getElementById('sessionTimeoutModal');
+        if (modal && !modal.classList.contains('active')) {
+          showSessionTimeoutModal();
+        }
+      }
+    });
+    
     // 2FA Management
     let current2FAStatus = false;
     let enrollmentSecret = null;
@@ -338,6 +419,15 @@
           method: 'GET',
           credentials: 'include'
         });
+        
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
         
         if (response.ok) {
           const data = await response.json();
@@ -411,6 +501,15 @@
           }
         });
         
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
+        
         if (response.ok) {
           const data = await response.json();
           console.log('Enrollment response received:', {
@@ -440,6 +539,14 @@
           document.getElementById('2fa-enrollment-modal').classList.add('active');
           show2FAStep(1);
         } else {
+          // Check for 401 before parsing JSON
+          if (response.status === 401) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+              return;
+            }
+          }
           const error = await response.json();
           alert('Error: ' + (error.error || 'Failed to start 2FA enrollment'));
         }
@@ -549,6 +656,15 @@
           body: JSON.stringify({ token1: code1, token2: code2 })
         });
         
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
+        
         if (response.ok) {
           const data = await response.json();
           if (data.enabled) {
@@ -560,6 +676,14 @@
             showSuccessNotification('Two-factor authentication has been enabled successfully!');
           }
         } else {
+          // Check for 401 before parsing JSON
+          if (response.status === 401) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+              return;
+            }
+          }
           const error = await response.json();
           errorDiv.textContent = error.error || 'Invalid verification code';
           errorDiv.style.display = 'block';
@@ -635,6 +759,14 @@
               showSuccessNotification('Two-factor authentication has been disabled.');
             }
           } else {
+            // Check for 401 before parsing JSON
+            if (response.status === 401) {
+              const path = window.location.pathname;
+              if (path !== '/' && !path.includes('login')) {
+                showSessionTimeoutModal();
+                return;
+              }
+            }
             const error = await response.json();
             showSuccessNotification('Error: ' + (error.error || 'Failed to disable 2FA'));
           }
@@ -701,6 +833,10 @@
     }
     
     // Session Timeout Management
+    // Store min/max values from API (will be set when loading)
+    let MIN_SESSION_TIMEOUT = 1;
+    let MAX_SESSION_TIMEOUT = 240;
+    
     async function loadSessionTimeout() {
       try {
         const response = await fetch('/auth/session-timeout', {
@@ -708,12 +844,35 @@
           credentials: 'include'
         });
         
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
+        
         if (response.ok) {
           const data = await response.json();
           const timeout = data.session_timeout_minutes || 10;
+          
+          // Update min/max from API response
+          if (data.min_session_timeout_minutes !== undefined) {
+            MIN_SESSION_TIMEOUT = data.min_session_timeout_minutes;
+          }
+          if (data.max_session_timeout_minutes !== undefined) {
+            MAX_SESSION_TIMEOUT = data.max_session_timeout_minutes;
+          }
+          
+          // Update input attributes with min/max values
           const input = document.getElementById('session-timeout-input');
           const display = document.getElementById('session-timeout-display');
-          if (input) input.value = timeout;
+          if (input) {
+            input.min = MIN_SESSION_TIMEOUT;
+            input.max = MAX_SESSION_TIMEOUT;
+            input.value = timeout;
+          }
           if (display) display.textContent = timeout;
         } else if (response.status === 401) {
           // Session expired - redirect to login
@@ -732,9 +891,9 @@
       if (!input) return;
       
       const timeout = parseInt(input.value, 10);
-      if (isNaN(timeout) || timeout < 5 || timeout > 240) {
+      if (isNaN(timeout) || timeout < MIN_SESSION_TIMEOUT || timeout > MAX_SESSION_TIMEOUT) {
         if (messageDiv) {
-          messageDiv.textContent = 'Session timeout must be between 5 and 240 minutes';
+          messageDiv.textContent = `Session timeout must be between ${MIN_SESSION_TIMEOUT} and ${MAX_SESSION_TIMEOUT} minutes`;
           messageDiv.style.color = '#ef4444';
           messageDiv.style.display = 'block';
         }
@@ -754,6 +913,15 @@
           body: JSON.stringify({ session_timeout_minutes: timeout })
         });
         
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
+        
         if (response.ok) {
           const data = await response.json();
           const display = document.getElementById('session-timeout-display');
@@ -770,6 +938,14 @@
         } else if (response.status === 401) {
           window.location.href = '/';
         } else {
+          // Check for 401 before parsing JSON
+          if (response.status === 401) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+              return;
+            }
+          }
           const errorData = await response.json();
           if (messageDiv) {
             messageDiv.textContent = errorData.error || 'Failed to update session timeout';
@@ -837,24 +1013,105 @@
           // Silently handle errors - session might have expired
           if (error.message.includes('401') || error.message.includes('Unauthorized')) {
             // Session expired - show message and redirect
-            alert('Your session expired due to inactivity.');
-            window.location.href = '/';
+            showSessionTimeoutModal();
           }
         }
       }
     }, ACTIVITY_CHECK_INTERVAL);
     
-    // Handle 401 responses globally (session expired)
-    const originalFetch = window.fetch;
-    window.fetch = async function(...args) {
-      const response = await originalFetch.apply(this, args);
-      if (response.status === 401 && !args[0].includes('/auth/login') && !args[0].includes('/auth/signup')) {
-        // Session expired
-        alert('Your session expired due to inactivity.');
-        window.location.href = '/';
+    // Handle 401 responses globally (session expired) - MUST be set up BEFORE other code
+    // This intercepts ALL fetch calls before any other code runs
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        try {
+          const response = await originalFetch.apply(this, args);
+          
+          // Check for 401 responses (session expired) - do this BEFORE any JSON parsing
+          if (response.status === 401) {
+            // Get the URL from args (could be string or Request object)
+            const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || args[0]?.href || '');
+            const path = window.location.pathname;
+            
+            // Only show modal for authenticated endpoints, not login/signup
+            const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/signup');
+            const isLandingPage = path === '/' || path.includes('login');
+            
+            if (!isAuthEndpoint && !isLandingPage) {
+              // Session expired - show modal IMMEDIATELY
+              console.log('[Session Timeout] 401 detected, showing modal. URL:', url, 'Path:', path);
+              
+              // Show modal right away
+              showSessionTimeoutModal();
+              
+              // Wrap response to prevent JSON parsing errors from displaying
+              // Use Proxy to intercept .json() calls and return empty object
+              const wrappedResponse = new Proxy(response, {
+                get: function(target, prop) {
+                  if (prop === 'json') {
+                    // Return a function that returns empty object instead of parsing
+                    return async function() {
+                      console.log('[Session Timeout] Preventing JSON parse for 401 - returning empty object');
+                      return {};
+                    };
+                  }
+                  // Return all other properties/methods normally
+                  const value = target[prop];
+                  return typeof value === 'function' ? value.bind(target) : value;
+                }
+              });
+              
+              // Return the wrapped response - prevents JSON parsing errors
+              return wrappedResponse;
+            }
+          }
+          
+          return response;
+        } catch (error) {
+          // Re-throw the error
+          throw error;
+        }
+      };
+    })();
+    
+    // Session timeout notification modal
+    let sessionTimeoutTimer = null;
+    function showSessionTimeoutModal() {
+      // Don't show if already showing or if we're on login page
+      if (window.location.pathname.includes('login') || window.location.pathname === '/') {
+        return;
       }
-      return response;
-    };
+      
+      const modal = document.getElementById('sessionTimeoutModal');
+      const countdownEl = document.getElementById('sessionTimeoutCountdown');
+      if (!modal) return;
+      
+      // Clear any existing timer
+      if (sessionTimeoutTimer) {
+        clearInterval(sessionTimeoutTimer);
+      }
+      
+      // Show modal
+      modal.classList.add('active');
+      document.body.style.overflow = 'hidden';
+      
+      // Countdown and redirect
+      let seconds = 3;
+      countdownEl.textContent = `Redirecting in ${seconds} seconds...`;
+      
+      sessionTimeoutTimer = setInterval(() => {
+        seconds--;
+        if (seconds > 0) {
+          countdownEl.textContent = `Redirecting in ${seconds} second${seconds !== 1 ? 's' : ''}...`;
+        } else {
+          clearInterval(sessionTimeoutTimer);
+          countdownEl.textContent = 'Redirecting now...';
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 300);
+        }
+      }, 1000);
+    }
   </script>
 </body>
 </html>

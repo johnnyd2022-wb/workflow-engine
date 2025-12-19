@@ -11,6 +11,10 @@ from flask import Blueprint, current_app, g, jsonify, request, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+from app.api.middleware.session_security import (
+    MAX_SESSION_TIMEOUT_MINUTES,
+    MIN_SESSION_TIMEOUT_MINUTES,
+)
 from app.core.db import db_session
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
@@ -548,8 +552,8 @@ def cancel_2fa():
 def manage_session_timeout():
     """Get or update user's session timeout preference
 
-    GET: Returns current session timeout in minutes
-    PUT: Updates session timeout (min 5, max 240 minutes)
+    GET: Returns current session timeout in minutes, plus min/max bounds
+    PUT: Updates session timeout (min/max from session_security constants)
     """
     user = g.current_user
     if not user:
@@ -562,7 +566,13 @@ def manage_session_timeout():
         if request.method == "GET":
             # Get current timeout
             timeout = getattr(user, "session_timeout_minutes", 10)
-            return jsonify({"session_timeout_minutes": timeout}), 200
+            return jsonify(
+                {
+                    "session_timeout_minutes": timeout,
+                    "min_session_timeout_minutes": MIN_SESSION_TIMEOUT_MINUTES,
+                    "max_session_timeout_minutes": MAX_SESSION_TIMEOUT_MINUTES,
+                }
+            ), 200
 
         elif request.method == "PUT":
             # Update timeout
@@ -574,9 +584,17 @@ def manage_session_timeout():
             if timeout_minutes is None:
                 return jsonify({"error": "session_timeout_minutes is required"}), 400
 
-            # Validate bounds (min 5, max 240 minutes)
-            if not isinstance(timeout_minutes, int) or timeout_minutes < 5 or timeout_minutes > 240:
-                return jsonify({"error": "session_timeout_minutes must be between 5 and 240 minutes"}), 400
+            # Validate bounds using constants from session_security
+            if (
+                not isinstance(timeout_minutes, int)
+                or timeout_minutes < MIN_SESSION_TIMEOUT_MINUTES
+                or timeout_minutes > MAX_SESSION_TIMEOUT_MINUTES
+            ):
+                return jsonify(
+                    {
+                        "error": f"session_timeout_minutes must be between {MIN_SESSION_TIMEOUT_MINUTES} and {MAX_SESSION_TIMEOUT_MINUTES} minutes"
+                    }
+                ), 400
 
             # Update user's session timeout
             updated_user = user_repo.update_session_timeout(user.id, timeout_minutes)

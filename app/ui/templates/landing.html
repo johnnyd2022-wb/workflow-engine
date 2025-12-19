@@ -453,6 +453,32 @@
     </div>
   </div>
 
+  <!-- Session Timeout Modal -->
+  <div id="sessionTimeoutModal" class="modal-overlay">
+    <div class="modal-content glass-card" style="max-width: 28rem; text-align: center;">
+      <div style="margin-bottom: 1.5rem;">
+        <div style="width: 64px; height: 64px; margin: 0 auto 1rem; background: rgba(239, 68, 68, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold" style="margin-bottom: 0.5rem;">Session Expired</h2>
+        <p class="text-muted" style="margin-bottom: 1rem;">
+          Your session has expired due to inactivity. You will be redirected to the Sign In screen.
+        </p>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: var(--text-secondary); font-size: 0.875rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span id="sessionTimeoutCountdown">Redirecting in 3 seconds...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <style>
     /* Modal Styles */
     .modal-overlay {
@@ -464,14 +490,19 @@
       bottom: 0;
       background: rgba(0, 0, 0, 0.7);
       backdrop-filter: blur(8px);
-      z-index: 1000;
+      z-index: 10000; /* Very high z-index to ensure it's on top */
       align-items: center;
       justify-content: center;
       padding: 1rem;
     }
     
     .modal-overlay.active {
-      display: flex;
+      display: flex !important; /* Force display */
+    }
+    
+    /* Ensure session timeout modal is always on top */
+    #sessionTimeoutModal {
+      z-index: 10001 !important;
     }
     
     .modal-content {
@@ -506,6 +537,168 @@
   </style>
 
   <script>
+    // Session timeout notification modal - MUST be defined early
+    let sessionTimeoutTimer = null;
+    let isSessionTimeoutModalShowing = false;
+    
+    function showSessionTimeoutModal() {
+      // Prevent duplicate modals
+      if (isSessionTimeoutModalShowing) {
+        return;
+      }
+      
+      // Don't show if we're on login/landing page
+      const path = window.location.pathname;
+      if (path === '/' || path.includes('login')) {
+        return;
+      }
+      
+      // Try to get modal elements
+      const timeoutModal = document.getElementById('sessionTimeoutModal');
+      const countdownEl = document.getElementById('sessionTimeoutCountdown');
+      
+      // If elements not ready, wait a bit and try again
+      if (!timeoutModal || !countdownEl) {
+        setTimeout(showSessionTimeoutModal, 50);
+        return;
+      }
+      
+      // Don't show if modal is already active
+      if (timeoutModal.classList.contains('active')) {
+        return;
+      }
+      
+      // Mark as showing
+      isSessionTimeoutModalShowing = true;
+      
+      // Clear any existing timer
+      if (sessionTimeoutTimer) {
+        clearInterval(sessionTimeoutTimer);
+      }
+      
+      // Show modal immediately - ensure it's visible
+      console.log('[Session Timeout] Modal function called, showing modal now');
+      timeoutModal.classList.add('active');
+      timeoutModal.style.display = 'flex'; // Force display
+      document.body.style.overflow = 'hidden';
+      
+      // Verify modal is visible
+      console.log('[Session Timeout] Modal active class:', timeoutModal.classList.contains('active'));
+      console.log('[Session Timeout] Modal display:', window.getComputedStyle(timeoutModal).display);
+      
+      // Force a repaint to ensure modal is visible
+      void timeoutModal.offsetHeight;
+      
+      // Countdown and redirect
+      let seconds = 3;
+      countdownEl.textContent = `Redirecting in ${seconds} seconds...`;
+      
+      sessionTimeoutTimer = setInterval(() => {
+        seconds--;
+        if (seconds > 0) {
+          countdownEl.textContent = `Redirecting in ${seconds} second${seconds !== 1 ? 's' : ''}...`;
+        } else {
+          clearInterval(sessionTimeoutTimer);
+          countdownEl.textContent = 'Redirecting now...';
+          setTimeout(() => {
+            isSessionTimeoutModalShowing = false;
+            window.location.href = '/';
+          }, 300);
+        }
+      }, 1000);
+    }
+    
+    // Global error handler to catch and suppress 401-related errors
+    window.addEventListener('error', function(event) {
+      // Suppress errors related to session timeout
+      if (event.message && (
+        event.message.includes('Session expired') ||
+        event.message.includes('401') ||
+        event.message.includes('Unauthorized')
+      )) {
+        console.log('[Session Timeout] Suppressing error:', event.message);
+        event.preventDefault();
+        // Show modal if not already showing
+        if (!isSessionTimeoutModalShowing) {
+          showSessionTimeoutModal();
+        }
+        return false;
+      }
+    });
+    
+    // Catch unhandled promise rejections (often from failed fetch calls)
+    window.addEventListener('unhandledrejection', function(event) {
+      // Suppress rejections related to 401/session timeout
+      const reason = event.reason;
+      if (reason && (
+        (typeof reason === 'string' && (reason.includes('401') || reason.includes('Session expired'))) ||
+        (reason.status === 401) ||
+        (reason.message && (reason.message.includes('401') || reason.message.includes('Session expired')))
+      )) {
+        console.log('[Session Timeout] Suppressing unhandled rejection:', reason);
+        event.preventDefault();
+        // Show modal if not already showing
+        if (!isSessionTimeoutModalShowing) {
+          showSessionTimeoutModal();
+        }
+      }
+    });
+    
+    // Handle 401 responses globally (session expired) - MUST be set up FIRST
+    // This intercepts ALL fetch calls before any other code runs
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        try {
+          const response = await originalFetch.apply(this, args);
+          
+          // Check for 401 responses (session expired) - do this BEFORE any JSON parsing
+          if (response.status === 401) {
+            // Get the URL from args (could be string or Request object)
+            const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || args[0]?.href || '');
+            const path = window.location.pathname;
+            
+            // Only show modal for authenticated endpoints, not login/signup
+            const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/signup');
+            const isLandingPage = path === '/' || path.includes('login');
+            
+            if (!isAuthEndpoint && !isLandingPage) {
+              // Session expired - show modal IMMEDIATELY
+              console.log('[Session Timeout] 401 detected, showing modal. URL:', url, 'Path:', path);
+              
+              // Show modal right away
+              showSessionTimeoutModal();
+              
+              // Wrap response to prevent JSON parsing errors from displaying
+              // Use Proxy to intercept .json() calls and return empty object
+              const wrappedResponse = new Proxy(response, {
+                get: function(target, prop) {
+                  if (prop === 'json') {
+                    // Return a function that returns empty object instead of parsing
+                    return async function() {
+                      console.log('[Session Timeout] Preventing JSON parse for 401 - returning empty object');
+                      return {};
+                    };
+                  }
+                  // Return all other properties/methods normally
+                  const value = target[prop];
+                  return typeof value === 'function' ? value.bind(target) : value;
+                }
+              });
+              
+              // Return the wrapped response - prevents JSON parsing errors
+              return wrappedResponse;
+            }
+          }
+          
+          return response;
+        } catch (error) {
+          // Re-throw the error
+          throw error;
+        }
+      };
+    })();
+    
     // Authentication Functions
     async function handleSignup(event) {
       event.preventDefault();
@@ -544,6 +737,15 @@
             password_confirm: passwordConfirm
           })
         });
+        
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
         
         const data = await response.json();
         
@@ -630,6 +832,15 @@
             body: JSON.stringify({ token: code })
           });
           
+          // Check for 401 before parsing JSON
+          if (response.status === 401) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+              return;
+            }
+          }
+          
           const data = await response.json();
           
           if (response.ok) {
@@ -670,6 +881,15 @@
               password: password
             })
           });
+          
+          // Check for 401 before parsing JSON (shouldn't happen on login, but be safe)
+          if (response.status === 401) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+              return;
+            }
+          }
           
           const data = await response.json();
           
@@ -768,6 +988,15 @@
           method: 'GET',
           credentials: 'include'
         });
+        
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
         
         if (response.ok) {
           const data = await response.json();
@@ -1094,12 +1323,15 @@
             credentials: 'include'
           });
           
-          // If session expired, redirect to login
+          // If session expired, show modal
           if (response.status === 401) {
-            // Don't redirect if we're already on the login page
-            if (!window.location.pathname.includes('login') && !window.location.pathname.includes('/')) {
-              alert('Your session expired due to inactivity.');
-              window.location.href = '/';
+            // Don't show modal if we're already on the login/landing page
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              // Show modal immediately
+              showSessionTimeoutModal();
+              // Don't continue processing - the modal will handle redirect
+              return;
             }
           }
         } catch (error) {
@@ -1107,22 +1339,6 @@
         }
       }
     }, ACTIVITY_CHECK_INTERVAL);
-    
-    // Handle 401 responses globally (session expired)
-    const originalFetch = window.fetch;
-    window.fetch = async function(...args) {
-      const response = await originalFetch.apply(this, args);
-      // Only handle 401 for authenticated endpoints, not login/signup
-      if (response.status === 401 && 
-          !args[0].includes('/auth/login') && 
-          !args[0].includes('/auth/signup') &&
-          !window.location.pathname.includes('login')) {
-        // Session expired
-        alert('Your session expired due to inactivity.');
-        window.location.href = '/';
-      }
-      return response;
-    };
   </script>
 
   <script src="/workflow-engine-static/common.js"></script>

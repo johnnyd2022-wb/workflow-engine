@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from flask import g, request, session
+from flask import g, make_response, request, session
 
 from app.api.middleware.tenant_context import PUBLIC_ENDPOINTS
 from app.core.db import db_session
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Default inactivity timeout (10 minutes)
 DEFAULT_SESSION_TIMEOUT_MINUTES = 10
-MIN_SESSION_TIMEOUT_MINUTES = 5
+MIN_SESSION_TIMEOUT_MINUTES = 1
 MAX_SESSION_TIMEOUT_MINUTES = 240
 
 
@@ -83,7 +83,11 @@ def setup_session_security(app):
                     # Session expired due to inactivity
                     logger.info(f"Session expired due to inactivity for user {user_id}")
                     session.clear()
-                    return
+                    # Return 401 response so frontend can show modal
+                    from flask import jsonify
+
+                    response = make_response(jsonify({"error": "Session expired due to inactivity"}), 401)
+                    return response
 
             except (ValueError, TypeError) as e:
                 logger.warning(f"Invalid last_activity_at format: {e}")
