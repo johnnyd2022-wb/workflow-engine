@@ -1066,6 +1066,63 @@
         });
       }
     });
+    
+    // Frontend Activity Tracking (for authenticated users)
+    // Track user activity to keep session alive
+    let lastActivityTime = Date.now();
+    const ACTIVITY_CHECK_INTERVAL = 60000; // Check every minute
+    
+    function trackActivity() {
+      lastActivityTime = Date.now();
+    }
+    
+    // Track various user activities
+    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'].forEach(event => {
+      document.addEventListener(event, trackActivity, { passive: true });
+    });
+    
+    // Periodically check activity and notify backend (only if authenticated)
+    setInterval(async () => {
+      // Only track if user is authenticated (check via /auth/me)
+      const timeSinceActivity = Date.now() - lastActivityTime;
+      // Only ping backend if there was recent activity (within last 2 minutes)
+      if (timeSinceActivity < 120000) {
+        try {
+          // Make a lightweight request to keep session alive
+          const response = await fetch('/auth/me', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          
+          // If session expired, redirect to login
+          if (response.status === 401) {
+            // Don't redirect if we're already on the login page
+            if (!window.location.pathname.includes('login') && !window.location.pathname.includes('/')) {
+              alert('Your session expired due to inactivity.');
+              window.location.href = '/';
+            }
+          }
+        } catch (error) {
+          // Silently handle errors - session might have expired
+        }
+      }
+    }, ACTIVITY_CHECK_INTERVAL);
+    
+    // Handle 401 responses globally (session expired)
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+      const response = await originalFetch.apply(this, args);
+      // Only handle 401 for authenticated endpoints, not login/signup
+      if (response.status === 401 && 
+          !args[0].includes('/auth/login') && 
+          !args[0].includes('/auth/signup') &&
+          !window.location.pathname.includes('login')) {
+        // Session expired
+        alert('Your session expired due to inactivity.');
+        window.location.href = '/';
+      }
+      return response;
+    };
   </script>
 
   <script src="/workflow-engine-static/common.js"></script>

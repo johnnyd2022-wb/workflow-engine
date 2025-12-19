@@ -110,3 +110,12 @@ class UserRepository:
         user.two_factor_enabled = False
         self.db.commit()
         return user
+
+    def update_session_timeout(self, user_id: UUID, timeout_minutes: int) -> User | None:
+        """Update session timeout for a user"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.session_timeout_minutes = timeout_minutes
+        self.db.commit()
+        return user
