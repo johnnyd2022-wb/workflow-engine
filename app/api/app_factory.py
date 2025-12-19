@@ -1,11 +1,9 @@
 """Flask application factory"""
 
 from flask import Flask
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
-from app.api.middleware.tenant_context import setup_tenant_context
 from app.api.middleware.session_security import setup_session_security
+from app.api.middleware.tenant_context import setup_tenant_context
 from app.api.routes.auth_routes import auth_bp
 from app.api.routes.org_routes import org_bp
 from app.utils.config_loader import config
@@ -27,6 +25,7 @@ def create_app():
     # Initialize rate limiter (IP-based)
     # Import limiter from auth_routes and initialize it with the app
     from app.api.routes.auth_routes import limiter
+
     limiter.init_app(app)
     app.limiter = limiter
 
