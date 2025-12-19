@@ -30,6 +30,8 @@ class User(Base):
     role = Column(Enum(UserRole, name="user_role"), default=UserRole.MEMBER, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    totp_secret = Column(String, nullable=True)
+    two_factor_enabled = Column(Boolean, default=False, nullable=False)
 
     # Relationship
     organisation = relationship("Organisation", backref="users")

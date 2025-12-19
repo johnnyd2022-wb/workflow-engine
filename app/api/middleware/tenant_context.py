@@ -20,6 +20,8 @@ from app.core.db.repositories.user_repo import UserRepository
 PUBLIC_ENDPOINTS = {
     "auth.login",
     "auth.signup",
+    "auth.verify_two_factor",  # 2FA verification during login (pending session only)
+    "auth.cancel_2fa",  # Cancel pending 2FA session (no auth required)
     "healthcheck",
     "static",
 }

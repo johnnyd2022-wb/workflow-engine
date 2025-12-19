@@ -396,7 +396,7 @@
         </button>
       </div>
       
-      <form id="loginForm" onsubmit="handleLogin(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+      <form id="login-form" style="display: flex; flex-direction: column; gap: 1rem;">
         <div>
           <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Email</label>
           <input 
@@ -404,6 +404,7 @@
             id="login-email" 
             name="email" 
             required 
+            autocomplete="off"
             class="input"
             placeholder="Enter your email"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -417,6 +418,7 @@
             id="login-password" 
             name="password" 
             required 
+            autocomplete="new-password"
             class="input"
             placeholder="Enter your password"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -425,7 +427,26 @@
         
         <div id="login-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
         
-        <button type="submit" class="btn btn-hero btn-lg" style="width: 100%;">
+        <!-- 2FA Input (hidden by default) -->
+        <div id="login-2fa-section" style="display: none;" data-mode="hidden">
+          <p style="color: var(--text-secondary); font-size: 0.9375rem; margin-bottom: 1rem;">
+            Enter the 6-digit verification code from your authenticator app to complete sign in.
+          </p>
+          <div>
+            <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Verification Code</label>
+            <input 
+              type="text" 
+              id="login-2fa-code" 
+              class="input"
+              placeholder="000000" 
+              maxlength="6" 
+              pattern="[0-9]{6}"
+              style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+            />
+          </div>
+        </div>
+        
+        <button type="submit" id="login-submit-btn" class="btn btn-hero btn-lg" style="width: 100%;">
           Sign In
         </button>
       </form>
@@ -550,51 +571,175 @@
     
     async function handleLogin(event) {
       event.preventDefault();
+      event.stopPropagation();
       
-      const form = event.target;
       const errorDiv = document.getElementById('login-error');
-      const submitButton = form.querySelector('button[type="submit"]');
+      const submitButton = document.getElementById('login-submit-btn');
+      const login2FASection = document.getElementById('login-2fa-section');
+      const codeInput = document.getElementById('login-2fa-code');
+      const emailInput = document.getElementById('login-email');
+      const passwordInput = document.getElementById('login-password');
+      const emailDiv = emailInput ? emailInput.closest('div') : null;
+      const passwordDiv = passwordInput ? passwordInput.closest('div') : null;
       
-      const email = document.getElementById('login-email').value;
-      const password = document.getElementById('login-password').value;
+      // CRITICAL: Always check data attribute first - this is the source of truth
+      const is2FAMode = login2FASection && login2FASection.getAttribute('data-mode') === 'visible';
       
-      errorDiv.style.display = 'none';
+      // If data attribute says we're in 2FA mode but no code, force reset
+      if (is2FAMode && (!codeInput || !codeInput.value.trim())) {
+        resetLoginModalUI();
+        // Re-check after reset
+        const reset2FASection = document.getElementById('login-2fa-section');
+        const resetIs2FAMode = reset2FASection && reset2FASection.getAttribute('data-mode') === 'visible';
+        if (resetIs2FAMode) {
+          // Reset didn't work - something is wrong, show error
+          errorDiv.textContent = 'Please try again';
+          errorDiv.style.display = 'block';
+          submitButton.disabled = false;
+          return;
+        }
+      }
+      
       submitButton.disabled = true;
-      submitButton.textContent = 'Signing In...';
+      errorDiv.style.display = 'none';
       
       try {
-        const response = await fetch('/auth/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: email,
-            password: password
-          })
-        });
+        // Check data attribute - this is the source of truth for UI state
+        const current2FAMode = login2FASection && login2FASection.getAttribute('data-mode') === 'visible';
         
-        const data = await response.json();
-        
-        if (response.ok) {
-          // Success - close modal and redirect to dashboard
-          closeModal('loginModal');
-          showSuccessMessage('Signed in successfully!');
-          // Redirect to dashboard after a brief delay to show success message
-          setTimeout(() => {
-            window.location.href = '/dashboard';
-          }, 500);
+        // Only proceed with 2FA if data attribute says so AND we have a code
+        if (current2FAMode && codeInput && codeInput.value.trim()) {
+          // Submit 2FA code
+          const code = codeInput.value.trim();
+          
+          if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+            errorDiv.textContent = 'Please enter a valid 6-digit code';
+            errorDiv.style.display = 'block';
+            submitButton.disabled = false;
+            return;
+          }
+          
+          submitButton.textContent = 'Verifying...';
+          
+          const response = await fetch('/auth/verify-2fa', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: code })
+          });
+          
+          const data = await response.json();
+          
+          if (response.ok) {
+            // Success - close modal and redirect
+            closeModal('loginModal');
+            showSuccessMessage('Signed in successfully!');
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 500);
+          } else {
+            errorDiv.textContent = data.error || 'Invalid verification code';
+            errorDiv.style.display = 'block';
+            submitButton.textContent = 'Verify Code';
+            submitButton.disabled = false;
+          }
         } else {
-          // Show error
-          errorDiv.textContent = data.error || 'Invalid email or password';
-          errorDiv.style.display = 'block';
+          // Submit email/password
+          const email = emailInput.value.trim();
+          const password = passwordInput.value;
+          
+          if (!email || !password) {
+            errorDiv.textContent = 'Please enter both email and password';
+            errorDiv.style.display = 'block';
+            submitButton.disabled = false;
+            return;
+          }
+          
+          submitButton.textContent = 'Signing In...';
+          
+          const response = await fetch('/auth/login', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: email,
+              password: password
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (response.ok) {
+            // Check if 2FA is required
+            if (data.requires_2fa) {
+              // Verify we're NOT already in 2FA mode before switching
+              const current2FAMode = login2FASection && login2FASection.getAttribute('data-mode') === 'visible';
+              
+              if (!current2FAMode) {
+                // We're in the correct state (email/password mode) - show 2FA
+                show2FAUI();
+                submitButton.textContent = 'Verify Code';
+                submitButton.disabled = false;
+                // Focus on 2FA input
+                setTimeout(() => codeInput.focus(), 100);
+              } else {
+                // UI is in wrong state - already in 2FA mode, reset and show error
+                resetLoginModalUI();
+                errorDiv.textContent = 'Please try logging in again';
+                errorDiv.style.display = 'block';
+                submitButton.disabled = false;
+              }
+            } else {
+              // Success - close modal and redirect
+              closeModal('loginModal');
+              showSuccessMessage('Signed in successfully!');
+              setTimeout(() => {
+                window.location.href = '/dashboard';
+              }, 500);
+            }
+          } else {
+            errorDiv.textContent = data.error || 'Invalid email or password';
+            errorDiv.style.display = 'block';
+            submitButton.textContent = 'Sign In';
+            submitButton.disabled = false;
+          }
         }
       } catch (error) {
         errorDiv.textContent = 'Network error. Please try again.';
         errorDiv.style.display = 'block';
-      } finally {
         submitButton.disabled = false;
-        submitButton.textContent = 'Sign In';
+        // Determine button text based on data attribute (source of truth)
+        const is2FAMode = login2FASection && login2FASection.getAttribute('data-mode') === 'visible';
+        submitButton.textContent = is2FAMode ? 'Verify Code' : 'Sign In';
+      }
+    }
+    
+    function show2FAUI() {
+      const emailDiv = document.getElementById('login-email').closest('div');
+      const passwordDiv = document.getElementById('login-password').closest('div');
+      const login2FASection = document.getElementById('login-2fa-section');
+      const submitButton = document.getElementById('login-submit-btn');
+      const modalTitle = document.querySelector('#loginModal h2');
+      
+      if (emailDiv) {
+        emailDiv.style.display = 'none';
+      }
+      if (passwordDiv) {
+        passwordDiv.style.display = 'none';
+      }
+      if (login2FASection) {
+        login2FASection.style.display = 'block';
+        login2FASection.setAttribute('data-mode', 'visible');
+      }
+      if (modalTitle) {
+        modalTitle.textContent = 'Enter Verification Code';
+      }
+      if (submitButton) {
+        submitButton.textContent = 'Verify Code';
       }
     }
     
@@ -613,7 +758,7 @@
           window.location.href = '/';
         }
       } catch (error) {
-        console.error('Logout error:', error);
+        // Silently fail - user will see error through UI if needed
       }
     }
     
@@ -657,11 +802,93 @@
       document.getElementById('hero-buttons-authenticated').style.display = 'none';
     }
     
-    function openModal(modalId) {
+    async function openModal(modalId) {
       const modal = document.getElementById(modalId);
       if (modal) {
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
+        // If opening login modal, reset UI state and clear any pending 2FA session
+        if (modalId === 'loginModal') {
+          // CRITICAL: Clear backend state FIRST, then reset UI
+          try {
+            await fetch('/auth/2fa/cancel', {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            });
+          } catch (err) {
+            // Silently fail - backend will clear on next login attempt
+          }
+          
+          // Now reset UI state
+          resetLoginModalUI();
+          
+          // Show modal
+          modal.classList.add('active');
+          document.body.style.overflow = 'hidden';
+          
+          // Reset again after modal is visible (defensive - ensures state is correct)
+          setTimeout(() => {
+            resetLoginModalUI();
+          }, 50);
+        } else {
+          // For other modals, just show them
+          modal.classList.add('active');
+          document.body.style.overflow = 'hidden';
+        }
+      }
+    }
+    
+    function resetLoginModalUI() {
+      const emailInput = document.getElementById('login-email');
+      const passwordInput = document.getElementById('login-password');
+      const emailDiv = emailInput ? emailInput.closest('div') : null;
+      const passwordDiv = passwordInput ? passwordInput.closest('div') : null;
+      const login2FASection = document.getElementById('login-2fa-section');
+      const codeInput = document.getElementById('login-2fa-code');
+      const submitButton = document.getElementById('login-submit-btn');
+      const modalTitle = document.querySelector('#loginModal h2');
+      const errorDiv = document.getElementById('login-error');
+      
+      // CRITICAL: Force hide 2FA FIRST (most important)
+      if (login2FASection) {
+        login2FASection.style.display = 'none';
+        login2FASection.setAttribute('data-mode', 'hidden');
+      }
+      if (codeInput) {
+        codeInput.value = '';
+        codeInput.blur();
+      }
+      
+      // CRITICAL: Force show email/password
+      if (emailDiv) {
+        emailDiv.style.display = 'block';
+      }
+      if (passwordDiv) {
+        passwordDiv.style.display = 'block';
+      }
+      
+      // Reset button
+      if (submitButton) {
+        submitButton.textContent = 'Sign In';
+        submitButton.disabled = false;
+      }
+      
+      // Reset title
+      if (modalTitle) {
+        modalTitle.textContent = 'Sign In';
+      }
+      
+      // Clear errors
+      if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+      }
+      
+      // Clear form values
+      const form = document.getElementById('login-form');
+      if (form) {
+        form.reset();
       }
     }
     
@@ -670,15 +897,31 @@
       if (modal) {
         modal.classList.remove('active');
         document.body.style.overflow = '';
-        // Clear form errors
-        const errorDiv = modal.querySelector('[id$="-error"]');
-        if (errorDiv) {
-          errorDiv.style.display = 'none';
-        }
-        // Reset forms
-        const form = modal.querySelector('form');
-        if (form) {
-          form.reset();
+        
+        // Reset login modal if applicable
+        if (modalId === 'loginModal') {
+          resetLoginModalUI();
+          
+          // Clear pending 2FA session on backend (fire and forget)
+          fetch('/auth/2fa/cancel', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          }).catch(() => {
+            // Silently fail - backend will clear on next login attempt
+          });
+        } else {
+          // For other modals, just clear form errors
+          const errorDiv = modal.querySelector('[id$="-error"]');
+          if (errorDiv) {
+            errorDiv.style.display = 'none';
+          }
+          const form = modal.querySelector('form');
+          if (form) {
+            form.reset();
+          }
         }
       }
     }
@@ -697,6 +940,95 @@
         setTimeout(() => messageDiv.remove(), 300);
       }, 3000);
     }
+    
+    // Make functions globally accessible for onclick handlers
+    // Do this IMMEDIATELY so they're available when HTML onclick attributes are parsed
+    // Store references to ensure we call the correct functions
+    const _closeModal = closeModal;
+    const _openModal = openModal;
+    const _resetLoginModalUI = resetLoginModalUI;
+    
+    // Also expose on window for event listeners that might need it
+    window._resetLoginModalUI = _resetLoginModalUI;
+    
+    window.openModal = function(modalId) {
+      return _openModal(modalId);
+    };
+    window.closeModal = function(modalId) {
+      if (typeof _closeModal === 'function') {
+        _closeModal(modalId);
+      } else {
+        // Fallback: define inline
+        const modal = document.getElementById(modalId);
+        if (modal) {
+          modal.classList.remove('active');
+          document.body.style.overflow = '';
+          if (modalId === 'loginModal') {
+            if (typeof _resetLoginModalUI === 'function') {
+              _resetLoginModalUI();
+            }
+            fetch('/auth/2fa/cancel', {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' }
+            }).catch(() => {});
+          }
+        }
+      }
+    };
+    window.handleLogin = handleLogin;
+    
+    // Also attach event listeners to close buttons as backup
+    // This ensures they work even if onclick attributes fail
+    setTimeout(() => {
+      const closeButtons = document.querySelectorAll('button[onclick*="closeModal"]');
+      closeButtons.forEach(btn => {
+        const onclickAttr = btn.getAttribute('onclick');
+        const match = onclickAttr.match(/closeModal\(['"]([^'"]+)['"]\)/);
+        if (match) {
+          const modalId = match[1];
+          // Remove onclick to avoid double-firing
+          btn.removeAttribute('onclick');
+          btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Directly implement close logic to avoid function reference issues
+            const modal = document.getElementById(modalId);
+            if (modal) {
+              modal.classList.remove('active');
+              document.body.style.overflow = '';
+              
+              // Reset login modal if applicable
+              if (modalId === 'loginModal') {
+                // Call resetLoginModalUI directly
+                let resetFn = null;
+                if (typeof resetLoginModalUI === 'function') {
+                  resetFn = resetLoginModalUI;
+                } else if (typeof window._resetLoginModalUI === 'function') {
+                  resetFn = window._resetLoginModalUI;
+                } else if (typeof _resetLoginModalUI === 'function') {
+                  resetFn = _resetLoginModalUI;
+                }
+                
+                if (resetFn) {
+                  resetFn();
+                }
+                
+                // Clear pending 2FA session on backend (fire and forget)
+                fetch('/auth/2fa/cancel', {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  }
+                }).catch(() => {});
+              }
+            }
+          });
+        }
+      });
+    }, 100);
     
     // Close modal when clicking overlay
     document.addEventListener('click', function(e) {
@@ -718,6 +1050,21 @@
     // Check auth status on page load
     document.addEventListener('DOMContentLoaded', function() {
       checkAuthStatus();
+      
+      // Set form handler
+      const loginForm = document.getElementById('login-form');
+      if (loginForm) {
+        loginForm.onsubmit = handleLogin;
+      }
+      
+      const submitButton = document.getElementById('login-submit-btn');
+      if (submitButton) {
+        submitButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleLogin(e);
+        });
+      }
     });
   </script>
 
