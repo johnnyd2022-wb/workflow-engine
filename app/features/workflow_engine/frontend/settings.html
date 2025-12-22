@@ -397,8 +397,22 @@
   
   <script src="/workflow-engine-static/common_4.js"></script>
   <script>
-    // Check if page loaded with JSON error (session expired on page load)
+    // Check if page loaded due to session timeout redirect
     (function() {
+      // Check URL for session_expired parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('session_expired') === 'true') {
+        console.log('[Session Timeout] Detected session_expired parameter in URL');
+        // Remove the parameter from URL (clean URL)
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+        // Show modal after a brief delay to ensure DOM is ready
+        setTimeout(() => {
+          showSessionTimeoutModal();
+        }, 100);
+        return;
+      }
+      
       // Check on DOM ready if the page content is a JSON error
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', checkForJsonError);
@@ -1270,8 +1284,12 @@
     // Session timeout notification modal
     let sessionTimeoutTimer = null;
     function showSessionTimeoutModal() {
-      // Don't show if already showing or if we're on login page
-      if (window.location.pathname.includes('login') || window.location.pathname === '/') {
+      // Allow showing on login page if session_expired parameter is present
+      const urlParams = new URLSearchParams(window.location.search);
+      const isSessionExpiredRedirect = urlParams.get('session_expired') === 'true';
+      
+      // Don't show if already showing, unless it's a session expired redirect
+      if (!isSessionExpiredRedirect && (window.location.pathname.includes('login') || window.location.pathname === '/')) {
         return;
       }
       

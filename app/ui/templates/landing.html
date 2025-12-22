@@ -583,9 +583,17 @@
         return;
       }
       
-      // Don't show if we're on login/landing page
+      // Allow showing on login page if session_expired parameter is present
+      // Check both URL params (before removal) and window flag (after removal)
+      const urlParams = new URLSearchParams(window.location.search);
+      const isSessionExpiredRedirect = urlParams.get('session_expired') === 'true' || window.sessionExpiredRedirect === true;
+      
+      console.log('[Session Timeout] isSessionExpiredRedirect:', isSessionExpiredRedirect);
+      
+      // Don't show if we're on login/landing page, unless it's a session expired redirect
       const path = window.location.pathname;
-      if (path === '/' || path.includes('login')) {
+      if (!isSessionExpiredRedirect && (path === '/' || path.includes('login'))) {
+        console.log('[Session Timeout] Skipping - on login page without session_expired');
         return;
       }
       
@@ -638,6 +646,7 @@
           countdownEl.textContent = 'Redirecting now...';
           setTimeout(() => {
             isSessionTimeoutModalShowing = false;
+            window.sessionExpiredRedirect = false; // Clear flag
             window.location.href = '/';
           }, 300);
         }
@@ -680,8 +689,48 @@
       }
     });
     
-    // Check if page loaded with JSON error (session expired on page load)
+    // Check if page loaded due to session timeout redirect
     (function() {
+      // Check URL for session_expired parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('session_expired') === 'true') {
+        console.log('[Session Timeout] Detected session_expired parameter in URL');
+        // Set a flag so showSessionTimeoutModal knows this is a session expired redirect
+        window.sessionExpiredRedirect = true;
+        
+        // Remove the parameter from URL (clean URL)
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+        
+        // Reset the showing flag to allow modal to show
+        if (typeof isSessionTimeoutModalShowing !== 'undefined') {
+          isSessionTimeoutModalShowing = false;
+        }
+        
+        // Show modal after DOM is ready
+        function showModalWhenReady() {
+          const modal = document.getElementById('sessionTimeoutModal');
+          const countdownEl = document.getElementById('sessionTimeoutCountdown');
+          console.log('[Session Timeout] Modal element found:', !!modal);
+          console.log('[Session Timeout] Countdown element found:', !!countdownEl);
+          
+          if (modal && countdownEl) {
+            console.log('[Session Timeout] Calling showSessionTimeoutModal');
+            showSessionTimeoutModal();
+          } else {
+            console.log('[Session Timeout] Elements not ready, retrying...');
+            setTimeout(showModalWhenReady, 50);
+          }
+        }
+        
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', showModalWhenReady);
+        } else {
+          setTimeout(showModalWhenReady, 100);
+        }
+        return;
+      }
+      
       // Check on DOM ready if the page content is a JSON error
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', checkForJsonError);
