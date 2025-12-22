@@ -179,29 +179,55 @@ def login():
             device_token = request.cookies.get("trusted_device_token")
             device_fingerprint_data = data.get("device_fingerprint", {})
 
+            # Debug logging
+            logger.debug(
+                f"Trusted device check - token present: {bool(device_token)}, fingerprint data present: {bool(device_fingerprint_data)}"
+            )
+
             # Generate fingerprint from browser characteristics
             device_fingerprint = None
             if device_fingerprint_data:
                 device_fingerprint = trusted_device_repo.generate_device_fingerprint(device_fingerprint_data)
+                logger.debug(f"Generated device fingerprint: {device_fingerprint[:16]}...")
 
             # Verify trusted device: must have BOTH token and fingerprint match
             trusted_device = None
             if device_token and device_fingerprint:
                 # Get device by token (hashed)
                 trusted_device = trusted_device_repo.get_trusted_device_by_token(device_token)
+                logger.debug(f"Found trusted device by token: {bool(trusted_device)}")
 
                 # Verify: token exists, belongs to user, fingerprint matches, not expired
                 if trusted_device:
+                    logger.debug(
+                        f"Verifying device - user_id match: {trusted_device.user_id == user.id}, "
+                        f"fingerprint match: {trusted_device.device_fingerprint == device_fingerprint}, "
+                        f"expired: {trusted_device.is_expired()}"
+                    )
                     if (
                         trusted_device.user_id != user.id
                         or trusted_device.device_fingerprint != device_fingerprint
                         or trusted_device.is_expired()
                     ):
                         # Token or fingerprint mismatch, or expired - don't trust
+                        logger.debug("Trusted device verification failed - mismatch or expired")
                         trusted_device = None
+                    else:
+                        logger.info(f"Trusted device verified for user {user.id} - skipping 2FA")
+            elif not device_token:
+                logger.debug("No trusted device token in cookie")
+            elif not device_fingerprint:
+                logger.debug("No device fingerprint data provided")
 
             if trusted_device:
                 # Trusted device verified (both token and fingerprint match) - skip 2FA
+                # Extract ALL values while user is still bound to session
+                user_id = user.id
+                user_org_id = user.org_id
+                user_email = user.email
+                user_role = user.role.value
+                user_session_timeout = getattr(user, "session_timeout_minutes", None)
+
                 trusted_device_repo.update_last_used(trusted_device)
                 db.commit()
 
@@ -209,24 +235,24 @@ def login():
                 rotate_session()
 
                 # Create session - stores user_id, org_id, user_email, org_name
-                session_data = auth_service.generate_session(user)
+                session_data = auth_service.generate_session(user_id=user_id, user_email=user_email, org_id=user_org_id)
                 session.update(session_data)
 
                 # Get user's session timeout preference
-                if hasattr(user, "session_timeout_minutes") and user.session_timeout_minutes:
-                    session["session_timeout_minutes"] = user.session_timeout_minutes
+                if user_session_timeout:
+                    session["session_timeout_minutes"] = user_session_timeout
 
-                # Log login (with trusted device bypass)
-                log_action("login", "user", user.id, {"trusted_device": True}, user.org_id, user.id)
+                # Log login (with trusted device bypass) - use extracted values
+                log_action("login", "user", user_id, {"trusted_device": True}, user_org_id, user_id)
 
                 return jsonify(
                     {
                         "message": "Login successful",
                         "user": {
-                            "id": str(user.id),
-                            "email": user.email,
-                            "role": user.role.value,
-                            "org_id": str(user.org_id),
+                            "id": str(user_id),
+                            "email": user_email,
+                            "role": user_role,
+                            "org_id": str(user_org_id),
                         },
                     }
                 ), 200
@@ -284,7 +310,16 @@ def login():
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
-    """Logout and clear session"""
+    """Logout and clear session
+
+    Note: Trusted device cookies are NOT cleared on logout.
+    They persist for 30 days to allow users to skip 2FA on trusted devices.
+    Cookies are only cleared when:
+    - Device is explicitly revoked by user
+    - Device expires (30 days)
+    - Password is changed
+    - 2FA is disabled
+    """
     user_id = session.get("user_id")
     org_id = session.get("org_id")
 
@@ -297,19 +332,9 @@ def logout():
 
     session.clear()
 
-    # Clear trusted device cookie on logout
-    response = make_response(jsonify({"message": "Logout successful"}), 200)
-    response.set_cookie(
-        "trusted_device_token",
-        "",
-        max_age=0,  # Expire immediately
-        httponly=True,
-        secure=True,  # HTTPS only - same in all environments
-        samesite="Lax",
-        path="/",
-    )
-
-    return response
+    # Do NOT clear trusted device cookie - it should persist across logout/login
+    # This allows "Remember this device" to work as expected
+    return jsonify({"message": "Logout successful"}), 200
 
 
 @auth_bp.route("/me", methods=["GET"])
@@ -466,8 +491,10 @@ def verify_two_factor():
 
             if existing_device:
                 # Update existing device - extend expiration and update last used
+                from datetime import timezone
+
                 existing_device.expires_at = TrustedDevice.get_expiration_date()
-                existing_device.last_used_at = datetime.utcnow()
+                existing_device.last_used_at = datetime.now(timezone.utc)
                 # Get the original token (we need to send it in cookie)
                 # Since we store hashed, we need to generate a new token or retrieve from somewhere
                 # For now, generate new token and update hash
@@ -498,16 +525,20 @@ def verify_two_factor():
 
         if device_token:
             # Set secure HttpOnly cookie with device token (30 days)
-            # Same behavior in all environments (requires HTTPS)
+            # Check if request is HTTPS to determine if cookie should be secure
+            # This allows it to work in both local (HTTP) and production (HTTPS)
+            is_https = request.is_secure or request.headers.get("X-Forwarded-Proto") == "https"
+            logger.info(f"Setting trusted device cookie for user {user_id} (HTTPS: {is_https})")
             response.set_cookie(
                 "trusted_device_token",
                 device_token,
                 max_age=30 * 24 * 60 * 60,  # 30 days in seconds
                 httponly=True,
-                secure=True,  # HTTPS only - same in all environments
+                secure=is_https,  # Secure only if HTTPS
                 samesite="Lax",
                 path="/",
             )
+            logger.debug(f"Cookie set with token (first 10 chars): {device_token[:10]}...")
 
         return response
 
