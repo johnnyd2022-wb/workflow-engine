@@ -444,6 +444,16 @@
               style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
             />
           </div>
+          <div style="margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <input 
+              type="checkbox" 
+              id="login-remember-device" 
+              style="width: 1rem; height: 1rem; cursor: pointer;"
+            />
+            <label for="login-remember-device" style="color: var(--text-secondary); font-size: 0.875rem; cursor: pointer; user-select: none;">
+              Remember this device for 30 days
+            </label>
+          </div>
         </div>
         
         <button type="submit" id="login-submit-btn" class="btn btn-hero btn-lg" style="width: 100%;">
@@ -537,6 +547,32 @@
   </style>
 
   <script>
+    // Device fingerprint collection for "Remember this device" feature
+    // Collects browser characteristics to create a unique device identifier
+    function collectDeviceFingerprint() {
+      try {
+        return {
+          userAgent: navigator.userAgent || '',
+          language: navigator.language || '',
+          platform: navigator.platform || '',
+          screenResolution: `${screen.width || 0}x${screen.height || 0}`,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+          colorDepth: screen.colorDepth || 0,
+          hardwareConcurrency: navigator.hardwareConcurrency || 0,
+          // Additional characteristics for better uniqueness
+          maxTouchPoints: navigator.maxTouchPoints || 0,
+          deviceMemory: navigator.deviceMemory || 0,
+        };
+      } catch (error) {
+        // Fallback to basic fingerprint if collection fails
+        return {
+          userAgent: navigator.userAgent || '',
+          language: navigator.language || '',
+          platform: navigator.platform || '',
+        };
+      }
+    }
+    
     // Session timeout notification modal - MUST be defined early
     let sessionTimeoutTimer = null;
     let isSessionTimeoutModalShowing = false;
@@ -643,6 +679,51 @@
         }
       }
     });
+    
+    // Check if page loaded with JSON error (session expired on page load)
+    (function() {
+      // Check on DOM ready if the page content is a JSON error
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkForJsonError);
+      } else {
+        checkForJsonError();
+      }
+      
+      function checkForJsonError() {
+        // Check if the page body contains only JSON error (session expired)
+        const bodyText = document.body ? document.body.textContent.trim() : '';
+        if (bodyText.startsWith('{') && bodyText.includes('"error"') && bodyText.includes('Session expired')) {
+          console.log('[Session Timeout] Detected JSON error on page load');
+          // Clear the page content and show modal
+          document.body.innerHTML = '';
+          showSessionTimeoutModal();
+          return;
+        }
+      }
+      
+      // Also check when page becomes visible (user switches back to tab)
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+          // Page became visible - check session status
+          setTimeout(async () => {
+            try {
+              const response = await fetch('/auth/me', {
+                method: 'GET',
+                credentials: 'include'
+              });
+              if (response.status === 401) {
+                const path = window.location.pathname;
+                if (path !== '/' && !path.includes('login')) {
+                  showSessionTimeoutModal();
+                }
+              }
+            } catch (error) {
+              // Silently handle
+            }
+          }, 100);
+        }
+      });
+    })();
     
     // Handle 401 responses globally (session expired) - MUST be set up FIRST
     // This intercepts ALL fetch calls before any other code runs
@@ -823,13 +904,24 @@
           
           submitButton.textContent = 'Verifying...';
           
+          // Get remember device checkbox value
+          const rememberDeviceCheckbox = document.getElementById('login-remember-device');
+          const rememberDevice = rememberDeviceCheckbox ? rememberDeviceCheckbox.checked : false;
+          
+          // Collect device fingerprint for "Remember this device" feature
+          const deviceFingerprint = collectDeviceFingerprint();
+          
           const response = await fetch('/auth/verify-2fa', {
             method: 'POST',
             credentials: 'include',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ token: code })
+            body: JSON.stringify({ 
+              token: code,
+              remember_device: rememberDevice,
+              device_fingerprint: deviceFingerprint
+            })
           });
           
           // Check for 401 before parsing JSON
@@ -870,6 +962,9 @@
           
           submitButton.textContent = 'Signing In...';
           
+          // Collect device fingerprint for "Remember this device" feature
+          const deviceFingerprint = collectDeviceFingerprint();
+          
           const response = await fetch('/auth/login', {
             method: 'POST',
             credentials: 'include',
@@ -878,7 +973,8 @@
             },
             body: JSON.stringify({
               email: email,
-              password: password
+              password: password,
+              device_fingerprint: deviceFingerprint
             })
           });
           

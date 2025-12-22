@@ -83,11 +83,23 @@ def setup_session_security(app):
                     # Session expired due to inactivity
                     logger.info(f"Session expired due to inactivity for user {user_id}")
                     session.clear()
-                    # Return 401 response so frontend can show modal
-                    from flask import jsonify
 
-                    response = make_response(jsonify({"error": "Session expired due to inactivity"}), 401)
-                    return response
+                    # Check if this is an HTML page request (not an API call)
+                    # If Accept header includes text/html, or if it's a page route, redirect to login
+                    accepts_html = request.headers.get("Accept", "").find("text/html") != -1
+                    is_page_route = not request.path.startswith("/auth/") and not request.path.startswith("/api/")
+
+                    if accepts_html or is_page_route:
+                        # For HTML page requests, redirect to login
+                        from flask import redirect
+
+                        return redirect("/", code=302)
+                    else:
+                        # For API requests, return JSON 401 so frontend can show modal
+                        from flask import jsonify
+
+                        response = make_response(jsonify({"error": "Session expired due to inactivity"}), 401)
+                        return response
 
             except (ValueError, TypeError) as e:
                 logger.warning(f"Invalid last_activity_at format: {e}")

@@ -7,7 +7,7 @@ from uuid import UUID
 
 import pyotp
 import qrcode
-from flask import Blueprint, current_app, g, jsonify, request, session
+from flask import Blueprint, current_app, g, jsonify, make_response, request, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -16,6 +16,8 @@ from app.api.middleware.session_security import (
     MIN_SESSION_TIMEOUT_MINUTES,
 )
 from app.core.db import db_session
+from app.core.db.models.trusted_device import TrustedDevice
+from app.core.db.repositories.trusted_device_repo import TrustedDeviceRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
@@ -171,6 +173,65 @@ def login():
 
         # Check if 2FA is enabled
         if user.two_factor_enabled:
+            # Check for trusted device - following Google/AWS/Azure patterns
+            # Verify BOTH token (from cookie) AND fingerprint match
+            trusted_device_repo = TrustedDeviceRepository(db)
+            device_token = request.cookies.get("trusted_device_token")
+            device_fingerprint_data = data.get("device_fingerprint", {})
+
+            # Generate fingerprint from browser characteristics
+            device_fingerprint = None
+            if device_fingerprint_data:
+                device_fingerprint = trusted_device_repo.generate_device_fingerprint(device_fingerprint_data)
+
+            # Verify trusted device: must have BOTH token and fingerprint match
+            trusted_device = None
+            if device_token and device_fingerprint:
+                # Get device by token (hashed)
+                trusted_device = trusted_device_repo.get_trusted_device_by_token(device_token)
+
+                # Verify: token exists, belongs to user, fingerprint matches, not expired
+                if trusted_device:
+                    if (
+                        trusted_device.user_id != user.id
+                        or trusted_device.device_fingerprint != device_fingerprint
+                        or trusted_device.is_expired()
+                    ):
+                        # Token or fingerprint mismatch, or expired - don't trust
+                        trusted_device = None
+
+            if trusted_device:
+                # Trusted device verified (both token and fingerprint match) - skip 2FA
+                trusted_device_repo.update_last_used(trusted_device)
+                db.commit()
+
+                # Rotate session ID on successful login (session fixation protection)
+                rotate_session()
+
+                # Create session - stores user_id, org_id, user_email, org_name
+                session_data = auth_service.generate_session(user)
+                session.update(session_data)
+
+                # Get user's session timeout preference
+                if hasattr(user, "session_timeout_minutes") and user.session_timeout_minutes:
+                    session["session_timeout_minutes"] = user.session_timeout_minutes
+
+                # Log login (with trusted device bypass)
+                log_action("login", "user", user.id, {"trusted_device": True}, user.org_id, user.id)
+
+                return jsonify(
+                    {
+                        "message": "Login successful",
+                        "user": {
+                            "id": str(user.id),
+                            "email": user.email,
+                            "role": user.role.value,
+                            "org_id": str(user.org_id),
+                        },
+                    }
+                ), 200
+
+            # No trusted device or expired - require 2FA
             # Do NOT log in yet — return partial auth state
             # CRITICAL: Only set pending_2fa_user_id, NOT user_id
             # User is NOT authenticated until 2FA is verified
@@ -235,7 +296,20 @@ def logout():
             pass  # Don't fail logout if logging fails
 
     session.clear()
-    return jsonify({"message": "Logout successful"}), 200
+
+    # Clear trusted device cookie on logout
+    response = make_response(jsonify({"message": "Logout successful"}), 200)
+    response.set_cookie(
+        "trusted_device_token",
+        "",
+        max_age=0,  # Expire immediately
+        httponly=True,
+        secure=True,  # HTTPS only - same in all environments
+        samesite="Lax",
+        path="/",
+    )
+
+    return response
 
 
 @auth_bp.route("/me", methods=["GET"])
@@ -297,6 +371,9 @@ def verify_two_factor():
         return jsonify({"error": "JSON body required"}), 400
 
     token = data.get("token")
+    remember_device = data.get("remember_device", False)  # Optional: remember this device for 30 days
+    device_fingerprint_data = data.get("device_fingerprint", {})  # Browser characteristics for fingerprinting
+
     if not token:
         return jsonify({"error": "token is required"}), 400
 
@@ -366,10 +443,6 @@ def verify_two_factor():
             return jsonify({"error": "Invalid 2FA token"}), 401
 
         # Rotate session ID on successful 2FA verification (session fixation protection)
-        # Store pending 2FA data temporarily before rotation
-        temp_pending_user_id = session.get("pending_2fa_user_id")
-        temp_pending_created_at = session.get("pending_2fa_created_at")
-
         # Rotate session (clears everything)
         rotate_session()
 
@@ -381,16 +454,62 @@ def verify_two_factor():
         if hasattr(user, "session_timeout_minutes") and user.session_timeout_minutes:
             session["session_timeout_minutes"] = user.session_timeout_minutes
 
+        # If user wants to remember this device, create a trusted device token
+        # Following Google/AWS/Azure patterns: store token in HttpOnly cookie + hash in DB
+        device_token = None
+        if remember_device and device_fingerprint_data:
+            trusted_device_repo = TrustedDeviceRepository(db)
+            device_fingerprint = trusted_device_repo.generate_device_fingerprint(device_fingerprint_data)
+
+            # Check if device already exists (update it) or create new one
+            existing_device = trusted_device_repo.get_trusted_device_by_fingerprint(user_id, device_fingerprint)
+
+            if existing_device:
+                # Update existing device - extend expiration and update last used
+                existing_device.expires_at = TrustedDevice.get_expiration_date()
+                existing_device.last_used_at = datetime.utcnow()
+                # Get the original token (we need to send it in cookie)
+                # Since we store hashed, we need to generate a new token or retrieve from somewhere
+                # For now, generate new token and update hash
+                device_token = trusted_device_repo.generate_device_token()
+                existing_device.device_token = trusted_device_repo.hash_device_token(device_token)
+            else:
+                # Create new trusted device
+                device_token = trusted_device_repo.generate_device_token()
+                hashed_token = trusted_device_repo.hash_device_token(device_token)
+                expires_at = TrustedDevice.get_expiration_date()
+                trusted_device_repo.create_trusted_device(user_id, hashed_token, device_fingerprint, expires_at)
+
+            db.commit()
+
         # Log successful 2FA verification - use extracted values
-        log_action("2fa_success", "user", user_id, None, user_org_id, user_id)
+        log_action("2fa_success", "user", user_id, {"remember_device": remember_device}, user_org_id, user_id)
         log_action("login", "user", user_id, None, user_org_id, user_id)
 
-        return jsonify(
-            {
-                "message": "Login successful",
-                "user": {"id": str(user_id), "email": user_email, "role": user_role, "org_id": str(user_org_id)},
-            }
-        ), 200
+        # Create response
+        response_data = {
+            "message": "Login successful",
+            "user": {"id": str(user_id), "email": user_email, "role": user_role, "org_id": str(user_org_id)},
+        }
+
+        # Set trusted device cookie if device was remembered
+        # Following Google/AWS/Azure patterns: HttpOnly, Secure, SameSite
+        response = make_response(jsonify(response_data), 200)
+
+        if device_token:
+            # Set secure HttpOnly cookie with device token (30 days)
+            # Same behavior in all environments (requires HTTPS)
+            response.set_cookie(
+                "trusted_device_token",
+                device_token,
+                max_age=30 * 24 * 60 * 60,  # 30 days in seconds
+                httponly=True,
+                secure=True,  # HTTPS only - same in all environments
+                samesite="Lax",
+                path="/",
+            )
+
+        return response
 
     except ValueError as e:
         logger.warning(f"Invalid user_id in 2FA verification: {e}")

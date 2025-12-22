@@ -397,6 +397,51 @@
   
   <script src="/workflow-engine-static/common_4.js"></script>
   <script>
+    // Check if page loaded with JSON error (session expired on page load)
+    (function() {
+      // Check on DOM ready if the page content is a JSON error
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkForJsonError);
+      } else {
+        checkForJsonError();
+      }
+      
+      function checkForJsonError() {
+        // Check if the page body contains only JSON error (session expired)
+        const bodyText = document.body ? document.body.textContent.trim() : '';
+        if (bodyText.startsWith('{') && bodyText.includes('"error"') && bodyText.includes('Session expired')) {
+          console.log('[Session Timeout] Detected JSON error on page load');
+          // Clear the page content and show modal
+          document.body.innerHTML = '';
+          showSessionTimeoutModal();
+          return;
+        }
+      }
+      
+      // Also check when page becomes visible (user switches back to tab)
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+          // Page became visible - check session status
+          setTimeout(async () => {
+            try {
+              const response = await fetch('/auth/me', {
+                method: 'GET',
+                credentials: 'include'
+              });
+              if (response.status === 401) {
+                const path = window.location.pathname;
+                if (path !== '/' && !path.includes('login')) {
+                  showSessionTimeoutModal();
+                }
+              }
+            } catch (error) {
+              // Silently handle
+            }
+          }, 100);
+        }
+      });
+    })();
+    
     // Global error handler to catch and suppress 401-related errors
     window.addEventListener('error', function(event) {
       // Suppress errors related to session timeout
