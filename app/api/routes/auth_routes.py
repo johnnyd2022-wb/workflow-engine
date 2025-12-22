@@ -338,14 +338,17 @@ def logout():
 
 
 @auth_bp.route("/me", methods=["GET"])
+@limiter.limit("120 per minute")  # Higher limit for activity tracking (2 per second max)
 def get_current_user():
     """
     Public endpoint.
     Returns authenticated user/org context if logged in.
     Returns user: null when logged out.
     Always HTTP 200.
-    """
 
+    Rate limited: 120 per minute (2 per second) to support activity tracking
+    while still preventing abuse.
+    """
     from flask import g, jsonify
 
     # Log user info for debugging (optional: remove or mask IDs in production)

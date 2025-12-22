@@ -1144,8 +1144,9 @@
     // Track user activity to keep session alive
     let lastActivityTime = Date.now();
     let lastPingTime = 0;
-    const MIN_PING_INTERVAL = 15000; // Ping at most every 15 seconds (throttle)
-    const ACTIVITY_CHECK_INTERVAL = 30000; // Check every 30 seconds (more frequent)
+    let pingInProgress = false; // Prevent concurrent pings
+    const MIN_PING_INTERVAL = 20000; // Ping at most every 20 seconds (throttle)
+    const ACTIVITY_CHECK_INTERVAL = 45000; // Check every 45 seconds (less frequent to avoid rate limits)
     
     // Throttled function to ping backend on activity
     async function pingBackendOnActivity() {
@@ -1155,6 +1156,12 @@
         return;
       }
       
+      // Prevent concurrent pings
+      if (pingInProgress) {
+        return;
+      }
+      
+      pingInProgress = true;
       lastPingTime = now;
       
       try {
@@ -1172,16 +1179,18 @@
             return;
           }
         }
-      } catch (error) {
-        // Silently handle errors - session might have expired
-        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
-          const path = window.location.pathname;
-          if (path !== '/' && !path.includes('login')) {
-            showSessionTimeoutModal();
+        } catch (error) {
+          // Silently handle errors - session might have expired
+          if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+            }
           }
+        } finally {
+          pingInProgress = false;
         }
       }
-    }
     
     function trackActivity() {
       lastActivityTime = Date.now();
