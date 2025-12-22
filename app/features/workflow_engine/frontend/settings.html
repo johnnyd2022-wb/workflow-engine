@@ -174,22 +174,44 @@
         <div class="glass-card">
           <h2 class="mb-3">Security</h2>
           
-          <div class="form-group">
-            <label class="form-label">Current Password</label>
-            <input type="password" class="form-input" placeholder="Enter current password">
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label">New Password</label>
-            <input type="password" class="form-input" placeholder="Enter new password">
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label">Confirm New Password</label>
-            <input type="password" class="form-input" placeholder="Confirm new password">
-          </div>
-          
-          <button class="btn btn-primary">Update Password</button>
+          <form id="password-reset-form" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label">Current Password</label>
+              <input 
+                type="password" 
+                id="current-password" 
+                class="form-input" 
+                placeholder="Enter current password"
+                required
+              >
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">New Password</label>
+              <input 
+                type="password" 
+                id="new-password" 
+                class="form-input" 
+                placeholder="Enter new password"
+                required
+              >
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">Confirm New Password</label>
+              <input 
+                type="password" 
+                id="new-password-confirm" 
+                class="form-input" 
+                placeholder="Confirm new password"
+                required
+              >
+            </div>
+            
+            <div id="password-reset-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
+            
+            <button type="submit" id="password-reset-btn" class="btn btn-primary">Update Password</button>
+          </form>
         </div>
         
         <div class="glass-card" style="margin-top: 1.5rem;">
@@ -246,6 +268,11 @@
     
     #sessionTimeoutModal.active {
       display: flex !important;
+    }
+    
+    .text-error {
+      color: #ef4444;
+      font-size: 0.875rem;
     }
   </style>
   
@@ -984,38 +1011,150 @@
     // Load session timeout on page load
     loadSessionTimeout();
     
+    // Password Reset Handler
+    const passwordResetForm = document.getElementById('password-reset-form');
+    if (passwordResetForm) {
+      passwordResetForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const currentPassword = document.getElementById('current-password').value;
+        const newPassword = document.getElementById('new-password').value;
+        const newPasswordConfirm = document.getElementById('new-password-confirm').value;
+        const errorDiv = document.getElementById('password-reset-error');
+        const submitButton = document.getElementById('password-reset-btn');
+        
+        // Clear previous errors
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+        
+        // Client-side validation
+        if (!currentPassword || !newPassword || !newPasswordConfirm) {
+          errorDiv.textContent = 'All fields are required';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
+        if (newPassword !== newPasswordConfirm) {
+          errorDiv.textContent = 'New passwords do not match';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
+        if (currentPassword === newPassword) {
+          errorDiv.textContent = 'New password must be different from current password';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
+        // Disable button during submission
+        submitButton.disabled = true;
+        submitButton.textContent = 'Updating...';
+        
+        try {
+          const response = await fetch('/auth/change-password', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              current_password: currentPassword,
+              new_password: newPassword,
+              new_password_confirm: newPasswordConfirm
+            })
+          });
+          
+          // Check for 401 before parsing JSON
+          if (response.status === 401) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+              return;
+            }
+          }
+          
+          const data = await response.json();
+          
+          if (response.ok) {
+            // Success - clear form and show success message
+            passwordResetForm.reset();
+            showSuccessNotification('Password updated successfully!');
+          } else {
+            // Show error
+            errorDiv.textContent = data.error || 'Failed to update password';
+            errorDiv.style.display = 'block';
+          }
+        } catch (error) {
+          console.error('Error updating password:', error);
+          errorDiv.textContent = 'Network error. Please try again.';
+          errorDiv.style.display = 'block';
+        } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Update Password';
+        }
+      });
+    }
+    
     // Frontend Activity Tracking
     // Track user activity to keep session alive
     let lastActivityTime = Date.now();
-    const ACTIVITY_CHECK_INTERVAL = 60000; // Check every minute
+    let lastPingTime = 0;
+    const MIN_PING_INTERVAL = 15000; // Ping at most every 15 seconds (throttle)
+    const ACTIVITY_CHECK_INTERVAL = 30000; // Check every 30 seconds (more frequent)
     
-    function trackActivity() {
-      lastActivityTime = Date.now();
-    }
-    
-    // Track various user activities
-    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'].forEach(event => {
-      document.addEventListener(event, trackActivity, { passive: true });
-    });
-    
-    // Periodically check activity and notify backend
-    setInterval(async () => {
-      const timeSinceActivity = Date.now() - lastActivityTime;
-      // Only ping backend if there was recent activity (within last 2 minutes)
-      if (timeSinceActivity < 120000) {
-        try {
-          // Make a lightweight request to keep session alive
-          await fetch('/auth/me', {
-            method: 'GET',
-            credentials: 'include'
-          });
-        } catch (error) {
-          // Silently handle errors - session might have expired
-          if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-            // Session expired - show message and redirect
+    // Throttled function to ping backend on activity
+    async function pingBackendOnActivity() {
+      const now = Date.now();
+      // Throttle: only ping if at least MIN_PING_INTERVAL has passed since last ping
+      if (now - lastPingTime < MIN_PING_INTERVAL) {
+        return;
+      }
+      
+      lastPingTime = now;
+      
+      try {
+        // Make a lightweight request to keep session alive
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        // If session expired, show modal
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
+      } catch (error) {
+        // Silently handle errors - session might have expired
+        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
             showSessionTimeoutModal();
           }
         }
+      }
+    }
+    
+    function trackActivity() {
+      lastActivityTime = Date.now();
+      // Ping backend immediately when activity is detected (throttled)
+      pingBackendOnActivity();
+    }
+    
+    // Track various user activities
+    ['mousedown', 'mousemove', 'keypress', 'keydown', 'scroll', 'touchstart', 'click', 'input'].forEach(event => {
+      document.addEventListener(event, trackActivity, { passive: true });
+    });
+    
+    // Periodically check activity and notify backend (backup in case activity tracking misses something)
+    setInterval(async () => {
+      const timeSinceActivity = Date.now() - lastActivityTime;
+      // Ping if there was recent activity (within last 2 minutes) or if we haven't pinged recently
+      if (timeSinceActivity < 120000 || (Date.now() - lastPingTime) > ACTIVITY_CHECK_INTERVAL) {
+        await pingBackendOnActivity();
       }
     }, ACTIVITY_CHECK_INTERVAL);
     

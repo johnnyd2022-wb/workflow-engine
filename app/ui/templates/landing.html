@@ -1299,44 +1299,66 @@
     // Frontend Activity Tracking (for authenticated users)
     // Track user activity to keep session alive
     let lastActivityTime = Date.now();
-    const ACTIVITY_CHECK_INTERVAL = 60000; // Check every minute
+    let lastPingTime = 0;
+    const MIN_PING_INTERVAL = 15000; // Ping at most every 15 seconds (throttle)
+    const ACTIVITY_CHECK_INTERVAL = 30000; // Check every 30 seconds (more frequent)
+    
+    // Throttled function to ping backend on activity
+    async function pingBackendOnActivity() {
+      const now = Date.now();
+      // Throttle: only ping if at least MIN_PING_INTERVAL has passed since last ping
+      if (now - lastPingTime < MIN_PING_INTERVAL) {
+        return;
+      }
+      
+      lastPingTime = now;
+      
+      try {
+        // Make a lightweight request to keep session alive
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        // If session expired, show modal
+        if (response.status === 401) {
+          // Don't show modal if we're already on the login/landing page
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            // Show modal immediately
+            showSessionTimeoutModal();
+            // Don't continue processing - the modal will handle redirect
+            return;
+          }
+        }
+      } catch (error) {
+        // Silently handle errors - session might have expired
+        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+          }
+        }
+      }
+    }
     
     function trackActivity() {
       lastActivityTime = Date.now();
+      // Ping backend immediately when activity is detected (throttled)
+      pingBackendOnActivity();
     }
     
-    // Track various user activities
-    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'].forEach(event => {
+    // Track various user activities (including input for typing in forms)
+    ['mousedown', 'mousemove', 'keypress', 'keydown', 'scroll', 'touchstart', 'click', 'input'].forEach(event => {
       document.addEventListener(event, trackActivity, { passive: true });
     });
     
-    // Periodically check activity and notify backend (only if authenticated)
+    // Periodically check activity and notify backend (backup in case activity tracking misses something)
     setInterval(async () => {
-      // Only track if user is authenticated (check via /auth/me)
       const timeSinceActivity = Date.now() - lastActivityTime;
-      // Only ping backend if there was recent activity (within last 2 minutes)
-      if (timeSinceActivity < 120000) {
-        try {
-          // Make a lightweight request to keep session alive
-          const response = await fetch('/auth/me', {
-            method: 'GET',
-            credentials: 'include'
-          });
-          
-          // If session expired, show modal
-          if (response.status === 401) {
-            // Don't show modal if we're already on the login/landing page
-            const path = window.location.pathname;
-            if (path !== '/' && !path.includes('login')) {
-              // Show modal immediately
-              showSessionTimeoutModal();
-              // Don't continue processing - the modal will handle redirect
-              return;
-            }
-          }
-        } catch (error) {
-          // Silently handle errors - session might have expired
-        }
+      // Ping if there was recent activity (within last 2 minutes) or if we haven't pinged recently
+      if (timeSinceActivity < 120000 || (Date.now() - lastPingTime) > ACTIVITY_CHECK_INTERVAL) {
+        await pingBackendOnActivity();
       }
     }, ACTIVITY_CHECK_INTERVAL);
   </script>

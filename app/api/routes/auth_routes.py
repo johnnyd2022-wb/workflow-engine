@@ -610,3 +610,66 @@ def manage_session_timeout():
         logger.exception("Failed to manage session timeout")
         return jsonify({"error": "Internal server error"}), 500
     # Don't close session here - let middleware teardown handle it
+
+
+@auth_bp.route("/change-password", methods=["POST"])
+@requires_auth
+@limiter.limit("5 per 15 minutes")
+def change_password():
+    """Change user password
+
+    Requires authentication and current password verification.
+    Rate limited: 5 attempts per 15 minutes per IP.
+    """
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    current_password = data.get("current_password")
+    new_password = data.get("new_password")
+    new_password_confirm = data.get("new_password_confirm")
+
+    if not current_password or not new_password or not new_password_confirm:
+        return jsonify({"error": "current_password, new_password, and new_password_confirm are required"}), 400
+
+    # Validate passwords match
+    if new_password != new_password_confirm:
+        return jsonify({"error": "New passwords do not match"}), 400
+
+    # Ensure new password is different from current
+    if current_password == new_password:
+        return jsonify({"error": "New password must be different from current password"}), 400
+
+    user = g.current_user
+    if not user:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    db = db_session()
+    try:
+        auth_service = AuthService(db)
+        user_repo = UserRepository(db)
+
+        # Verify current password
+        if not auth_service.verify_password(current_password, user.password_hash):
+            logger.warning(f"Failed password change attempt for user {user.id} - incorrect current password")
+            return jsonify({"error": "Current password is incorrect"}), 401
+
+        # Hash new password using the same method as signup
+        new_password_hash = auth_service.hash_password(new_password)
+
+        # Update user password
+        updated_user = user_repo.update_user(user_id=user.id, org_id=user.org_id, password_hash=new_password_hash)
+
+        if not updated_user:
+            return jsonify({"error": "Failed to update password"}), 500
+
+        # Log password change
+        log_action("password_change", "user", user.id, None, user.org_id, user.id)
+
+        return jsonify({"message": "Password updated successfully"}), 200
+
+    except Exception:
+        logger.exception("Failed to change password")
+        return jsonify({"error": "Internal server error"}), 500
+    # Don't close session here - let middleware teardown handle it
