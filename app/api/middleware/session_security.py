@@ -8,10 +8,11 @@ Implements:
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from flask import g, make_response, request, session
+from flask import g, make_response, render_template_string, request, session
 
 from app.api.middleware.tenant_context import PUBLIC_ENDPOINTS
 from app.core.db import db_session
@@ -92,119 +93,14 @@ def setup_session_security(app):
                     if accepts_html or is_page_route:
                         # For HTML page requests, return a response that shows modal then redirects
                         # This prevents the immediate redirect and allows modal to show first
-                        from flask import Response
+                        # Load the session expired template
+                        app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                        template_path = os.path.join(app_dir, "ui", "templates", "session_expired.html")
 
-                        html_content = """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Session Expired</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a0a0a;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-        }
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(8px);
-            z-index: 2000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-content {
-            background: rgba(30, 30, 30, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 1rem;
-            padding: 2rem;
-            max-width: 28rem;
-            text-align: center;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-        .icon {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 1rem;
-            background: rgba(239, 68, 68, 0.2);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        h2 {
-            margin: 0 0 0.5rem 0;
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-        p {
-            margin: 0 0 1rem 0;
-            color: #999;
-        }
-        .countdown {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            color: #999;
-            font-size: 0.875rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="modal-overlay">
-        <div class="modal-content">
-            <div class="icon">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-            </div>
-            <h2>Session Expired</h2>
-            <p>Your session has expired due to inactivity. You will be redirected to the Sign In screen.</p>
-            <div class="countdown">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                <span id="countdown">Redirecting in 3 seconds...</span>
-            </div>
-        </div>
-    </div>
-    <script>
-        let seconds = 3;
-        const countdownEl = document.getElementById('countdown');
-        const timer = setInterval(() => {
-            seconds--;
-            if (seconds > 0) {
-                countdownEl.textContent = 'Redirecting in ' + seconds + ' second' + (seconds !== 1 ? 's' : '') + '...';
-            } else {
-                clearInterval(timer);
-                countdownEl.textContent = 'Redirecting now...';
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 300);
-            }
-        }, 1000);
-    </script>
-</body>
-</html>
-                        """
-                        return Response(html_content, mimetype="text/html", status=401)
+                        with open(template_path, encoding="utf-8") as f:
+                            template_content = f.read()
+
+                        return render_template_string(template_content), 401
                     else:
                         # For API requests, return JSON 401 so frontend can show modal
                         from flask import jsonify
