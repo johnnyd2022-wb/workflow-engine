@@ -142,7 +142,7 @@ class UserRepository:
     def lock_account(self, user_id: UUID, lockout_duration_minutes: int = 1) -> User | None:
         """Lock user account for specified duration (default 1 minute)"""
         from datetime import datetime, timedelta, timezone
-        
+
         user = self.get_user_by_id(user_id)
         if not user:
             return None
@@ -163,7 +163,7 @@ class UserRepository:
     def is_account_locked(self, user_id: UUID) -> bool:
         """Check if account is currently locked"""
         from datetime import datetime, timezone
-        
+
         user = self.get_user_by_id(user_id)
         if not user:
             return False
