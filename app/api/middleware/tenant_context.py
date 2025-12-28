@@ -89,6 +89,8 @@ def setup_tenant_context(app):
             g.org_status = getattr(org, "status", None).value if getattr(org, "status", None) else None
 
             # Optional: cache lightweight primitives in session for performance
+            # CRITICAL: Only cache safe, non-sensitive data (no passwords, tokens, or secrets)
+            # This cache is used for performance optimization and does not contain sensitive information
             session["_user_cache"] = {
                 "user_id": g.user_id,
                 "org_id": g.org_id,

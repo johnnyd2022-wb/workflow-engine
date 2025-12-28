@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -32,6 +32,11 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     totp_secret = Column(String, nullable=True)
     two_factor_enabled = Column(Boolean, default=False, nullable=False)
+    session_timeout_minutes = Column(Integer, default=10, nullable=False)  # User-configurable session timeout
+
+    # Account lockout fields for brute force protection
+    failed_login_attempts = Column(Integer, default=0, nullable=False)  # Count of consecutive failed login attempts
+    account_locked_until = Column(DateTime(timezone=True), nullable=True)  # Timestamp when account lockout expires
 
     # Relationship
     organisation = relationship("Organisation", backref="users")

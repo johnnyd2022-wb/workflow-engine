@@ -329,6 +329,7 @@
             id="signup-org-name" 
             name="org_name" 
             required 
+            autocomplete="organization"
             class="input"
             placeholder="Enter your organization name"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -342,6 +343,7 @@
             id="signup-email" 
             name="email" 
             required 
+            autocomplete="email"
             class="input"
             placeholder="Enter your email"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -355,10 +357,12 @@
             id="signup-password" 
             name="password" 
             required 
+            autocomplete="new-password"
             class="input"
             placeholder="Create a password"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
           />
+          <div id="signup-password-warnings" style="display: none; margin-top: 0.5rem; padding: 0.75rem; border-radius: 0.5rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); color: #fbbf24; font-size: 0.875rem;"></div>
         </div>
         
         <div>
@@ -368,6 +372,7 @@
             id="signup-password-confirm" 
             name="password_confirm" 
             required 
+            autocomplete="new-password"
             class="input"
             placeholder="Confirm your password"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -444,12 +449,48 @@
               style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
             />
           </div>
+          <div style="margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <input 
+              type="checkbox" 
+              id="login-remember-device" 
+              style="width: 1rem; height: 1rem; cursor: pointer;"
+            />
+            <label for="login-remember-device" style="color: var(--text-secondary); font-size: 0.875rem; cursor: pointer; user-select: none;">
+              Remember this device for 30 days
+            </label>
+          </div>
         </div>
         
         <button type="submit" id="login-submit-btn" class="btn btn-hero btn-lg" style="width: 100%;">
           Sign In
         </button>
       </form>
+    </div>
+  </div>
+
+  <!-- Session Timeout Modal -->
+  <div id="sessionTimeoutModal" class="modal-overlay">
+    <div class="modal-content glass-card" style="max-width: 28rem; text-align: center;">
+      <div style="margin-bottom: 1.5rem;">
+        <div style="width: 64px; height: 64px; margin: 0 auto 1rem; background: rgba(239, 68, 68, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold" style="margin-bottom: 0.5rem;">Session Expired</h2>
+        <p class="text-muted" style="margin-bottom: 1rem;">
+          Your session has expired due to inactivity. You will be redirected to the Sign In screen.
+        </p>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: var(--text-secondary); font-size: 0.875rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span id="sessionTimeoutCountdown">Redirecting in 3 seconds...</span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -464,14 +505,19 @@
       bottom: 0;
       background: rgba(0, 0, 0, 0.7);
       backdrop-filter: blur(8px);
-      z-index: 1000;
+      z-index: 10000; /* Very high z-index to ensure it's on top */
       align-items: center;
       justify-content: center;
       padding: 1rem;
     }
     
     .modal-overlay.active {
-      display: flex;
+      display: flex !important; /* Force display */
+    }
+    
+    /* Ensure session timeout modal is always on top */
+    #sessionTimeoutModal {
+      z-index: 10001 !important;
     }
     
     .modal-content {
@@ -506,6 +552,288 @@
   </style>
 
   <script>
+    // Device fingerprint collection for "Remember this device" feature
+    // Collects browser characteristics to create a unique device identifier
+    function collectDeviceFingerprint() {
+      try {
+        return {
+          userAgent: navigator.userAgent || '',
+          language: navigator.language || '',
+          platform: navigator.platform || '',
+          screenResolution: `${screen.width || 0}x${screen.height || 0}`,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+          colorDepth: screen.colorDepth || 0,
+          hardwareConcurrency: navigator.hardwareConcurrency || 0,
+          // Additional characteristics for better uniqueness
+          maxTouchPoints: navigator.maxTouchPoints || 0,
+          deviceMemory: navigator.deviceMemory || 0,
+        };
+      } catch (error) {
+        // Fallback to basic fingerprint if collection fails
+        return {
+          userAgent: navigator.userAgent || '',
+          language: navigator.language || '',
+          platform: navigator.platform || '',
+        };
+      }
+    }
+    
+    // Session timeout notification modal - MUST be defined early
+    let sessionTimeoutTimer = null;
+    let isSessionTimeoutModalShowing = false;
+    
+    function showSessionTimeoutModal() {
+      // Prevent duplicate modals
+      if (isSessionTimeoutModalShowing) {
+        return;
+      }
+      
+      // Allow showing on login page if session_expired parameter is present
+      // Check both URL params (before removal) and window flag (after removal)
+      const urlParams = new URLSearchParams(window.location.search);
+      const isSessionExpiredRedirect = urlParams.get('session_expired') === 'true' || window.sessionExpiredRedirect === true;
+      
+      console.log('[Session Timeout] isSessionExpiredRedirect:', isSessionExpiredRedirect);
+      
+      // Don't show if we're on login/landing page, unless it's a session expired redirect
+      const path = window.location.pathname;
+      if (!isSessionExpiredRedirect && (path === '/' || path.includes('login'))) {
+        console.log('[Session Timeout] Skipping - on login page without session_expired');
+        return;
+      }
+      
+      // Try to get modal elements
+      const timeoutModal = document.getElementById('sessionTimeoutModal');
+      const countdownEl = document.getElementById('sessionTimeoutCountdown');
+      
+      // If elements not ready, wait a bit and try again
+      if (!timeoutModal || !countdownEl) {
+        setTimeout(showSessionTimeoutModal, 50);
+        return;
+      }
+      
+      // Don't show if modal is already active
+      if (timeoutModal.classList.contains('active')) {
+        return;
+      }
+      
+      // Mark as showing
+      isSessionTimeoutModalShowing = true;
+      
+      // Clear any existing timer
+      if (sessionTimeoutTimer) {
+        clearInterval(sessionTimeoutTimer);
+      }
+      
+      // Show modal immediately - ensure it's visible
+      console.log('[Session Timeout] Modal function called, showing modal now');
+      timeoutModal.classList.add('active');
+      timeoutModal.style.display = 'flex'; // Force display
+      document.body.style.overflow = 'hidden';
+      
+      // Verify modal is visible
+      console.log('[Session Timeout] Modal active class:', timeoutModal.classList.contains('active'));
+      console.log('[Session Timeout] Modal display:', window.getComputedStyle(timeoutModal).display);
+      
+      // Force a repaint to ensure modal is visible
+      void timeoutModal.offsetHeight;
+      
+      // Countdown and redirect
+      let seconds = 3;
+      countdownEl.textContent = `Redirecting in ${seconds} seconds...`;
+      
+      sessionTimeoutTimer = setInterval(() => {
+        seconds--;
+        if (seconds > 0) {
+          countdownEl.textContent = `Redirecting in ${seconds} second${seconds !== 1 ? 's' : ''}...`;
+        } else {
+          clearInterval(sessionTimeoutTimer);
+          countdownEl.textContent = 'Redirecting now...';
+          setTimeout(() => {
+            isSessionTimeoutModalShowing = false;
+            window.sessionExpiredRedirect = false; // Clear flag
+            window.location.href = '/';
+          }, 300);
+        }
+      }, 1000);
+    }
+    
+    // Global error handler to catch and suppress 401-related errors
+    window.addEventListener('error', function(event) {
+      // Suppress errors related to session timeout
+      if (event.message && (
+        event.message.includes('Session expired') ||
+        event.message.includes('401') ||
+        event.message.includes('Unauthorized')
+      )) {
+        console.log('[Session Timeout] Suppressing error:', event.message);
+        event.preventDefault();
+        // Show modal if not already showing
+        if (!isSessionTimeoutModalShowing) {
+          showSessionTimeoutModal();
+        }
+        return false;
+      }
+    });
+    
+    // Catch unhandled promise rejections (often from failed fetch calls)
+    window.addEventListener('unhandledrejection', function(event) {
+      // Suppress rejections related to 401/session timeout
+      const reason = event.reason;
+      if (reason && (
+        (typeof reason === 'string' && (reason.includes('401') || reason.includes('Session expired'))) ||
+        (reason.status === 401) ||
+        (reason.message && (reason.message.includes('401') || reason.message.includes('Session expired')))
+      )) {
+        console.log('[Session Timeout] Suppressing unhandled rejection:', reason);
+        event.preventDefault();
+        // Show modal if not already showing
+        if (!isSessionTimeoutModalShowing) {
+          showSessionTimeoutModal();
+        }
+      }
+    });
+    
+    // Check if page loaded due to session timeout redirect
+    (function() {
+      // Check URL for session_expired parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('session_expired') === 'true') {
+        console.log('[Session Timeout] Detected session_expired parameter in URL');
+        // Set a flag so showSessionTimeoutModal knows this is a session expired redirect
+        window.sessionExpiredRedirect = true;
+        
+        // Remove the parameter from URL (clean URL)
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+        
+        // Reset the showing flag to allow modal to show
+        if (typeof isSessionTimeoutModalShowing !== 'undefined') {
+          isSessionTimeoutModalShowing = false;
+        }
+        
+        // Show modal after DOM is ready
+        function showModalWhenReady() {
+          const modal = document.getElementById('sessionTimeoutModal');
+          const countdownEl = document.getElementById('sessionTimeoutCountdown');
+          console.log('[Session Timeout] Modal element found:', !!modal);
+          console.log('[Session Timeout] Countdown element found:', !!countdownEl);
+          
+          if (modal && countdownEl) {
+            console.log('[Session Timeout] Calling showSessionTimeoutModal');
+            showSessionTimeoutModal();
+          } else {
+            console.log('[Session Timeout] Elements not ready, retrying...');
+            setTimeout(showModalWhenReady, 50);
+          }
+        }
+        
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', showModalWhenReady);
+        } else {
+          setTimeout(showModalWhenReady, 100);
+        }
+        return;
+      }
+      
+      // Check on DOM ready if the page content is a JSON error
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkForJsonError);
+      } else {
+        checkForJsonError();
+      }
+      
+      function checkForJsonError() {
+        // Check if the page body contains only JSON error (session expired)
+        const bodyText = document.body ? document.body.textContent.trim() : '';
+        if (bodyText.startsWith('{') && bodyText.includes('"error"') && bodyText.includes('Session expired')) {
+          console.log('[Session Timeout] Detected JSON error on page load');
+          // Clear the page content and show modal
+          document.body.innerHTML = '';
+          showSessionTimeoutModal();
+          return;
+        }
+      }
+      
+      // Also check when page becomes visible (user switches back to tab)
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+          // Page became visible - check session status
+          setTimeout(async () => {
+            try {
+              const response = await fetch('/auth/me', {
+                method: 'GET',
+                credentials: 'include'
+              });
+              if (response.status === 401) {
+                const path = window.location.pathname;
+                if (path !== '/' && !path.includes('login')) {
+                  showSessionTimeoutModal();
+                }
+              }
+            } catch (error) {
+              // Silently handle
+            }
+          }, 100);
+        }
+      });
+    })();
+    
+    // Handle 401 responses globally (session expired) - MUST be set up FIRST
+    // This intercepts ALL fetch calls before any other code runs
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        try {
+          const response = await originalFetch.apply(this, args);
+          
+          // Check for 401 responses (session expired) - do this BEFORE any JSON parsing
+          if (response.status === 401) {
+            // Get the URL from args (could be string or Request object)
+            const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || args[0]?.href || '');
+            const path = window.location.pathname;
+            
+            // Only show modal for authenticated endpoints, not login/signup
+            const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/signup');
+            const isLandingPage = path === '/' || path.includes('login');
+            
+            if (!isAuthEndpoint && !isLandingPage) {
+              // Session expired - show modal IMMEDIATELY
+              console.log('[Session Timeout] 401 detected, showing modal. URL:', url, 'Path:', path);
+              
+              // Show modal right away
+              showSessionTimeoutModal();
+              
+              // Wrap response to prevent JSON parsing errors from displaying
+              // Use Proxy to intercept .json() calls and return empty object
+              const wrappedResponse = new Proxy(response, {
+                get: function(target, prop) {
+                  if (prop === 'json') {
+                    // Return a function that returns empty object instead of parsing
+                    return async function() {
+                      console.log('[Session Timeout] Preventing JSON parse for 401 - returning empty object');
+                      return {};
+                    };
+                  }
+                  // Return all other properties/methods normally
+                  const value = target[prop];
+                  return typeof value === 'function' ? value.bind(target) : value;
+                }
+              });
+              
+              // Return the wrapped response - prevents JSON parsing errors
+              return wrappedResponse;
+            }
+          }
+          
+          return response;
+        } catch (error) {
+          // Re-throw the error
+          throw error;
+        }
+      };
+    })();
+    
     // Authentication Functions
     async function handleSignup(event) {
       event.preventDefault();
@@ -544,6 +872,15 @@
             password_confirm: passwordConfirm
           })
         });
+        
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
         
         const data = await response.json();
         
@@ -621,14 +958,34 @@
           
           submitButton.textContent = 'Verifying...';
           
+          // Get remember device checkbox value
+          const rememberDeviceCheckbox = document.getElementById('login-remember-device');
+          const rememberDevice = rememberDeviceCheckbox ? rememberDeviceCheckbox.checked : false;
+          
+          // Collect device fingerprint for "Remember this device" feature
+          const deviceFingerprint = collectDeviceFingerprint();
+          
           const response = await fetch('/auth/verify-2fa', {
             method: 'POST',
             credentials: 'include',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ token: code })
+            body: JSON.stringify({ 
+              token: code,
+              remember_device: rememberDevice,
+              device_fingerprint: deviceFingerprint
+            })
           });
+          
+          // Check for 401 before parsing JSON
+          if (response.status === 401) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+              return;
+            }
+          }
           
           const data = await response.json();
           
@@ -659,6 +1016,9 @@
           
           submitButton.textContent = 'Signing In...';
           
+          // Collect device fingerprint for "Remember this device" feature
+          const deviceFingerprint = collectDeviceFingerprint();
+          
           const response = await fetch('/auth/login', {
             method: 'POST',
             credentials: 'include',
@@ -667,9 +1027,19 @@
             },
             body: JSON.stringify({
               email: email,
-              password: password
+              password: password,
+              device_fingerprint: deviceFingerprint
             })
           });
+          
+          // Check for 401 before parsing JSON (shouldn't happen on login, but be safe)
+          if (response.status === 401) {
+            const path = window.location.pathname;
+            if (path !== '/' && !path.includes('login')) {
+              showSessionTimeoutModal();
+              return;
+            }
+          }
           
           const data = await response.json();
           
@@ -769,6 +1139,15 @@
           credentials: 'include'
         });
         
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
+        
         if (response.ok) {
           const data = await response.json();
           updateUIForAuthenticatedUser(data.user, data.organisation);
@@ -831,6 +1210,24 @@
           setTimeout(() => {
             resetLoginModalUI();
           }, 50);
+        } else if (modalId === 'signupModal') {
+          // Reset signup modal UI state when opening
+          resetSignupModalUI();
+          
+          // Show modal
+          modal.classList.add('active');
+          document.body.style.overflow = 'hidden';
+          
+          // Reset again after modal is visible (defensive - ensures state is correct)
+          // Use longer timeout to ensure browser autofill doesn't interfere
+          setTimeout(() => {
+            resetSignupModalUI();
+          }, 100);
+          
+          // Reset one more time after a longer delay to catch any autofill
+          setTimeout(() => {
+            resetSignupModalUI();
+          }, 300);
         } else {
           // For other modals, just show them
           modal.classList.add('active');
@@ -885,10 +1282,63 @@
         errorDiv.textContent = '';
       }
       
-      // Clear form values
+      // Clear form values - explicitly clear each input
       const form = document.getElementById('login-form');
       if (form) {
         form.reset();
+      }
+      if (emailInput) {
+        emailInput.value = '';
+      }
+      if (passwordInput) {
+        passwordInput.value = '';
+      }
+    }
+    
+    function resetSignupModalUI() {
+      // Get all form elements - matching the pattern from resetLoginModalUI
+      const orgNameInput = document.getElementById('signup-org-name');
+      const emailInput = document.getElementById('signup-email');
+      const passwordInput = document.getElementById('signup-password');
+      const passwordConfirmInput = document.getElementById('signup-password-confirm');
+      const errorDiv = document.getElementById('signup-error');
+      const warningsDiv = document.getElementById('signup-password-warnings');
+      const form = document.getElementById('signupForm');
+      const submitButton = form ? form.querySelector('button[type="submit"]') : null;
+      
+      // Clear form values - explicitly clear each input (matching login modal pattern)
+      if (form) {
+        form.reset();
+      }
+      if (orgNameInput) {
+        orgNameInput.value = '';
+      }
+      if (emailInput) {
+        emailInput.value = '';
+      }
+      if (passwordInput) {
+        passwordInput.value = '';
+      }
+      if (passwordConfirmInput) {
+        passwordConfirmInput.value = '';
+      }
+      
+      // Clear errors
+      if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+      }
+      
+      // Clear password warnings
+      if (warningsDiv) {
+        warningsDiv.style.display = 'none';
+        warningsDiv.innerHTML = '';
+      }
+      
+      // Reset submit button
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Account';
       }
     }
     
@@ -912,6 +1362,9 @@
           }).catch(() => {
             // Silently fail - backend will clear on next login attempt
           });
+        } else if (modalId === 'signupModal') {
+          // Reset signup modal - clear form, errors, and warnings
+          resetSignupModalUI();
         } else {
           // For other modals, just clear form errors
           const errorDiv = modal.querySelector('[id$="-error"]');
@@ -947,9 +1400,11 @@
     const _closeModal = closeModal;
     const _openModal = openModal;
     const _resetLoginModalUI = resetLoginModalUI;
+    const _resetSignupModalUI = resetSignupModalUI;
     
     // Also expose on window for event listeners that might need it
     window._resetLoginModalUI = _resetLoginModalUI;
+    window._resetSignupModalUI = _resetSignupModalUI;
     
     window.openModal = function(modalId) {
       return _openModal(modalId);
@@ -972,6 +1427,10 @@
               credentials: 'include',
               headers: { 'Content-Type': 'application/json' }
             }).catch(() => {});
+          } else if (modalId === 'signupModal') {
+            if (typeof _resetSignupModalUI === 'function') {
+              _resetSignupModalUI();
+            }
           }
         }
       }
@@ -1023,6 +1482,20 @@
                     'Content-Type': 'application/json',
                   }
                 }).catch(() => {});
+              } else if (modalId === 'signupModal') {
+                // Call resetSignupModalUI directly
+                let resetFn = null;
+                if (typeof resetSignupModalUI === 'function') {
+                  resetFn = resetSignupModalUI;
+                } else if (typeof window._resetSignupModalUI === 'function') {
+                  resetFn = window._resetSignupModalUI;
+                } else if (typeof _resetSignupModalUI === 'function') {
+                  resetFn = _resetSignupModalUI;
+                }
+                
+                if (resetFn) {
+                  resetFn();
+                }
               }
             }
           });
@@ -1065,10 +1538,89 @@
           handleLogin(e);
         });
       }
+      
+      // Add password policy checking to signup password field
+      if (window.PasswordPolicy) {
+        window.PasswordPolicy.attach('signup-password', 'signup-password-warnings', 1000);
+      }
     });
+    
+    // Frontend Activity Tracking (for authenticated users)
+    // Track user activity to keep session alive
+    let lastActivityTime = Date.now();
+    let lastPingTime = 0;
+    let pingInProgress = false; // Prevent concurrent pings
+    const MIN_PING_INTERVAL = 20000; // Ping at most every 20 seconds (throttle)
+    const ACTIVITY_CHECK_INTERVAL = 45000; // Check every 45 seconds (less frequent to avoid rate limits)
+    
+    // Throttled function to ping backend on activity
+    async function pingBackendOnActivity() {
+      const now = Date.now();
+      // Throttle: only ping if at least MIN_PING_INTERVAL has passed since last ping
+      if (now - lastPingTime < MIN_PING_INTERVAL) {
+        return;
+      }
+      
+      // Prevent concurrent pings
+      if (pingInProgress) {
+        return;
+      }
+      
+      pingInProgress = true;
+      lastPingTime = now;
+      
+      try {
+        // Make a lightweight request to keep session alive
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        // If session expired, show modal
+        if (response.status === 401) {
+          // Don't show modal if we're already on the login/landing page
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            // Show modal immediately
+            showSessionTimeoutModal();
+            // Don't continue processing - the modal will handle redirect
+            return;
+          }
+        }
+      } catch (error) {
+        // Silently handle errors - session might have expired
+        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+          }
+        }
+      }
+    }
+    
+    function trackActivity() {
+      lastActivityTime = Date.now();
+      // Ping backend immediately when activity is detected (throttled)
+      pingBackendOnActivity();
+    }
+    
+    // Track various user activities (including input for typing in forms)
+    ['mousedown', 'mousemove', 'keypress', 'keydown', 'scroll', 'touchstart', 'click', 'input'].forEach(event => {
+      document.addEventListener(event, trackActivity, { passive: true });
+    });
+    
+    // Periodically check activity and notify backend (backup in case activity tracking misses something)
+    setInterval(async () => {
+      const timeSinceActivity = Date.now() - lastActivityTime;
+      // Ping if there was recent activity (within last 2 minutes) or if we haven't pinged recently
+      if (timeSinceActivity < 120000 || (Date.now() - lastPingTime) > ACTIVITY_CHECK_INTERVAL) {
+        await pingBackendOnActivity();
+      }
+    }, ACTIVITY_CHECK_INTERVAL);
   </script>
 
   <script src="/workflow-engine-static/common.js"></script>
+  <script src="/ui/shared/password-policy.js"></script>
 </body>
 </html>
 

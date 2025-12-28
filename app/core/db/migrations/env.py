@@ -11,6 +11,7 @@ from app.core.db.models.models import Base
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User
 from app.core.db.models.audit_log import AuditLog
+from app.core.db.models.trusted_device import TrustedDevice
 from app.utils.config_loader import config
 
 # this is the Alembic Config object, which provides
