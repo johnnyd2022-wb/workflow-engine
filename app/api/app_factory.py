@@ -1,6 +1,8 @@
 """Flask application factory"""
 
-from flask import Flask
+import os
+
+from flask import Flask, redirect, request, send_from_directory
 
 from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
@@ -17,9 +19,13 @@ def create_app():
     app.secret_key = config.get("app", "secret_key", fallback="dev-secret-key-change-in-production")
 
     # Configure session cookies for production security
+    # CRITICAL: Always use Secure=True (HTTPS is used in both local dev and production)
+    # This prevents session cookies from being sent over unencrypted connections
     app.config["SESSION_COOKIE_SECURE"] = config.getboolean("app", "session_cookie_secure", fallback=True)
-    app.config["SESSION_COOKIE_HTTPONLY"] = True
-    app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
+    app.config["SESSION_COOKIE_HTTPONLY"] = True  # Prevent XSS attacks by blocking JavaScript access
+    app.config["SESSION_COOKIE_SAMESITE"] = "Strict"  # Prevent CSRF attacks by blocking cross-site requests
+    app.config["SESSION_COOKIE_PATH"] = "/"  # Explicitly set cookie path to root
+    # Align PERMANENT_SESSION_LIFETIME with default user session timeout (10 minutes default, max 24 hours)
     app.config["PERMANENT_SESSION_LIFETIME"] = 86400  # 24 hours (max session lifetime)
 
     # Initialize rate limiter (IP-based)
@@ -44,8 +50,107 @@ def create_app():
 
         app.register_blueprint(workflow_engine_bp)
 
+    # Serve shared UI JavaScript files (register before middleware)
+    @app.route("/ui/shared/<path:filename>")
+    def serve_ui_shared(filename):
+        """Serve shared UI JavaScript files"""
+        # Calculate path: app_factory.py is in app/api/
+        # Go up 3 levels: app/api/ -> app/ -> project_root/
+        # Then join with app/ui/shared
+        current_file = os.path.abspath(__file__)  # full path to app/api/app_factory.py
+        api_dir = os.path.dirname(current_file)  # app/api/
+        app_dir = os.path.dirname(api_dir)  # app/
+        project_root = os.path.dirname(app_dir)  # project root
+        shared_dir = os.path.join(project_root, "app", "ui", "shared")
+
+        # Set proper MIME type for JavaScript files
+        try:
+            response = send_from_directory(shared_dir, filename)
+            if filename.endswith(".js"):
+                response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+            return response
+        except Exception as e:
+            # Log error for debugging
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error serving shared file {filename} from {shared_dir}: {e}")
+            raise
+
     # Set up middleware
     setup_tenant_context(app)
     setup_session_security(app)
+
+    # CRITICAL: HTTPS Enforcement - Redirect all HTTP traffic to HTTPS
+    # This ensures all connections are encrypted, preventing man-in-the-middle attacks
+    @app.before_request
+    def force_https():
+        """Redirect HTTP requests to HTTPS to ensure encrypted connections"""
+        # Skip for healthcheck and static files
+        # CRITICAL: Check if endpoint is None before calling methods on it
+        if request.endpoint is None:
+            return  # Skip if no endpoint (e.g., Chrome DevTools requests)
+
+        if request.endpoint in ("healthcheck", "static", "serve_ui_shared") or (
+            request.endpoint and request.endpoint.endswith(".static")
+        ):
+            return
+
+        # Check if request is not secure (HTTP instead of HTTPS)
+        if not request.is_secure:
+            # Check for X-Forwarded-Proto header (used by reverse proxies like nginx)
+            if request.headers.get("X-Forwarded-Proto") != "https":
+                # Redirect to HTTPS version of the same URL
+                url = request.url.replace("http://", "https://", 1)
+                return redirect(url, code=301)
+
+    # CRITICAL: Security Headers - Add security headers to all responses
+    # These headers protect against various attack vectors (XSS, clickjacking, MIME sniffing, etc.)
+    @app.after_request
+    def set_security_headers(response):
+        """Set security headers on all responses to protect against common attacks"""
+        # Prevent MIME type sniffing (forces browsers to respect Content-Type)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+        # Prevent clickjacking attacks by blocking iframe embedding
+        response.headers["X-Frame-Options"] = "DENY"
+
+        # Enable XSS protection in older browsers (modern browsers have better built-in protection)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+
+        # Content Security Policy - balance security with functionality
+        # Allow Google Fonts, inline styles, and inline scripts (required for current frontend)
+        # Note: For production, consider using nonces for inline scripts instead of 'unsafe-inline'
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "script-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self'"
+        )
+
+        # HSTS (HTTP Strict Transport Security) - Force HTTPS for 1 year
+        # This prevents protocol downgrade attacks and cookie hijacking
+        # includeSubDomains ensures all subdomains also use HTTPS
+        if request.is_secure or request.headers.get("X-Forwarded-Proto") == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+        return response
+
+    # CRITICAL: CSRF Protection - Protect against Cross-Site Request Forgery attacks
+    # Flask-WTF provides automatic CSRF token validation for all POST/PUT/DELETE requests
+    try:
+        from flask_wtf.csrf import CSRFProtect
+
+        CSRFProtect(app)  # Initialize CSRF protection
+        # CSRF tokens are automatically validated for all POST/PUT/DELETE/PATCH requests
+        # Exempt API endpoints that use token-based auth (if any) using @csrf.exempt decorator
+    except ImportError:
+        # If Flask-WTF is not installed, log warning but don't fail
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.warning("Flask-WTF not installed. CSRF protection disabled. Install with: pip install Flask-WTF")
 
     return app

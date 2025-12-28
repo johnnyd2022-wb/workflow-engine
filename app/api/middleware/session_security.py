@@ -83,7 +83,10 @@ def setup_session_security(app):
                 if time_since_activity > timedelta(minutes=timeout_minutes):
                     # Session expired due to inactivity
                     logger.info(f"Session expired due to inactivity for user {user_id}")
+                    # CRITICAL: Clear ALL session data on expiry to prevent session fixation
+                    # This ensures no authentication state persists after timeout
                     session.clear()
+                    session.modified = True  # Explicitly mark session as modified to ensure cookie is cleared
 
                     # Check if this is an HTML page request (not an API call)
                     # If Accept header includes text/html, or if it's a page route, redirect to login
@@ -114,12 +117,16 @@ def setup_session_security(app):
                 session["last_activity_at"] = datetime.utcnow().isoformat()
 
         # Update last activity timestamp
+        # CRITICAL: Mark session as modified to ensure changes are persisted
         session["last_activity_at"] = datetime.utcnow().isoformat()
+        session.modified = True
 
     @app.after_request
     def update_session_activity(response):
         """Update session activity after each request"""
         # Only update for authenticated requests
         if session.get("user_id"):
+            # CRITICAL: Mark session as modified to ensure activity timestamp is persisted
             session["last_activity_at"] = datetime.utcnow().isoformat()
+            session.modified = True
         return response

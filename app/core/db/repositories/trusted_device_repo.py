@@ -25,14 +25,16 @@ class TrustedDeviceRepository:
         """Hash device token for secure storage (following Google/AWS/Azure patterns)"""
         return hashlib.sha256(token.encode()).hexdigest()
 
-    def generate_device_fingerprint(self, fingerprint_data: dict) -> str:
-        """Generate device fingerprint from browser characteristics
+    def generate_device_fingerprint(self, fingerprint_data: dict, ip_address: str = None) -> str:
+        """Generate device fingerprint from browser characteristics + IP address
 
-        Follows Google/AWS/Azure patterns by using browser + OS + hardware characteristics
-        instead of relying on IP addresses which are often shared.
+        CRITICAL: Combines User-Agent + IP + hashed device ID for robust fingerprinting
+        Following Google/AWS/Azure patterns by using browser + OS + hardware characteristics
+        plus IP address for additional security layer.
 
         Args:
             fingerprint_data: Dictionary containing browser characteristics
+            ip_address: Optional IP address to include in fingerprint
 
         Returns:
             SHA-256 hash of the combined fingerprint data
@@ -41,11 +43,13 @@ class TrustedDeviceRepository:
             # Fallback: use empty string if no data provided
             fingerprint_data = {}
 
-        # Combine all fingerprint properties into a deterministic string
+        # CRITICAL: Combine all fingerprint properties into a deterministic string
         # Order matters for consistency
+        # Include IP address for additional security (even though IPs can change)
         fingerprint_string = ":".join(
             [
-                str(fingerprint_data.get("userAgent", "")),
+                str(fingerprint_data.get("userAgent", "")),  # User-Agent (browser + OS)
+                str(ip_address or ""),  # IP address (additional security layer)
                 str(fingerprint_data.get("language", "")),
                 str(fingerprint_data.get("platform", "")),
                 str(fingerprint_data.get("screenResolution", "")),

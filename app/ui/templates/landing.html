@@ -329,6 +329,7 @@
             id="signup-org-name" 
             name="org_name" 
             required 
+            autocomplete="organization"
             class="input"
             placeholder="Enter your organization name"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -342,6 +343,7 @@
             id="signup-email" 
             name="email" 
             required 
+            autocomplete="email"
             class="input"
             placeholder="Enter your email"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -355,10 +357,12 @@
             id="signup-password" 
             name="password" 
             required 
+            autocomplete="new-password"
             class="input"
             placeholder="Create a password"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
           />
+          <div id="signup-password-warnings" style="display: none; margin-top: 0.5rem; padding: 0.75rem; border-radius: 0.5rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); color: #fbbf24; font-size: 0.875rem;"></div>
         </div>
         
         <div>
@@ -368,6 +372,7 @@
             id="signup-password-confirm" 
             name="password_confirm" 
             required 
+            autocomplete="new-password"
             class="input"
             placeholder="Confirm your password"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
@@ -1205,6 +1210,24 @@
           setTimeout(() => {
             resetLoginModalUI();
           }, 50);
+        } else if (modalId === 'signupModal') {
+          // Reset signup modal UI state when opening
+          resetSignupModalUI();
+          
+          // Show modal
+          modal.classList.add('active');
+          document.body.style.overflow = 'hidden';
+          
+          // Reset again after modal is visible (defensive - ensures state is correct)
+          // Use longer timeout to ensure browser autofill doesn't interfere
+          setTimeout(() => {
+            resetSignupModalUI();
+          }, 100);
+          
+          // Reset one more time after a longer delay to catch any autofill
+          setTimeout(() => {
+            resetSignupModalUI();
+          }, 300);
         } else {
           // For other modals, just show them
           modal.classList.add('active');
@@ -1259,10 +1282,63 @@
         errorDiv.textContent = '';
       }
       
-      // Clear form values
+      // Clear form values - explicitly clear each input
       const form = document.getElementById('login-form');
       if (form) {
         form.reset();
+      }
+      if (emailInput) {
+        emailInput.value = '';
+      }
+      if (passwordInput) {
+        passwordInput.value = '';
+      }
+    }
+    
+    function resetSignupModalUI() {
+      // Get all form elements - matching the pattern from resetLoginModalUI
+      const orgNameInput = document.getElementById('signup-org-name');
+      const emailInput = document.getElementById('signup-email');
+      const passwordInput = document.getElementById('signup-password');
+      const passwordConfirmInput = document.getElementById('signup-password-confirm');
+      const errorDiv = document.getElementById('signup-error');
+      const warningsDiv = document.getElementById('signup-password-warnings');
+      const form = document.getElementById('signupForm');
+      const submitButton = form ? form.querySelector('button[type="submit"]') : null;
+      
+      // Clear form values - explicitly clear each input (matching login modal pattern)
+      if (form) {
+        form.reset();
+      }
+      if (orgNameInput) {
+        orgNameInput.value = '';
+      }
+      if (emailInput) {
+        emailInput.value = '';
+      }
+      if (passwordInput) {
+        passwordInput.value = '';
+      }
+      if (passwordConfirmInput) {
+        passwordConfirmInput.value = '';
+      }
+      
+      // Clear errors
+      if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+      }
+      
+      // Clear password warnings
+      if (warningsDiv) {
+        warningsDiv.style.display = 'none';
+        warningsDiv.innerHTML = '';
+      }
+      
+      // Reset submit button
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Account';
       }
     }
     
@@ -1286,6 +1362,9 @@
           }).catch(() => {
             // Silently fail - backend will clear on next login attempt
           });
+        } else if (modalId === 'signupModal') {
+          // Reset signup modal - clear form, errors, and warnings
+          resetSignupModalUI();
         } else {
           // For other modals, just clear form errors
           const errorDiv = modal.querySelector('[id$="-error"]');
@@ -1321,9 +1400,11 @@
     const _closeModal = closeModal;
     const _openModal = openModal;
     const _resetLoginModalUI = resetLoginModalUI;
+    const _resetSignupModalUI = resetSignupModalUI;
     
     // Also expose on window for event listeners that might need it
     window._resetLoginModalUI = _resetLoginModalUI;
+    window._resetSignupModalUI = _resetSignupModalUI;
     
     window.openModal = function(modalId) {
       return _openModal(modalId);
@@ -1346,6 +1427,10 @@
               credentials: 'include',
               headers: { 'Content-Type': 'application/json' }
             }).catch(() => {});
+          } else if (modalId === 'signupModal') {
+            if (typeof _resetSignupModalUI === 'function') {
+              _resetSignupModalUI();
+            }
           }
         }
       }
@@ -1397,6 +1482,20 @@
                     'Content-Type': 'application/json',
                   }
                 }).catch(() => {});
+              } else if (modalId === 'signupModal') {
+                // Call resetSignupModalUI directly
+                let resetFn = null;
+                if (typeof resetSignupModalUI === 'function') {
+                  resetFn = resetSignupModalUI;
+                } else if (typeof window._resetSignupModalUI === 'function') {
+                  resetFn = window._resetSignupModalUI;
+                } else if (typeof _resetSignupModalUI === 'function') {
+                  resetFn = _resetSignupModalUI;
+                }
+                
+                if (resetFn) {
+                  resetFn();
+                }
               }
             }
           });
@@ -1438,6 +1537,11 @@
           e.stopPropagation();
           handleLogin(e);
         });
+      }
+      
+      // Add password policy checking to signup password field
+      if (window.PasswordPolicy) {
+        window.PasswordPolicy.attach('signup-password', 'signup-password-warnings', 1000);
       }
     });
     
@@ -1516,6 +1620,7 @@
   </script>
 
   <script src="/workflow-engine-static/common.js"></script>
+  <script src="/ui/shared/password-policy.js"></script>
 </body>
 </html>
 

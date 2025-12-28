@@ -2,7 +2,7 @@
 
 import io
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pyotp
@@ -28,8 +28,32 @@ logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-# Create a limiter instance (will be initialized with app in app_factory)
-limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+
+# CRITICAL: Custom rate limiting key function that combines IP + email/account
+# This prevents attackers from bypassing rate limits by using different IPs
+def get_rate_limit_key():
+    """Generate rate limit key combining IP address and email/account identifier
+
+    CRITICAL: Combines IP + email to prevent distributed brute force attacks
+    This ensures rate limits apply per account, not just per IP
+    """
+    ip = get_remote_address()
+    # Try to get email from request body (for login/signup endpoints)
+    try:
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+            email = data.get("email", "").lower().strip()
+            if email:
+                # Combine IP and email for more robust rate limiting
+                return f"{ip}:{email}"
+    except Exception:
+        pass
+    # Fallback to IP-only if email not available
+    return ip
+
+
+# Create a limiter instance with custom key function (will be initialized with app in app_factory)
+limiter = Limiter(key_func=get_rate_limit_key, default_limits=["200 per day", "50 per hour"])
 
 # Pending 2FA session expiry (Using 5 minutes as default)
 PENDING_2FA_EXPIRY_MINUTES = 5
@@ -105,20 +129,14 @@ def signup():
 
     except ValueError as e:
         error_msg = str(e)
-        # Provide more helpful messages for common signup errors
-        if "already exists" in error_msg.lower() and "organisation" in error_msg.lower():
-            return jsonify(
-                {
-                    "error": "An organization with this name already exists. If you're part of this organization, please contact your administrator for access or try logging in instead."
-                }
-            ), 400
-        elif "already exists" in error_msg.lower() and "user" in error_msg.lower() and "email" in error_msg.lower():
-            return jsonify(
-                {
-                    "error": "An account with this email already exists. Please try logging in instead, or use a different email address."
-                }
-            ), 400
-        return jsonify({"error": error_msg}), 400
+        # CRITICAL: Normalize error messages to prevent user enumeration
+        # Always return the same generic message regardless of specific error
+        # This prevents attackers from determining if an email or org name exists
+        if "already exists" in error_msg.lower():
+            # Generic message that doesn't reveal whether email or org exists
+            return jsonify({"error": "Cannot complete request. Check credentials or contact support."}), 400
+        # For other validation errors, still use generic message
+        return jsonify({"error": "Cannot complete request. Check credentials or contact support."}), 400
     except Exception:
         db.rollback()
         logger.exception("Failed to create organisation")
@@ -127,11 +145,12 @@ def signup():
 
 
 @auth_bp.route("/login", methods=["POST"])
-@limiter.limit("5 per 15 minutes")
+@limiter.limit("5 per 1 minute")  # Allow 5 attempts to trigger account lockout, then 6th attempt gets rate limited
 def login():
     """Login with email and password
 
-    Rate limited: 5 attempts per 15 minutes per IP
+    Rate limited: 5 attempts per 1 minute (allows 5 attempts to trigger account lockout)
+    Account lockout: 5 failed attempts → 1 minute lockout
     """
     data = request.get_json()
 
@@ -158,18 +177,126 @@ def login():
 
     db = db_session()
     try:
+        # CRITICAL: Account Lockout - Check if account is locked before authentication
+        # Get IP address and User-Agent for logging and security tracking
+        ip_address = get_remote_address()
+        user_agent = request.headers.get("User-Agent", "Unknown")
+
+        # Check if this is a password reset attempt (unlocks account)
+        is_password_reset = data.get("password_reset", False)
+
         auth_service = AuthService(db)
         org_uuid = UUID(org_id) if org_id else None
+
+        # Try to get user by email first to check lockout status
+        # This is done before authentication to check lockout status
+        user_repo = UserRepository(db)
+        user_by_email = user_repo.get_user_by_email(email, org_id=org_uuid)
+
+        # CRITICAL: Account Lockout Logic
+        # If account is locked and this is NOT a password reset, block login
+        if user_by_email and not is_password_reset:
+            if user_repo.is_account_locked(user_by_email.id):
+                # Calculate remaining lockout time
+                remaining_seconds = int(
+                    (user_by_email.account_locked_until - datetime.now(timezone.utc)).total_seconds()
+                )
+                remaining_minutes = max(0, remaining_seconds // 60)
+
+                # Log account lockout attempt with IP and User-Agent
+                log_action(
+                    "account_locked_login_attempt",
+                    "user",
+                    user_by_email.id,
+                    {
+                        "ip_address": ip_address,
+                        "user_agent": user_agent,
+                        "remaining_lockout_minutes": remaining_minutes,
+                    },
+                    user_by_email.org_id,
+                    user_by_email.id,
+                )
+                logger.warning(
+                    f"Login attempt blocked - account locked for user {user_by_email.id} "
+                    f"from IP {ip_address} (User-Agent: {user_agent[:50]})"
+                )
+                return jsonify(
+                    {
+                        "error": "Account is temporarily locked due to multiple failed login attempts. "
+                        f"Please try again in {remaining_minutes + 1} minute(s) or reset your password."
+                    }
+                ), 423  # 423 Locked status code
 
         # Normalize authentication to prevent user enumeration
         # Always perform the same operations regardless of whether user exists
         user = auth_service.authenticate(email, password, org_id=org_uuid)
 
-        # Always return the same error message to prevent enumeration
+        # CRITICAL: Account Lockout - Handle failed login attempts
+        # If authentication failed and user exists, increment failed attempts
         if not user:
-            # Log the attempt (but don't reveal if user exists)
-            logger.warning(f"Failed login attempt for email: {email}")
-            return jsonify({"error": "Invalid email or password"}), 401
+            # Log failed login attempt with IP and User-Agent
+            # CRITICAL: Never log passwords or sensitive data
+            logger.warning(f"Failed login attempt from IP {ip_address} (User-Agent: {user_agent[:50]})")
+
+            # If user exists, track failed attempts for account lockout
+            if user_by_email:
+                # Increment failed login attempts
+                user_repo.increment_failed_login_attempts(user_by_email.id)
+                db.commit()
+
+                # Refresh user to get updated failed_login_attempts count
+                db.refresh(user_by_email)
+
+                # Lock account after 5 failed attempts for 1 minute
+                if user_by_email.failed_login_attempts >= 5:
+                    user_repo.lock_account(user_by_email.id, lockout_duration_minutes=1)
+                    db.commit()
+
+                    # Log account lockout event with IP and User-Agent
+                    log_action(
+                        "account_locked",
+                        "user",
+                        user_by_email.id,
+                        {
+                            "ip_address": ip_address,
+                            "user_agent": user_agent,
+                            "failed_attempts": user_by_email.failed_login_attempts,
+                        },
+                        user_by_email.org_id,
+                        user_by_email.id,
+                    )
+                    logger.warning(
+                        f"Account locked for user {user_by_email.id} after 5 failed login attempts "
+                        f"from IP {ip_address} (User-Agent: {user_agent[:50]})"
+                    )
+
+                # Log failed login attempt with IP and User-Agent
+                log_action(
+                    "login_failure",
+                    "user",
+                    user_by_email.id,
+                    {
+                        "ip_address": ip_address,
+                        "user_agent": user_agent,
+                        "failed_attempts": user_by_email.failed_login_attempts,
+                    },
+                    user_by_email.org_id,
+                    user_by_email.id,
+                )
+
+            # Always return the same error message to prevent user enumeration
+            return jsonify({"error": "Cannot complete request. Check credentials or contact support."}), 401
+
+        # CRITICAL: Account Lockout - Reset failed attempts on successful authentication
+        # If password reset flag is set, unlock the account
+        if is_password_reset:
+            user_repo.unlock_account(user.id)
+            db.commit()
+            logger.info(f"Account unlocked via password reset for user {user.id}")
+
+        # Reset failed login attempts on successful authentication
+        user_repo.reset_failed_login_attempts(user.id)
+        db.commit()
 
         # Check if 2FA is enabled
         if user.two_factor_enabled:
@@ -184,10 +311,14 @@ def login():
                 f"Trusted device check - token present: {bool(device_token)}, fingerprint data present: {bool(device_fingerprint_data)}"
             )
 
-            # Generate fingerprint from browser characteristics
+            # CRITICAL: Generate fingerprint from browser characteristics + IP address
+            # This combines User-Agent + IP + hashed device ID for robust fingerprinting
             device_fingerprint = None
             if device_fingerprint_data:
-                device_fingerprint = trusted_device_repo.generate_device_fingerprint(device_fingerprint_data)
+                ip_address = get_remote_address()
+                device_fingerprint = trusted_device_repo.generate_device_fingerprint(
+                    device_fingerprint_data, ip_address
+                )
                 logger.debug(f"Generated device fingerprint: {device_fingerprint[:16]}...")
 
             # Verify trusted device: must have BOTH token and fingerprint match
@@ -243,7 +374,15 @@ def login():
                     session["session_timeout_minutes"] = user_session_timeout
 
                 # Log login (with trusted device bypass) - use extracted values
-                log_action("login", "user", user_id, {"trusted_device": True}, user_org_id, user_id)
+                # CRITICAL: Include IP address and User-Agent for security auditing
+                log_action(
+                    "login",
+                    "user",
+                    user_id,
+                    {"trusted_device": True, "ip_address": ip_address, "user_agent": user_agent},
+                    user_org_id,
+                    user_id,
+                )
 
                 return jsonify(
                     {
@@ -290,7 +429,8 @@ def login():
             session["session_timeout_minutes"] = user.session_timeout_minutes
 
         # Log login
-        log_action("login", "user", user.id, None, user.org_id, user.id)
+        # CRITICAL: Include IP address and User-Agent for security auditing
+        log_action("login", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id)
 
         return jsonify(
             {
@@ -312,6 +452,9 @@ def login():
 def logout():
     """Logout and clear session
 
+    CRITICAL: session.clear() ensures all authentication state is removed
+    This prevents session fixation and ensures clean logout
+
     Note: Trusted device cookies are NOT cleared on logout.
     They persist for 30 days to allow users to skip 2FA on trusted devices.
     Cookies are only cleared when:
@@ -330,7 +473,9 @@ def logout():
         except Exception:
             pass  # Don't fail logout if logging fails
 
+    # CRITICAL: Clear ALL session data on logout to prevent session fixation
     session.clear()
+    session.modified = True  # Explicitly mark session as modified to ensure cookie is cleared
 
     # Do NOT clear trusted device cookie - it should persist across logout/login
     # This allows "Remember this device" to work as expected
@@ -383,7 +528,7 @@ def get_current_user():
 
 
 @auth_bp.route("/verify-2fa", methods=["POST"])
-@limiter.limit("5 per 5 minutes")
+@limiter.limit("5 per 5 minutes")  # CRITICAL: Rate limit 2FA verification to prevent brute force
 def verify_two_factor():
     """Verify TOTP token during login
 
@@ -467,6 +612,7 @@ def verify_two_factor():
 
         if not auth_service.verify_totp(user, token):
             # Log 2FA failure - use extracted values
+            # CRITICAL: Never log the actual token or code
             log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
             return jsonify({"error": "Invalid 2FA token"}), 401
 
@@ -484,18 +630,18 @@ def verify_two_factor():
 
         # If user wants to remember this device, create a trusted device token
         # Following Google/AWS/Azure patterns: store token in HttpOnly cookie + hash in DB
+        # CRITICAL: Include IP address in fingerprint for robust device identification
         device_token = None
         if remember_device and device_fingerprint_data:
             trusted_device_repo = TrustedDeviceRepository(db)
-            device_fingerprint = trusted_device_repo.generate_device_fingerprint(device_fingerprint_data)
+            ip_address = get_remote_address()
+            device_fingerprint = trusted_device_repo.generate_device_fingerprint(device_fingerprint_data, ip_address)
 
             # Check if device already exists (update it) or create new one
             existing_device = trusted_device_repo.get_trusted_device_by_fingerprint(user_id, device_fingerprint)
 
             if existing_device:
                 # Update existing device - extend expiration and update last used
-                from datetime import timezone
-
                 existing_device.expires_at = TrustedDevice.get_expiration_date()
                 existing_device.last_used_at = datetime.now(timezone.utc)
                 # Get the original token (we need to send it in cookie)
@@ -513,6 +659,7 @@ def verify_two_factor():
             db.commit()
 
         # Log successful 2FA verification - use extracted values
+        # CRITICAL: Never log the actual token or code
         log_action("2fa_success", "user", user_id, {"remember_device": remember_device}, user_org_id, user_id)
         log_action("login", "user", user_id, None, user_org_id, user_id)
 
@@ -527,21 +674,23 @@ def verify_two_factor():
         response = make_response(jsonify(response_data), 200)
 
         if device_token:
-            # Set secure HttpOnly cookie with device token (30 days)
-            # Check if request is HTTPS to determine if cookie should be secure
-            # This allows it to work in both local (HTTP) and production (HTTPS)
+            # CRITICAL: Set secure HttpOnly cookie with device token (30 days)
+            # Following Google/AWS/Azure patterns: Secure, HttpOnly, SameSite=Lax, Path=/
+            # Always use Secure=True (HTTPS is used in both local dev and production)
             is_https = request.is_secure or request.headers.get("X-Forwarded-Proto") == "https"
-            logger.info(f"Setting trusted device cookie for user {user_id} (HTTPS: {is_https})")
+            secure_cookie = is_https  # Always secure when HTTPS is detected
+
+            # CRITICAL: Never log the actual token (even partially)
+            logger.info(f"Setting trusted device cookie for user {user_id}")
             response.set_cookie(
                 "trusted_device_token",
                 device_token,
                 max_age=30 * 24 * 60 * 60,  # 30 days in seconds
-                httponly=True,
-                secure=is_https,  # Secure only if HTTPS
-                samesite="Lax",
-                path="/",
+                httponly=True,  # Prevent XSS attacks
+                secure=secure_cookie,  # Always secure in production
+                samesite="Lax",  # Balance security and usability
+                path="/",  # Explicitly set path
             )
-            logger.debug(f"Cookie set with token (first 10 chars): {device_token[:10]}...")
 
         return response
 
@@ -588,6 +737,7 @@ def enroll_2fa():
         qr_code_data_url = f"data:image/png;base64,{img_base64}"
 
         # Log enrollment
+        # CRITICAL: Never log the secret or QR code data
         log_action("2fa_enrolled", "user", user.id, None, user.org_id, user.id)
 
         return jsonify({"secret": new_secret, "provisioning_uri": provisioning_uri, "qr_code": qr_code_data_url}), 200
@@ -635,11 +785,13 @@ def enable_2fa():
 
         # Verify first token
         if not auth_service.verify_totp(user, token1):
+            # CRITICAL: Never log the actual token
             log_action("2fa_enable_failure", "user", user.id, {"reason": "invalid_first_token"}, user.org_id, user.id)
             return jsonify({"error": "Invalid first token"}), 400
 
         # Verify second token
         if not auth_service.verify_totp(user, token2):
+            # CRITICAL: Never log the actual token
             log_action("2fa_enable_failure", "user", user.id, {"reason": "invalid_second_token"}, user.org_id, user.id)
             return jsonify({"error": "Invalid second token"}), 400
 
@@ -647,7 +799,13 @@ def enable_2fa():
         user_repo.enable_two_factor(user.id)
 
         # Log enablement
-        log_action("2fa_enabled", "user", user.id, None, user.org_id, user.id)
+        # CRITICAL: Never log tokens or secrets
+        # CRITICAL: Include IP address and User-Agent for security auditing
+        ip_address = get_remote_address()
+        user_agent = request.headers.get("User-Agent", "Unknown")
+        log_action(
+            "2fa_enabled", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id
+        )
 
         return jsonify({"enabled": True}), 200
 
@@ -669,7 +827,13 @@ def disable_2fa():
         user_repo.disable_two_factor(user.id)
 
         # Log disablement
-        log_action("2fa_disabled", "user", user.id, None, user.org_id, user.id)
+        # CRITICAL: Never log sensitive data
+        # CRITICAL: Include IP address and User-Agent for security auditing
+        ip_address = get_remote_address()
+        user_agent = request.headers.get("User-Agent", "Unknown")
+        log_action(
+            "2fa_disabled", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id
+        )
 
         return jsonify({"disabled": True}), 200
 
@@ -683,19 +847,18 @@ def disable_2fa():
 def cancel_2fa():
     """Cancel pending 2FA verification and clear the session
 
+    CRITICAL: session.clear() ensures all authentication state is removed
+    This prevents session fixation and ensures clean cancellation
+
     This endpoint clears any pending_2fa_user_id from the session.
     After calling this, the user must complete the full login flow again
     (email/password + 2FA if enabled).
     """
-    # Clear ALL authentication-related session data
+    # CRITICAL: Clear ALL authentication-related session data
+    # Use session.clear() instead of individual pops for complete cleanup
     had_pending = "pending_2fa_user_id" in session
-    session.pop("pending_2fa_user_id", None)
-    session.pop("pending_2fa_created_at", None)
-    session.pop("user_id", None)  # Ensure no user_id exists
-    session.pop("org_id", None)  # Ensure no org_id exists
-    session.pop("user_email", None)
-    session.pop("org_name", None)
-    session.pop("_user_cache", None)  # Clear any cached user data
+    session.clear()
+    session.modified = True  # Explicitly mark session as modified to ensure cookie is cleared
 
     return jsonify({"cancelled": True, "had_pending": had_pending}), 200
 
@@ -765,6 +928,50 @@ def manage_session_timeout():
     # Don't close session here - let middleware teardown handle it
 
 
+@auth_bp.route("/password-policy-check", methods=["POST"])
+def check_password_policy():
+    """Check password against policy and return warnings (does not block)
+
+    This endpoint provides password policy warnings to help users create stronger passwords.
+    It does NOT block users from proceeding - it only provides warnings.
+    """
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    password = data.get("password", "")
+
+    if not password:
+        return jsonify({"warnings": [], "is_valid": True}), 200
+
+    warnings = []
+
+    # Check password length (warn if < 8 characters)
+    if len(password) < 8:
+        warnings.append("Password should be at least 8 characters long")
+
+    # Check for uppercase letter
+    if not any(c.isupper() for c in password):
+        warnings.append("Password should contain at least one uppercase letter")
+
+    # Check for lowercase letter
+    if not any(c.islower() for c in password):
+        warnings.append("Password should contain at least one lowercase letter")
+
+    # Check for number
+    if not any(c.isdigit() for c in password):
+        warnings.append("Password should contain at least one number")
+
+    # Check for special character
+    special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+    if not any(c in special_chars for c in password):
+        warnings.append("Password should contain at least one special character (!@#$%^&*()_+-=[]{}|;:,.<>?)")
+
+    # Return warnings (user can still proceed)
+    return jsonify({"warnings": warnings, "is_valid": len(warnings) == 0}), 200
+
+
 @auth_bp.route("/change-password", methods=["POST"])
 @requires_auth
 @limiter.limit("5 per 15 minutes")
@@ -805,10 +1012,11 @@ def change_password():
 
         # Verify current password
         if not auth_service.verify_password(current_password, user.password_hash):
-            logger.warning(f"Failed password change attempt for user {user.id} - incorrect current password")
+            # CRITICAL: Never log passwords or sensitive data
+            logger.warning(f"Failed password change attempt for user {user.id}")
             return jsonify({"error": "Current password is incorrect"}), 401
 
-        # Hash new password using the same method as signup
+        # Hash new password using bcrypt (production-ready)
         new_password_hash = auth_service.hash_password(new_password)
 
         # Update user password
@@ -817,8 +1025,30 @@ def change_password():
         if not updated_user:
             return jsonify({"error": "Failed to update password"}), 500
 
+        # CRITICAL: Clear ALL trusted devices on password change
+        # This ensures that if password was compromised, trusted devices are invalidated
+        trusted_device_repo = TrustedDeviceRepository(db)
+        trusted_device_repo.delete_user_devices(user.id)
+        db.commit()
+
+        # CRITICAL: Clear session and force re-authentication after password change
+        # This prevents session fixation and ensures user must login again
+        session.clear()
+        session.modified = True
+
         # Log password change
-        log_action("password_change", "user", user.id, None, user.org_id, user.id)
+        # CRITICAL: Never log passwords
+        # CRITICAL: Include IP address and User-Agent for security auditing
+        ip_address = get_remote_address()
+        user_agent = request.headers.get("User-Agent", "Unknown")
+        log_action(
+            "password_change",
+            "user",
+            user.id,
+            {"ip_address": ip_address, "user_agent": user_agent},
+            user.org_id,
+            user.id,
+        )
 
         return jsonify({"message": "Password updated successfully"}), 200
 

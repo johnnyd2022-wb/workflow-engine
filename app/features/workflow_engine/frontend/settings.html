@@ -195,6 +195,7 @@
                 placeholder="Enter new password"
                 required
               >
+              <div id="new-password-warnings" style="display: none; margin-top: 0.5rem; padding: 0.75rem; border-radius: 0.5rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); color: #fbbf24; font-size: 0.875rem;"></div>
             </div>
             
             <div class="form-group">
@@ -396,6 +397,7 @@
   
   
   <script src="/workflow-engine-static/common_4.js"></script>
+  <script src="/ui/shared/password-policy.js"></script>
   <script>
     // Check if page loaded due to session timeout redirect
     (function() {
@@ -1069,6 +1071,11 @@
     
     // Load session timeout on page load
     loadSessionTimeout();
+    
+    // Add password policy checking to new password field
+    if (window.PasswordPolicy) {
+      window.PasswordPolicy.attach('new-password', 'new-password-warnings', 1000);
+    }
     
     // Password Reset Handler
     const passwordResetForm = document.getElementById('password-reset-form');

@@ -119,3 +119,61 @@ class UserRepository:
         user.session_timeout_minutes = timeout_minutes
         self.db.commit()
         return user
+
+    def increment_failed_login_attempts(self, user_id: UUID) -> User | None:
+        """Increment failed login attempts counter for account lockout"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        self.db.commit()
+        return user
+
+    def reset_failed_login_attempts(self, user_id: UUID) -> User | None:
+        """Reset failed login attempts counter on successful login"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.failed_login_attempts = 0
+        user.account_locked_until = None
+        self.db.commit()
+        return user
+
+    def lock_account(self, user_id: UUID, lockout_duration_minutes: int = 1) -> User | None:
+        """Lock user account for specified duration (default 1 minute)"""
+        from datetime import datetime, timedelta, timezone
+        
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.account_locked_until = datetime.now(timezone.utc) + timedelta(minutes=lockout_duration_minutes)
+        self.db.commit()
+        return user
+
+    def unlock_account(self, user_id: UUID) -> User | None:
+        """Unlock user account (used during password reset)"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        user.account_locked_until = None
+        user.failed_login_attempts = 0
+        self.db.commit()
+        return user
+
+    def is_account_locked(self, user_id: UUID) -> bool:
+        """Check if account is currently locked"""
+        from datetime import datetime, timezone
+        
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return False
+        if not user.account_locked_until:
+            return False
+        # Check if lockout has expired
+        if user.account_locked_until < datetime.now(timezone.utc):
+            # Auto-unlock expired accounts
+            user.account_locked_until = None
+            user.failed_login_attempts = 0
+            self.db.commit()
+            return False
+        return True
