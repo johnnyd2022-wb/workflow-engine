@@ -197,13 +197,14 @@ class AuthService:
         """
         return self.backup_code_repo.verify_and_consume_code(user_id, code)
 
-    def delete_backup_codes(self, user_id: UUID) -> int:
+    def delete_backup_codes(self, user_id: UUID, commit: bool = False) -> int:
         """Delete all backup codes for a user (used when disabling 2FA)
 
         Args:
             user_id: User ID
+            commit: Whether to commit the transaction (default False, let caller control)
 
         Returns:
             Number of codes deleted
         """
-        return self.backup_code_repo.delete_all_codes_for_user(user_id)
+        return self.backup_code_repo.delete_all_codes_for_user(user_id, commit=commit)

@@ -540,13 +540,73 @@
     let enrollmentInProgress = false;  // Prevent multiple enrollment modals
     
     // Check for incomplete enrollment on page load
-    if (localStorage.getItem('2fa_enrollment_incomplete') === 'true') {
-      // Show warning about incomplete enrollment
+    async function checkIncompleteEnrollment() {
+      const incompleteFlag = localStorage.getItem('2fa_enrollment_incomplete');
+      const storedStep = sessionStorage.getItem('2fa_enrollment_step');
+      const storedCodes = sessionStorage.getItem('2fa_backup_codes');
+      
+      if (incompleteFlag === 'true' || (storedStep === '4' && storedCodes)) {
+        // Check server state to see if 2FA is actually enabled
+        try {
+          const response = await fetch('/auth/me', { credentials: 'include' });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.user?.two_factor_enabled) {
+              // 2FA is enabled - check if we have backup codes to restore
+              if (storedStep === '4' && storedCodes) {
+                try {
+                  const codes = JSON.parse(storedCodes);
+                  // Restore enrollment state
+                  backupCodes = codes;
+                  enrollmentCompleted = false;
+                  // Show modal with step 4
+                  document.getElementById('2fa-enrollment-modal').classList.add('active');
+                  displayBackupCodes(codes);
+                  show2FAStep(4);
+                  showErrorNotification('⚠️ IMPORTANT: You were viewing your backup codes. Please confirm you have saved them before closing this window.');
+                } catch (e) {
+                  console.error('Failed to restore backup codes:', e);
+                  showWarningAboutIncompleteEnrollment();
+                }
+              } else {
+                // 2FA enabled but no backup codes in storage
+                showWarningAboutIncompleteEnrollment();
+              }
+            } else {
+              // 2FA not enabled - clear flags (enrollment was cancelled)
+              localStorage.removeItem('2fa_enrollment_incomplete');
+              sessionStorage.removeItem('2fa_enrollment_step');
+              sessionStorage.removeItem('2fa_backup_codes');
+            }
+          }
+        } catch (error) {
+          console.error('Error checking enrollment state:', error);
+          // On error, show warning but don't clear flags
+          if (incompleteFlag === 'true') {
+            showWarningAboutIncompleteEnrollment();
+          }
+        }
+      }
+    }
+    
+    function showWarningAboutIncompleteEnrollment() {
       setTimeout(() => {
-        alert('⚠️ WARNING: A previous 2FA enrollment may not have completed properly. Please check your 2FA status in settings and contact support if you are locked out.');
-        localStorage.removeItem('2fa_enrollment_incomplete');
+        const confirmed = confirm(
+          '⚠️ WARNING: A previous 2FA enrollment may not have completed properly.\n\n' +
+          'If you did not save your backup codes, you may be locked out of your account.\n\n' +
+          'Please check your 2FA status in settings and contact support if needed.\n\n' +
+          'Click OK to clear this warning.'
+        );
+        if (confirmed) {
+          localStorage.removeItem('2fa_enrollment_incomplete');
+          sessionStorage.removeItem('2fa_enrollment_step');
+          sessionStorage.removeItem('2fa_backup_codes');
+        }
       }, 1000);
     }
+    
+    // Check on page load
+    checkIncompleteEnrollment();
     
     // Load 2FA status on page load
     async function load2FAStatus() {
@@ -845,8 +905,14 @@
           if (data && data.enabled) {
             if (data.backup_codes && Array.isArray(data.backup_codes) && data.backup_codes.length > 0) {
               console.log('Showing step 4 with backup codes');
-              // Store backup codes and show step 4
+              // Store backup codes in memory and sessionStorage (survives page refresh)
               backupCodes = data.backup_codes;
+              try {
+                sessionStorage.setItem('2fa_backup_codes', JSON.stringify(data.backup_codes));
+                sessionStorage.setItem('2fa_enrollment_step', '4');
+              } catch (e) {
+                console.warn('Failed to store backup codes in sessionStorage:', e);
+              }
               displayBackupCodes(data.backup_codes);
               show2FAStep(4);
               // Don't close modal yet - wait for user confirmation
@@ -928,6 +994,16 @@
       }
       
       enrollmentCompleted = true;
+      
+      // CRITICAL: Clear all enrollment-related storage on successful completion
+      try {
+        sessionStorage.removeItem('2fa_backup_codes');
+        sessionStorage.removeItem('2fa_enrollment_step');
+        localStorage.removeItem('2fa_enrollment_incomplete');
+      } catch (e) {
+        console.warn('Failed to clear enrollment storage:', e);
+      }
+      
       close2FAModal();
       // Update status
       current2FAStatus = true;
@@ -1027,6 +1103,17 @@
       backupCodes = null;
       enrollmentCompleted = false;
       enrollmentInProgress = false;  // Reset enrollment flag
+      
+      // CRITICAL: Clear sessionStorage when modal is closed (unless enrollment completed)
+      if (!enrollmentCompleted) {
+        try {
+          sessionStorage.removeItem('2fa_backup_codes');
+          sessionStorage.removeItem('2fa_enrollment_step');
+        } catch (e) {
+          console.warn('Failed to clear sessionStorage:', e);
+        }
+      }
+      
       document.getElementById('backup-codes-confirmed').checked = false;
       document.getElementById('2fa-confirm-backup-codes-btn').disabled = true;
       document.getElementById('enable-2fa-btn').disabled = false;  // Re-enable button

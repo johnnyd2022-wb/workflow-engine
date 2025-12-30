@@ -857,7 +857,8 @@ def enable_2fa():
         existing_codes = auth_service.backup_code_repo.get_all_codes_for_user(user.id)
         if existing_codes:
             # Clean up any orphaned backup codes from incomplete enrollment
-            auth_service.delete_backup_codes(user.id)
+            # No commit - will be part of the main transaction
+            auth_service.delete_backup_codes(user.id, commit=False)
 
         # Verify first token
         if not auth_service.verify_totp(user, token1):
@@ -920,7 +921,12 @@ def enable_2fa():
 @auth_bp.route("/2fa/disable", methods=["POST"])
 @requires_auth
 def disable_2fa():
-    """Disable two-factor authentication"""
+    """Disable two-factor authentication
+
+    CRITICAL: This operation is idempotent and atomic.
+    If 2FA is already disabled, returns success without error.
+    All operations (delete codes, disable 2FA) are wrapped in a transaction.
+    """
     user = g.current_user
 
     db = db_session()
@@ -928,29 +934,48 @@ def disable_2fa():
         user_repo = UserRepository(db)
         auth_service = AuthService(db)
 
-        # Delete all backup codes for this user
-        deleted_count = auth_service.delete_backup_codes(user.id)
+        # CRITICAL: Idempotency check - refresh user to get latest state
+        db.refresh(user)
+        if not user.two_factor_enabled:
+            # Already disabled - return success (idempotent)
+            return jsonify({"disabled": True, "already_disabled": True}), 200
 
-        # Disable 2FA
-        user_repo.disable_two_factor(user.id)
+        # CRITICAL: Wrap disable and code deletion in transaction for atomicity
+        # Both operations must succeed together or both must fail
+        try:
+            # Delete all backup codes for this user (no commit - transaction controlled by caller)
+            deleted_count = auth_service.backup_code_repo.delete_all_codes_for_user(user.id, commit=False)
 
-        # Log disablement
-        # CRITICAL: Never log sensitive data
-        # CRITICAL: Include IP address and User-Agent for security auditing
-        ip_address = get_remote_address()
-        user_agent = request.headers.get("User-Agent", "Unknown")
-        log_action(
-            "2fa_disabled",
-            "user",
-            user.id,
-            {"ip_address": ip_address, "user_agent": user_agent, "backup_codes_deleted": deleted_count},
-            user.org_id,
-            user.id,
-        )
+            # Disable 2FA
+            user_repo.disable_two_factor(user.id)
 
-        return jsonify({"disabled": True}), 200
+            # Commit transaction atomically
+            db.commit()
+
+            # Log disablement (after successful commit)
+            # CRITICAL: Never log sensitive data
+            # CRITICAL: Include IP address and User-Agent for security auditing
+            ip_address = get_remote_address()
+            user_agent = request.headers.get("User-Agent", "Unknown")
+            log_action(
+                "2fa_disabled",
+                "user",
+                user.id,
+                {"ip_address": ip_address, "user_agent": user_agent, "backup_codes_deleted": deleted_count},
+                user.org_id,
+                user.id,
+            )
+
+            return jsonify({"disabled": True}), 200
+
+        except Exception:
+            # Rollback on any error during disable/code deletion
+            db.rollback()
+            logger.exception("Failed to disable 2FA or delete backup codes")
+            raise
 
     except Exception:
+        db.rollback()
         logger.exception("Failed to disable 2FA")
         return jsonify({"error": "Internal server error"}), 500
     # Don't close session here - let middleware teardown handle it

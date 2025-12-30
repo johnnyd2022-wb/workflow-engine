@@ -37,15 +37,21 @@ class BackupCodeRepository:
         alphabet = string.ascii_letters + string.digits
         return "".join(secrets.choice(alphabet) for _ in range(length))
 
-    def generate_and_store_codes(self, user_id: UUID, count: int = 10) -> list[str]:
+    def generate_and_store_codes(self, user_id: UUID, count: int = 10, commit: bool = False) -> list[str]:
         """Generate backup codes and store them encrypted in the database
 
         Args:
             user_id: User ID to generate codes for
             count: Number of codes to generate (default 10)
+            commit: Whether to commit the transaction (default False, let caller control)
 
         Returns:
             List of plaintext backup codes (for one-time display to user)
+
+        Note:
+            CRITICAL: By default, this method does NOT commit the transaction.
+            The caller must commit to ensure atomicity with other operations.
+            Set commit=True only if this is the only operation in the transaction.
         """
         plaintext_codes = []
         backup_codes = []
@@ -66,7 +72,11 @@ class BackupCodeRepository:
 
         # Bulk insert all codes
         self.db.add_all(backup_codes)
-        self.db.commit()
+
+        # CRITICAL: Only commit if explicitly requested
+        # This allows the caller to wrap this in a larger transaction
+        if commit:
+            self.db.commit()
 
         return plaintext_codes
 
@@ -129,17 +139,28 @@ class BackupCodeRepository:
             self.db.rollback()
             return False
 
-    def delete_all_codes_for_user(self, user_id: UUID) -> int:
+    def delete_all_codes_for_user(self, user_id: UUID, commit: bool = False) -> int:
         """Delete all backup codes for a user (used when disabling 2FA)
 
         Args:
             user_id: User ID
+            commit: Whether to commit the transaction (default False, let caller control)
 
         Returns:
             Number of codes deleted
+
+        Note:
+            CRITICAL: By default, this method does NOT commit the transaction.
+            The caller must commit to ensure atomicity with other operations.
+            Set commit=True only if this is the only operation in the transaction.
         """
         deleted_count = self.db.query(TwoFactorBackupCode).filter(TwoFactorBackupCode.user_id == user_id).delete()
-        self.db.commit()
+
+        # CRITICAL: Only commit if explicitly requested
+        # This allows the caller to wrap this in a larger transaction
+        if commit:
+            self.db.commit()
+
         return deleted_count
 
     def get_unconsumed_count(self, user_id: UUID) -> int:
