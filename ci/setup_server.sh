@@ -18,7 +18,8 @@ openssl req -x509 -newkey rsa:4096 -nodes \
 
 # Start server in background
 echo "Starting Flask application server..."
-ENVIRONMENT=test python -m app.main > /tmp/flask.log 2>&1 &
+# Use uv run to ensure we use the virtual environment with all dependencies
+ENVIRONMENT=test uv run python -m app.main > /tmp/flask.log 2>&1 &
 SERVER_PID=$!
 echo $SERVER_PID > /tmp/flask.pid
 echo "Flask server started with PID: $SERVER_PID"
