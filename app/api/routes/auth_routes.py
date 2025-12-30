@@ -609,12 +609,26 @@ def verify_two_factor():
         user_org_id = user.org_id
         user_email = user.email
         user_role = user.role.value
+        # Extract session_timeout_minutes before any operations that might detach the user object
+        user_session_timeout = getattr(user, "session_timeout_minutes", None)
 
-        if not auth_service.verify_totp(user, token):
-            # Log 2FA failure - use extracted values
-            # CRITICAL: Never log the actual token or code
-            log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
-            return jsonify({"error": "Invalid 2FA token"}), 401
+        # Try TOTP verification first
+        totp_valid = auth_service.verify_totp(user, token)
+
+        # Track if backup code was used (for security: don't allow trusted device with backup codes)
+        backup_code_used = False
+
+        # If TOTP fails, try backup code
+        if not totp_valid:
+            backup_code_valid = auth_service.verify_backup_code(user_id, token)
+            if not backup_code_valid:
+                # Log 2FA failure - use extracted values
+                # CRITICAL: Never log the actual token or code
+                log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
+                return jsonify({"error": "Invalid 2FA token or backup code"}), 401
+            # Backup code was valid and consumed
+            backup_code_used = True
+            log_action("2fa_backup_code_used", "user", user_id, None, user_org_id, user_id)
 
         # Rotate session ID on successful 2FA verification (session fixation protection)
         # Rotate session (clears everything)
@@ -624,15 +638,16 @@ def verify_two_factor():
         session_data = auth_service.generate_session(user_id=user_id, user_email=user_email, org_id=user_org_id)
         session.update(session_data)
 
-        # Get user's session timeout preference
-        if hasattr(user, "session_timeout_minutes") and user.session_timeout_minutes:
-            session["session_timeout_minutes"] = user.session_timeout_minutes
+        # Get user's session timeout preference (use extracted value to avoid detached instance error)
+        if user_session_timeout:
+            session["session_timeout_minutes"] = user_session_timeout
 
         # If user wants to remember this device, create a trusted device token
         # Following Google/AWS/Azure patterns: store token in HttpOnly cookie + hash in DB
         # CRITICAL: Include IP address in fingerprint for robust device identification
+        # SECURITY: Do NOT allow trusted device creation when using backup codes (one-time use recovery)
         device_token = None
-        if remember_device and device_fingerprint_data:
+        if remember_device and device_fingerprint_data and not backup_code_used:
             trusted_device_repo = TrustedDeviceRepository(db)
             ip_address = get_remote_address()
             device_fingerprint = trusted_device_repo.generate_device_fingerprint(device_fingerprint_data, ip_address)
@@ -798,8 +813,12 @@ def enable_2fa():
         # Both tokens verified - enable 2FA
         user_repo.enable_two_factor(user.id)
 
+        # Generate backup codes (10 codes, 8 characters each)
+        # CRITICAL: Never log the backup codes
+        backup_codes = auth_service.generate_backup_codes(user.id, count=10)
+
         # Log enablement
-        # CRITICAL: Never log tokens or secrets
+        # CRITICAL: Never log tokens, secrets, or backup codes
         # CRITICAL: Include IP address and User-Agent for security auditing
         ip_address = get_remote_address()
         user_agent = request.headers.get("User-Agent", "Unknown")
@@ -807,7 +826,9 @@ def enable_2fa():
             "2fa_enabled", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id
         )
 
-        return jsonify({"enabled": True}), 200
+        # Return backup codes to user (one-time display)
+        # CRITICAL: These codes should be displayed once and never logged
+        return jsonify({"enabled": True, "backup_codes": backup_codes}), 200
 
     except Exception:
         logger.exception("Failed to enable 2FA")
@@ -824,6 +845,12 @@ def disable_2fa():
     db = db_session()
     try:
         user_repo = UserRepository(db)
+        auth_service = AuthService(db)
+
+        # Delete all backup codes for this user
+        deleted_count = auth_service.delete_backup_codes(user.id)
+
+        # Disable 2FA
         user_repo.disable_two_factor(user.id)
 
         # Log disablement
@@ -832,7 +859,12 @@ def disable_2fa():
         ip_address = get_remote_address()
         user_agent = request.headers.get("User-Agent", "Unknown")
         log_action(
-            "2fa_disabled", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id
+            "2fa_disabled",
+            "user",
+            user.id,
+            {"ip_address": ip_address, "user_agent": user_agent, "backup_codes_deleted": deleted_count},
+            user.org_id,
+            user.id,
         )
 
         return jsonify({"disabled": True}), 200
