@@ -39,3 +39,41 @@ ruff:
     - merge_requests
     - main
   allow_failure: false
+
+unit_tests:
+  stage: test
+  image: python:3.12-bullseye
+  services:
+    - name: postgres:16
+      alias: postgres
+      command: ["postgres", "-c", "max_connections=200"]
+  variables:
+    # Set environment to use test.ini config
+    ENVIRONMENT: test
+    # Database connection for GitLab CI service
+    # Service containers are accessible via their alias as hostname
+    POSTGRES_DB: workflow-engine
+    POSTGRES_USER: workflow-engine
+    POSTGRES_PASSWORD: secret
+    POSTGRES_HOST_AUTH_METHOD: trust
+  before_script:
+    # Install dependencies
+    - pip install uv
+    - uv sync --extra dev
+    # Install PostgreSQL client and curl for health checks
+    - apt-get update -qq && apt-get install -y -qq postgresql-client curl openssl
+    # Make CI scripts executable
+    - chmod +x ci/*.sh
+    # Setup database (wait for postgres, update config, run migrations)
+    - ./ci/setup_database.sh
+    # Setup and start Flask server (generate certs, start server, wait for ready)
+    - ./ci/setup_server.sh
+  script:
+    - ENVIRONMENT=test uv run pytest tests/ -v
+  after_script:
+    # Clean up: Stop Flask server
+    - ./ci/cleanup_server.sh
+  only:
+    - merge_requests
+    - main
+  allow_failure: true

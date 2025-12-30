@@ -1,5 +1,6 @@
-"""Comprehensive tests for TOTP 2FA endpoints"""
+"""Optimized tests for TOTP 2FA endpoints - uses time manipulation to avoid waiting"""
 
+import time
 from uuid import uuid4
 
 import pyotp
@@ -14,7 +15,7 @@ BASE_URL = "https://localhost:8005"
 
 
 class Test2FATOTP:
-    """Test suite for TOTP 2FA functionality"""
+    """Test suite for TOTP 2FA functionality - optimized version"""
 
     @pytest.fixture(autouse=True)
     def setup_session(self):
@@ -28,6 +29,27 @@ class Test2FATOTP:
         except Exception:
             pass
 
+    def _generate_two_different_tokens(self, secret: str):
+        """Helper to generate two different TOTP tokens without waiting
+
+        Uses pyotp's at() method to generate tokens for different time windows.
+        This avoids waiting 30 seconds for the next TOTP window.
+        """
+        totp = pyotp.TOTP(secret)
+        current_time = int(time.time())
+
+        # Generate token for current time window
+        token1 = totp.at(current_time)
+
+        # Generate token for next time window (30 seconds later)
+        token2 = totp.at(current_time + 30)
+
+        # If they're somehow the same (shouldn't happen), use the window after that
+        if token1 == token2:
+            token2 = totp.at(current_time + 60)
+
+        return token1, token2
+
     def test_enroll_2fa_requires_authentication(self):
         """Test that /2fa/enroll requires authentication"""
         response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
@@ -35,7 +57,7 @@ class Test2FATOTP:
 
     def test_enable_2fa_requires_authentication(self):
         """Test that /2fa/enable requires authentication"""
-        response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": "123456"})
+        response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": "123456", "token2": "654321"})
         assert response.status_code == 401
 
     def test_disable_2fa_requires_authentication(self):
@@ -68,8 +90,8 @@ class Test2FATOTP:
         assert len(data["provisioning_uri"]) > 0
         assert "otpauth://" in data["provisioning_uri"]
 
-    def test_enable_2fa_with_valid_token(self):
-        """Test enabling 2FA with a valid TOTP token"""
+    def test_enable_2fa_with_valid_tokens(self):
+        """Test enabling 2FA with two valid TOTP tokens"""
         # Sign up and login
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
@@ -87,14 +109,16 @@ class Test2FATOTP:
         assert enroll_response.status_code == 200
         secret = enroll_response.json()["secret"]
 
-        # Generate a valid TOTP token
-        totp = pyotp.TOTP(secret)
-        token = totp.now()
+        # Generate two different TOTP tokens using optimized method
+        token1, token2 = self._generate_two_different_tokens(secret)
 
-        # Enable 2FA with the token
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": token})
+        # Enable 2FA with both tokens
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
-        assert enable_response.json()["enabled"] is True
+        data = enable_response.json()
+        assert data["enabled"] is True
+        assert "backup_codes" in data
+        assert len(data["backup_codes"]) == 10
 
         # Verify 2FA is enabled in /auth/me
         me_response = self.session.get(f"{BASE_URL}/auth/me")
@@ -118,11 +142,20 @@ class Test2FATOTP:
         # Enroll in 2FA
         enroll_response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
         assert enroll_response.status_code == 200
+        secret = enroll_response.json()["secret"]
 
-        # Try to enable with invalid token
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": "000000"})
+        # Generate one valid token
+        token1, token2 = self._generate_two_different_tokens(secret)
+
+        # Try to enable with invalid first token
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": "000000", "token2": token2})
         assert enable_response.status_code == 400
-        assert "Invalid token" in enable_response.json()["error"]
+        assert "Invalid first token" in enable_response.json()["error"]
+
+        # Try with invalid second token
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": "000000"})
+        assert enable_response.status_code == 400
+        assert "Invalid second token" in enable_response.json()["error"]
 
     def test_disable_2fa(self):
         """Test disabling 2FA"""
@@ -141,10 +174,9 @@ class Test2FATOTP:
         # Enroll and enable 2FA
         enroll_response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
         secret = enroll_response.json()["secret"]
-        totp = pyotp.TOTP(secret)
-        token = totp.now()
+        token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": token})
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Verify it's enabled
@@ -205,10 +237,9 @@ class Test2FATOTP:
         # Enroll and enable 2FA
         enroll_response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
         secret = enroll_response.json()["secret"]
-        totp = pyotp.TOTP(secret)
-        token = totp.now()
+        token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": token})
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Logout
@@ -240,8 +271,9 @@ class Test2FATOTP:
         enroll_response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
         secret = enroll_response.json()["secret"]
         totp = pyotp.TOTP(secret)
+        token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": totp.now()})
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Logout
@@ -283,9 +315,9 @@ class Test2FATOTP:
         # Enroll and enable 2FA
         enroll_response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
         secret = enroll_response.json()["secret"]
-        totp = pyotp.TOTP(secret)
+        token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": totp.now()})
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Logout
@@ -327,9 +359,9 @@ class Test2FATOTP:
         # Enroll and enable 2FA
         enroll_response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
         secret = enroll_response.json()["secret"]
-        totp = pyotp.TOTP(secret)
+        token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": totp.now()})
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Logout
@@ -339,13 +371,16 @@ class Test2FATOTP:
         login_response = self.session.post(f"{BASE_URL}/auth/login", json={"email": email, "password": password})
         assert login_response.status_code == 200
 
-        # Try to verify without token
-        verify_response = self.session.post(f"{BASE_URL}/auth/verify-2fa", json={})
+        # Try to verify without token (send JSON body but missing token field)
+        verify_response = self.session.post(
+            f"{BASE_URL}/auth/verify-2fa",
+            json={"remember_device": False},  # Send JSON but without token
+        )
         assert verify_response.status_code == 400
         assert "token is required" in verify_response.json()["error"]
 
     def test_enable_2fa_missing_token_fails(self):
-        """Test that enable-2fa requires token"""
+        """Test that enable-2fa requires both tokens"""
         # Sign up and login
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
@@ -362,10 +397,15 @@ class Test2FATOTP:
         enroll_response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
         assert enroll_response.status_code == 200
 
-        # Try to enable without token
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={})
+        # Try to enable without tokens (send JSON body but missing token fields)
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"some_field": "value"})
         assert enable_response.status_code == 400
-        assert "token is required" in enable_response.json()["error"]
+        assert "First token is required" in enable_response.json()["error"]
+
+        # Try with only first token
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": "123456"})
+        assert enable_response.status_code == 400
+        assert "Second token is required" in enable_response.json()["error"]
 
     def test_auth_me_returns_2fa_status(self):
         """Test that /auth/me returns two_factor_enabled status"""
@@ -389,10 +429,9 @@ class Test2FATOTP:
         # Enroll and enable 2FA
         enroll_response = self.session.post(f"{BASE_URL}/auth/2fa/enroll")
         secret = enroll_response.json()["secret"]
-        totp = pyotp.TOTP(secret)
-        token = totp.now()
+        token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token": token})
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Check status (should be True)

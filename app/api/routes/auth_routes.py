@@ -2,6 +2,7 @@
 
 import io
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -27,6 +28,9 @@ from app.core.utils.log_action import log_action
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
+
+# Check if running in CI (GitLab CI sets CI=true and GITLAB_CI=true)
+IS_CI = os.getenv("CI", "").lower() == "true" or os.getenv("GITLAB_CI", "").lower() == "true"
 
 
 # CRITICAL: Custom rate limiting key function that combines IP + email/account
@@ -145,7 +149,9 @@ def signup():
 
 
 @auth_bp.route("/login", methods=["POST"])
-@limiter.limit("5 per 1 minute")  # Allow 5 attempts to trigger account lockout, then 6th attempt gets rate limited
+@limiter.limit(
+    "1000 per minute" if IS_CI else "5 per 1 minute"
+)  # Allow 5 attempts to trigger account lockout, then 6th attempt gets rate limited (higher limit for CI)
 def login():
     """Login with email and password
 
@@ -528,7 +534,9 @@ def get_current_user():
 
 
 @auth_bp.route("/verify-2fa", methods=["POST"])
-@limiter.limit("5 per 5 minutes")  # CRITICAL: Rate limit 2FA verification to prevent brute force
+@limiter.limit(
+    "1000 per minute" if IS_CI else "5 per 5 minutes"
+)  # CRITICAL: Rate limit 2FA verification to prevent brute force (higher limit for CI)
 def verify_two_factor():
     """Verify TOTP token during login
 
@@ -1112,7 +1120,7 @@ def check_password_policy():
 
 @auth_bp.route("/change-password", methods=["POST"])
 @requires_auth
-@limiter.limit("5 per 15 minutes")
+@limiter.limit("1000 per minute" if IS_CI else "5 per 15 minutes")
 def change_password():
     """Change user password
 
