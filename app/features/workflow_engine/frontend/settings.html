@@ -537,6 +537,16 @@
     // 2FA Management
     let current2FAStatus = false;
     let enrollmentSecret = null;
+    let enrollmentInProgress = false;  // Prevent multiple enrollment modals
+    
+    // Check for incomplete enrollment on page load
+    if (localStorage.getItem('2fa_enrollment_incomplete') === 'true') {
+      // Show warning about incomplete enrollment
+      setTimeout(() => {
+        alert('⚠️ WARNING: A previous 2FA enrollment may not have completed properly. Please check your 2FA status in settings and contact support if you are locked out.');
+        localStorage.removeItem('2fa_enrollment_incomplete');
+      }, 1000);
+    }
     
     // Load 2FA status on page load
     async function load2FAStatus() {
@@ -618,6 +628,15 @@
     
     // Enable 2FA - Start enrollment
     document.getElementById('enable-2fa-btn').addEventListener('click', async function() {
+      // CRITICAL: Prevent multiple enrollment modals
+      if (enrollmentInProgress) {
+        return;
+      }
+      
+      enrollmentInProgress = true;
+      const enableBtn = this;
+      enableBtn.disabled = true;
+      
       try {
         const response = await fetch('/auth/2fa/enroll', {
           method: 'POST',
@@ -679,6 +698,9 @@
       } catch (error) {
         console.error('Error enrolling in 2FA:', error);
         alert('Error: Failed to start 2FA enrollment. Please try again.');
+      } finally {
+        enrollmentInProgress = false;
+        enableBtn.disabled = false;
       }
     });
     
@@ -913,11 +935,30 @@
       showSuccessNotification('Two-factor authentication has been enabled successfully!');
     });
     
+    // Retry helper for critical operations
+    async function retryOperation(operation, maxRetries = 3, baseDelay = 1000) {
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const result = await operation();
+          return { success: true, result };
+        } catch (error) {
+          if (i === maxRetries - 1) {
+            // Final attempt failed
+            return { success: false, error };
+          }
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = baseDelay * Math.pow(2, i);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+      return { success: false, error: new Error('Max retries exceeded') };
+    }
+    
     // Cancel enrollment on step 4 - disable 2FA if it was enabled
     document.getElementById('2fa-cancel-step4-btn').addEventListener('click', async function() {
       // If enrollment was completed (2FA enabled) but user cancels, disable it
       if (!enrollmentCompleted) {
-        try {
+        const disableResult = await retryOperation(async () => {
           const response = await fetch('/auth/2fa/disable', {
             method: 'POST',
             credentials: 'include',
@@ -926,12 +967,22 @@
             }
           });
           
-          if (response.ok) {
-            current2FAStatus = false;
-            update2FAUI();
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
           }
-        } catch (error) {
-          console.error('Error disabling 2FA after cancellation:', error);
+          
+          return response;
+        }, 3, 1000);
+        
+        if (disableResult.success) {
+          current2FAStatus = false;
+          update2FAUI();
+        } else {
+          // Critical: Show warning if disable failed
+          console.error('Failed to disable 2FA after cancellation:', disableResult.error);
+          alert('⚠️ WARNING: Failed to cancel 2FA enrollment. Your account may be locked if you did not save your backup codes. Please contact support immediately or try disabling 2FA from settings.');
+          // Store flag to detect incomplete enrollment on next page load
+          localStorage.setItem('2fa_enrollment_incomplete', 'true');
         }
       }
       
@@ -942,20 +993,31 @@
     function close2FAModal() {
       // If closing modal before confirming backup codes, disable 2FA
       if (!enrollmentCompleted && backupCodes !== null) {
-        // 2FA was enabled but user didn't confirm - disable it
-        fetch('/auth/2fa/disable', {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json'
+        // 2FA was enabled but user didn't confirm - disable it with retry
+        retryOperation(async () => {
+          const response = await fetch('/auth/2fa/disable', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
           }
-        }).then(response => {
-          if (response.ok) {
+          
+          return response;
+        }, 3, 1000).then(result => {
+          if (result.success) {
             current2FAStatus = false;
             update2FAUI();
+          } else {
+            // Critical: Show warning if disable failed
+            console.error('Error disabling 2FA after modal close:', result.error);
+            // Don't show alert here as it might interrupt user flow, but log and store flag
+            localStorage.setItem('2fa_enrollment_incomplete', 'true');
           }
-        }).catch(error => {
-          console.error('Error disabling 2FA after modal close:', error);
         });
       }
       
@@ -964,8 +1026,10 @@
       firstToken = null;
       backupCodes = null;
       enrollmentCompleted = false;
+      enrollmentInProgress = false;  // Reset enrollment flag
       document.getElementById('backup-codes-confirmed').checked = false;
       document.getElementById('2fa-confirm-backup-codes-btn').disabled = true;
+      document.getElementById('enable-2fa-btn').disabled = false;  // Re-enable button
       show2FAStep(1); // Reset to first step
     }
     
