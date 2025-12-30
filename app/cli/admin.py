@@ -7,9 +7,11 @@ import click
 from app.core.db import db_session
 from app.core.db.models.organisation import OrganisationStatus
 from app.core.db.models.user import UserRole
+from app.core.db.repositories.backup_code_repo import BackupCodeRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
+from app.core.security.backup_code_encryption import BackupCodeEncryption
 from app.core.security.org_manager import OrgManager
 
 
@@ -136,5 +138,73 @@ def list_users(org_id, active_only):
             click.echo()
     except Exception as e:
         click.echo(f"❌ Failed to list users: {e}", err=True)
+    finally:
+        db.close()
+
+
+@click.command()
+@click.option("--user-id", required=True, help="User ID to retrieve backup codes for")
+def get_backup_codes(user_id):
+    """Retrieve and decrypt 2FA backup codes for a user (admin only)
+
+    WARNING: This command decrypts and displays backup codes.
+    Use only when a user is locked out and needs admin intervention.
+    """
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        click.echo(f"❌ Invalid user ID: {user_id}", err=True)
+        return
+
+    db = db_session()
+    try:
+        user_repo = UserRepository(db)
+        user = user_repo.get_user_by_id(user_uuid)
+
+        if not user:
+            click.echo(f"❌ User not found: {user_id}", err=True)
+            return
+
+        if not user.two_factor_enabled:
+            click.echo(f"❌ User {user.email} does not have 2FA enabled", err=True)
+            return
+
+        # Get backup codes
+        encryption = BackupCodeEncryption()
+        backup_code_repo = BackupCodeRepository(db, encryption)
+        backup_codes = backup_code_repo.get_all_codes_for_user(user_uuid)
+
+        if not backup_codes:
+            click.echo(f"❌ No backup codes found for user {user.email}", err=True)
+            return
+
+        click.echo(f"\n🔐 Backup codes for user: {user.email} (ID: {user_id})\n")
+        click.echo("⚠️  WARNING: These codes are sensitive. Handle with care!\n")
+
+        unconsumed_count = 0
+        consumed_count = 0
+
+        for backup_code in backup_codes:
+            try:
+                decrypted_code = encryption.decrypt(backup_code.encrypted_code)
+                status = "✅ Available" if not backup_code.consumed else "❌ Used"
+                click.echo(f"  {decrypted_code} - {status}")
+
+                if backup_code.consumed:
+                    consumed_count += 1
+                else:
+                    unconsumed_count += 1
+            except Exception as e:
+                click.echo(f"  ❌ Failed to decrypt code (ID: {backup_code.id}): {e}", err=True)
+
+        click.echo("\n📊 Summary:")
+        click.echo(f"  Total codes: {len(backup_codes)}")
+        click.echo(f"  Available: {unconsumed_count}")
+        click.echo(f"  Used: {consumed_count}")
+        click.echo()
+
+    except Exception as e:
+        click.echo(f"❌ Failed to retrieve backup codes: {e}", err=True)
+        db.rollback()
     finally:
         db.close()

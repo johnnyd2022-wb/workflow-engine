@@ -550,6 +550,15 @@ def verify_two_factor():
     if not token:
         return jsonify({"error": "token is required"}), 400
 
+    # CRITICAL: Validate token format server-side
+    # Accept either 6-digit TOTP code or 8-character backup code
+    token = token.strip()
+    is_totp_code = len(token) == 6 and token.isdigit()
+    is_backup_code = len(token) == 8 and token.isalnum()
+
+    if not (is_totp_code or is_backup_code):
+        return jsonify({"error": "Invalid code format. Enter a 6-digit TOTP code or 8-character backup code."}), 400
+
     # Check for pending 2FA session - if it doesn't exist, user must login again
     pending = session.get("pending_2fa_user_id")
     pending_created_at_str = session.get("pending_2fa_created_at")
@@ -609,12 +618,35 @@ def verify_two_factor():
         user_org_id = user.org_id
         user_email = user.email
         user_role = user.role.value
+        # Extract session_timeout_minutes before any operations that might detach the user object
+        user_session_timeout = getattr(user, "session_timeout_minutes", None)
 
-        if not auth_service.verify_totp(user, token):
-            # Log 2FA failure - use extracted values
-            # CRITICAL: Never log the actual token or code
+        # Track if backup code was used (for security: don't allow trusted device with backup codes)
+        backup_code_used = False
+        totp_valid = False
+
+        # Try appropriate verification based on code format
+        if is_totp_code:
+            # Try TOTP verification for 6-digit codes
+            totp_valid = auth_service.verify_totp(user, token)
+            if not totp_valid:
+                # TOTP failed - log failure
+                log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
+                return jsonify({"error": "Invalid 2FA token or backup code"}), 401
+        elif is_backup_code:
+            # For 8-character codes, try backup code directly
+            backup_code_valid = auth_service.verify_backup_code(user_id, token)
+            if backup_code_valid:
+                backup_code_used = True
+                log_action("2fa_backup_code_used", "user", user_id, None, user_org_id, user_id)
+            else:
+                # Backup code invalid
+                log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
+                return jsonify({"error": "Invalid 2FA token or backup code"}), 401
+        else:
+            # Should not reach here due to validation above, but safety check
             log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
-            return jsonify({"error": "Invalid 2FA token"}), 401
+            return jsonify({"error": "Invalid 2FA token or backup code"}), 401
 
         # Rotate session ID on successful 2FA verification (session fixation protection)
         # Rotate session (clears everything)
@@ -624,15 +656,16 @@ def verify_two_factor():
         session_data = auth_service.generate_session(user_id=user_id, user_email=user_email, org_id=user_org_id)
         session.update(session_data)
 
-        # Get user's session timeout preference
-        if hasattr(user, "session_timeout_minutes") and user.session_timeout_minutes:
-            session["session_timeout_minutes"] = user.session_timeout_minutes
+        # Get user's session timeout preference (use extracted value to avoid detached instance error)
+        if user_session_timeout:
+            session["session_timeout_minutes"] = user_session_timeout
 
         # If user wants to remember this device, create a trusted device token
         # Following Google/AWS/Azure patterns: store token in HttpOnly cookie + hash in DB
         # CRITICAL: Include IP address in fingerprint for robust device identification
+        # SECURITY: Do NOT allow trusted device creation when using backup codes (one-time use recovery)
         device_token = None
-        if remember_device and device_fingerprint_data:
+        if remember_device and device_fingerprint_data and not backup_code_used:
             trusted_device_repo = TrustedDeviceRepository(db)
             ip_address = get_remote_address()
             device_fingerprint = trusted_device_repo.generate_device_fingerprint(device_fingerprint_data, ip_address)
@@ -713,6 +746,36 @@ def enroll_2fa():
     try:
         user_repo = UserRepository(db)
 
+        # CRITICAL: Check if 2FA is already enabled
+        # Refresh user to get latest state from database
+        db.refresh(user)
+        if user.two_factor_enabled:
+            return jsonify({"error": "2FA is already enabled. Disable it first to re-enroll."}), 400
+
+        # CRITICAL: Check if enrollment is in progress (has secret but not enabled)
+        # If so, return existing secret instead of creating new one
+        if user.totp_secret:
+            # Enrollment in progress - return existing secret
+            totp = pyotp.TOTP(user.totp_secret)
+            provisioning_uri = totp.provisioning_uri(name=user.email, issuer_name="WorkflowEngine")
+
+            # Generate QR code from existing secret
+            qr = qrcode.QRCode(version=1, box_size=10, border=4, error_correction=qrcode.constants.ERROR_CORRECT_M)
+            qr.add_data(provisioning_uri)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format="PNG")
+            img_buffer.seek(0)
+            import base64
+
+            img_base64 = base64.b64encode(img_buffer.getvalue()).decode("utf-8")
+            qr_code_data_url = f"data:image/png;base64,{img_base64}"
+
+            return jsonify(
+                {"secret": user.totp_secret, "provisioning_uri": provisioning_uri, "qr_code": qr_code_data_url}
+            ), 200
+
         new_secret = pyotp.random_base32()
         user_repo.set_totp_secret(user.id, new_secret)
 
@@ -783,33 +846,73 @@ def enable_2fa():
         auth_service = AuthService(db)
         user_repo = UserRepository(db)
 
+        # CRITICAL: Idempotency check - prevent duplicate enrollment
+        # Refresh user to get latest state from database
+        db.refresh(user)
+        if user.two_factor_enabled:
+            return jsonify({"error": "2FA is already enabled. Disable it first to re-enroll."}), 400
+
+        # CRITICAL: Check for existing backup codes and clean them up
+        # This handles cases where enrollment was started but not completed
+        existing_codes = auth_service.backup_code_repo.get_all_codes_for_user(user.id)
+        if existing_codes:
+            # Clean up any orphaned backup codes from incomplete enrollment
+            # No commit - will be part of the main transaction
+            auth_service.delete_backup_codes(user.id, commit=False)
+
         # Verify first token
         if not auth_service.verify_totp(user, token1):
             # CRITICAL: Never log the actual token
             log_action("2fa_enable_failure", "user", user.id, {"reason": "invalid_first_token"}, user.org_id, user.id)
+            db.rollback()
             return jsonify({"error": "Invalid first token"}), 400
 
         # Verify second token
         if not auth_service.verify_totp(user, token2):
             # CRITICAL: Never log the actual token
             log_action("2fa_enable_failure", "user", user.id, {"reason": "invalid_second_token"}, user.org_id, user.id)
+            db.rollback()
             return jsonify({"error": "Invalid second token"}), 400
 
-        # Both tokens verified - enable 2FA
-        user_repo.enable_two_factor(user.id)
+        # CRITICAL: Wrap enable and code generation in transaction
+        # Both operations must succeed together or both must fail
+        try:
+            # Both tokens verified - enable 2FA
+            user_repo.enable_two_factor(user.id)
 
-        # Log enablement
-        # CRITICAL: Never log tokens or secrets
-        # CRITICAL: Include IP address and User-Agent for security auditing
-        ip_address = get_remote_address()
-        user_agent = request.headers.get("User-Agent", "Unknown")
-        log_action(
-            "2fa_enabled", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id
-        )
+            # Generate backup codes (10 codes, 8 characters each)
+            # CRITICAL: Never log the backup codes
+            backup_codes = auth_service.generate_backup_codes(user.id, count=10)
 
-        return jsonify({"enabled": True}), 200
+            # Commit transaction atomically
+            db.commit()
+
+            # Log enablement (after successful commit)
+            # CRITICAL: Never log tokens, secrets, or backup codes
+            # CRITICAL: Include IP address and User-Agent for security auditing
+            ip_address = get_remote_address()
+            user_agent = request.headers.get("User-Agent", "Unknown")
+            log_action(
+                "2fa_enabled",
+                "user",
+                user.id,
+                {"ip_address": ip_address, "user_agent": user_agent},
+                user.org_id,
+                user.id,
+            )
+
+            # Return backup codes to user (one-time display)
+            # CRITICAL: These codes should be displayed once and never logged
+            return jsonify({"enabled": True, "backup_codes": backup_codes}), 200
+
+        except Exception:
+            # Rollback on any error during enable/code generation
+            db.rollback()
+            logger.exception("Failed to enable 2FA or generate backup codes")
+            raise
 
     except Exception:
+        db.rollback()
         logger.exception("Failed to enable 2FA")
         return jsonify({"error": "Internal server error"}), 500
     # Don't close session here - let middleware teardown handle it
@@ -818,26 +921,61 @@ def enable_2fa():
 @auth_bp.route("/2fa/disable", methods=["POST"])
 @requires_auth
 def disable_2fa():
-    """Disable two-factor authentication"""
+    """Disable two-factor authentication
+
+    CRITICAL: This operation is idempotent and atomic.
+    If 2FA is already disabled, returns success without error.
+    All operations (delete codes, disable 2FA) are wrapped in a transaction.
+    """
     user = g.current_user
 
     db = db_session()
     try:
         user_repo = UserRepository(db)
-        user_repo.disable_two_factor(user.id)
+        auth_service = AuthService(db)
 
-        # Log disablement
-        # CRITICAL: Never log sensitive data
-        # CRITICAL: Include IP address and User-Agent for security auditing
-        ip_address = get_remote_address()
-        user_agent = request.headers.get("User-Agent", "Unknown")
-        log_action(
-            "2fa_disabled", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id
-        )
+        # CRITICAL: Idempotency check - refresh user to get latest state
+        db.refresh(user)
+        if not user.two_factor_enabled:
+            # Already disabled - return success (idempotent)
+            return jsonify({"disabled": True, "already_disabled": True}), 200
 
-        return jsonify({"disabled": True}), 200
+        # CRITICAL: Wrap disable and code deletion in transaction for atomicity
+        # Both operations must succeed together or both must fail
+        try:
+            # Delete all backup codes for this user (no commit - transaction controlled by caller)
+            deleted_count = auth_service.backup_code_repo.delete_all_codes_for_user(user.id, commit=False)
+
+            # Disable 2FA
+            user_repo.disable_two_factor(user.id)
+
+            # Commit transaction atomically
+            db.commit()
+
+            # Log disablement (after successful commit)
+            # CRITICAL: Never log sensitive data
+            # CRITICAL: Include IP address and User-Agent for security auditing
+            ip_address = get_remote_address()
+            user_agent = request.headers.get("User-Agent", "Unknown")
+            log_action(
+                "2fa_disabled",
+                "user",
+                user.id,
+                {"ip_address": ip_address, "user_agent": user_agent, "backup_codes_deleted": deleted_count},
+                user.org_id,
+                user.id,
+            )
+
+            return jsonify({"disabled": True}), 200
+
+        except Exception:
+            # Rollback on any error during disable/code deletion
+            db.rollback()
+            logger.exception("Failed to disable 2FA or delete backup codes")
+            raise
 
     except Exception:
+        db.rollback()
         logger.exception("Failed to disable 2FA")
         return jsonify({"error": "Internal server error"}), 500
     # Don't close session here - let middleware teardown handle it

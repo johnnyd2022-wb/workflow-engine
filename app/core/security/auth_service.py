@@ -11,6 +11,7 @@ from flask import g, session
 from sqlalchemy.orm import Session
 
 from app.core.db.models.user import User
+from app.core.db.repositories.backup_code_repo import BackupCodeRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
 
@@ -22,6 +23,7 @@ class AuthService:
         self.db = db
         self.user_repo = UserRepository(db)
         self.org_repo = OrganisationRepository(db)
+        self.backup_code_repo = BackupCodeRepository(db)
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -169,3 +171,40 @@ class AuthService:
             return False
         totp = pyotp.TOTP(user.totp_secret)
         return totp.verify(token, valid_window=1)
+
+    def generate_backup_codes(self, user_id: UUID, count: int = 10) -> list[str]:
+        """Generate backup codes for a user
+
+        Args:
+            user_id: User ID to generate codes for
+            count: Number of codes to generate (default 10)
+
+        Returns:
+            List of plaintext backup codes (for one-time display to user)
+            CRITICAL: These codes should NEVER be logged
+        """
+        return self.backup_code_repo.generate_and_store_codes(user_id, count)
+
+    def verify_backup_code(self, user_id: UUID, code: str) -> bool:
+        """Verify a backup code and mark it as consumed if valid
+
+        Args:
+            user_id: User ID
+            code: Plaintext backup code to verify
+
+        Returns:
+            True if code is valid and was consumed, False otherwise
+        """
+        return self.backup_code_repo.verify_and_consume_code(user_id, code)
+
+    def delete_backup_codes(self, user_id: UUID, commit: bool = False) -> int:
+        """Delete all backup codes for a user (used when disabling 2FA)
+
+        Args:
+            user_id: User ID
+            commit: Whether to commit the transaction (default False, let caller control)
+
+        Returns:
+            Number of codes deleted
+        """
+        return self.backup_code_repo.delete_all_codes_for_user(user_id, commit=commit)

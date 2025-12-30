@@ -435,17 +435,17 @@
         <!-- 2FA Input (hidden by default) -->
         <div id="login-2fa-section" style="display: none;" data-mode="hidden">
           <p style="color: var(--text-secondary); font-size: 0.9375rem; margin-bottom: 1rem;">
-            Enter the 6-digit verification code from your authenticator app to complete sign in.
+            Enter the 6-digit code from your authenticator app, or an 8-character backup code if you've lost access to your device.
           </p>
           <div>
-            <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Verification Code</label>
+            <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Verification Code or Backup Code</label>
             <input 
               type="text" 
               id="login-2fa-code" 
               class="input"
-              placeholder="000000" 
-              maxlength="6" 
-              pattern="[0-9]{6}"
+              placeholder="000000 or ABC12345" 
+              maxlength="8" 
+              pattern="[A-Za-z0-9]{6,8}"
               style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
             />
           </div>
@@ -949,8 +949,12 @@
           // Submit 2FA code
           const code = codeInput.value.trim();
           
-          if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
-            errorDiv.textContent = 'Please enter a valid 6-digit code';
+          // Accept either 6-digit TOTP code or 8-character backup code
+          const isTOTPCode = code.length === 6 && /^\d{6}$/.test(code);
+          const isBackupCode = code.length === 8 && /^[A-Za-z0-9]{8}$/.test(code);
+          
+          if (!code || (!isTOTPCode && !isBackupCode)) {
+            errorDiv.textContent = 'Please enter a valid 6-digit code or 8-character backup code';
             errorDiv.style.display = 'block';
             submitButton.disabled = false;
             return;
