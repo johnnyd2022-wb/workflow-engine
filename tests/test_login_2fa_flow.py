@@ -51,7 +51,7 @@ db = db_session()
 try:
     org_repo = OrganisationRepository(db)
     user_repo = UserRepository(db)
-    
+
     # Find and delete test org
     org = org_repo.get_org_by_name("{self.test_org_name}")
     if org:
@@ -60,17 +60,17 @@ try:
         for log in audit_logs:
             db.delete(log)
         db.commit()
-        
+
         # Delete users
         users = user_repo.list_users_for_org(org.id, active_only=False)
         for user in users:
             db.delete(user)
         db.commit()
-        
+
         # Delete org
         db.delete(org)
         db.commit()
-    
+
     # Also check for orphaned user
     user = user_repo.get_user_by_email("{self.test_email}")
     if user:

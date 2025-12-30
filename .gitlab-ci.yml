@@ -39,3 +39,15 @@ ruff:
     - merge_requests
     - main
   allow_failure: false
+
+unit_tests:
+  stage: test
+  image: python:3.12-bullseye
+  script:
+    - pip install uv
+    - uv sync --extra dev
+    - uv run pytest tests/
+  only:
+    - merge_requests
+    - main
+  allow_failure: true
