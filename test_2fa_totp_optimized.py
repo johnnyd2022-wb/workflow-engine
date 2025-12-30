@@ -1,7 +1,7 @@
 """Optimized tests for TOTP 2FA endpoints - uses time manipulation to avoid waiting"""
 
-from uuid import uuid4
 import time
+from uuid import uuid4
 
 import pyotp
 import pytest
@@ -31,23 +31,23 @@ class Test2FATOTP:
 
     def _generate_two_different_tokens(self, secret: str):
         """Helper to generate two different TOTP tokens without waiting
-        
+
         Uses pyotp's at() method to generate tokens for different time windows.
         This avoids waiting 30 seconds for the next TOTP window.
         """
         totp = pyotp.TOTP(secret)
         current_time = int(time.time())
-        
+
         # Generate token for current time window
         token1 = totp.at(current_time)
-        
+
         # Generate token for next time window (30 seconds later)
         token2 = totp.at(current_time + 30)
-        
+
         # If they're somehow the same (shouldn't happen), use the window after that
         if token1 == token2:
             token2 = totp.at(current_time + 60)
-        
+
         return token1, token2
 
     def test_enroll_2fa_requires_authentication(self):
@@ -113,9 +113,7 @@ class Test2FATOTP:
         token1, token2 = self._generate_two_different_tokens(secret)
 
         # Enable 2FA with both tokens
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
         data = enable_response.json()
         assert data["enabled"] is True
@@ -150,16 +148,12 @@ class Test2FATOTP:
         token1, token2 = self._generate_two_different_tokens(secret)
 
         # Try to enable with invalid first token
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": "000000", "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": "000000", "token2": token2})
         assert enable_response.status_code == 400
         assert "Invalid first token" in enable_response.json()["error"]
 
         # Try with invalid second token
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": "000000"}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": "000000"})
         assert enable_response.status_code == 400
         assert "Invalid second token" in enable_response.json()["error"]
 
@@ -182,9 +176,7 @@ class Test2FATOTP:
         secret = enroll_response.json()["secret"]
         token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Verify it's enabled
@@ -247,9 +239,7 @@ class Test2FATOTP:
         secret = enroll_response.json()["secret"]
         token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Logout
@@ -283,9 +273,7 @@ class Test2FATOTP:
         totp = pyotp.TOTP(secret)
         token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Logout
@@ -329,9 +317,7 @@ class Test2FATOTP:
         secret = enroll_response.json()["secret"]
         token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Logout
@@ -375,9 +361,7 @@ class Test2FATOTP:
         secret = enroll_response.json()["secret"]
         token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Logout
@@ -389,8 +373,8 @@ class Test2FATOTP:
 
         # Try to verify without token (send JSON body but missing token field)
         verify_response = self.session.post(
-            f"{BASE_URL}/auth/verify-2fa", 
-            json={"remember_device": False}  # Send JSON but without token
+            f"{BASE_URL}/auth/verify-2fa",
+            json={"remember_device": False},  # Send JSON but without token
         )
         assert verify_response.status_code == 400
         assert "token is required" in verify_response.json()["error"]
@@ -447,9 +431,7 @@ class Test2FATOTP:
         secret = enroll_response.json()["secret"]
         token1, token2 = self._generate_two_different_tokens(secret)
 
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
 
         # Check status (should be True)
@@ -469,4 +451,3 @@ class Test2FATOTP:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

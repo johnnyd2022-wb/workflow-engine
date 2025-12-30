@@ -36,9 +36,9 @@ class TestLogin2FAFlow:
 
         try:
             # Use cleanup script to remove test data
+            import os
             import subprocess
             import sys
-            import os
 
             # Create a temporary cleanup script
             cleanup_script = f"""
@@ -116,23 +116,23 @@ finally:
 
     def _generate_two_different_tokens(self, secret: str):
         """Helper to generate two different TOTP tokens without waiting
-        
+
         Uses pyotp's at() method to generate tokens for different time windows.
         This avoids waiting 30 seconds for the next TOTP window.
         """
         totp = pyotp.TOTP(secret)
         current_time = int(time.time())
-        
+
         # Generate token for current time window
         token1 = totp.at(current_time)
-        
+
         # Generate token for next time window (30 seconds later)
         token2 = totp.at(current_time + 30)
-        
+
         # If they're somehow the same (shouldn't happen), use the window after that
         if token1 == token2:
             token2 = totp.at(current_time + 60)
-        
+
         return token1, token2
 
     def _enroll_and_enable_2fa(self):
@@ -146,9 +146,7 @@ finally:
         token1, token2 = self._generate_two_different_tokens(secret)
 
         # Enable 2FA with both tokens
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
         data = enable_response.json()
         assert data["enabled"] is True
@@ -330,8 +328,8 @@ finally:
 
         # Try to verify without token (send JSON body but missing token field)
         verify_response = self.session.post(
-            f"{BASE_URL}/auth/verify-2fa", 
-            json={"remember_device": False}  # Send JSON but without token
+            f"{BASE_URL}/auth/verify-2fa",
+            json={"remember_device": False},  # Send JSON but without token
         )
         assert verify_response.status_code == 400
         assert "token is required" in verify_response.json()["error"]
@@ -369,7 +367,7 @@ finally:
 
     def test_00_backup_code_format_validation(self):
         """Test that backup code format is validated (8 alphanumeric characters)
-        
+
         This test is named with "00_" prefix to run early (alphabetically first)
         before other tests hit the rate limit (5 requests per 5 minutes).
         """
@@ -402,7 +400,7 @@ finally:
 
     def test_00_totp_code_format_validation(self):
         """Test that TOTP code format is validated (6 digits)
-        
+
         This test is named with "00_" prefix to run early (alphabetically first)
         before other tests hit the rate limit (5 requests per 5 minutes).
         """
@@ -420,12 +418,16 @@ finally:
 
         # Try with invalid format (non-numeric)
         verify_response = self.session.post(f"{BASE_URL}/auth/verify-2fa", json={"token": "ABCDEF"})
-        assert verify_response.status_code == 400, f"Expected 400, got {verify_response.status_code}: {verify_response.text}"
+        assert verify_response.status_code == 400, (
+            f"Expected 400, got {verify_response.status_code}: {verify_response.text}"
+        )
         assert "Invalid code format" in verify_response.json()["error"]
 
         # Try with invalid format (wrong length)
         verify_response = self.session.post(f"{BASE_URL}/auth/verify-2fa", json={"token": "12345"})
-        assert verify_response.status_code == 400, f"Expected 400, got {verify_response.status_code}: {verify_response.text}"
+        assert verify_response.status_code == 400, (
+            f"Expected 400, got {verify_response.status_code}: {verify_response.text}"
+        )
         assert "Invalid code format" in verify_response.json()["error"]
 
     def test_verify_2fa_expired_session_fails(self):
@@ -485,9 +487,7 @@ finally:
         token1, token2 = self._generate_two_different_tokens(secret)
 
         # Enable 2FA
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token1, "token2": token2})
         assert enable_response.status_code == 200
         data = enable_response.json()
         assert data["enabled"] is True
@@ -513,13 +513,10 @@ finally:
         token = totp.now()
 
         # Try to enable with same token twice (should fail)
-        enable_response = self.session.post(
-            f"{BASE_URL}/auth/2fa/enable", json={"token1": token, "token2": token}
-        )
+        enable_response = self.session.post(f"{BASE_URL}/auth/2fa/enable", json={"token1": token, "token2": token})
         assert enable_response.status_code == 400
         assert "Second token must be different" in enable_response.json()["error"]
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
