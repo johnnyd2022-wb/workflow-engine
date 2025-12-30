@@ -43,10 +43,42 @@ ruff:
 unit_tests:
   stage: test
   image: python:3.12-bullseye
-  script:
+  services:
+    - name: postgres:16
+      alias: postgres
+      command: ["postgres", "-c", "max_connections=200"]
+  variables:
+    # Set environment to use test.ini config
+    ENVIRONMENT: test
+    # Database connection for GitLab CI service
+    # Service containers are accessible via their alias as hostname
+    POSTGRES_DB: workflow-engine
+    POSTGRES_USER: workflow-engine
+    POSTGRES_PASSWORD: secret
+    POSTGRES_HOST_AUTH_METHOD: trust
+  before_script:
+    # Install dependencies
     - pip install uv
     - uv sync --extra dev
-    - uv run pytest tests/
+    # Install PostgreSQL client for pg_isready
+    - apt-get update -qq && apt-get install -y -qq postgresql-client
+    # Wait for PostgreSQL to be ready
+    - |
+      echo "Waiting for PostgreSQL to be ready..."
+      until PGPASSWORD=$POSTGRES_PASSWORD psql -h postgres -p 5432 -U $POSTGRES_USER -d $POSTGRES_DB -c '\q' 2>/dev/null; do
+        echo "PostgreSQL is unavailable - sleeping"
+        sleep 2
+      done
+      echo "PostgreSQL is ready!"
+    # Update test.ini to use service container hostname
+    # Service containers are accessible via their alias as hostname
+    - |
+      sed -i 's|host = host.docker.internal|host = postgres|' app/config/test.ini
+      sed -i 's|port = 5401|port = 5432|' app/config/test.ini
+    # Run Alembic migrations to set up schema
+    - ENVIRONMENT=test uv run alembic upgrade head
+  script:
+    - ENVIRONMENT=test uv run pytest tests/ -v
   only:
     - merge_requests
     - main
