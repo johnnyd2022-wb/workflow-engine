@@ -18,7 +18,9 @@ openssl req -x509 -newkey rsa:4096 -nodes \
 
 # Start server in background
 echo "Starting Flask application server..."
+# Set PYTHONPATH to include project root so 'features' module can be imported
 # Use uv run to ensure we use the virtual environment with all dependencies
+export PYTHONPATH="$(pwd):$PYTHONPATH"
 ENVIRONMENT=test uv run python -m app.main > /tmp/flask.log 2>&1 &
 SERVER_PID=$!
 echo $SERVER_PID > /tmp/flask.pid
