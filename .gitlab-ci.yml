@@ -62,70 +62,17 @@ unit_tests:
     - uv sync --extra dev
     # Install PostgreSQL client and curl for health checks
     - apt-get update -qq && apt-get install -y -qq postgresql-client curl openssl
-    # Wait for PostgreSQL to be ready
-    - |
-      echo "Waiting for PostgreSQL to be ready..."
-      until PGPASSWORD=$POSTGRES_PASSWORD psql -h postgres -p 5432 -U $POSTGRES_USER -d $POSTGRES_DB -c '\q' 2>/dev/null; do
-        echo "PostgreSQL is unavailable - sleeping"
-        sleep 2
-      done
-      echo "PostgreSQL is ready!"
-    # Update test.ini to use service container hostname and correct port
-    # Service containers are accessible via their alias as hostname
-    # Tests expect port 8005, so update test.ini to match
-    - |
-      sed -i 's|host = host.docker.internal|host = postgres|' app/config/test.ini
-      sed -i 's|port = 5401|port = 5432|' app/config/test.ini
-      sed -i 's|port = 8001|port = 8005|' app/config/test.ini
-    # Run Alembic migrations to set up schema
-    - ENVIRONMENT=test uv run alembic upgrade head
-    # Generate self-signed certificate for HTTPS (tests require HTTPS)
-    - |
-      echo "Generating self-signed SSL certificate..."
-      mkdir -p app/tls
-      openssl req -x509 -newkey rsa:4096 -nodes \
-        -keyout app/tls/app_cert.key \
-        -out app/tls/app_cert.pem \
-        -days 365 \
-        -subj "/C=US/ST=State/L=City/O=Org/CN=localhost" \
-        2>/dev/null || true
-    # Start Flask application server in background for integration tests
-    - |
-      echo "Starting Flask application server..."
-      # Start server in background
-      ENVIRONMENT=test python -m app.main > /tmp/flask.log 2>&1 &
-      SERVER_PID=$!
-      echo $SERVER_PID > /tmp/flask.pid
-      echo "Flask server started with PID: $SERVER_PID"
-      # Wait for server to be ready (check health endpoint)
-      echo "Waiting for Flask server to start..."
-      for i in {1..60}; do
-        if curl -k -f -s https://localhost:8005/auth/me > /dev/null 2>&1; then
-          echo "✅ Flask server is ready!"
-          break
-        fi
-        if [ $i -eq 60 ]; then
-          echo "❌ Flask server failed to start after 60 seconds!"
-          echo "Server logs:"
-          cat /tmp/flask.log
-          exit 1
-        fi
-        sleep 1
-      done
+    # Make CI scripts executable
+    - chmod +x ci/*.sh
+    # Setup database (wait for postgres, update config, run migrations)
+    - ./ci/setup_database.sh
+    # Setup and start Flask server (generate certs, start server, wait for ready)
+    - ./ci/setup_server.sh
   script:
     - ENVIRONMENT=test uv run pytest tests/ -v
   after_script:
     # Clean up: Stop Flask server
-    - |
-      if [ -f /tmp/flask.pid ]; then
-        echo "Stopping Flask server (PID: $(cat /tmp/flask.pid))..."
-        kill $(cat /tmp/flask.pid) 2>/dev/null || true
-        sleep 2
-        # Force kill if still running
-        kill -9 $(cat /tmp/flask.pid) 2>/dev/null || true
-        rm -f /tmp/flask.pid
-        echo "Flask server stopped"
-      fi
+    - ./ci/cleanup_server.sh
   only:
     - merge_requests
     - main
