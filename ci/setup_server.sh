@@ -18,9 +18,16 @@ openssl req -x509 -newkey rsa:4096 -nodes \
 
 # Start server in background
 echo "Starting Flask application server..."
+# Debug: Show current directory and PYTHONPATH
+PROJECT_ROOT="$(pwd)"
+echo "Current directory: $PROJECT_ROOT"
+echo "Checking if features directory exists:"
+ls -la "$PROJECT_ROOT/features" 2>&1 | head -5 || echo "features directory not found!"
 # Set PYTHONPATH inline to include project root so 'features' module can be imported
 # Use uv run to ensure we use the virtual environment with all dependencies
-PYTHONPATH="$(pwd):${PYTHONPATH:-}" ENVIRONMENT=test uv run python -m app.main > /tmp/flask.log 2>&1 &
+echo "Setting PYTHONPATH to: $PROJECT_ROOT"
+PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}" ENVIRONMENT=test uv run python -c "import sys; print('Python sys.path:', sys.path); import os; print('PYTHONPATH env:', os.environ.get('PYTHONPATH', 'NOT SET'))" >> /tmp/flask.log 2>&1
+PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}" ENVIRONMENT=test uv run python -m app.main >> /tmp/flask.log 2>&1 &
 SERVER_PID=$!
 echo $SERVER_PID > /tmp/flask.pid
 echo "Flask server started with PID: $SERVER_PID"
