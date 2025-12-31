@@ -565,7 +565,7 @@
                   show2FAStep(4);
                   showErrorNotification('⚠️ IMPORTANT: You were viewing your backup codes. Please confirm you have saved them before closing this window.');
                 } catch (e) {
-                  console.error('Failed to restore backup codes:', e);
+                  // Failed to restore backup codes - don't log sensitive data
                   showWarningAboutIncompleteEnrollment();
                 }
               } else {
@@ -580,7 +580,8 @@
             }
           }
         } catch (error) {
-          console.error('Error checking enrollment state:', error);
+          // Don't log error object - may contain sensitive data
+          console.error('Error checking enrollment state');
           // On error, show warning but don't clear flags
           if (incompleteFlag === 'true') {
             showWarningAboutIncompleteEnrollment();
@@ -633,7 +634,8 @@
           }
         }
       } catch (error) {
-        console.error('Error loading 2FA status:', error);
+        // Don't log error object - may contain sensitive data
+        console.error('Error loading 2FA status');
       }
     }
     
@@ -674,7 +676,8 @@
       
       // Add error handler for image loading
       img.onerror = function(e) {
-        console.error('Error loading QR code image:', e);
+        // Don't log error object - may contain sensitive QR code data
+        console.error('Error loading QR code image');
         container.innerHTML = '<p style="color: #ef4444; padding: 1rem; text-align: center;">Error displaying QR code image. Please use the manual code below.</p>';
       };
       
@@ -756,7 +759,8 @@
           alert('Error: ' + (error.error || 'Failed to start 2FA enrollment'));
         }
       } catch (error) {
-        console.error('Error enrolling in 2FA:', error);
+        // Don't log error object - may contain sensitive secret data
+        console.error('Error enrolling in 2FA');
         alert('Error: Failed to start 2FA enrollment. Please try again.');
       } finally {
         enrollmentInProgress = false;
@@ -888,13 +892,15 @@
           let data;
           try {
             data = await response.json();
-            console.log('2FA enable response data:', data);
+            // Don't log response data - may contain sensitive backup codes
+            console.log('2FA enable response received');
             console.log('Has enabled:', data.enabled);
             console.log('Has backup_codes:', !!data.backup_codes);
             console.log('Backup codes type:', typeof data.backup_codes);
             console.log('Backup codes is array:', Array.isArray(data.backup_codes));
           } catch (parseError) {
-            console.error('Error parsing response JSON:', parseError);
+            // Don't log parse error - may contain sensitive backup codes
+            console.error('Error parsing response JSON');
             errorDiv.textContent = 'Error parsing server response. Please try again.';
             errorDiv.style.display = 'block';
             verifyBtn.disabled = false;
@@ -911,7 +917,8 @@
                 sessionStorage.setItem('2fa_backup_codes', JSON.stringify(data.backup_codes));
                 sessionStorage.setItem('2fa_enrollment_step', '4');
               } catch (e) {
-                console.warn('Failed to store backup codes in sessionStorage:', e);
+                // Failed to store backup codes - don't log sensitive data
+                console.warn('Failed to store backup codes in sessionStorage');
               }
               displayBackupCodes(data.backup_codes);
               show2FAStep(4);
@@ -922,7 +929,8 @@
               verifyBtn.textContent = 'Verify & Enable 2FA';
             } else {
               // Backup codes not in response - this shouldn't happen, but handle gracefully
-              console.error('Backup codes not received in response or invalid format:', data.backup_codes);
+              // Don't log backup codes - they may be present in data.backup_codes
+              console.error('Backup codes not received in response or invalid format');
               close2FAModal();
               current2FAStatus = true;
               update2FAUI();
@@ -930,7 +938,8 @@
             }
           } else {
             // Response says not enabled - show error
-            console.error('Response indicates 2FA was not enabled:', data);
+            // Don't log data object - may contain sensitive backup codes
+            console.error('Response indicates 2FA was not enabled');
             errorDiv.textContent = 'Failed to enable 2FA. Please try again.';
             errorDiv.style.display = 'block';
             verifyBtn.disabled = false;
@@ -952,7 +961,8 @@
           verifyBtn.textContent = 'Verify & Enable 2FA';
         }
       } catch (error) {
-        console.error('Error enabling 2FA:', error);
+        // Don't log error object - may contain sensitive backup codes
+        console.error('Error enabling 2FA');
         errorDiv.textContent = 'Network error. Please try again.';
         errorDiv.style.display = 'block';
         verifyBtn.disabled = false;
@@ -962,7 +972,8 @@
     
     // Display backup codes
     function displayBackupCodes(codes) {
-      console.log('Displaying backup codes:', codes);
+      // Don't log backup codes - they are sensitive
+      console.log('Displaying backup codes');
       const container = document.getElementById('backup-codes-container');
       if (!container) {
         console.error('Backup codes container not found!');
@@ -970,7 +981,8 @@
       }
       container.innerHTML = '';
       if (!codes || !Array.isArray(codes)) {
-        console.error('Invalid backup codes:', codes);
+        // Don't log codes - they are sensitive
+        console.error('Invalid backup codes format');
         return;
       }
       codes.forEach((code, index) => {
@@ -1001,7 +1013,8 @@
         sessionStorage.removeItem('2fa_enrollment_step');
         localStorage.removeItem('2fa_enrollment_incomplete');
       } catch (e) {
-        console.warn('Failed to clear enrollment storage:', e);
+        // Don't log error object - may contain sensitive backup codes
+        console.warn('Failed to clear enrollment storage');
       }
       
       close2FAModal();
@@ -1110,7 +1123,8 @@
           sessionStorage.removeItem('2fa_backup_codes');
           sessionStorage.removeItem('2fa_enrollment_step');
         } catch (e) {
-          console.warn('Failed to clear sessionStorage:', e);
+          // Don't log error object - may contain sensitive backup codes
+          console.warn('Failed to clear sessionStorage');
         }
       }
       
