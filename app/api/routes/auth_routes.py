@@ -19,7 +19,7 @@ from app.api.middleware.session_security import (
 from app.core.db import db_session
 from app.core.db.models.trusted_device import TrustedDevice
 from app.core.db.repositories.trusted_device_repo import TrustedDeviceRepository
-from app.core.db.repositories.user_repo import UserRepository
+from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
 from app.core.security.permissions import requires_auth
@@ -28,6 +28,40 @@ from app.core.utils.log_action import log_action
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
+
+
+def validate_email(email: str) -> tuple[bool, str | None]:
+    """
+    Validate email address format.
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if not email:
+        return False, "Email address is required"
+
+    email = email.strip()
+
+    if not email:
+        return False, "Email address cannot be empty"
+
+    if "@" not in email:
+        return False, "Invalid email address format"
+
+    # Basic validation: must have @ and at least one character before and after
+    parts = email.split("@")
+    if len(parts) != 2:
+        return False, "Invalid email address format"
+
+    if not parts[0] or not parts[1]:
+        return False, "Invalid email address format"
+
+    # Check for basic domain format (at least one dot)
+    if "." not in parts[1]:
+        return False, "Invalid email address format"
+
+    return True, None
+
 
 # Check if running in CI (GitLab CI sets CI=true and GITLAB_CI=true)
 IS_CI = os.getenv("CI", "").lower() == "true" or os.getenv("GITLAB_CI", "").lower() == "true"
@@ -95,17 +129,34 @@ def signup():
     email = data.get("email")
     password = data.get("password")
     password_confirm = data.get("password_confirm")
+    phone_number = data.get("phone_number")
 
     if not org_name or not email or not password or not password_confirm:
         return jsonify({"error": "org_name, email, password, and password_confirm are required"}), 400
 
+    # Validate email format
+    is_valid, error_msg = validate_email(email)
+    if not is_valid:
+        return jsonify({"error": error_msg}), 400
+
     if password != password_confirm:
         return jsonify({"error": "Passwords do not match"}), 400
+
+    # Validate phone number if provided (6-15 digits only)
+    if phone_number:
+        # Remove any non-digit characters for validation
+        phone_digits = "".join(filter(str.isdigit, phone_number))
+        if len(phone_digits) < 6 or len(phone_digits) > 15:
+            return jsonify({"error": "Phone number must be 6-15 digits"}), 400
+        # Store only digits
+        phone_number = phone_digits
+    else:
+        phone_number = None
 
     db = db_session()
     try:
         org_manager = OrgManager(db)
-        org, user = org_manager.create_org_with_admin_user(org_name, email, password)
+        org, user = org_manager.create_org_with_admin_user(org_name, email, password, phone_number)
 
         # Create session - stores user_id, org_id, user_email, org_name
         auth_service = AuthService(db)
@@ -1200,5 +1251,110 @@ def change_password():
 
     except Exception:
         logger.exception("Failed to change password")
+        return jsonify({"error": "Internal server error"}), 500
+    # Don't close session here - let middleware teardown handle it
+
+
+@auth_bp.route("/settings", methods=["GET", "PUT"])
+@requires_auth
+def manage_user_settings():
+    """Get or update user settings (email, phone_number)
+
+    GET: Returns current user settings including org_name, email, and phone_number
+    PUT: Updates email and phone_number (org_name is not editable)
+    """
+    user = g.current_user
+    if not user:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    db = db_session()
+    try:
+        user_repo = UserRepository(db)
+
+        if request.method == "GET":
+            # Get current settings
+            # Use g.org_name from middleware (safe primitive) instead of g.current_org.name (may be detached)
+            return jsonify(
+                {
+                    "org_name": getattr(g, "org_name", None),
+                    "email": user.email,
+                    "phone_number": user.phone_number or "",
+                }
+            ), 200
+
+        elif request.method == "PUT":
+            # Update settings
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "JSON body required"}), 400
+
+            email = data.get("email")
+            phone_number = data.get("phone_number")
+
+            # Validate email if provided
+            if email is not None:
+                is_valid, error_msg = validate_email(email)
+                if not is_valid:
+                    return jsonify({"error": error_msg}), 400
+
+            # Validate phone number if provided (6-15 digits only)
+            if phone_number is not None:
+                if phone_number:  # Only validate if not empty
+                    # Remove any non-digit characters for validation
+                    phone_digits = "".join(filter(str.isdigit, phone_number))
+                    if len(phone_digits) < 6 or len(phone_digits) > 15:
+                        return jsonify({"error": "Phone number must be 6-15 digits"}), 400
+                    # Store only digits
+                    phone_number = phone_digits
+                else:
+                    # Empty string means clear the phone number
+                    phone_number = None
+
+            # Update user
+            try:
+                updated_user = user_repo.update_user(
+                    user_id=user.id,
+                    org_id=user.org_id,
+                    email=email,
+                    phone_number=phone_number,
+                )
+            except EmailConflictError as e:
+                # Email conflict - return 409 Conflict
+                return jsonify({"error": str(e)}), 409
+
+            if not updated_user:
+                return jsonify({"error": "Failed to update settings"}), 500
+
+            # Extract values immediately after update (before object might become detached)
+            # Use updated values if provided, otherwise use original values
+            final_email = email if email is not None else user.email
+            final_phone = phone_number if phone_number is not None else (user.phone_number or "")
+
+            # Update session email if it changed
+            if email and email != user.email:
+                session["user_email"] = email
+
+            # Log settings update
+            log_action(
+                "update",
+                "user_settings",
+                user.id,
+                {"email_updated": email is not None, "phone_updated": phone_number is not None},
+                user.org_id,
+                user.id,
+            )
+
+            return jsonify(
+                {
+                    "message": "Settings updated successfully",
+                    "org_name": getattr(g, "org_name", None),
+                    "email": final_email,
+                    "phone_number": final_phone,
+                }
+            ), 200
+
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to manage user settings")
         return jsonify({"error": "Internal server error"}), 500
     # Don't close session here - let middleware teardown handle it

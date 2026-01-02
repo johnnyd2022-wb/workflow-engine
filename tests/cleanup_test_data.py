@@ -11,8 +11,8 @@ from app.core.db.repositories.user_repo import UserRepository
 def _delete_user_related_data(db, user_id):
     """Delete all data related to a user (backup codes, trusted devices, audit logs)"""
     from app.core.db.models.audit_log import AuditLog
-    from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
     from app.core.db.models.trusted_device import TrustedDevice
+    from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
 
     # Delete backup codes
     backup_codes = db.query(TwoFactorBackupCode).filter(TwoFactorBackupCode.user_id == user_id).all()

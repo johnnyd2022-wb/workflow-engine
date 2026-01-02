@@ -2,9 +2,16 @@
 
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.db.models.user import User, UserRole
+
+
+class EmailConflictError(Exception):
+    """Raised when email update conflicts with existing user"""
+
+    pass
 
 
 class UserRepository:
@@ -14,10 +21,23 @@ class UserRepository:
         self.db = db
 
     def create_user(
-        self, org_id: UUID, email: str, password_hash: str, role: UserRole = UserRole.MEMBER, is_active: bool = True
+        self,
+        org_id: UUID,
+        email: str,
+        password_hash: str,
+        role: UserRole = UserRole.MEMBER,
+        is_active: bool = True,
+        phone_number: str | None = None,
     ) -> User:
         """Create a new user (must belong to an organisation)"""
-        user = User(org_id=org_id, email=email, password_hash=password_hash, role=role, is_active=is_active)
+        user = User(
+            org_id=org_id,
+            email=email,
+            password_hash=password_hash,
+            role=role,
+            is_active=is_active,
+            phone_number=phone_number,
+        )
         self.db.add(user)
         self.db.flush()  # Flush to get the ID without committing
         # Access id to ensure it's loaded
@@ -54,24 +74,49 @@ class UserRepository:
         password_hash: str | None = None,
         role: UserRole | None = None,
         is_active: bool | None = None,
+        phone_number: str | None = None,
     ) -> User | None:
-        """Update user (tenancy enforced - must match org_id)"""
+        """Update user (tenancy enforced - must match org_id)
+
+        Raises EmailConflictError if email update conflicts with existing user.
+        This is race-condition safe as it relies on DB uniqueness constraint.
+        """
         user = self.get_user_by_id(user_id, org_id=org_id)
         if not user:
             return None
 
+        # Store original email in case we need to rollback
+        original_email = user.email
+
         if email is not None:
-            user.email = email
+            # Only update if email is actually changing
+            if email != user.email:
+                user.email = email
         if password_hash is not None:
             user.password_hash = password_hash
         if role is not None:
             user.role = role
         if is_active is not None:
             user.is_active = is_active
+        if phone_number is not None:
+            user.phone_number = phone_number
 
-        self.db.commit()
-        self.db.refresh(user)
-        return user
+        try:
+            self.db.commit()
+            self.db.refresh(user)
+            return user
+        except IntegrityError as e:
+            # Rollback the transaction
+            self.db.rollback()
+            # Check if this is an email uniqueness violation
+            # Different databases may have different error messages
+            error_str = str(e.orig).lower() if hasattr(e, "orig") else str(e).lower()
+            if "unique" in error_str or "duplicate" in error_str or "email" in error_str:
+                # Restore original email to ensure session state consistency
+                user.email = original_email
+                raise EmailConflictError(f"Email address '{email}' is already in use")
+            # Re-raise if it's a different integrity error
+            raise
 
     def delete_user(self, user_id: UUID, org_id: UUID) -> bool:
         """Delete user (tenancy enforced - soft delete by setting is_active=False)"""
