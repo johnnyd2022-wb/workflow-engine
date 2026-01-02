@@ -19,7 +19,7 @@ from app.api.middleware.session_security import (
 from app.core.db import db_session
 from app.core.db.models.trusted_device import TrustedDevice
 from app.core.db.repositories.trusted_device_repo import TrustedDeviceRepository
-from app.core.db.repositories.user_repo import UserRepository
+from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
 from app.core.security.permissions import requires_auth
@@ -28,6 +28,40 @@ from app.core.utils.log_action import log_action
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
+
+
+def validate_email(email: str) -> tuple[bool, str | None]:
+    """
+    Validate email address format.
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if not email:
+        return False, "Email address is required"
+
+    email = email.strip()
+
+    if not email:
+        return False, "Email address cannot be empty"
+
+    if "@" not in email:
+        return False, "Invalid email address format"
+
+    # Basic validation: must have @ and at least one character before and after
+    parts = email.split("@")
+    if len(parts) != 2:
+        return False, "Invalid email address format"
+
+    if not parts[0] or not parts[1]:
+        return False, "Invalid email address format"
+
+    # Check for basic domain format (at least one dot)
+    if "." not in parts[1]:
+        return False, "Invalid email address format"
+
+    return True, None
+
 
 # Check if running in CI (GitLab CI sets CI=true and GITLAB_CI=true)
 IS_CI = os.getenv("CI", "").lower() == "true" or os.getenv("GITLAB_CI", "").lower() == "true"
@@ -99,6 +133,11 @@ def signup():
 
     if not org_name or not email or not password or not password_confirm:
         return jsonify({"error": "org_name, email, password, and password_confirm are required"}), 400
+
+    # Validate email format
+    is_valid, error_msg = validate_email(email)
+    if not is_valid:
+        return jsonify({"error": error_msg}), 400
 
     if password != password_confirm:
         return jsonify({"error": "Passwords do not match"}), 400
@@ -1254,8 +1293,9 @@ def manage_user_settings():
 
             # Validate email if provided
             if email is not None:
-                if not email or "@" not in email:
-                    return jsonify({"error": "Invalid email address"}), 400
+                is_valid, error_msg = validate_email(email)
+                if not is_valid:
+                    return jsonify({"error": error_msg}), 400
 
             # Validate phone number if provided (6-15 digits only)
             if phone_number is not None:
@@ -1271,12 +1311,16 @@ def manage_user_settings():
                     phone_number = None
 
             # Update user
-            updated_user = user_repo.update_user(
-                user_id=user.id,
-                org_id=user.org_id,
-                email=email,
-                phone_number=phone_number,
-            )
+            try:
+                updated_user = user_repo.update_user(
+                    user_id=user.id,
+                    org_id=user.org_id,
+                    email=email,
+                    phone_number=phone_number,
+                )
+            except EmailConflictError as e:
+                # Email conflict - return 409 Conflict
+                return jsonify({"error": str(e)}), 409
 
             if not updated_user:
                 return jsonify({"error": "Failed to update settings"}), 500
