@@ -94,6 +94,9 @@
           </a>
         </div>
       </nav>
+      
+      <!-- Account Info Component Container -->
+      <div id="account-info-container" style="margin-top: auto; padding: 1rem 0;"></div>
     </aside>
     
     <main class="main-content">
@@ -110,22 +113,45 @@
         <div class="glass-card mb-4">
           <h2 class="mb-3">Account Information</h2>
           
+          <div id="settings-message" style="display: none; margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.875rem;"></div>
+          
           <div class="form-group">
             <label class="form-label">Company Name</label>
-            <input type="text" class="form-input" value="Flume Enterprises" placeholder="Enter company name">
+            <input 
+              type="text" 
+              id="settings-org-name" 
+              class="form-input" 
+              placeholder="Enter company name"
+              readonly
+              style="background: rgba(255, 255, 255, 0.03); color: var(--text-secondary); cursor: not-allowed;"
+            >
           </div>
           
           <div class="form-group">
             <label class="form-label">Email</label>
-            <input type="email" class="form-input" value="admin@flume.example.com" placeholder="Enter email">
+            <input 
+              type="email" 
+              id="settings-email" 
+              class="form-input" 
+              placeholder="Enter email"
+              required
+            >
           </div>
           
           <div class="form-group">
-            <label class="form-label">Phone</label>
-            <input type="tel" class="form-input" value="+61 2 1234 5678" placeholder="Enter phone number">
+            <label class="form-label">Phone Number</label>
+            <input 
+              type="tel" 
+              id="settings-phone" 
+              class="form-input" 
+              placeholder="Enter phone number (6-15 digits)"
+              pattern="[0-9]{6,15}"
+              maxlength="15"
+            >
+            <div id="settings-phone-error" class="text-error" style="display: none; margin-top: 0.5rem; font-size: 0.875rem;"></div>
           </div>
           
-          <button class="btn btn-primary">Save Changes</button>
+          <button id="settings-save-btn" class="btn btn-primary" onclick="saveSettings()">Save Changes</button>
         </div>
         
         <div class="glass-card mb-4">
@@ -436,6 +462,48 @@
   
   <script src="/workflow-engine-static/common_4.js"></script>
   <script src="/ui/shared/password-policy.js"></script>
+  <script src="/ui/shared/account-info.js"></script>
+  <script>
+    // Load account info component HTML immediately
+    (function loadAccountInfoComponent() {
+      const container = document.getElementById('account-info-container');
+      if (!container) {
+        // Container not ready yet, retry quickly
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', loadAccountInfoComponent);
+        } else {
+          setTimeout(loadAccountInfoComponent, 10);
+        }
+        return;
+      }
+      
+      fetch('/ui/shared/account-info.html')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.text();
+        })
+        .then(html => {
+          container.innerHTML = html;
+          // Immediately try to load account info data
+          const checkAndLoad = () => {
+            const component = document.getElementById('account-info-component');
+            if (component && window.loadAccountInfo) {
+              window.loadAccountInfo('account-info-container');
+            } else if (!window.loadAccountInfo) {
+              // Retry quickly if loadAccountInfo not available yet
+              setTimeout(checkAndLoad, 10);
+            }
+          };
+          // Check immediately, then retry if needed
+          checkAndLoad();
+        })
+        .catch(error => {
+          console.error('Error loading account info component:', error);
+        });
+    })();
+  </script>
   <script>
     // Check if page loaded due to session timeout redirect
     (function() {
@@ -608,6 +676,146 @@
     
     // Check on page load
     checkIncompleteEnrollment();
+    
+    // Load settings on page load
+    async function loadSettings() {
+      try {
+        const response = await fetch('/auth/settings', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
+        
+        if (response.ok) {
+          const data = await response.json();
+          const orgNameInput = document.getElementById('settings-org-name');
+          const emailInput = document.getElementById('settings-email');
+          const phoneInput = document.getElementById('settings-phone');
+          
+          if (orgNameInput) orgNameInput.value = data.org_name || '';
+          if (emailInput) emailInput.value = data.email || '';
+          if (phoneInput) phoneInput.value = data.phone_number || '';
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    }
+    
+    // Save settings
+    async function saveSettings() {
+      const emailInput = document.getElementById('settings-email');
+      const phoneInput = document.getElementById('settings-phone');
+      const saveBtn = document.getElementById('settings-save-btn');
+      const messageDiv = document.getElementById('settings-message');
+      const phoneErrorDiv = document.getElementById('settings-phone-error');
+      
+      if (!emailInput || !phoneInput || !saveBtn) return;
+      
+      const email = emailInput.value.trim();
+      let phoneNumber = phoneInput.value.trim();
+      
+      // Hide previous messages
+      if (messageDiv) messageDiv.style.display = 'none';
+      if (phoneErrorDiv) phoneErrorDiv.style.display = 'none';
+      
+      // Validate email
+      if (!email || !email.includes('@')) {
+        if (messageDiv) {
+          messageDiv.textContent = 'Please enter a valid email address';
+          messageDiv.style.display = 'block';
+          messageDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+          messageDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          messageDiv.style.color = '#ef4444';
+        }
+        return;
+      }
+      
+      // Validate phone number if provided (6-15 digits only)
+      if (phoneNumber) {
+        const phoneDigits = phoneNumber.replace(/\D/g, ''); // Remove non-digits
+        if (phoneDigits.length < 6 || phoneDigits.length > 15) {
+          if (phoneErrorDiv) {
+            phoneErrorDiv.textContent = 'Phone number must be 6-15 digits';
+            phoneErrorDiv.style.display = 'block';
+          }
+          return;
+        }
+        phoneNumber = phoneDigits; // Store only digits
+      }
+      
+      // Disable save button
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      
+      try {
+        const response = await fetch('/auth/settings', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            email: email,
+            phone_number: phoneNumber || ''
+          })
+        });
+        
+        // Check for 401 before parsing JSON
+        if (response.status === 401) {
+          const path = window.location.pathname;
+          if (path !== '/' && !path.includes('login')) {
+            showSessionTimeoutModal();
+            return;
+          }
+        }
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Success - update UI and show message
+          if (phoneInput) phoneInput.value = data.phone_number || '';
+          if (messageDiv) {
+            messageDiv.textContent = data.message || 'Settings saved successfully';
+            messageDiv.style.display = 'block';
+            messageDiv.style.background = 'rgba(34, 197, 94, 0.1)';
+            messageDiv.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+            messageDiv.style.color = '#22c55e';
+          }
+        } else {
+          // Error
+          if (messageDiv) {
+            messageDiv.textContent = data.error || 'Failed to save settings';
+            messageDiv.style.display = 'block';
+            messageDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+            messageDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+            messageDiv.style.color = '#ef4444';
+          }
+        }
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        if (messageDiv) {
+          messageDiv.textContent = 'Network error. Please try again.';
+          messageDiv.style.display = 'block';
+          messageDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+          messageDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          messageDiv.style.color = '#ef4444';
+        }
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Changes';
+      }
+    }
+    
+    // Load settings on page load
+    loadSettings();
     
     // Load 2FA status on page load
     async function load2FAStatus() {

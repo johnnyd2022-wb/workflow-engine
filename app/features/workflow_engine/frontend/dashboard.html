@@ -100,6 +100,9 @@
           </a>
         </div>
       </nav>
+      
+      <!-- Account Info Component Container -->
+      <div id="account-info-container" style="margin-top: auto; padding: 1rem 0;"></div>
     </aside>
     
     <!-- Main Content -->
@@ -120,47 +123,6 @@
           </button>
         </div>
       </header>
-      
-      <!-- User & Organization Info -->
-      <section class="mb-4">
-        <div class="glass-card" style="padding: 1.5rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-            <div>
-              <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem;">Account Information</h3>
-              <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--text-secondary);">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
-                  </svg>
-                  <span style="color: var(--text-secondary); font-size: 0.875rem;">User:</span>
-                  <span id="dashboard-user-email" style="font-weight: 500;">{{user_email}}</span>
-                  <span id="dashboard-user-role" style="color: var(--text-secondary); font-size: 0.75rem; padding: 0.25rem 0.5rem; background: rgba(255, 255, 255, 0.1); border-radius: 0.25rem; text-transform: capitalize;">{{user_role}}</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--text-secondary);">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                  </svg>
-                  <span style="color: var(--text-secondary); font-size: 0.875rem;">Organization:</span>
-                  <span id="dashboard-org-name" style="font-weight: 500;">{{org_name}}</span>
-                  <span id="dashboard-org-status" style="color: var(--text-secondary); font-size: 0.75rem; padding: 0.25rem 0.5rem; background: rgba(255, 255, 255, 0.1); border-radius: 0.25rem; text-transform: capitalize;">{{org_status}}</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <button class="btn btn-glass" onclick="handleLogout()">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 0.5rem;">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                  <polyline points="16 17 21 12 16 7"></polyline>
-                  <line x1="21" y1="12" x2="9" y2="12"></line>
-                </svg>
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
       
       <!-- Main Body -->
       <div class="main-body">
@@ -444,7 +406,48 @@
   
   <!-- Scripts -->
   <script src="/workflow-engine-static/common_4.js"></script>
+  <script src="/ui/shared/account-info.js"></script>
   <script>
+    // Load account info component HTML immediately
+    (function loadAccountInfoComponent() {
+      const container = document.getElementById('account-info-container');
+      if (!container) {
+        // Container not ready yet, retry quickly
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', loadAccountInfoComponent);
+        } else {
+          setTimeout(loadAccountInfoComponent, 10);
+        }
+        return;
+      }
+      
+      fetch('/ui/shared/account-info.html')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.text();
+        })
+        .then(html => {
+          container.innerHTML = html;
+          // Immediately try to load account info data
+          const checkAndLoad = () => {
+            const component = document.getElementById('account-info-component');
+            if (component && window.loadAccountInfo) {
+              window.loadAccountInfo('account-info-container');
+            } else if (!window.loadAccountInfo) {
+              // Retry quickly if loadAccountInfo not available yet
+              setTimeout(checkAndLoad, 10);
+            }
+          };
+          // Check immediately, then retry if needed
+          checkAndLoad();
+        })
+        .catch(error => {
+          console.error('Error loading account info component:', error);
+        });
+    })();
+    
     // Load session context on every page load
     // This ensures user/org info is always available, even after navigating from legacy pages
     async function loadSessionContext() {
@@ -456,20 +459,7 @@
         
         if (response.ok) {
           const data = await response.json();
-          // Update account info section with data from /auth/me
-          if (data.user && data.organisation) {
-            // Update user info
-            const userEmailEl = document.getElementById('dashboard-user-email');
-            const userRoleEl = document.getElementById('dashboard-user-role');
-            if (userEmailEl) userEmailEl.textContent = data.user.email;
-            if (userRoleEl) userRoleEl.textContent = data.user.role;
-            
-            // Update org info
-            const orgNameEl = document.getElementById('dashboard-org-name');
-            const orgStatusEl = document.getElementById('dashboard-org-status');
-            if (orgNameEl) orgNameEl.textContent = data.organisation.name;
-            if (orgStatusEl) orgStatusEl.textContent = data.organisation.status;
-          }
+          // Account info now handled by shared component in sidebar
         } else {
           // Not authenticated - redirect to home
           console.log('Not authenticated, redirecting to home');

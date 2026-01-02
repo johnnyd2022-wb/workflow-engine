@@ -39,13 +39,12 @@
         <span class="navbar-logo-text">Flume</span>
       </a>
       
-      <div class="navbar-menu" id="navbar-menu">
+      <div class="navbar-menu" id="navbar-menu" style="display: flex;">
         <button class="btn btn-glass" onclick="openModal('loginModal')">Sign In</button>
         <button class="btn btn-hero" onclick="openModal('signupModal')" style="margin-left: 0.5rem;">Sign Up</button>
       </div>
       <div class="navbar-menu" id="navbar-menu-authenticated" style="display: none;">
-        <span class="text-muted" id="user-info" style="margin-right: 1rem;"></span>
-        <button class="btn btn-glass" onclick="handleLogout()">Logout</button>
+        <!-- Account info moved to shared component below -->
       </div>
     </div>
   </nav>
@@ -197,7 +196,7 @@
               </button>
             </a>
           </div>
-
+          
           <!-- Social proof -->
           <div class="flex items-center" style="gap: 1.5rem; padding-top: 2rem;">
             <div>
@@ -348,6 +347,22 @@
             placeholder="Enter your email"
             style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
           />
+        </div>
+        
+        <div>
+          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Phone Number</label>
+          <input 
+            type="tel" 
+            id="signup-phone-number" 
+            name="phone_number" 
+            autocomplete="tel"
+            class="input"
+            placeholder="Enter phone number (6-15 digits)"
+            pattern="[0-9]{6,15}"
+            maxlength="15"
+            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
+          />
+          <div id="signup-phone-error" class="text-error" style="display: none; margin-top: 0.5rem; font-size: 0.875rem;"></div>
         </div>
         
         <div>
@@ -844,10 +859,25 @@
       
       const orgName = document.getElementById('signup-org-name').value;
       const email = document.getElementById('signup-email').value;
+      const phoneNumber = document.getElementById('signup-phone-number').value;
       const password = document.getElementById('signup-password').value;
       const passwordConfirm = document.getElementById('signup-password-confirm').value;
+      const phoneErrorDiv = document.getElementById('signup-phone-error');
       
       errorDiv.style.display = 'none';
+      if (phoneErrorDiv) phoneErrorDiv.style.display = 'none';
+      
+      // Validate phone number if provided (6-15 digits only)
+      if (phoneNumber) {
+        const phoneDigits = phoneNumber.replace(/\D/g, ''); // Remove non-digits
+        if (phoneDigits.length < 6 || phoneDigits.length > 15) {
+          if (phoneErrorDiv) {
+            phoneErrorDiv.textContent = 'Phone number must be 6-15 digits';
+            phoneErrorDiv.style.display = 'block';
+          }
+          return;
+        }
+      }
       
       // Validate passwords match
       if (password !== passwordConfirm) {
@@ -868,6 +898,7 @@
           body: JSON.stringify({
             org_name: orgName,
             email: email,
+            phone_number: phoneNumber ? phoneNumber.replace(/\D/g, '') : null,
             password: password,
             password_confirm: passwordConfirm
           })
@@ -1150,11 +1181,26 @@
             showSessionTimeoutModal();
             return;
           }
+          // On landing page, 401 means not authenticated - show sign in/sign up
+          updateUIForUnauthenticatedUser();
+          return;
         }
         
         if (response.ok) {
-          const data = await response.json();
-          updateUIForAuthenticatedUser(data.user, data.organisation);
+          try {
+            const data = await response.json();
+            // Only show authenticated UI if we have valid user data
+            if (data && data.user && data.user.email) {
+              updateUIForAuthenticatedUser(data.user, data.organisation);
+            } else {
+              // Invalid response data - treat as unauthenticated
+              updateUIForUnauthenticatedUser();
+            }
+          } catch (parseError) {
+            // Failed to parse JSON - treat as unauthenticated
+            console.error('Failed to parse auth response:', parseError);
+            updateUIForUnauthenticatedUser();
+          }
         } else {
           updateUIForUnauthenticatedUser();
         }
@@ -1164,15 +1210,49 @@
     }
     
     function updateUIForAuthenticatedUser(user, organisation) {
-      // Update navbar
-      document.getElementById('navbar-menu').style.display = 'none';
+      // Only update UI if we have valid user data
+      if (!user || !user.email) {
+        // Invalid user data - treat as unauthenticated
+        updateUIForUnauthenticatedUser();
+        return;
+      }
+      
+      // On landing page, be extra cautious - only hide navbar if we're absolutely sure
+      const path = window.location.pathname;
+      const isLandingPage = path === '/' || path === '';
+      
+      // Update navbar - on landing page, don't hide the navbar-menu since auth menu is empty
+      const navbarMenu = document.getElementById('navbar-menu');
       const authMenu = document.getElementById('navbar-menu-authenticated');
-      authMenu.style.display = 'flex';
-      document.getElementById('user-info').textContent = `${user.email} (${organisation.name})`;
+      
+      if (isLandingPage) {
+        // On landing page, authenticated users should still see the navbar (or we could add content to auth menu)
+        // For now, keep navbar visible on landing page even when authenticated
+        // Only update hero buttons
+        const heroButtons = document.getElementById('hero-buttons');
+        const heroButtonsAuth = document.getElementById('hero-buttons-authenticated');
+        if (heroButtons && heroButtonsAuth) {
+          heroButtons.style.display = 'none';
+          heroButtonsAuth.style.display = 'flex';
+        }
+        return; // Don't hide navbar on landing page
+      }
+      
+      // On other pages, update navbar normally
+      if (navbarMenu && authMenu) {
+        navbarMenu.style.display = 'none';
+        authMenu.style.display = 'flex';
+      }
       
       // Update hero buttons
-      document.getElementById('hero-buttons').style.display = 'none';
-      document.getElementById('hero-buttons-authenticated').style.display = 'flex';
+      const heroButtons = document.getElementById('hero-buttons');
+      const heroButtonsAuth = document.getElementById('hero-buttons-authenticated');
+      if (heroButtons && heroButtonsAuth) {
+        heroButtons.style.display = 'none';
+        heroButtonsAuth.style.display = 'flex';
+      }
+      
+      // Account info component not needed on landing page
     }
     
     function updateUIForUnauthenticatedUser() {
@@ -1526,7 +1606,17 @@
     
     // Check auth status on page load
     document.addEventListener('DOMContentLoaded', function() {
-      checkAuthStatus();
+      // Ensure navbar is visible by default (will be updated by checkAuthStatus)
+      const navbarMenu = document.getElementById('navbar-menu');
+      const navbarMenuAuth = document.getElementById('navbar-menu-authenticated');
+      if (navbarMenu) navbarMenu.style.display = 'flex';
+      if (navbarMenuAuth) navbarMenuAuth.style.display = 'none';
+      
+      // On landing page, always show navbar by default and only hide if truly authenticated
+      // Add a small delay to ensure DOM is ready
+      setTimeout(() => {
+        checkAuthStatus();
+      }, 100);
       
       // Set form handler
       const loginForm = document.getElementById('login-form');

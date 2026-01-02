@@ -14,10 +14,10 @@ class UserRepository:
         self.db = db
 
     def create_user(
-        self, org_id: UUID, email: str, password_hash: str, role: UserRole = UserRole.MEMBER, is_active: bool = True
+        self, org_id: UUID, email: str, password_hash: str, role: UserRole = UserRole.MEMBER, is_active: bool = True, phone_number: str | None = None
     ) -> User:
         """Create a new user (must belong to an organisation)"""
-        user = User(org_id=org_id, email=email, password_hash=password_hash, role=role, is_active=is_active)
+        user = User(org_id=org_id, email=email, password_hash=password_hash, role=role, is_active=is_active, phone_number=phone_number)
         self.db.add(user)
         self.db.flush()  # Flush to get the ID without committing
         # Access id to ensure it's loaded
@@ -54,6 +54,7 @@ class UserRepository:
         password_hash: str | None = None,
         role: UserRole | None = None,
         is_active: bool | None = None,
+        phone_number: str | None = None,
     ) -> User | None:
         """Update user (tenancy enforced - must match org_id)"""
         user = self.get_user_by_id(user_id, org_id=org_id)
@@ -68,6 +69,8 @@ class UserRepository:
             user.role = role
         if is_active is not None:
             user.is_active = is_active
+        if phone_number is not None:
+            user.phone_number = phone_number
 
         self.db.commit()
         self.db.refresh(user)
