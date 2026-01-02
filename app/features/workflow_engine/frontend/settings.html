@@ -889,8 +889,6 @@
     
     // Display QR code from backend (generated server-side)
     function displayQRCode(container, qrCodeDataUrl) {
-      console.log('Displaying QR code from backend, data URL length:', qrCodeDataUrl ? qrCodeDataUrl.length : 0);
-      
       if (!qrCodeDataUrl) {
         container.innerHTML = '<p style="color: #ef4444; padding: 1rem; text-align: center;">No QR code data received. Please use the manual code below.</p>';
         return;
@@ -912,7 +910,7 @@
       };
       
       img.onload = function() {
-        console.log('QR code image loaded successfully');
+        // QR code image loaded successfully
       };
       
       container.innerHTML = '';
@@ -950,18 +948,11 @@
         
         if (response.ok) {
           const data = await response.json();
-          console.log('Enrollment response received:', {
-            hasSecret: !!data.secret,
-            hasProvisioningUri: !!data.provisioning_uri,
-            hasQRCode: !!data.qr_code,
-            qrCodeLength: data.qr_code ? data.qr_code.length : 0
-          });
           
           enrollmentSecret = data.secret;
           
           // Display QR code from backend
           const qrContainer = document.getElementById('qrcode-container');
-          console.log('QR container element:', qrContainer);
           
           if (data.qr_code) {
             displayQRCode(qrContainer, data.qr_code);
@@ -1107,8 +1098,6 @@
           body: JSON.stringify({ token1: code1, token2: code2 })
         });
         
-        console.log('2FA enable response status:', response.status, response.ok);
-        
         // Check for 401 before parsing JSON
         if (response.status === 401) {
           const path = window.location.pathname;
@@ -1123,11 +1112,6 @@
           try {
             data = await response.json();
             // Don't log response data - may contain sensitive backup codes
-            console.log('2FA enable response received');
-            console.log('Has enabled:', data.enabled);
-            console.log('Has backup_codes:', !!data.backup_codes);
-            console.log('Backup codes type:', typeof data.backup_codes);
-            console.log('Backup codes is array:', Array.isArray(data.backup_codes));
           } catch (parseError) {
             // Don't log parse error - may contain sensitive backup codes
             console.error('Error parsing response JSON');
@@ -1140,7 +1124,6 @@
           
           if (data && data.enabled) {
             if (data.backup_codes && Array.isArray(data.backup_codes) && data.backup_codes.length > 0) {
-              console.log('Showing step 4 with backup codes');
               // Store backup codes in memory and sessionStorage (survives page refresh)
               backupCodes = data.backup_codes;
               try {
@@ -1203,7 +1186,6 @@
     // Display backup codes
     function displayBackupCodes(codes) {
       // Don't log backup codes - they are sensitive
-      console.log('Displaying backup codes');
       const container = document.getElementById('backup-codes-container');
       if (!container) {
         console.error('Backup codes container not found!');
@@ -1221,7 +1203,6 @@
         codeDiv.textContent = code;
         container.appendChild(codeDiv);
       });
-      console.log('Backup codes displayed successfully');
     }
     
     // Enable/disable confirm button based on checkbox
