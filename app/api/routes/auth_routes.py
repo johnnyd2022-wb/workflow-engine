@@ -145,16 +145,13 @@ def signup():
     if password != password_confirm:
         return jsonify({"error": "Passwords do not match"}), 400
 
-    # Validate phone number if provided (6-15 digits only)
-    if phone_number:
-        # Remove any non-digit characters for validation
-        phone_digits = "".join(filter(str.isdigit, phone_number))
-        if len(phone_digits) < 6 or len(phone_digits) > 15:
-            return jsonify({"error": "Phone number must be 6-15 digits"}), 400
-        # Store only digits
-        phone_number = phone_digits
-    else:
-        phone_number = None
+    # Normalize phone number if provided (reusable function for consistency)
+    from app.core.utils.phone_normalization import normalize_phone_number
+
+    try:
+        phone_number = normalize_phone_number(phone_number)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
     db = db_session()
     try:
@@ -284,12 +281,9 @@ def login():
                     f"Login attempt blocked - account locked for user {user_by_email.id} "
                     f"from IP {ip_address} (User-Agent: {user_agent[:50]})"
                 )
-                return jsonify(
-                    {
-                        "error": "Account is temporarily locked due to multiple failed login attempts. "
-                        f"Please try again in {remaining_minutes + 1} minute(s) or reset your password."
-                    }
-                ), 423  # 423 Locked status code
+                # Return same error message as other login failures to prevent user enumeration
+                # Account lockout is logged server-side for security tracking
+                return jsonify({"error": "Cannot complete request. Check credentials or contact support."}), 401
 
         # Normalize authentication to prevent user enumeration
         # Always perform the same operations regardless of whether user exists
@@ -1304,18 +1298,15 @@ def manage_user_settings():
                 if not is_valid:
                     return jsonify({"error": error_msg}), 400
 
-            # Validate phone number if provided (6-15 digits only)
+            # Normalize phone number if provided (reusable function for consistency)
+            from app.core.utils.phone_normalization import normalize_phone_number
+
             if phone_number is not None:
-                if phone_number:  # Only validate if not empty
-                    # Remove any non-digit characters for validation
-                    phone_digits = "".join(filter(str.isdigit, phone_number))
-                    if len(phone_digits) < 6 or len(phone_digits) > 15:
-                        return jsonify({"error": "Phone number must be 6-15 digits"}), 400
-                    # Store only digits
-                    phone_number = phone_digits
-                else:
+                try:
                     # Empty string means clear the phone number
-                    phone_number = None
+                    phone_number = normalize_phone_number(phone_number) if phone_number else None
+                except ValueError as e:
+                    return jsonify({"error": str(e)}), 400
 
             # Update user
             try:

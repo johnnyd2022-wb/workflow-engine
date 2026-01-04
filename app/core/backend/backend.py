@@ -74,13 +74,8 @@ def serve_core_js(filename):
 
         logger = logging.getLogger(__name__)
         logger.info(f"Static JS file not found: {filename} from {core_frontend_dir}")
-        # Fallback to default static if file not found in core
-        from flask import current_app
-
-        try:
-            return current_app.send_static_file(f"js/{filename}")
-        except Exception:
-            abort(404, "File not found")
+        # Return 404 - do not fall back to Flask's global static handler
+        abort(404, "File not found")
     except Exception:
         # Unexpected exception - log at exception level
         import logging
@@ -124,13 +119,8 @@ def serve_core_css(filename):
 
         logger = logging.getLogger(__name__)
         logger.info(f"Static CSS file not found: {filename} from {core_frontend_dir}")
-        # Fallback to default static if file not found in core
-        from flask import current_app
-
-        try:
-            return current_app.send_static_file(f"css/{filename}")
-        except Exception:
-            abort(404, "File not found")
+        # Return 404 - do not fall back to Flask's global static handler
+        abort(404, "File not found")
     except Exception:
         # Unexpected exception - log at exception level
         import logging
