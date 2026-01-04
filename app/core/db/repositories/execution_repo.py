@@ -17,39 +17,64 @@ class ExecutionRepository:
         self.db = db
 
     def create_execution(self, org_id: UUID, process_id: UUID) -> Execution:
-        """Create a new execution and initialize execution steps"""
-        # Verify process exists and belongs to org
-        process = self.db.query(Process).filter(Process.id == process_id, Process.org_id == org_id).first()
-        if not process:
-            raise ValueError(f"Process {process_id} not found or does not belong to org {org_id}")
+        """Create a new execution and initialize execution steps
 
-        # Create execution
-        execution = Execution(org_id=org_id, process_id=process_id, status=ExecutionStatus.PENDING)
-        self.db.add(execution)
-        self.db.flush()
-        _ = execution.id
+        This operation is fully transactional - either all execution steps are created
+        or none are (prevents partial execution state under concurrent requests).
+        """
+        from sqlalchemy.exc import IntegrityError
 
-        # Create execution steps for each step in the process
-        steps = self.db.query(Step).filter(Step.process_id == process_id).order_by(Step.step_number).all()
-        execution_steps = []
-        for step in steps:
-            exec_step = ExecutionStep(
-                execution_id=execution.id,
-                step_id=step.id,
-                step_number=step.step_number,
-                status=ExecutionStepStatus.PENDING,
-            )
-            execution_steps.append(exec_step)
-            self.db.add(exec_step)
+        try:
+            # Verify process exists and belongs to org
+            process = self.db.query(Process).filter(Process.id == process_id, Process.org_id == org_id).first()
+            if not process:
+                raise ValueError(f"Process {process_id} not found or does not belong to org {org_id}")
 
-        # Mark first step(s) as ready (steps with no dependencies or dependencies already met)
-        # For now, we'll mark the first step as ready
-        if execution_steps:
-            execution_steps[0].status = ExecutionStepStatus.READY
+            # Create execution
+            execution = Execution(org_id=org_id, process_id=process_id, status=ExecutionStatus.PENDING)
+            self.db.add(execution)
+            self.db.flush()
+            _ = execution.id
 
-        execution.status = ExecutionStatus.IN_PROGRESS
-        self.db.commit()
-        return execution
+            # Create execution steps for each step in the process
+            steps = self.db.query(Step).filter(Step.process_id == process_id).order_by(Step.step_number).all()
+            execution_steps = []
+            total_steps = len(steps)
+
+            # Snapshot total_steps at creation for progress calculation integrity
+            execution.total_steps = total_steps
+
+            # Determine terminal step (highest step_number)
+            terminal_step_number = max((s.step_number for s in steps), default=None) if steps else None
+
+            for step in steps:
+                is_terminal = (step.step_number == terminal_step_number) if terminal_step_number is not None else False
+                exec_step = ExecutionStep(
+                    execution_id=execution.id,
+                    step_id=step.id,
+                    step_number=step.step_number,
+                    status=ExecutionStepStatus.PENDING,
+                    is_terminal_step=is_terminal,
+                )
+                execution_steps.append(exec_step)
+                self.db.add(exec_step)
+
+            # Mark first step(s) as ready (steps with no dependencies or dependencies already met)
+            # For now, we'll mark the first step as ready
+            if execution_steps:
+                execution_steps[0].status = ExecutionStepStatus.READY
+
+            execution.status = ExecutionStatus.IN_PROGRESS
+            self.db.commit()
+            return execution
+        except IntegrityError:
+            # Rollback on any integrity error to prevent partial state
+            self.db.rollback()
+            raise
+        except Exception:
+            # Rollback on any other error to prevent partial state
+            self.db.rollback()
+            raise
 
     def get_execution_by_id(self, execution_id: UUID, org_id: UUID | None = None) -> Execution | None:
         """Get execution by ID, optionally scoped to org"""
@@ -101,7 +126,10 @@ class ExecutionRepository:
         actual_outputs: list | None = None,
         execution_data: dict | None = None,
     ) -> ExecutionStep | None:
-        """Complete an execution step and advance execution"""
+        """Complete an execution step and advance execution
+
+        Enforces step order: all prior steps must be completed before this step can be completed.
+        """
         from datetime import datetime
 
         execution_step = (
@@ -118,6 +146,23 @@ class ExecutionRepository:
             and execution_step.status != ExecutionStepStatus.IN_PROGRESS
         ):
             raise ValueError(f"Step {execution_step_id} is not in a state that can be completed")
+
+        # Enforce step order: check that all prior steps are completed
+        execution = execution_step.execution
+        prior_steps = (
+            self.db.query(ExecutionStep)
+            .filter(
+                ExecutionStep.execution_id == execution.id,
+                ExecutionStep.step_number < execution_step.step_number,
+            )
+            .all()
+        )
+        incomplete_prior_steps = [es for es in prior_steps if es.status != ExecutionStepStatus.COMPLETED]
+        if incomplete_prior_steps:
+            raise ValueError(
+                f"Cannot complete step {execution_step.step_number}: "
+                f"prior steps {[es.step_number for es in incomplete_prior_steps]} are not completed"
+            )
 
         # Update step status and data
         execution_step.status = ExecutionStepStatus.COMPLETED

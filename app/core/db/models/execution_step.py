@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -32,6 +32,7 @@ class ExecutionStep(Base):
     step_id = Column(UUID(as_uuid=True), ForeignKey("steps.id"), nullable=False, index=True)
     step_number = Column(Integer, nullable=False)  # Denormalized for easier querying
     status = Column(Enum(ExecutionStepStatus, name="execution_step_status"), default=ExecutionStepStatus.PENDING, nullable=False)
+    is_terminal_step = Column(Boolean, default=False, nullable=False)  # Deterministic terminal step detection
     # Actual input values used (immutable after completion)
     actual_inputs = Column(JSONB, nullable=True)  # Format: [{"name": "Aluminum Sheets", "quantity": 100, "unit": "kg", "inventory_item_id": "uuid"}, ...]
     # Actual outputs produced (immutable after completion)

@@ -8,6 +8,7 @@ from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
 from app.api.routes.auth_routes import auth_bp
 from app.api.routes.org_routes import org_bp
+from app.core.security.permissions import requires_auth
 from app.utils.config_loader import config
 
 
@@ -65,8 +66,21 @@ def create_app():
 
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
+    @requires_auth
     def serve_ui_shared(filename):
-        """Serve shared UI files (JavaScript and CSS)"""
+        """Serve shared UI files (JavaScript and CSS) - requires authentication"""
+        from flask import abort
+        from werkzeug.security import safe_join
+
+        # Path traversal protection: reject filenames with .. or /
+        if ".." in filename or "/" in filename or "\\" in filename:
+            abort(400, "Invalid filename")
+
+        # Extension whitelist for security
+        allowed_extensions = {".js", ".css"}
+        if not any(filename.lower().endswith(ext) for ext in allowed_extensions):
+            abort(400, "Invalid file type")
+
         # Calculate path: app_factory.py is in app/api/
         # Go up 3 levels: app/api/ -> app/ -> project_root/
         # Then join with app/ui/shared
@@ -76,8 +90,12 @@ def create_app():
         project_root = os.path.dirname(app_dir)  # project root
         shared_dir = os.path.join(project_root, "app", "ui", "shared")
 
-        # Set proper MIME type based on file extension
+        # Use safe_join to prevent path traversal
         try:
+            safe_path = safe_join(shared_dir, filename)
+            if safe_path is None:
+                abort(400, "Invalid filename")
+
             response = send_from_directory(shared_dir, filename)
             if filename.endswith(".js"):
                 response.headers["Content-Type"] = "application/javascript; charset=utf-8"
@@ -90,7 +108,7 @@ def create_app():
 
             logger = logging.getLogger(__name__)
             logger.error(f"Error serving shared file {filename} from {shared_dir}: {e}")
-            raise
+            abort(404, "File not found")
 
     # Set up middleware
     setup_tenant_context(app)

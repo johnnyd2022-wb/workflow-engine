@@ -41,10 +41,27 @@ def flows():
 
 
 @core_bp.route("/static/js/<filename>")
+@requires_auth
 def serve_core_js(filename):
-    """Serve JavaScript files from core frontend"""
+    """Serve JavaScript files from core frontend - requires authentication"""
+    from flask import abort
+    from werkzeug.security import safe_join
+
+    # Path traversal protection: reject filenames with .. or /
+    if ".." in filename or "/" in filename or "\\" in filename:
+        abort(400, "Invalid filename")
+
+    # Extension whitelist for security
+    if not filename.lower().endswith(".js"):
+        abort(400, "Invalid file type")
+
     core_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "js")
     try:
+        # Use safe_join to prevent path traversal
+        safe_path = safe_join(core_frontend_dir, filename)
+        if safe_path is None:
+            abort(400, "Invalid filename")
+
         response = send_from_directory(core_frontend_dir, filename)
         if filename.endswith(".js"):
             response.headers["Content-Type"] = "application/javascript; charset=utf-8"
@@ -57,10 +74,27 @@ def serve_core_js(filename):
 
 
 @core_bp.route("/static/css/<filename>")
+@requires_auth
 def serve_core_css(filename):
-    """Serve CSS files from core frontend"""
+    """Serve CSS files from core frontend - requires authentication"""
+    from flask import abort
+    from werkzeug.security import safe_join
+
+    # Path traversal protection: reject filenames with .. or /
+    if ".." in filename or "/" in filename or "\\" in filename:
+        abort(400, "Invalid filename")
+
+    # Extension whitelist for security
+    if not filename.lower().endswith(".css"):
+        abort(400, "Invalid file type")
+
     core_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "css")
     try:
+        # Use safe_join to prevent path traversal
+        safe_path = safe_join(core_frontend_dir, filename)
+        if safe_path is None:
+            abort(400, "Invalid filename")
+
         response = send_from_directory(core_frontend_dir, filename)
         if filename.endswith(".css"):
             response.headers["Content-Type"] = "text/css; charset=utf-8"
@@ -140,8 +174,15 @@ def create_process():
             ),
             201,
         )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        # Log the full error for debugging but return generic message to client
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error creating process")
+        return jsonify({"error": "Failed to create process"}), 500
 
 
 @core_bp.route("/api/core/processes/<process_id>", methods=["GET"])
@@ -307,8 +348,15 @@ def create_execution():
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        # Log the full error for debugging but return generic message to client
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error creating process")
+        return jsonify({"error": "Failed to create process"}), 500
 
 
 @core_bp.route("/api/core/executions", methods=["GET"])
@@ -352,6 +400,11 @@ def list_executions():
                 "name": next_step.step.name if next_step.step else None,
             }
 
+        # Calculate progress using snapshot total_steps to avoid division by zero and ensure consistency
+        # Progress should not change if steps are added or reordered later
+        total_steps = execution.total_steps or len(execution_steps) if execution_steps else 0
+        progress = (len(completed_steps) / total_steps * 100) if total_steps > 0 else 0
+
         result.append(
             {
                 "id": str(execution.id),
@@ -360,7 +413,7 @@ def list_executions():
                 "started_at": execution.started_at.isoformat() if execution.started_at else None,
                 "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
                 "current_step": current_step,
-                "progress": len(completed_steps) / len(execution_steps) * 100 if execution_steps else 0,
+                "progress": progress,
             }
         )
 
@@ -445,15 +498,12 @@ def complete_step(execution_id: str, execution_step_id: str):
         # Create inventory items for outputs if specified
         if actual_outputs:
             inventory_repo = InventoryRepository(db_session)
-            execution = repo.get_execution_by_id(execution_uuid, org_id)
             for output in actual_outputs:
-                # Determine inventory type based on step position
-                # This is simplified - in a full implementation, you'd check if it's the last step
+                # Determine inventory type based on terminal step detection
+                # Use is_terminal_step field for deterministic detection
                 inventory_type = InventoryType.WORK_IN_PROGRESS.value
-                if execution and execution.process:
-                    steps = execution.process.steps
-                    if steps and execution_step.step_number == len(steps):
-                        inventory_type = InventoryType.FINAL_PRODUCT.value
+                if execution_step.is_terminal_step:
+                    inventory_type = InventoryType.FINAL_PRODUCT.value
 
                 inventory_repo.create_inventory_item(
                     org_id=org_id,
@@ -478,8 +528,15 @@ def complete_step(execution_id: str, execution_step_id: str):
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        # Log the full error for debugging but return generic message to client
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error creating process")
+        return jsonify({"error": "Failed to create process"}), 500
 
 
 @core_bp.route("/api/core/inventory", methods=["GET"])
@@ -578,8 +635,15 @@ def create_inventory_item():
             ),
             201,
         )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        # Log the full error for debugging but return generic message to client
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error creating process")
+        return jsonify({"error": "Failed to create process"}), 500
 
 
 @core_bp.route("/api/core/metrics", methods=["GET"])

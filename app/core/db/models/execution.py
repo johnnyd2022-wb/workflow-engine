@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -30,6 +30,7 @@ class Execution(Base):
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     process_id = Column(UUID(as_uuid=True), ForeignKey("processes.id"), nullable=False, index=True)
     status = Column(Enum(ExecutionStatus, name="execution_status"), default=ExecutionStatus.PENDING, nullable=False)
+    total_steps = Column(Integer, nullable=True)  # Snapshot of step count at creation for progress calculation
     started_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
