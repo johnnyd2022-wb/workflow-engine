@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SupplyChain V2 - Process Flow Details">
+  <title>Process Flow | SupplyChain V2</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles2.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Shared Sidebar - V2 Modern Dark -->
+    {% include 'shared/sidebar-v2.html' %}
+    
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <span class="header-title" id="process-header-title">Process Flow</span>
+        </div>
+        <div class="header-right">
+          <button class="header-icon-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span class="header-notification-dot"></span>
+          </button>
+          <button class="header-icon-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+      
+      <!-- Page Content -->
+      <main class="page-content">
+        <div class="max-content">
+          <!-- Back Link -->
+          <a href="/core" class="back-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"/>
+              <polyline points="12 19 5 12 12 5"/>
+            </svg>
+            Back to Process Hub
+          </a>
+          
+          <!-- Process Header Card -->
+          <div class="card" style="padding: 24px; margin-bottom: 24px;">
+            <div class="flex justify-between items-center">
+              <div>
+                <h1 class="page-title" style="font-size: 24px;" id="process-name">Loading...</h1>
+                <p class="page-subtitle" id="process-description">Loading process details...</p>
+              </div>
+              <button class="btn btn-primary" id="start-execution-btn" onclick="startExecution()">
+                <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                Start Execution
+              </button>
+            </div>
+            
+            <!-- Stats Row -->
+            <div class="flex items-center gap-4 mt-6" style="padding-top: 24px; border-top: 1px solid var(--border-light);">
+              <div class="flex items-center gap-2">
+                <div style="padding: 8px; background: hsl(220, 20%, 96%); border-radius: 8px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary);">
+                    <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
+                  </svg>
+                </div>
+                <div>
+                  <p style="font-size: 12px; color: var(--text-secondary);">Steps</p>
+                  <p style="font-size: 18px; font-weight: 600; color: var(--text-primary);" id="process-step-count">0</p>
+                </div>
+              </div>
+              <div style="width: 1px; height: 32px; background: var(--border-light);"></div>
+              <div class="flex items-center gap-2">
+                <div style="padding: 8px; background: var(--primary-bg); border-radius: 8px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                </div>
+                <div>
+                  <p style="font-size: 12px; color: var(--text-secondary);">Active</p>
+                  <p style="font-size: 18px; font-weight: 600; color: var(--primary);" id="process-active-count">0</p>
+                </div>
+              </div>
+              <div style="width: 1px; height: 32px; background: var(--border-light);"></div>
+              <div class="flex items-center gap-2">
+                <div style="padding: 8px; background: var(--success-bg); border-radius: 8px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                </div>
+                <div>
+                  <p style="font-size: 12px; color: var(--text-secondary);">Completed</p>
+                  <p style="font-size: 18px; font-weight: 600; color: var(--success-dark);" id="process-completed-count">0</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Tabs -->
+          <div class="tabs">
+            <button class="tab active" onclick="showTab('structure')">
+              Structure
+              <span class="tab-badge" id="structure-badge">0</span>
+            </button>
+            <button class="tab" onclick="showTab('executions')">
+              Executions
+              <span class="tab-badge" id="executions-badge">0</span>
+            </button>
+            <button class="tab" onclick="showTab('inventory')">
+              Inventory
+            </button>
+          </div>
+          
+          <!-- Tab Content: Structure -->
+          <div id="tab-structure">
+            <div id="steps-container">
+              <!-- Steps will be loaded dynamically from backend -->
+            </div>
+          </div>
+          
+          <!-- Tab Content: Executions (hidden by default) -->
+          <div id="tab-executions" style="display: none;">
+            <div class="card">
+              <div class="executions-section">
+                <h3 class="executions-label">Active</h3>
+                <div id="active-executions-container">
+                  <!-- Active executions will be loaded dynamically -->
+                </div>
+              </div>
+              
+              <div class="executions-section">
+                <h3 class="executions-label">Completed</h3>
+                <div id="completed-executions-container">
+                  <!-- Completed executions will be loaded dynamically -->
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Tab Content: Inventory (hidden by default) -->
+          <div id="tab-inventory" style="display: none;">
+            <div class="card">
+              <div id="inventory-container">
+                <!-- Inventory will be loaded dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  
+  <!-- Backend Integration Scripts -->
+  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
+  <script src="/ui/shared/sidebar-v2.js"></script>
+  <script src="/ui/shared/account-info.js"></script>
+  <script>
+    // Initialize account info component
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() {
+        if (window.initAccountInfo) {
+          window.initAccountInfo('account-info-container');
+        }
+      });
+    } else {
+      if (window.initAccountInfo) {
+        window.initAccountInfo('account-info-container');
+      }
+    }
+    
+    // Get process ID from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const processId = urlParams.get('id') || '{{ process_id }}';
+    
+    let currentProcess = null;
+    
+    // Load process data
+    async function loadProcessData() {
+      if (!processId) {
+        console.error('No process ID provided');
+        return;
+      }
+      
+      try {
+        // Load process details
+        const processData = await CoreAPI.getProcess(processId);
+        currentProcess = processData;
+        
+        // Update header
+        document.getElementById('process-name').textContent = processData.name || 'Unnamed Process';
+        document.getElementById('process-description').textContent = processData.description || 'No description';
+        document.getElementById('process-header-title').textContent = processData.name || 'Process Flow';
+        
+        // Update stats
+        document.getElementById('process-step-count').textContent = processData.steps?.length || 0;
+        document.getElementById('structure-badge').textContent = processData.steps?.length || 0;
+        
+        // Render steps
+        renderSteps(processData.steps || []);
+        
+        // Load executions
+        await loadExecutions();
+        
+        // Load inventory
+        await loadInventory();
+        
+      } catch (error) {
+        console.error('Failed to load process data:', error);
+        document.getElementById('process-name').textContent = 'Error loading process';
+        document.getElementById('process-description').textContent = error.message || 'Failed to load process details';
+      }
+    }
+    
+    // Render steps
+    function renderSteps(steps) {
+      const container = document.getElementById('steps-container');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      
+      if (!steps || steps.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p class="empty-state-description">No steps defined for this process.</p></div>';
+        return;
+      }
+      
+      // Sort steps by step_number
+      const sortedSteps = [...steps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+      
+      sortedSteps.forEach(step => {
+        const stepCard = createStepCard(step);
+        container.appendChild(stepCard);
+      });
+    }
+    
+    // Create step card
+    function createStepCard(step) {
+      const card = document.createElement('div');
+      card.className = 'card step-card';
+      
+      const inputs = step.inputs || [];
+      const outputs = step.outputs || [];
+      
+      card.innerHTML = `
+        <div class="step-card-header">
+          <div class="step-number">${step.step_number || ''}</div>
+          <div class="step-info">
+            <h3 class="step-name">${escapeHtml(step.name || 'Unnamed Step')}</h3>
+            <p class="step-description">${escapeHtml(step.description || '')}</p>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+        <div class="step-card-body">
+          <div class="step-io-section">
+            <h4 class="step-io-label">Inputs</h4>
+            ${inputs.length > 0 ? inputs.map(input => `
+              <div class="step-io-item input">
+                <span class="step-io-name">${escapeHtml(input.name || 'Unnamed Input')}</span>
+                <span class="step-io-qty">${input.quantity || ''} ${input.unit || ''}</span>
+              </div>
+            `).join('') : '<p style="color: var(--text-secondary); font-size: 14px;">No inputs defined</p>'}
+          </div>
+          <div class="step-io-section">
+            <h4 class="step-io-label">Outputs</h4>
+            ${outputs.length > 0 ? outputs.map(output => `
+              <div class="step-io-item output">
+                <span class="step-io-name">${escapeHtml(output.name || 'Unnamed Output')}</span>
+                <span class="step-io-qty">${output.quantity || ''} ${output.unit || ''}</span>
+              </div>
+            `).join('') : '<p style="color: var(--text-secondary); font-size: 14px;">No outputs defined</p>'}
+          </div>
+        </div>
+      `;
+      
+      return card;
+    }
+    
+    // Load executions
+    async function loadExecutions() {
+      if (!processId) return;
+      
+      try {
+        const executionsData = await CoreAPI.getExecutions(processId);
+        const executions = executionsData.executions || [];
+        
+        // Update badge
+        document.getElementById('executions-badge').textContent = executions.length;
+        
+        // Separate active and completed
+        const active = executions.filter(e => e.status === 'in_progress' || e.status === 'IN_PROGRESS');
+        const completed = executions.filter(e => e.status === 'completed' || e.status === 'COMPLETED');
+        
+        // Update stats
+        document.getElementById('process-active-count').textContent = active.length;
+        document.getElementById('process-completed-count').textContent = completed.length;
+        
+        // Render executions
+        renderExecutions(active, completed);
+        
+      } catch (error) {
+        console.error('Failed to load executions:', error);
+      }
+    }
+    
+    // Render executions
+    function renderExecutions(active, completed) {
+      const activeContainer = document.getElementById('active-executions-container');
+      const completedContainer = document.getElementById('completed-executions-container');
+      
+      if (activeContainer) {
+        activeContainer.innerHTML = '';
+        if (active.length === 0) {
+          activeContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px;">No active executions</p>';
+        } else {
+          active.forEach(execution => {
+            activeContainer.appendChild(createExecutionItem(execution, 'active'));
+          });
+        }
+      }
+      
+      if (completedContainer) {
+        completedContainer.innerHTML = '';
+        if (completed.length === 0) {
+          completedContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px;">No completed executions</p>';
+        } else {
+          completed.forEach(execution => {
+            completedContainer.appendChild(createExecutionItem(execution, 'completed'));
+          });
+        }
+      }
+    }
+    
+    // Create execution item
+    function createExecutionItem(execution, status) {
+      const item = document.createElement('div');
+      item.className = `execution-item ${status}`;
+      
+      const currentStep = execution.current_step || {};
+      const stepNumber = currentStep.step_number || 0;
+      const totalSteps = currentProcess?.steps?.length || 0;
+      const executionId = execution.id || '';
+      const shortId = executionId.length > 8 ? executionId.substring(0, 8) : executionId;
+      
+      item.innerHTML = `
+        <div class="execution-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            ${status === 'active' ? '<polygon points="5 3 19 12 5 21 5 3"/>' : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
+          </svg>
+        </div>
+        <div class="execution-info">
+          <p class="execution-title">Execution #${shortId || 'Unknown'}</p>
+          <p class="execution-subtitle">${status === 'active' ? (stepNumber > 0 ? `Step ${stepNumber} of ${totalSteps}` : 'Starting...') : 'Completed all steps'}</p>
+        </div>
+        <div class="execution-status">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            ${status === 'active' ? '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
+          </svg>
+          ${status === 'active' ? 'In Progress' : 'Success'}
+        </div>
+        <svg class="execution-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12 5 19 12 12 19"/>
+        </svg>
+      `;
+      
+      return item;
+    }
+    
+    // Load inventory
+    async function loadInventory() {
+      if (!processId) return;
+      
+      try {
+        const inventoryData = await CoreAPI.getInventory(null, processId);
+        const items = inventoryData.inventory_items || [];
+        
+        renderInventory(items);
+        
+      } catch (error) {
+        console.error('Failed to load inventory:', error);
+      }
+    }
+    
+    // Render inventory
+    function renderInventory(items) {
+      const container = document.getElementById('inventory-container');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      
+      if (items.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
+            </svg>
+            <h3 class="empty-state-title">Inventory Management</h3>
+            <p class="empty-state-description">No inventory items for this process</p>
+          </div>
+        `;
+        return;
+      }
+      
+      // Group by type
+      const grouped = {
+        raw_material: [],
+        work_in_progress: [],
+        final_product: []
+      };
+      
+      items.forEach(item => {
+        const type = item.inventory_type || 'raw_material';
+        if (grouped[type]) {
+          grouped[type].push(item);
+        }
+      });
+      
+      // Render grouped inventory
+      Object.entries(grouped).forEach(([type, typeItems]) => {
+        if (typeItems.length > 0) {
+          const section = document.createElement('div');
+          section.className = 'inventory-section';
+          section.innerHTML = `
+            <h4 class="inventory-section-title">${type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</h4>
+            <div class="inventory-grid">
+              ${typeItems.map(item => `
+                <div class="inventory-item-card">
+                  <div class="inventory-item-header">
+                    <span class="inventory-item-name">${escapeHtml(item.name)}</span>
+                    <span class="inventory-item-qty">${item.quantity} ${item.unit || ''}</span>
+                  </div>
+                  ${item.supplier ? `<div class="inventory-item-detail">Supplier: ${escapeHtml(item.supplier)}</div>` : ''}
+                  ${item.supplier_batch_number ? `<div class="inventory-item-detail">Batch: ${escapeHtml(item.supplier_batch_number)}</div>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          `;
+          container.appendChild(section);
+        }
+      });
+    }
+    
+    // Start execution
+    async function startExecution() {
+      if (!processId) {
+        alert('No process ID available');
+        return;
+      }
+      
+      try {
+        const result = await CoreAPI.createExecution(processId);
+        alert('Execution started successfully!');
+        // Reload executions
+        await loadExecutions();
+      } catch (error) {
+        console.error('Failed to start execution:', error);
+        alert(error.message || 'Failed to start execution. Please try again.');
+      }
+    }
+    
+    // Tab switching
+    function showTab(tabName) {
+      // Hide all tabs
+      document.getElementById('tab-structure').style.display = 'none';
+      document.getElementById('tab-executions').style.display = 'none';
+      document.getElementById('tab-inventory').style.display = 'none';
+      
+      // Remove active from all tab buttons
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      
+      // Show selected tab
+      document.getElementById('tab-' + tabName).style.display = 'block';
+      
+      // Add active to clicked tab
+      event.target.classList.add('active');
+    }
+    
+    // Escape HTML
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Load data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      if (processId) {
+        loadProcessData();
+      } else {
+        document.getElementById('process-name').textContent = 'No Process Selected';
+        document.getElementById('process-description').textContent = 'Please select a process from the Process Hub';
+      }
+    });
+  </script>
+</body>
+</html>

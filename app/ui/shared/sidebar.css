@@ -1,0 +1,292 @@
+/* Shared Sidebar Component Styles
+   Clean container-based approach with separate styling for left pane vs main content */
+
+/* ============================================
+   CSS Variables Required for Sidebar
+   ============================================ */
+:root {
+  /* Base Colors */
+  --color-sidebar-dark: hsl(218, 45%, 8%);
+  --color-primary: hsl(199, 100%, 46%);
+  --color-secondary: hsl(245, 100%, 69%);
+  
+  /* Text & Neutrals */
+  --color-text-primary: hsl(210, 20%, 98%);
+  --color-text-secondary: hsl(222, 20%, 81%);
+  
+  /* Design System Tokens */
+  --foreground: var(--color-text-primary);
+  --primary: var(--color-primary);
+  --secondary: var(--color-secondary);
+  --muted-foreground: var(--color-text-secondary);
+  
+  /* Glass Effect Variables */
+  --glass-overlay: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --glass-blur: blur(20px);
+  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  --shadow-glass-hover: 0 12px 48px 0 rgba(0, 0, 0, 0.4);
+  
+  /* Spacing */
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 1rem;
+  --spacing-md: 1.5rem;
+  --spacing-lg: 2rem;
+  --spacing-xl: 3rem;
+  
+  /* Transitions */
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Radius */
+  --radius: 1.5rem;
+}
+
+/* ============================================
+   APP CONTAINER — Layout Wrapper
+   ============================================ */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* ============================================
+   LEFT PANE — Sidebar Navigation
+   ============================================ */
+.left-pane {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  width: 280px;
+  background: var(--color-sidebar-dark);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: var(--spacing-lg) var(--spacing-md);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--transition-smooth);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+}
+
+.left-pane .sidebar-header {
+  margin-bottom: var(--spacing-xl);
+}
+
+.left-pane .sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+}
+
+.left-pane .logo-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 1.25rem;
+  box-shadow: 0 0 20px rgba(0, 168, 232, 0.4);
+}
+
+.left-pane .logo-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Navigation */
+.left-pane .sidebar-nav {
+  flex: 1;
+}
+
+.left-pane .nav-item {
+  position: relative;
+  margin-bottom: var(--spacing-xs);
+}
+
+.left-pane .nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: 0.75rem;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+}
+
+.left-pane .nav-link::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  transform: scaleY(0);
+  transition: transform var(--transition-base);
+}
+
+.left-pane .nav-link:hover {
+  background: rgba(0, 168, 232, 0.12);
+  color: var(--primary);
+}
+
+.left-pane .nav-link.active {
+  background: rgba(0, 168, 232, 0.15);
+  color: var(--primary);
+  box-shadow: 0 0 20px rgba(0, 168, 232, 0.3);
+}
+
+.left-pane .nav-link.active::before {
+  transform: scaleY(1);
+}
+
+.left-pane .nav-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform var(--transition-base);
+}
+
+.left-pane .nav-link:hover .nav-icon {
+  transform: scale(1.1);
+}
+
+/* ============================================
+   Glass Card (for Account Info)
+   ============================================ */
+.left-pane .glass-card {
+  background: var(--glass-overlay);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-glass);
+  position: relative;
+}
+
+.left-pane .glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 60%);
+  border-radius: var(--radius);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* ============================================
+   Button Glass (for Logout Button)
+   ============================================ */
+.left-pane .btn-glass {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 1rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+  white-space: nowrap;
+  font-family: inherit;
+  background: var(--glass-overlay);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  color: var(--foreground);
+}
+
+.left-pane .btn-glass:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 20px rgba(0, 168, 232, 0.2);
+}
+
+/* ============================================
+   MAIN CONTENT AREA
+   ============================================ */
+/* Main content should have margin to account for fixed sidebar */
+.app-container ~ .main-content,
+body > .main-content {
+  margin-left: 280px;
+  width: calc(100% - 280px);
+  min-height: 100vh;
+}
+
+/* ============================================
+   Mobile Menu
+   ============================================ */
+.mobile-menu-toggle {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 200;
+  background: var(--glass-overlay);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 90;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* ============================================
+   Responsive
+   ============================================ */
+@media (max-width: 767px) {
+  .mobile-menu-toggle {
+    display: block;
+  }
+  
+  .left-pane {
+    transform: translateX(-100%);
+  }
+  
+  .left-pane.active {
+    transform: translateX(0);
+  }
+  
+  .app-container ~ .main-content,
+  body > .main-content {
+    margin-left: 0;
+    width: 100%;
+  }
+}

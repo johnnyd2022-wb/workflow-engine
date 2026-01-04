@@ -9,132 +9,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Shared sidebar styles (loaded first, independent from page styles) -->
+  <link rel="stylesheet" href="/ui/shared/sidebar.css">
+  <script src="/ui/shared/sidebar.js" defer></script>
+  <!-- Page-specific styles (loaded after sidebar to allow overrides if needed) -->
   <link rel="stylesheet" href="/workflow-engine-static/styles_10.css">
   <link rel="stylesheet" href="/workflow-engine-static/styles_2.css">
 </head>
 <body>
   <!-- Flume UI Version 5 — Liquid Depth Aesthetic with Darker Sidebar -->
-  
-  <button class="mobile-menu-toggle" aria-label="Toggle menu">
-    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M3 12h18M3 6h18M3 18h18"/>
-    </svg>
-  </button>
-  
-  <div class="mobile-overlay"></div>
-  
-  <div class="app-shell">
-    
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-logo">
-          <div class="logo-icon">F</div>
-          <div class="logo-text">Flume</div>
-        </div>
-      </div>
-      
-      <nav class="sidebar-nav">
-        <div class="nav-item">
-          <a href="/workflow-engine/dashboard" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <rect x="3" y="3" width="7" height="7" rx="1"/>
-              <rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-            <span>Dashboard</span>
-          </a>
-        </div>
-
-        <div class="nav-item">
-          <a href="/workflow-engine/flow-engine" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3V7z"></path>
-            </svg>
-            <span>Flow Engine</span>
-          </a>
-        </div>
-        
-        <div class="nav-item">
-          <a href="/workflow-engine/core" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6m9.66-9L16 12m-6 0L4.34 9M19.66 18L16 12m-6 0L4.34 18"/>
-            </svg>
-            <span>Core Flows</span>
-          </a>
-        </div>
-        
-        <div class="nav-item">
-          <a href="/workflow-engine/compliance" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            <span>Compliance</span>
-          </a>
-        </div>
-        
-        <div class="nav-item">
-          <a href="/workflow-engine/integrations" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
-            <span>Integrations</span>
-          </a>
-        </div>
-        
-        <div class="nav-item">
-          <a href="/workflow-engine/settings" class="nav-link active">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6"/>
-              <path d="M1 12h6m6 0h6"/>
-            </svg>
-            <span>Settings</span>
-          </a>
-        </div>
-      </nav>
-      
-      <!-- Account Info Component Container -->
-      <div id="account-info-container" style="margin-top: auto; padding: 1rem 0;">
-        <!-- Shared Account Info Component -->
-        <div id="account-info-component">
-          <div class="glass-card" style="padding: 1rem; margin-top: auto; max-width: 100%;">
-            <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Account Information</h3>
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-              <div style="display: flex; align-items: flex-start; gap: 0.5rem; min-width: 0;">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--text-secondary); flex-shrink: 0; margin-top: 0.125rem;">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                <div style="display: flex; flex-direction: column; min-width: 0; flex: 1;">
-                  <span style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.25rem;">User</span>
-                  <span id="account-info-email" style="font-weight: 500; font-size: 0.875rem; word-break: break-word; overflow-wrap: break-word; line-height: 1.3;">Loading...</span>
-                </div>
-              </div>
-              <div style="display: flex; align-items: flex-start; gap: 0.5rem; min-width: 0;">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--text-secondary); flex-shrink: 0; margin-top: 0.125rem;">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
-                <div style="display: flex; flex-direction: column; min-width: 0; flex: 1;">
-                  <span style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.25rem;">Org</span>
-                  <span id="account-info-org" style="font-weight: 500; font-size: 0.875rem; word-break: break-word; overflow-wrap: break-word; line-height: 1.3;">Loading...</span>
-                </div>
-              </div>
-            </div>
-            <button 
-              id="account-info-logout-btn" 
-              class="btn btn-glass" 
-              onclick="handleAccountInfoLogout()" 
-              style="width: 100%; margin-top: 1rem;"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
-    </aside>
+  {% include 'components/sidebar.html' %}
     
     <main class="main-content">
       
@@ -497,7 +381,7 @@
   </div>
   
   
-  <script src="/workflow-engine-static/common_4.js"></script>
+  <!-- Sidebar JS is now in /ui/shared/sidebar.js (loaded in head) -->
   <script src="/ui/shared/password-policy.js"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script>
