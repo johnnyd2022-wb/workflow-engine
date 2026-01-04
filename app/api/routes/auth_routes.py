@@ -134,6 +134,9 @@ def signup():
     if not org_name or not email or not password or not password_confirm:
         return jsonify({"error": "org_name, email, password, and password_confirm are required"}), 400
 
+    # Normalize email to lowercase at write time (before validation and DB operations)
+    email = email.lower().strip()
+
     # Validate email format
     is_valid, error_msg = validate_email(email)
     if not is_valid:
@@ -221,6 +224,9 @@ def login():
     if not email or not password:
         return jsonify({"error": "email and password are required"}), 400
 
+    # Normalize email to lowercase at write time (before any DB operations)
+    email = email.lower().strip()
+
     # CRITICAL: Clear ALL authentication-related session data before starting new login
     # This ensures no stale partial authentication state persists
     # Only keep non-auth session data (if any)
@@ -247,6 +253,7 @@ def login():
 
         # Try to get user by email first to check lockout status
         # This is done before authentication to check lockout status
+        # Email is already normalized above
         user_repo = UserRepository(db)
         user_by_email = user_repo.get_user_by_email(email, org_id=org_uuid)
 

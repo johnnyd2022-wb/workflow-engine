@@ -56,21 +56,38 @@ def serve_core_js(filename):
         abort(400, "Invalid file type")
 
     core_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "js")
-    try:
-        # Use safe_join to prevent path traversal
-        safe_path = safe_join(core_frontend_dir, filename)
-        if safe_path is None:
-            abort(400, "Invalid filename")
+    # Use safe_join for validation only (not for file access)
+    safe_path = safe_join(core_frontend_dir, filename)
+    if safe_path is None:
+        abort(400, "Invalid filename")
 
+    # File serving must be done exclusively via send_from_directory
+    try:
         response = send_from_directory(core_frontend_dir, filename)
-        if filename.endswith(".js"):
-            response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        # Set explicit Content-Type header
+        response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        # X-Content-Type-Options is set globally in after_request handler
         return response
-    except Exception:
+    except FileNotFoundError:
+        # Missing static file - log at info level (not error)
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.info(f"Static JS file not found: {filename} from {core_frontend_dir}")
         # Fallback to default static if file not found in core
         from flask import current_app
 
-        return current_app.send_static_file(f"js/{filename}")
+        try:
+            return current_app.send_static_file(f"js/{filename}")
+        except Exception:
+            abort(404, "File not found")
+    except Exception:
+        # Unexpected exception - log at exception level
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Unexpected error serving static JS file: {filename}")
+        abort(500, "Internal server error")
 
 
 @core_bp.route("/static/css/<filename>")
@@ -89,21 +106,38 @@ def serve_core_css(filename):
         abort(400, "Invalid file type")
 
     core_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "css")
-    try:
-        # Use safe_join to prevent path traversal
-        safe_path = safe_join(core_frontend_dir, filename)
-        if safe_path is None:
-            abort(400, "Invalid filename")
+    # Use safe_join for validation only (not for file access)
+    safe_path = safe_join(core_frontend_dir, filename)
+    if safe_path is None:
+        abort(400, "Invalid filename")
 
+    # File serving must be done exclusively via send_from_directory
+    try:
         response = send_from_directory(core_frontend_dir, filename)
-        if filename.endswith(".css"):
-            response.headers["Content-Type"] = "text/css; charset=utf-8"
+        # Set explicit Content-Type header
+        response.headers["Content-Type"] = "text/css; charset=utf-8"
+        # X-Content-Type-Options is set globally in after_request handler
         return response
-    except Exception:
+    except FileNotFoundError:
+        # Missing static file - log at info level (not error)
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.info(f"Static CSS file not found: {filename} from {core_frontend_dir}")
         # Fallback to default static if file not found in core
         from flask import current_app
 
-        return current_app.send_static_file(f"css/{filename}")
+        try:
+            return current_app.send_static_file(f"css/{filename}")
+        except Exception:
+            abort(404, "File not found")
+    except Exception:
+        # Unexpected exception - log at exception level
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Unexpected error serving static CSS file: {filename}")
+        abort(500, "Internal server error")
 
 
 @core_bp.route("/api/core/processes", methods=["GET"])

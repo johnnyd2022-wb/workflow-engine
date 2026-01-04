@@ -90,25 +90,33 @@ def create_app():
         project_root = os.path.dirname(app_dir)  # project root
         shared_dir = os.path.join(project_root, "app", "ui", "shared")
 
-        # Use safe_join to prevent path traversal
-        try:
-            safe_path = safe_join(shared_dir, filename)
-            if safe_path is None:
-                abort(400, "Invalid filename")
+        # Use safe_join for validation only (not for file access)
+        safe_path = safe_join(shared_dir, filename)
+        if safe_path is None:
+            abort(400, "Invalid filename")
 
+        # File serving must be done exclusively via send_from_directory
+        try:
             response = send_from_directory(shared_dir, filename)
+            # Set explicit Content-Type headers
             if filename.endswith(".js"):
                 response.headers["Content-Type"] = "application/javascript; charset=utf-8"
             elif filename.endswith(".css"):
                 response.headers["Content-Type"] = "text/css; charset=utf-8"
+            # X-Content-Type-Options is set globally in after_request handler
             return response
-        except Exception as e:
-            # Log error for debugging
+        except FileNotFoundError:
+            # Missing static file - log at info level (not error)
             import logging
-
             logger = logging.getLogger(__name__)
-            logger.error(f"Error serving shared file {filename} from {shared_dir}: {e}")
+            logger.info(f"Static file not found: {filename} from {shared_dir}")
             abort(404, "File not found")
+        except Exception:
+            # Unexpected exception - log at exception level
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception(f"Unexpected error serving static file: {filename}")
+            abort(500, "Internal server error")
 
     # Set up middleware
     setup_tenant_context(app)
