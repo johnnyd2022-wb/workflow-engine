@@ -179,6 +179,7 @@ def create_user():
         db.rollback()
         # Log the full error for debugging but return generic message to client
         import logging
+
         logger = logging.getLogger(__name__)
         logger.exception("Error creating user")
         return jsonify({"error": "Failed to create user"}), 500

@@ -41,4 +41,3 @@ class Process(Base):
 
     def __repr__(self):
         return f"<Process(id={self.id}, name={self.name}, org_id={self.org_id})>"
-

@@ -31,12 +31,18 @@ class ExecutionStep(Base):
     execution_id = Column(UUID(as_uuid=True), ForeignKey("executions.id"), nullable=False, index=True)
     step_id = Column(UUID(as_uuid=True), ForeignKey("steps.id"), nullable=False, index=True)
     step_number = Column(Integer, nullable=False)  # Denormalized for easier querying
-    status = Column(Enum(ExecutionStepStatus, name="execution_step_status"), default=ExecutionStepStatus.PENDING, nullable=False)
+    status = Column(
+        Enum(ExecutionStepStatus, name="execution_step_status"), default=ExecutionStepStatus.PENDING, nullable=False
+    )
     is_terminal_step = Column(Boolean, default=False, nullable=False)  # Deterministic terminal step detection
     # Actual input values used (immutable after completion)
-    actual_inputs = Column(JSONB, nullable=True)  # Format: [{"name": "Aluminum Sheets", "quantity": 100, "unit": "kg", "inventory_item_id": "uuid"}, ...]
+    actual_inputs = Column(
+        JSONB, nullable=True
+    )  # Format: [{"name": "Aluminum Sheets", "quantity": 100, "unit": "kg", "inventory_item_id": "uuid"}, ...]
     # Actual outputs produced (immutable after completion)
-    actual_outputs = Column(JSONB, nullable=True)  # Format: [{"name": "Verified Materials", "quantity": 145, "unit": "kg"}, ...]
+    actual_outputs = Column(
+        JSONB, nullable=True
+    )  # Format: [{"name": "Verified Materials", "quantity": 145, "unit": "kg"}, ...]
     # Execution metadata (errors, notes, etc.)
     execution_data = Column(JSONB, nullable=True)  # For storing step execution details immutably
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -50,4 +56,3 @@ class ExecutionStep(Base):
 
     def __repr__(self):
         return f"<ExecutionStep(id={self.id}, execution_id={self.execution_id}, step_id={self.step_id}, status={self.status.value})>"
-

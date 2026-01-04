@@ -39,8 +39,9 @@ class Execution(Base):
     # Relationships
     organisation = relationship("Organisation", backref="executions")
     process = relationship("Process", back_populates="executions")
-    execution_steps = relationship("ExecutionStep", back_populates="execution", order_by="ExecutionStep.step_number", cascade="all, delete-orphan")
+    execution_steps = relationship(
+        "ExecutionStep", back_populates="execution", order_by="ExecutionStep.step_number", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<Execution(id={self.id}, process_id={self.process_id}, status={self.status.value})>"
-

@@ -47,8 +47,9 @@ class InventoryItem(Base):
     # Relationships
     organisation = relationship("Organisation", backref="inventory_items")
     source_execution = relationship("Execution", foreign_keys=[source_execution_id], backref="produced_inventory")
-    source_execution_step = relationship("ExecutionStep", foreign_keys=[source_execution_step_id], backref="produced_inventory")
+    source_execution_step = relationship(
+        "ExecutionStep", foreign_keys=[source_execution_step_id], backref="produced_inventory"
+    )
 
     def __repr__(self):
         return f"<InventoryItem(id={self.id}, name={self.name}, quantity={self.quantity} {self.unit}, type={self.inventory_type})>"
-

@@ -112,4 +112,3 @@ class InventoryRepository:
         self.db.delete(item)
         self.db.commit()
         return True
-

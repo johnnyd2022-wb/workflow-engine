@@ -29,4 +29,3 @@ def normalize_phone_number(phone_number: str | None) -> str | None:
 
     # Return None for empty strings, otherwise return digits-only
     return phone_digits if phone_digits else None
-

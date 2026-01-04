@@ -108,12 +108,14 @@ def create_app():
         except FileNotFoundError:
             # Missing static file - log at info level (not error)
             import logging
+
             logger = logging.getLogger(__name__)
             logger.info(f"Static file not found: {filename} from {shared_dir}")
             abort(404, "File not found")
         except Exception:
             # Unexpected exception - log at exception level
             import logging
+
             logger = logging.getLogger(__name__)
             logger.exception(f"Unexpected error serving static file: {filename}")
             abort(500, "Internal server error")
