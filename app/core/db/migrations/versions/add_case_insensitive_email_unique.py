@@ -1,7 +1,7 @@
 """Add case-insensitive email uniqueness constraint
 
 Revision ID: case_insensitive_email_001
-Revises: add_core_models_001
+Revises: acf7c513c15e
 Create Date: 2025-01-XX XX:XX:XX.XXXXXX
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'case_insensitive_email_001'
-down_revision: Union[str, None] = 'add_core_models_001'
+down_revision: Union[str, None] = 'acf7c513c15e'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
