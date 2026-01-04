@@ -29,7 +29,14 @@ class UserRepository:
         is_active: bool = True,
         phone_number: str | None = None,
     ) -> User:
-        """Create a new user (must belong to an organisation)"""
+        """Create a new user (must belong to an organisation)
+
+        Email is normalized to lowercase for case-insensitive uniqueness.
+        Raises EmailConflictError if email already exists (race-condition safe).
+        """
+        # Normalize email to lowercase for case-insensitive uniqueness
+        email = email.lower().strip()
+
         user = User(
             org_id=org_id,
             email=email,
@@ -39,10 +46,24 @@ class UserRepository:
             phone_number=phone_number,
         )
         self.db.add(user)
-        self.db.flush()  # Flush to get the ID without committing
-        # Access id to ensure it's loaded
-        _ = user.id
-        self.db.commit()
+        try:
+            self.db.flush()  # Flush to get the ID without committing
+            # Access id to ensure it's loaded
+            _ = user.id
+            self.db.commit()
+        except IntegrityError as e:
+            self.db.rollback()
+            # Check if this is an email uniqueness violation
+            error_str = str(e.orig).lower() if hasattr(e, "orig") else str(e).lower()
+            if (
+                "unique" in error_str
+                or "duplicate" in error_str
+                or "email" in error_str
+                or "ix_users_email" in error_str
+            ):
+                raise EmailConflictError(f"Email address '{email}' is already in use")
+            # Re-raise if it's a different integrity error
+            raise
         return user
 
     def get_user_by_id(self, user_id: UUID, org_id: UUID | None = None) -> User | None:
@@ -53,7 +74,9 @@ class UserRepository:
         return query.first()
 
     def get_user_by_email(self, email: str, org_id: UUID | None = None) -> User | None:
-        """Get user by email, optionally scoped to organisation"""
+        """Get user by email (case-insensitive), optionally scoped to organisation"""
+        # Normalize email to lowercase for case-insensitive lookup
+        email = email.lower().strip()
         query = self.db.query(User).filter(User.email == email)
         if org_id is not None:
             query = query.filter(User.org_id == org_id)
@@ -89,6 +112,8 @@ class UserRepository:
         original_email = user.email
 
         if email is not None:
+            # Normalize email to lowercase for case-insensitive uniqueness
+            email = email.lower().strip()
             # Only update if email is actually changing
             if email != user.email:
                 user.email = email

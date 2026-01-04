@@ -8,12 +8,21 @@ from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
 from app.api.routes.auth_routes import auth_bp
 from app.api.routes.org_routes import org_bp
+from app.core.security.permissions import requires_auth
 from app.utils.config_loader import config
 
 
 def create_app():
     """Create and configure Flask application"""
-    app = Flask(__name__)
+    # Get the path to app/ui/templates for shared components
+    current_file = os.path.abspath(__file__)  # app/api/app_factory.py
+    api_dir = os.path.dirname(current_file)  # app/api/
+    app_dir = os.path.dirname(api_dir)  # app/
+    ui_templates_dir = os.path.join(app_dir, "ui", "templates")
+
+    # Set the app's template folder to the shared templates directory
+    # Flask will also search blueprint template folders automatically
+    app = Flask(__name__, template_folder=ui_templates_dir)
 
     # Set secret key for sessions (should be in config in production)
     app.secret_key = config.get("app", "secret_key", fallback="dev-secret-key-change-in-production")
@@ -39,6 +48,11 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(org_bp)
 
+    # Register core blueprint
+    from app.core.backend.backend import core_bp
+
+    app.register_blueprint(core_bp)
+
     # Register existing feature blueprints conditionally
     if config.crm_enabled:
         from features.crm.backend.backend import crm_bp
@@ -50,10 +64,23 @@ def create_app():
 
         app.register_blueprint(workflow_engine_bp)
 
-    # Serve shared UI JavaScript files (register before middleware)
+    # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
+    @requires_auth
     def serve_ui_shared(filename):
-        """Serve shared UI JavaScript files"""
+        """Serve shared UI files (JavaScript and CSS) - requires authentication"""
+        from flask import abort
+        from werkzeug.security import safe_join
+
+        # Path traversal protection: reject filenames with .. or /
+        if ".." in filename or "/" in filename or "\\" in filename:
+            abort(400, "Invalid filename")
+
+        # Extension whitelist for security
+        allowed_extensions = {".js", ".css"}
+        if not any(filename.lower().endswith(ext) for ext in allowed_extensions):
+            abort(400, "Invalid file type")
+
         # Calculate path: app_factory.py is in app/api/
         # Go up 3 levels: app/api/ -> app/ -> project_root/
         # Then join with app/ui/shared
@@ -63,19 +90,35 @@ def create_app():
         project_root = os.path.dirname(app_dir)  # project root
         shared_dir = os.path.join(project_root, "app", "ui", "shared")
 
-        # Set proper MIME type for JavaScript files
+        # Use safe_join for validation only (not for file access)
+        safe_path = safe_join(shared_dir, filename)
+        if safe_path is None:
+            abort(400, "Invalid filename")
+
+        # File serving must be done exclusively via send_from_directory
         try:
             response = send_from_directory(shared_dir, filename)
+            # Set explicit Content-Type headers
             if filename.endswith(".js"):
                 response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+            elif filename.endswith(".css"):
+                response.headers["Content-Type"] = "text/css; charset=utf-8"
+            # X-Content-Type-Options is set globally in after_request handler
             return response
-        except Exception as e:
-            # Log error for debugging
+        except FileNotFoundError:
+            # Missing static file - log at info level (not error)
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(f"Error serving shared file {filename} from {shared_dir}: {e}")
-            raise
+            logger.info(f"Static file not found: {filename} from {shared_dir}")
+            abort(404, "File not found")
+        except Exception:
+            # Unexpected exception - log at exception level
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.exception(f"Unexpected error serving static file: {filename}")
+            abort(500, "Internal server error")
 
     # Set up middleware
     setup_tenant_context(app)

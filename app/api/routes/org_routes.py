@@ -8,7 +8,7 @@ from app.core.db import db_session
 from app.core.db.models.organisation import OrganisationStatus
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.organisation_repo import OrganisationRepository
-from app.core.db.repositories.user_repo import UserRepository
+from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.permissions import requires_auth, requires_org_scope, requires_role
 from app.core.utils.log_action import log_action
@@ -143,22 +143,21 @@ def create_user():
         user_repo = UserRepository(db)
         auth_service = AuthService(db)
 
-        # Check if user already exists
-        existing_user = user_repo.get_user_by_email(email)
-        if existing_user:
-            return jsonify({"error": f"User with email '{email}' already exists"}), 400
-
         # Parse role
         try:
             role = UserRole(role_str.lower())
         except ValueError:
             return jsonify({"error": f"Invalid role: {role_str}"}), 400
 
-        # Create user
+        # Create user (email uniqueness is enforced at DB level, race-condition safe)
         password_hash = auth_service.hash_password(password)
-        user = user_repo.create_user(
-            org_id=g.current_org_id, email=email, password_hash=password_hash, role=role, is_active=True
-        )
+        try:
+            user = user_repo.create_user(
+                org_id=g.current_org_id, email=email, password_hash=password_hash, role=role, is_active=True
+            )
+        except EmailConflictError as e:
+            db.rollback()
+            return jsonify({"error": str(e)}), 400
 
         # Extract values before any potential session issues
         user_id = str(user.id)
@@ -176,9 +175,14 @@ def create_user():
             }
         ), 201
 
-    except Exception as e:
+    except Exception:
         db.rollback()
-        return jsonify({"error": f"Failed to create user: {str(e)}"}), 500
+        # Log the full error for debugging but return generic message to client
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error creating user")
+        return jsonify({"error": "Failed to create user"}), 500
     # Don't close session here - let middleware teardown handle it
 
 

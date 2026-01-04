@@ -205,7 +205,7 @@ def integrations():
 @workflow_engine_bp.route("/workflow-engine/settings")
 def settings():
     """Render the settings page"""
-    return render_template("settings.html")
+    return render_template("settings.html", active_page="settings")
 
 
 @workflow_engine_bp.route("/workflow-engine/flow-engine1")

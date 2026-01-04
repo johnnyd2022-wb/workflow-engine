@@ -60,8 +60,16 @@
           const emailEl = component.querySelector('#account-info-email');
           const orgEl = component.querySelector('#account-info-org');
           
-          if (emailEl) emailEl.textContent = data.user.email || 'Unknown';
-          if (orgEl) orgEl.textContent = data.organisation.name || 'Unknown';
+          if (emailEl) {
+            const email = data.user.email || 'Unknown';
+            emailEl.textContent = email;
+            emailEl.title = email; // Show full email on hover
+          }
+          if (orgEl) {
+            const orgName = data.organisation.name || 'Unknown';
+            orgEl.textContent = orgName;
+            orgEl.title = orgName; // Show full org name on hover
+          }
           
           // Show component (already visible by default, but ensure it's shown)
           component.style.display = 'block';

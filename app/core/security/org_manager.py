@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.db.models.organisation import Organisation, OrganisationStatus
 from app.core.db.models.user import User, UserRole
 from app.core.db.repositories.organisation_repo import OrganisationRepository
-from app.core.db.repositories.user_repo import UserRepository
+from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
 from app.core.security.auth_service import AuthService
 
 
@@ -39,14 +39,19 @@ class OrgManager:
 
         # Create admin user
         password_hash = AuthService.hash_password(password)
-        admin_user = self.user_repo.create_user(
-            org_id=org.id,
-            email=admin_email,
-            password_hash=password_hash,
-            role=UserRole.ADMIN,
-            is_active=True,
-            phone_number=phone_number,
-        )
+        try:
+            admin_user = self.user_repo.create_user(
+                org_id=org.id,
+                email=admin_email,
+                password_hash=password_hash,
+                role=UserRole.ADMIN,
+                is_active=True,
+                phone_number=phone_number,
+            )
+        except EmailConflictError:
+            # Rollback org creation if user creation fails due to email conflict
+            self.db.rollback()
+            raise ValueError(f"User with email '{admin_email}' already exists")
 
         return org, admin_user
 
