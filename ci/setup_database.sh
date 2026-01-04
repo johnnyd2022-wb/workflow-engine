@@ -24,7 +24,10 @@ sed -i 's|port = 8001|port = 8005|' app/config/test.ini
 
 # Run Alembic migrations to set up schema
 echo "Running database migrations..."
-ENVIRONMENT=test uv run alembic upgrade head
+# Upgrade to the specific head revision to avoid "overlaps" error
+# This works regardless of current database state or multiple heads
+echo "Upgrading to execution_step_tracking_001 (current head)..."
+ENVIRONMENT=test uv run alembic upgrade execution_step_tracking_001
 
 echo "✅ Database setup complete!"
 
