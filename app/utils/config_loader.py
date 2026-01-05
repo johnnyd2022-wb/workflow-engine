@@ -30,8 +30,17 @@ class Config:
 
     def _load_keepass_creds(self):
         """Attempt to load database credentials from KeePassXC"""
-        # Only try KeePassXC for local environment
-        if self.environment != "local":
+        # Only try KeePassXC for local environment, or test environment if enabled
+        if self.environment == "local":
+            # Always try for local environment
+            pass
+        elif self.environment == "test":
+            # Check if KeePassXC is enabled for test environment
+            use_keepass = self.getboolean("database", "use_keepass", False)
+            if not use_keepass:
+                return
+        else:
+            # Other environments don't use KeePassXC
             return
 
         try:
