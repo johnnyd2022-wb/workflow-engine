@@ -66,6 +66,7 @@ def create_app():
 
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
+    @limiter.exempt
     @requires_auth
     def serve_ui_shared(filename):
         """Serve shared UI files (JavaScript and CSS) - requires authentication"""
