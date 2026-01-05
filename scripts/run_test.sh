@@ -7,8 +7,8 @@ echo "Environment: $ENVIRONMENT"
 echo "Config file: config/$ENVIRONMENT.ini"
 
 # Build and run Docker container for test
-docker stop $(docker ps -aqf "name=workflow-engine-test") 2>/dev/null || true
-docker rm $(docker ps -aqf "name=workflow-engine-test") 2>/dev/null || true
+docker stop workflow-engine-test 2>/dev/null || true
+docker rm workflow-engine-test 2>/dev/null || true
 
 # Build Docker image for test environment
 docker build --target test -f Dockerfile.multi -t workflow-engine:test .
@@ -18,6 +18,7 @@ docker run -d \
     --name workflow-engine-test \
     -p 8001:8001 \
     -e ENVIRONMENT=test \
+    -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD_TEST \
     workflow-engine:test
 
 echo "✅ Test environment started on port 8001"
