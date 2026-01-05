@@ -19,7 +19,7 @@ echo "✅ PostgreSQL is ready!"
 # Tests expect port 8005, so update test.ini to match
 echo "Updating test.ini configuration..."
 sed -i 's|host = host.docker.internal|host = postgres|' app/config/test.ini
-sed -i 's|port = 5401|port = 5432|' app/config/test.ini
+sed -i 's|port = 8401|port = 5432|' app/config/test.ini
 sed -i 's|port = 8001|port = 8005|' app/config/test.ini
 
 # Run Alembic migrations to set up schema

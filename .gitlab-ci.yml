@@ -52,8 +52,8 @@ unit_tests:
     ENVIRONMENT: test
     # Database connection for GitLab CI service
     # Service containers are accessible via their alias as hostname
-    POSTGRES_DB: workflow-engine
-    POSTGRES_USER: workflow-engine
+    POSTGRES_DB: workflow-engine-test
+    POSTGRES_USER: workflow_rw
     POSTGRES_PASSWORD: secret
     POSTGRES_HOST_AUTH_METHOD: trust
   before_script:
@@ -76,4 +76,4 @@ unit_tests:
   only:
     - merge_requests
     - main
-  allow_failure: true
+  allow_failure: false
