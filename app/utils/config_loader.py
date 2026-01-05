@@ -30,17 +30,8 @@ class Config:
 
     def _load_keepass_creds(self):
         """Attempt to load database credentials from KeePassXC"""
-        # Only try KeePassXC for local environment, or test environment if enabled
-        if self.environment == "local":
-            # Always try for local environment
-            pass
-        elif self.environment == "test":
-            # Check if KeePassXC is enabled for test environment
-            use_keepass = self.getboolean("database", "use_keepass", False)
-            if not use_keepass:
-                return
-        else:
-            # Other environments don't use KeePassXC
+        # Only try KeePassXC for local environment
+        if self.environment != "local":
             return
 
         try:
@@ -122,14 +113,32 @@ class Config:
 
     @property
     def db_user(self) -> str:
-        # Try KeePassXC first, fallback to config file
+        # For test environment, check for environment variable first
+        if self.environment == "test":
+            use_env_var = self.getboolean("database", "use_env_var", False)
+            if use_env_var:
+                env_user = os.getenv("POSTGRES_USER")
+                if env_user:
+                    return env_user
+        # Try KeePassXC first (for local environment), fallback to config file
         if self._keepass_creds and "Username" in self._keepass_creds:
             return self._keepass_creds["Username"]
         return self.get("database", "user", "postgres")
 
     @property
     def db_password(self) -> str:
-        # Try KeePassXC first, fallback to config file
+        # For test environment, check for environment variable first
+        if self.environment == "test":
+            use_env_var = self.getboolean("database", "use_env_var", False)
+            if use_env_var:
+                # Check both POSTGRES_PASSWORD and POSTGRES_PASSWORD_TEST for compatibility
+                env_password = os.getenv("POSTGRES_PASSWORD") or os.getenv("POSTGRES_PASSWORD_TEST")
+                if env_password:
+                    # Strip quotes if present (handles cases where export used quotes)
+                    env_password = env_password.strip("\"'")
+                    if env_password:
+                        return env_password
+        # Try KeePassXC first (for local environment), fallback to config file
         if self._keepass_creds and "Password" in self._keepass_creds:
             return self._keepass_creds["Password"]
         return self.get("database", "password", "")
