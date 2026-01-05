@@ -10,6 +10,7 @@ port = 5401
 name = workflow-engine
 user = postgres
 password = YOUR_PASSWORD_HERE
+use_keepass = false
 
 [xero]
 client_id = YOUR_TEST_XERO_CLIENT_ID
