@@ -76,4 +76,4 @@ unit_tests:
   only:
     - merge_requests
     - main
-  allow_failure: true
+  allow_failure: false
