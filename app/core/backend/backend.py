@@ -459,7 +459,12 @@ def list_executions():
 
         # Filter by status if provided
         if status_str:
-            status_map = {"in_progress": "in_progress", "completed": "completed", "IN_PROGRESS": "in_progress", "COMPLETED": "completed"}
+            status_map = {
+                "in_progress": "in_progress",
+                "completed": "completed",
+                "IN_PROGRESS": "in_progress",
+                "COMPLETED": "completed",
+            }
             target_status = status_map.get(status_str, status_str.lower())
             mock_executions = [e for e in mock_executions if e["status"] == target_status]
 
