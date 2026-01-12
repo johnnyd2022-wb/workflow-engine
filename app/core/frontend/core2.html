@@ -124,10 +124,16 @@
           </div>
           
           <!-- Inventory Section -->
-          <h2 class="section-title">Inventory summary</h2>
-          <div class="inventory-grid" id="inventory-grid">
-            <!-- Inventory will be loaded dynamically from backend -->
-          </div>
+          <section class="card">
+            <div class="card-header">
+              <h2 class="card-title">Inventory at a Glance</h2>
+            </div>
+            <div class="card-content">
+              <div class="inventory-category-grid" id="inventory-grid">
+                <!-- Inventory will be loaded dynamically from backend -->
+              </div>
+            </div>
+          </section>
           
           <!-- Processes Section -->
           <h2 class="section-title mt-6">Process summary</h2>
@@ -256,50 +262,12 @@
       inventoryGrid.innerHTML = '';
       
       if (!items || items.length === 0) {
-        // Show mock data with highlighted empty state message
-        const mockData = {
-          raw_material: [
-            { name: 'Juniper Berries', quantity: 150, unit: 'kg', isExample: true },
-            { name: 'Coriander Seeds', quantity: 45, unit: 'kg', isExample: true },
-            { name: 'Angelica Root', quantity: 25, unit: 'kg', isExample: true }
-          ],
-          work_in_progress: [
-            { name: 'Botanical Infusion', quantity: 500, unit: 'L', isExample: true },
-            { name: 'Neutral Spirit Base', quantity: 1000, unit: 'L', isExample: true }
-          ],
-          final_product: [
-            { name: 'Premium London Dry Gin', quantity: 850, unit: 'bottles', isExample: true },
-            { name: 'Navy Strength Gin', quantity: 320, unit: 'bottles', isExample: true }
-          ]
-        };
-        
-        // Render empty state message card first
-        const emptyStateCard = document.createElement('div');
-        emptyStateCard.className = 'card';
-        emptyStateCard.style.cssText = 'padding: 32px; text-align: center; background: var(--bg-card); border: 2px dashed var(--border-default); border-radius: var(--radius-lg); margin-bottom: 24px; grid-column: 1 / -1;';
-        emptyStateCard.innerHTML = `
-          <div style="margin-bottom: 16px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary);">
-              <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
-            </svg>
+        // Show empty state
+        inventoryGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
+            <p style="color: var(--text-secondary);">No inventory items yet. Add your first item to get started.</p>
           </div>
-          <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">No Inventory Items Yet</h3>
-          <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 24px;">Get started by adding your first inventory item. The examples below show the different types of inventory you can track.</p>
-          <button class="btn btn-primary" data-modal-open="add-inventory-modal" style="margin: 0 auto;">
-            <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add Inventory Item
-          </button>
         `;
-        inventoryGrid.appendChild(emptyStateCard);
-        
-        // Render mock example cards after the empty state message
-        inventoryGrid.appendChild(createInventoryCardV2('Raw Materials (Example)', 'source', mockData.raw_material, true));
-        inventoryGrid.appendChild(createInventoryCardV2('Intermediate Products (Example)', 'intermediate', mockData.work_in_progress, true));
-        inventoryGrid.appendChild(createInventoryCardV2('Final Products (Example)', 'final', mockData.final_product, true));
-        
         return;
       }
       
@@ -317,51 +285,50 @@
         }
       });
       
-      // Render each category
+      // Render each category card
       if (grouped.raw_material.length > 0) {
-        inventoryGrid.appendChild(createInventoryCardV2('Raw Materials', 'source', grouped.raw_material));
+        inventoryGrid.appendChild(createInventoryCategoryCard('raw', grouped.raw_material));
       }
       if (grouped.work_in_progress.length > 0) {
-        inventoryGrid.appendChild(createInventoryCardV2('Intermediate', 'intermediate', grouped.work_in_progress));
+        inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
       }
       if (grouped.final_product.length > 0) {
-        inventoryGrid.appendChild(createInventoryCardV2('Final Products', 'final', grouped.final_product));
+        inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
       }
     }
     
-    function createInventoryCardV2(category, typeClass, items, isExample = false) {
+    function createInventoryCategoryCard(type, items) {
       const card = document.createElement('div');
-      card.className = 'card inventory-card';
-      
-      if (isExample) {
-        card.style.cssText = 'opacity: 0.6; border: 1px dashed var(--border-default);';
-      }
+      card.className = `inventory-category-card ${type}`;
       
       const displayItems = items.slice(0, 3);
       const remaining = items.length - 3;
       
+      // Icon SVG based on type
+      let iconSvg = '';
+      if (type === 'raw') {
+        iconSvg = '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>';
+      } else if (type === 'intermediate') {
+        iconSvg = '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>';
+      } else if (type === 'final') {
+        iconSvg = '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>';
+      }
+      
+      const categoryTitle = type === 'raw' ? 'Raw Materials' : type === 'intermediate' ? 'Intermediate' : 'Final Products';
+      
       card.innerHTML = `
-        <div class="inventory-card-header ${typeClass}">
-          <div class="inventory-header-content">
-            <div class="inventory-icon-wrapper">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-              </svg>
-            </div>
-            <div>
-              <div class="inventory-category">${category}</div>
-              <div class="inventory-count">${isExample ? 'Example' : `${items.length} items`}</div>
-            </div>
-          </div>
+        <div class="inventory-category-header">
+          <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            ${iconSvg}
+          </svg>
+          <span class="inventory-category-title">${categoryTitle}</span>
         </div>
-        <div class="inventory-card-body">
+        <p class="inventory-category-count">${items.length} items</p>
+        <div class="inventory-category-items">
           ${displayItems.map(item => `
-            <div class="inventory-item">
-              <span class="inventory-item-name" style="${isExample ? 'color: var(--text-tertiary); font-style: italic;' : ''}">${escapeHtml(item.name)}</span>
-              <span class="inventory-item-qty" style="${isExample ? 'color: var(--text-tertiary);' : ''}">${item.quantity || '0'} ${item.unit || ''}</span>
-            </div>
+            <p class="inventory-category-item">${escapeHtml(item.name)}: ${item.quantity || '0'} ${item.unit || ''}</p>
           `).join('')}
-          ${remaining > 0 ? `<p class="inventory-more">+${remaining} more</p>` : ''}
+          ${remaining > 0 ? `<p class="inventory-category-more">+${remaining} more</p>` : ''}
         </div>
       `;
       
