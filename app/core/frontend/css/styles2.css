@@ -785,100 +785,245 @@
     margin-bottom: 16px;
   }
   
-  .inventory-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    margin-bottom: 32px;
+  /* Card Header and Content */
+  .card-header {
+    padding: 20px 20px 0 20px;
   }
   
-  @media (max-width: 1024px) {
-    .inventory-grid {
+  .card-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  
+  .card-content {
+    padding: 20px;
+  }
+  
+  /* Inventory at a Glance - 3 Column Category Cards */
+  .inventory-category-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  
+  @media (max-width: 768px) {
+    .inventory-category-grid {
       grid-template-columns: 1fr;
     }
   }
   
-  .inventory-card {
-    overflow: hidden;
+  .inventory-category-card {
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid;
   }
   
-  .inventory-card-header {
-    padding: 20px;
+  .inventory-category-card.raw {
+    background: hsl(217, 91%, 95%);
+    border-color: hsl(217, 70%, 80%);
   }
   
-  .inventory-card-header.source {
-    background: linear-gradient(135deg, var(--node-source), hsl(210, 90%, 45%));
+  .inventory-category-card.intermediate {
+    background: hsl(45, 93%, 94%);
+    border-color: hsl(45, 70%, 75%);
   }
   
-  .inventory-card-header.intermediate {
-    background: linear-gradient(135deg, var(--node-intermediate), hsl(25, 95%, 50%));
+  .inventory-category-card.final {
+    background: hsl(142, 71%, 93%);
+    border-color: hsl(142, 50%, 70%);
   }
   
-  .inventory-card-header.final {
-    background: linear-gradient(135deg, var(--node-final), hsl(150, 70%, 38%));
-  }
-  
-  .inventory-header-content {
+  .inventory-category-header {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
   }
   
-  .inventory-icon-wrapper {
-    padding: 8px;
-    background: hsla(0, 0%, 100%, 0.2);
-    border-radius: var(--radius-md);
-    backdrop-filter: blur(8px);
+  .inventory-category-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
   }
   
-  .inventory-icon-wrapper svg {
-    width: 20px;
-    height: 20px;
-    color: white;
+  .inventory-category-icon.raw { color: hsl(217, 91%, 50%); }
+  .inventory-category-icon.intermediate { color: hsl(45, 93%, 40%); }
+  .inventory-category-icon.final { color: hsl(142, 71%, 40%); }
+  
+  .inventory-category-title {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 14px;
   }
   
-  .inventory-category {
-    font-weight: 600;
-    color: white;
-  }
-  
-  .inventory-count {
-    font-size: 24px;
+  .inventory-category-count {
+    font-size: 1.5rem;
     font-weight: 700;
-    color: hsla(0, 0%, 100%, 0.95);
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
   }
   
-  .inventory-card-body {
-    padding: 20px;
+  .inventory-category-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
   }
   
-  .inventory-item {
+  .inventory-category-item {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+  }
+  
+  .inventory-category-more {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--primary);
+    margin-top: 0.25rem;
+  }
+  
+  /* ========== INVENTORY (3-column colored cards) - Flows2 ========== */
+  .inventory-category-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  
+  @media (max-width: 768px) {
+    .inventory-category-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .inventory-category-card {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+  }
+  
+  .inventory-category-card.raw {
+    background-color: hsl(210, 100%, 97%);
+    border-color: hsl(210, 80%, 85%);
+  }
+  
+  .inventory-category-card.intermediate {
+    background-color: hsl(45, 100%, 96%);
+    border-color: hsl(45, 80%, 80%);
+  }
+  
+  .inventory-category-card.final {
+    background-color: hsl(142, 76%, 96%);
+    border-color: hsl(142, 60%, 80%);
+  }
+  
+  .inventory-category-header {
+    padding: 0.75rem 1rem;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
+    gap: 0.5rem;
   }
   
-  .inventory-item:not(:last-child) {
-    border-bottom: 1px solid var(--border-light);
+  .inventory-category-card.raw .inventory-category-header {
+    background-color: hsl(210, 100%, 95%);
+    color: hsl(210, 80%, 40%);
+  }
+  
+  .inventory-category-card.intermediate .inventory-category-header {
+    background-color: hsl(45, 100%, 92%);
+    color: hsl(45, 80%, 35%);
+  }
+  
+  .inventory-category-card.final .inventory-category-header {
+    background-color: hsl(142, 76%, 92%);
+    color: hsl(142, 60%, 35%);
+  }
+  
+  .inventory-category-header svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  
+  .inventory-category-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+  
+  .inventory-category-count {
+    margin-left: auto;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    background: hsl(0, 0%, 100% / 0.5);
+  }
+  
+  .inventory-category-content {
+    padding: 0.75rem 1rem;
+    background: var(--bg-card);
+  }
+  
+  .inventory-category-item {
+    padding: 0.5rem 0.625rem;
+    border-radius: 0.375rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .inventory-category-item:last-child {
+    margin-bottom: 0;
+  }
+  
+  .inventory-category-card.raw .inventory-category-item {
+    background-color: hsl(210, 100%, 97%);
+    border: 1px solid hsl(210, 80%, 85%);
+  }
+  
+  .inventory-category-card.intermediate .inventory-category-item {
+    background-color: hsl(45, 100%, 96%);
+    border: 1px solid hsl(45, 80%, 80%);
+  }
+  
+  .inventory-category-card.final .inventory-category-item {
+    background-color: hsl(142, 76%, 96%);
+    border: 1px solid hsl(142, 60%, 80%);
+  }
+  
+  .inventory-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
   
   .inventory-item-name {
-    font-size: 14px;
-    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
   }
   
-  .inventory-item-qty {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--primary);
+  .inventory-item-quantity {
+    font-size: 0.875rem;
+    font-weight: 600;
   }
   
-  .inventory-more {
-    padding-top: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--primary);
+  .inventory-category-card.raw .inventory-item-quantity {
+    color: hsl(210, 80%, 40%);
+  }
+  
+  .inventory-category-card.intermediate .inventory-item-quantity {
+    color: hsl(45, 80%, 35%);
+  }
+  
+  .inventory-category-card.final .inventory-item-quantity {
+    color: hsl(142, 60%, 35%);
+  }
+  
+  .inventory-item-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
   }
   
   /* ============================================
@@ -979,92 +1124,94 @@
   }
   
   /* ============================================
-     TABS
+     TABS (Flows2)
      ============================================ */
   
   .tabs {
+    margin-bottom: 1.5rem;
+  }
+  
+  .tabs-list {
     display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px;
-    background: hsl(220, 20%, 96%);
+    gap: 0.25rem;
+    background: var(--secondary-bg);
+    padding: 0.25rem;
     border-radius: var(--radius-lg);
     width: fit-content;
-    margin-bottom: 24px;
   }
   
-  .tab {
-    padding: 8px 16px;
-    border-radius: var(--radius-md);
-    font-size: 14px;
+  .tab-trigger {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text-tertiary);
-    background: transparent;
     border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: calc(var(--radius-lg) - 0.125rem);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: var(--transition-normal);
   }
   
-  .tab:hover {
+  .tab-trigger:hover {
     color: var(--text-primary);
   }
   
-  .tab.active {
-    background: white;
+  .tab-trigger.active {
+    background: var(--bg-card);
     color: var(--text-primary);
     box-shadow: var(--shadow-sm);
   }
   
-  .tab-badge {
-    margin-left: 8px;
-    padding: 2px 8px;
-    border-radius: var(--radius-sm);
-    font-size: 12px;
+  .tab-content {
+    display: none;
   }
   
-  .tab.active .tab-badge {
-    background: var(--primary-bg);
-    color: var(--primary);
-  }
-  
-  .tab:not(.active) .tab-badge {
-    background: hsl(220, 15%, 90%);
-    color: var(--text-secondary);
+  .tab-content.active {
+    display: block;
   }
   
   /* ============================================
-     STEP CARDS
+     PROCESS STEPS (Flows2)
      ============================================ */
   
+  .steps-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
   .step-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    margin-bottom: 16px;
   }
   
-  .step-card:last-child {
-    margin-bottom: 0;
-  }
-  
-  .step-card-header {
+  .step-header {
+    padding: 1rem 1.25rem;
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 20px;
-    border-bottom: 1px solid var(--border-light);
+    gap: 1rem;
+    cursor: pointer;
+    transition: var(--transition-normal);
+  }
+  
+  .step-header:hover {
+    background: var(--secondary-bg);
   }
   
   .step-number {
-    width: 40px;
-    height: 40px;
-    border-radius: var(--radius-lg);
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    width: 2rem;
+    height: 2rem;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
-    font-weight: 700;
-    font-size: 14px;
-    box-shadow: 0 4px 12px hsla(210, 100%, 50%, 0.2);
+    font-size: 0.875rem;
+    font-weight: 600;
+    flex-shrink: 0;
   }
   
   .step-info {
@@ -1077,174 +1224,260 @@
   }
   
   .step-description {
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--text-secondary);
-    margin-top: 2px;
   }
   
-  .step-card-body {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+  .step-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
   }
   
-  .step-io-section {
-    padding: 20px;
-  }
-  
-  .step-io-section:first-child {
-    border-right: 1px solid var(--border-light);
-  }
-  
-  .step-io-label {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-tertiary);
-    margin-bottom: 12px;
-  }
-  
-  .step-io-item {
+  .step-toggle {
+    width: 1.5rem;
+    height: 1.5rem;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    border-radius: var(--radius-md);
-    margin-bottom: 8px;
+    justify-content: center;
+    transition: var(--transition-normal);
   }
   
-  .step-io-item:last-child {
+  .step-toggle.expanded svg {
+    transform: rotate(180deg);
+  }
+  
+  .step-content {
+    display: none;
+    padding: 1.25rem;
+    border-top: 1px solid var(--border-default);
+    background: var(--secondary-bg);
+  }
+  
+  .step-content.expanded {
+    display: block;
+  }
+  
+  /* ========== INPUTS/OUTPUTS ========== */
+  .io-section {
+    margin-bottom: 1.5rem;
+  }
+  
+  .io-section:last-child {
     margin-bottom: 0;
   }
   
-  .step-io-item.input {
-    background: hsl(220, 20%, 97%);
-  }
-  
-  .step-io-item.output {
-    background: var(--success-bg);
-  }
-  
-  .step-io-name {
-    font-size: 14px;
+  .io-section-title {
+    font-size: 0.875rem;
+    font-weight: 600;
     color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
   
-  .step-io-qty {
-    font-size: 14px;
+  .io-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .io-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: 0.5rem;
+  }
+  
+  .io-item-name {
+    flex: 1;
+    font-size: 0.875rem;
+  }
+  
+  .io-item-quantity {
+    font-size: 0.875rem;
     font-weight: 500;
   }
   
-  .step-io-item.input .step-io-qty {
-    color: var(--primary);
+  .io-item-unit {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    min-width: 3rem;
   }
   
-  .step-io-item.output .step-io-qty {
-    color: var(--success-dark);
+  .io-item-badge {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
   }
   
-  /* ============================================
-     EXECUTIONS
-     ============================================ */
-  
-  .executions-section {
-    padding: 20px;
-  }
-  
-  .executions-section:not(:last-child) {
-    border-bottom: 1px solid var(--border-light);
-  }
-  
-  .executions-label {
-    font-size: 12px;
+  /* ========== EXECUTIONS (Flows2) ========== */
+  .execution-section-title {
+    font-size: 1.125rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-tertiary);
-    margin-bottom: 16px;
-  }
-  
-  .execution-item {
+    color: var(--text-primary);
+    margin-bottom: 1rem;
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 16px;
+    gap: 0.5rem;
+  }
+  
+  .execution-section-title svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  
+  .execution-section-title.in-flight svg {
+    color: hsl(175, 60%, 45%);
+  }
+  
+  .execution-section-title.completed svg {
+    color: hsl(142, 71%, 45%);
+  }
+  
+  .execution-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .execution-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
-    margin-bottom: 12px;
+    padding: 1.25rem;
   }
   
-  .execution-item:last-child {
-    margin-bottom: 0;
+  .execution-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
   }
   
-  .execution-item.active {
-    background: var(--primary-bg);
-    border: 1px solid hsl(210, 100%, 90%);
+  .execution-id {
+    font-weight: 600;
+    color: var(--text-primary);
   }
   
-  .execution-item.completed {
-    background: var(--success-bg);
-    border: 1px solid hsl(145, 60%, 88%);
+  .execution-date {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
   }
   
-  .execution-icon {
-    padding: 8px;
-    border-radius: var(--radius-md);
+  .execution-progress {
+    margin-bottom: 1rem;
   }
   
-  .execution-item.active .execution-icon {
-    background: var(--primary);
+  .progress-bar {
+    height: 0.5rem;
+    background: var(--secondary-bg);
+    border-radius: 9999px;
+    overflow: hidden;
   }
   
-  .execution-item.completed .execution-icon {
-    background: var(--success);
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary) 0%, hsl(175, 60%, 45%) 100%);
+    border-radius: 9999px;
+    transition: var(--transition-slow);
   }
   
-  .execution-icon svg {
-    width: 16px;
-    height: 16px;
-    color: white;
+  .execution-details {
+    display: flex;
+    gap: 2rem;
+    font-size: 0.875rem;
   }
   
-  .execution-info {
+  .execution-detail {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .execution-detail-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+  
+  .execution-detail-value {
+    font-weight: 500;
+  }
+  
+  /* Next Step Section */
+  .next-step-section {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: hsl(175, 60%, 45% / 0.05);
+    border: 1px solid hsl(175, 60%, 45% / 0.2);
+    border-radius: 0.5rem;
+  }
+  
+  .next-step-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .next-step-icon {
+    width: 2rem;
+    height: 2rem;
+    background: hsl(175, 60%, 45% / 0.1);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: hsl(175, 60%, 45%);
+  }
+  
+  .next-step-info {
     flex: 1;
   }
   
-  .execution-title {
+  .next-step-label {
+    font-size: 0.75rem;
     font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+  }
+  
+  .next-step-name {
+    font-weight: 600;
     color: var(--text-primary);
   }
   
-  .execution-subtitle {
-    font-size: 14px;
+  .next-step-description {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+  }
+  
+  .next-step-requirements {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  
+  .requirement-label {
+    font-size: 0.75rem;
     color: var(--text-secondary);
   }
   
-  .execution-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
-  }
-  
-  .execution-item.active .execution-status {
-    color: var(--primary);
-  }
-  
-  .execution-item.completed .execution-status {
-    color: var(--success-dark);
-  }
-  
-  .execution-status svg {
-    width: 16px;
-    height: 16px;
-  }
-  
-  .execution-arrow {
-    width: 20px;
-    height: 20px;
-    color: var(--text-muted);
+  .badge-outline {
+    background: transparent;
+    border: 1px solid var(--border-default);
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
   }
   
   /* ============================================
@@ -1320,3 +1553,31 @@
   .mt-6 { margin-top: 24px; }
   .mb-4 { margin-bottom: 16px; }
   .mb-6 { margin-bottom: 24px; }
+  .text-sm { font-size: 0.875rem; }
+  .text-muted { color: var(--text-secondary); }
+  
+  /* Button sizes */
+  .btn-sm {
+    padding: 6px 12px;
+    font-size: 0.875rem;
+  }
+  
+  /* Badge styles */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  
+  .badge-accent {
+    background: hsl(175, 60%, 45% / 0.1);
+    color: hsl(175, 60%, 45%);
+  }
+  
+  .badge-success {
+    background: hsl(142, 71%, 45% / 0.1);
+    color: hsl(142, 71%, 35%);
+  }

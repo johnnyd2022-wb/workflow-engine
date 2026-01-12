@@ -114,6 +114,7 @@ def cleanup_test_data():
 
         # Find all orgs matching TestOrg_ pattern
         from app.core.db.models.user import User
+
         all_orgs = org_repo.list_orgs()
         test_orgs = [org for org in all_orgs if org.name.startswith("TestOrg_")]
 
@@ -169,6 +170,7 @@ def cleanup_test_data():
     except Exception as e:
         print(f"❌ Error during cleanup: {e}")
         import traceback
+
         traceback.print_exc()
         db.rollback()
         sys.exit(1)
@@ -262,6 +264,7 @@ def list_test_data():
     except Exception as e:
         print(f"❌ Error listing test data: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     finally:

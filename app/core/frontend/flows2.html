@@ -18,11 +18,12 @@
     <!-- Main Content -->
     <div class="main-content">
       <!-- Header -->
-      <header class="header">
-        <div class="header-left">
-          <span class="header-title" id="process-header-title">Process Flow</span>
+      <header class="main-header">
+        <div>
+          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">Supply Chain Management</h1>
+          <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Manage and monitor all your operational workflows</p>
         </div>
-        <div class="header-right">
+        <div class="header-actions">
           <button class="header-icon-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -109,49 +110,63 @@
           
           <!-- Tabs -->
           <div class="tabs">
-            <button class="tab active" onclick="showTab('structure')">
-              Structure
-              <span class="tab-badge" id="structure-badge">0</span>
-            </button>
-            <button class="tab" onclick="showTab('executions')">
-              Executions
-              <span class="tab-badge" id="executions-badge">0</span>
-            </button>
-            <button class="tab" onclick="showTab('inventory')">
-              Inventory
-            </button>
-          </div>
-          
-          <!-- Tab Content: Structure -->
-          <div id="tab-structure">
-            <div id="steps-container">
-              <!-- Steps will be loaded dynamically from backend -->
+            <div class="tabs-list">
+              <button class="tab-trigger active" data-tab="tab-structure">Process Structure</button>
+              <button class="tab-trigger" data-tab="tab-executions">Executions <span class="badge badge-accent" style="margin-left:0.5rem;" id="executions-badge">0</span></button>
+              <button class="tab-trigger" data-tab="tab-inventory">Inventory</button>
             </div>
-          </div>
-          
-          <!-- Tab Content: Executions (hidden by default) -->
-          <div id="tab-executions" style="display: none;">
-            <div class="card">
-              <div class="executions-section">
-                <h3 class="executions-label">Active</h3>
-                <div id="active-executions-container">
+            
+            <!-- Structure Tab -->
+            <div id="tab-structure" class="tab-content active">
+              <div class="flex justify-between items-center mt-4 mb-4">
+                <p class="text-sm text-muted" id="step-count-text">0 steps in this process</p>
+                <button class="btn btn-secondary btn-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add Step
+                </button>
+              </div>
+              
+              <div class="steps-container" id="steps-container">
+                <!-- Steps will be loaded dynamically from backend -->
+              </div>
+            </div>
+            
+            <!-- Executions Tab -->
+            <div id="tab-executions" class="tab-content">
+              <!-- In-Flight Section -->
+              <div class="mb-6" id="in-flight-section">
+                <h3 class="execution-section-title in-flight">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  In-Flight Executions (<span id="active-count">0</span>)
+                </h3>
+                <div class="execution-list" id="active-executions-container">
                   <!-- Active executions will be loaded dynamically -->
                 </div>
               </div>
               
-              <div class="executions-section">
-                <h3 class="executions-label">Completed</h3>
-                <div id="completed-executions-container">
+              <!-- Completed Section -->
+              <div id="completed-section">
+                <h3 class="execution-section-title completed">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  Completed Executions (<span id="completed-count">0</span>)
+                </h3>
+                <div class="execution-list" id="completed-executions-container">
                   <!-- Completed executions will be loaded dynamically -->
                 </div>
               </div>
             </div>
-          </div>
-          
-          <!-- Tab Content: Inventory (hidden by default) -->
-          <div id="tab-inventory" style="display: none;">
-            <div class="card">
-              <div id="inventory-container">
+            
+            <!-- Inventory Tab -->
+            <div id="tab-inventory" class="tab-content">
+              <div class="flex justify-between items-center mb-4">
+                <p class="text-sm text-muted">Track materials connected to this process</p>
+                <button class="btn btn-secondary btn-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add Raw Material
+                </button>
+              </div>
+              
+              <div class="inventory-category-grid" id="inventory-container">
                 <!-- Inventory will be loaded dynamically -->
               </div>
             </div>
@@ -197,14 +212,12 @@
         const processData = await CoreAPI.getProcess(processId);
         currentProcess = processData;
         
-        // Update header
+        // Update process details in center pane
         document.getElementById('process-name').textContent = processData.name || 'Unnamed Process';
         document.getElementById('process-description').textContent = processData.description || 'No description';
-        document.getElementById('process-header-title').textContent = processData.name || 'Process Flow';
         
         // Update stats
         document.getElementById('process-step-count').textContent = processData.steps?.length || 0;
-        document.getElementById('structure-badge').textContent = processData.steps?.length || 0;
         
         // Render steps
         renderSteps(processData.steps || []);
@@ -234,6 +247,12 @@
         return;
       }
       
+      // Update step count text
+      const stepCountText = document.getElementById('step-count-text');
+      if (stepCountText) {
+        stepCountText.textContent = `${steps.length} step${steps.length !== 1 ? 's' : ''} in this process`;
+      }
+      
       // Sort steps by step_number
       const sortedSteps = [...steps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
       
@@ -246,46 +265,76 @@
     // Create step card
     function createStepCard(step) {
       const card = document.createElement('div');
-      card.className = 'card step-card';
+      card.className = 'step-card';
       
       const inputs = step.inputs || [];
       const outputs = step.outputs || [];
       
       card.innerHTML = `
-        <div class="step-card-header">
+        <div class="step-header" onclick="toggleStep(this)">
           <div class="step-number">${step.step_number || ''}</div>
           <div class="step-info">
-            <h3 class="step-name">${escapeHtml(step.name || 'Unnamed Step')}</h3>
-            <p class="step-description">${escapeHtml(step.description || '')}</p>
+            <div class="step-name">${escapeHtml(step.name || 'Unnamed Step')}</div>
+            <div class="step-description">${escapeHtml(step.description || '')}</div>
           </div>
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
+          <div class="step-meta">
+            <span>${inputs.length} input${inputs.length !== 1 ? 's' : ''}</span>
+            <span>${outputs.length} output${outputs.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="step-toggle">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
         </div>
-        <div class="step-card-body">
-          <div class="step-io-section">
-            <h4 class="step-io-label">Inputs</h4>
-            ${inputs.length > 0 ? inputs.map(input => `
-              <div class="step-io-item input">
-                <span class="step-io-name">${escapeHtml(input.name || 'Unnamed Input')}</span>
-                <span class="step-io-qty">${input.quantity || ''} ${input.unit || ''}</span>
-              </div>
-            `).join('') : '<p style="color: var(--text-secondary); font-size: 14px;">No inputs defined</p>'}
+        <div class="step-content">
+          <div class="io-section">
+            <div class="io-section-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+              Inputs
+              <button class="btn btn-secondary btn-sm" style="margin-left:auto;">+ Add</button>
+            </div>
+            <div class="io-list">
+              ${inputs.length > 0 ? inputs.map(input => `
+                <div class="io-item">
+                  <span class="io-item-name">${escapeHtml(input.name || 'Unnamed Input')}</span>
+                  <span class="io-item-quantity">${input.quantity || ''}</span>
+                  <span class="io-item-unit">${input.unit || ''}</span>
+                  ${input.isStatic ? '<span class="badge badge-accent io-item-badge">Static</span>' : '<span class="badge badge-accent io-item-badge">Variable</span>'}
+                </div>
+              `).join('') : '<p style="color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;">No inputs defined</p>'}
+            </div>
           </div>
-          <div class="step-io-section">
-            <h4 class="step-io-label">Outputs</h4>
-            ${outputs.length > 0 ? outputs.map(output => `
-              <div class="step-io-item output">
-                <span class="step-io-name">${escapeHtml(output.name || 'Unnamed Output')}</span>
-                <span class="step-io-qty">${output.quantity || ''} ${output.unit || ''}</span>
-              </div>
-            `).join('') : '<p style="color: var(--text-secondary); font-size: 14px;">No outputs defined</p>'}
+          <div class="io-section">
+            <div class="io-section-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>
+              Outputs
+              <button class="btn btn-secondary btn-sm" style="margin-left:auto;">+ Add</button>
+            </div>
+            <div class="io-list">
+              ${outputs.length > 0 ? outputs.map(output => `
+                <div class="io-item">
+                  <span class="io-item-name">${escapeHtml(output.name || 'Unnamed Output')}</span>
+                  <span class="io-item-quantity">${output.quantity || ''}</span>
+                  <span class="io-item-unit">${output.unit || ''}</span>
+                  ${output.isStatic ? '<span class="badge badge-accent io-item-badge">Static</span>' : '<span class="badge badge-accent io-item-badge">Variable</span>'}
+                </div>
+              `).join('') : '<p style="color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;">No outputs defined</p>'}
+            </div>
           </div>
         </div>
       `;
       
       return card;
     }
+    
+    // Step expand/collapse (global function for onclick)
+    window.toggleStep = function(header) {
+      const stepCard = header.closest('.step-card');
+      const content = stepCard.querySelector('.step-content');
+      const toggle = stepCard.querySelector('.step-toggle');
+      
+      content.classList.toggle('expanded');
+      toggle.classList.toggle('expanded');
+    };
     
     // Load executions
     async function loadExecutions() {
@@ -318,6 +367,11 @@
     function renderExecutions(active, completed) {
       const activeContainer = document.getElementById('active-executions-container');
       const completedContainer = document.getElementById('completed-executions-container');
+      const activeCountEl = document.getElementById('active-count');
+      const completedCountEl = document.getElementById('completed-count');
+      
+      if (activeCountEl) activeCountEl.textContent = active.length;
+      if (completedCountEl) completedCountEl.textContent = completed.length;
       
       if (activeContainer) {
         activeContainer.innerHTML = '';
@@ -325,7 +379,7 @@
           activeContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px;">No active executions</p>';
         } else {
           active.forEach(execution => {
-            activeContainer.appendChild(createExecutionItem(execution, 'active'));
+            activeContainer.appendChild(createExecutionCard(execution, 'active'));
           });
         }
       }
@@ -336,46 +390,83 @@
           completedContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px;">No completed executions</p>';
         } else {
           completed.forEach(execution => {
-            completedContainer.appendChild(createExecutionItem(execution, 'completed'));
+            completedContainer.appendChild(createExecutionCard(execution, 'completed'));
           });
         }
       }
     }
     
-    // Create execution item
-    function createExecutionItem(execution, status) {
-      const item = document.createElement('div');
-      item.className = `execution-item ${status}`;
+    // Create execution card
+    function createExecutionCard(execution, status) {
+      const card = document.createElement('div');
+      card.className = 'execution-card';
       
       const currentStep = execution.current_step || {};
+      const nextStep = execution.next_step || {};
       const stepNumber = currentStep.step_number || 0;
       const totalSteps = currentProcess?.steps?.length || 0;
+      const progress = totalSteps > 0 ? Math.round((stepNumber / totalSteps) * 100) : 0;
       const executionId = execution.id || '';
-      const shortId = executionId.length > 8 ? executionId.substring(0, 8) : executionId;
+      const shortId = executionId.length > 12 ? executionId.substring(0, 12) : executionId;
       
-      item.innerHTML = `
-        <div class="execution-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            ${status === 'active' ? '<polygon points="5 3 19 12 5 21 5 3"/>' : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
-          </svg>
+      const startDate = execution.created_at ? new Date(execution.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown';
+      const completedDate = execution.completed_at ? new Date(execution.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      
+      let nextStepHtml = '';
+      if (status === 'active' && nextStep.name) {
+        const requirements = nextStep.required_inputs || [];
+        nextStepHtml = `
+          <div class="next-step-section">
+            <div class="next-step-header">
+              <div class="next-step-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </div>
+              <div class="next-step-info">
+                <div class="next-step-label">Next Step</div>
+                <div class="next-step-name">${escapeHtml(nextStep.name)}</div>
+                ${nextStep.description ? `<div class="next-step-description">${escapeHtml(nextStep.description)}</div>` : ''}
+                ${requirements.length > 0 ? `
+                  <div class="next-step-requirements">
+                    <span class="requirement-label">Requires:</span>
+                    ${requirements.map(req => `<span class="badge-outline">${escapeHtml(req.name)}: ${req.quantity || ''} ${req.unit || ''}</span>`).join('')}
+                  </div>
+                ` : ''}
+              </div>
+              <button class="btn btn-primary btn-sm">Execute Step</button>
+            </div>
+          </div>
+        `;
+      }
+      
+      card.innerHTML = `
+        <div class="execution-header">
+          <div>
+            <div class="execution-id">${shortId || 'EXEC-Unknown'}</div>
+            <div class="execution-date">${status === 'active' ? `Started: ${startDate}` : `Completed: ${completedDate || startDate}`}</div>
+          </div>
+          <span class="badge ${status === 'active' ? 'badge-accent' : 'badge-success'}">${status === 'active' ? 'In Progress' : 'Completed'}</span>
         </div>
-        <div class="execution-info">
-          <p class="execution-title">Execution #${shortId || 'Unknown'}</p>
-          <p class="execution-subtitle">${status === 'active' ? (stepNumber > 0 ? `Step ${stepNumber} of ${totalSteps}` : 'Starting...') : 'Completed all steps'}</p>
+        <div class="execution-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: ${progress}%;"></div>
+          </div>
         </div>
-        <div class="execution-status">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            ${status === 'active' ? '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
-          </svg>
-          ${status === 'active' ? 'In Progress' : 'Success'}
+        ${nextStepHtml}
+        <div class="execution-details">
+          <div class="execution-detail">
+            <span class="execution-detail-label">Current Step</span>
+            <span class="execution-detail-value">${stepNumber} of ${totalSteps}</span>
+          </div>
+          ${execution.batch_id ? `
+            <div class="execution-detail">
+              <span class="execution-detail-label">Batch ID</span>
+              <span class="execution-detail-value">${escapeHtml(execution.batch_id)}</span>
+            </div>
+          ` : ''}
         </div>
-        <svg class="execution-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="5" y1="12" x2="19" y2="12"/>
-          <polyline points="12 5 19 12 12 19"/>
-        </svg>
       `;
       
-      return item;
+      return card;
     }
     
     // Load inventory
@@ -402,7 +493,7 @@
       
       if (items.length === 0) {
         container.innerHTML = `
-          <div class="empty-state">
+          <div class="empty-state" style="grid-column: 1 / -1;">
             <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
             </svg>
@@ -427,29 +518,50 @@
         }
       });
       
-      // Render grouped inventory
-      Object.entries(grouped).forEach(([type, typeItems]) => {
-        if (typeItems.length > 0) {
-          const section = document.createElement('div');
-          section.className = 'inventory-section';
-          section.innerHTML = `
-            <h4 class="inventory-section-title">${type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</h4>
-            <div class="inventory-grid">
-              ${typeItems.map(item => `
-                <div class="inventory-item-card">
-                  <div class="inventory-item-header">
-                    <span class="inventory-item-name">${escapeHtml(item.name)}</span>
-                    <span class="inventory-item-qty">${item.quantity} ${item.unit || ''}</span>
-                  </div>
-                  ${item.supplier ? `<div class="inventory-item-detail">Supplier: ${escapeHtml(item.supplier)}</div>` : ''}
-                  ${item.supplier_batch_number ? `<div class="inventory-item-detail">Batch: ${escapeHtml(item.supplier_batch_number)}</div>` : ''}
+      // Render category cards
+      if (grouped.raw_material.length > 0) {
+        container.appendChild(createInventoryCategoryCard('raw', 'Raw Materials', grouped.raw_material));
+      }
+      if (grouped.work_in_progress.length > 0) {
+        container.appendChild(createInventoryCategoryCard('intermediate', 'Intermediate Products', grouped.work_in_progress));
+      }
+      if (grouped.final_product.length > 0) {
+        container.appendChild(createInventoryCategoryCard('final', 'Final Products', grouped.final_product));
+      }
+    }
+    
+    // Create inventory category card
+    function createInventoryCategoryCard(type, title, items) {
+      const card = document.createElement('div');
+      card.className = `inventory-category-card ${type}`;
+      
+      const iconSvg = '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>';
+      
+      card.innerHTML = `
+        <div class="inventory-category-header">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconSvg}</svg>
+          <span class="inventory-category-title">${title}</span>
+          <span class="inventory-category-count">${items.length}</span>
+        </div>
+        <div class="inventory-category-content">
+          ${items.map(item => `
+            <div class="inventory-category-item">
+              <div class="inventory-item-row">
+                <span class="inventory-item-name">${escapeHtml(item.name)}</span>
+                <span class="inventory-item-quantity">${item.quantity || '0'} ${item.unit || ''}</span>
+              </div>
+              ${item.supplier || item.source_execution_id ? `
+                <div class="inventory-item-meta">
+                  ${item.supplier ? `Supplier: ${escapeHtml(item.supplier)}` : ''}
+                  ${item.source_execution_id ? `From: ${escapeHtml(item.source_execution_id)}` : ''}
                 </div>
-              `).join('')}
+              ` : ''}
             </div>
-          `;
-          container.appendChild(section);
-        }
-      });
+          `).join('')}
+        </div>
+      `;
+      
+      return card;
     }
     
     // Start execution
@@ -471,21 +583,21 @@
     }
     
     // Tab switching
-    function showTab(tabName) {
-      // Hide all tabs
-      document.getElementById('tab-structure').style.display = 'none';
-      document.getElementById('tab-executions').style.display = 'none';
-      document.getElementById('tab-inventory').style.display = 'none';
-      
-      // Remove active from all tab buttons
-      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-      
-      // Show selected tab
-      document.getElementById('tab-' + tabName).style.display = 'block';
-      
-      // Add active to clicked tab
-      event.target.classList.add('active');
-    }
+    document.addEventListener('DOMContentLoaded', function() {
+      // Tab switching
+      document.querySelectorAll('.tab-trigger').forEach(trigger => {
+        trigger.addEventListener('click', () => {
+          // Remove active from all triggers and contents
+          document.querySelectorAll('.tab-trigger').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+          
+          // Activate clicked tab
+          trigger.classList.add('active');
+          const tabId = trigger.getAttribute('data-tab');
+          document.getElementById(tabId).classList.add('active');
+        });
+      });
+    });
     
     // Escape HTML
     function escapeHtml(text) {

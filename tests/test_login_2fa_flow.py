@@ -418,16 +418,16 @@ finally:
 
         # Try with invalid format (non-numeric)
         verify_response = self.session.post(f"{BASE_URL}/auth/verify-2fa", json={"token": "ABCDEF"})
-        assert verify_response.status_code == 400, (
-            f"Expected 400, got {verify_response.status_code}: {verify_response.text}"
-        )
+        assert (
+            verify_response.status_code == 400
+        ), f"Expected 400, got {verify_response.status_code}: {verify_response.text}"
         assert "Invalid code format" in verify_response.json()["error"]
 
         # Try with invalid format (wrong length)
         verify_response = self.session.post(f"{BASE_URL}/auth/verify-2fa", json={"token": "12345"})
-        assert verify_response.status_code == 400, (
-            f"Expected 400, got {verify_response.status_code}: {verify_response.text}"
-        )
+        assert (
+            verify_response.status_code == 400
+        ), f"Expected 400, got {verify_response.status_code}: {verify_response.text}"
         assert "Invalid code format" in verify_response.json()["error"]
 
     def test_verify_2fa_expired_session_fails(self):

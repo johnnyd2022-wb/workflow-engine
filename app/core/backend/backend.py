@@ -14,6 +14,14 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.security.permissions import requires_auth
+from app.core.utils.mock_data import (
+    get_mock_executions,
+    get_mock_inventory,
+    get_mock_metrics,
+    get_mock_process,
+    get_mock_processes,
+    is_demo_user,
+)
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -134,6 +142,26 @@ def serve_core_css(filename):
 @requires_auth
 def list_processes():
     """List all processes for the current organisation"""
+    # Check if demo user - return mock data
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        mock_processes = get_mock_processes()
+        result = []
+        for process in mock_processes:
+            result.append(
+                {
+                    "id": process["id"],
+                    "name": process["name"],
+                    "description": process["description"],
+                    "category": process["category"],
+                    "step_count": len(process["steps"]),
+                    "active_executions": process["active_executions"],
+                    "completed_executions": process["completed_executions"],
+                    "created_at": process["created_at"],
+                }
+            )
+        return jsonify({"processes": result}), 200
+
     org_id = UUID(g.org_id)
     repo = ProcessRepository(db_session)
     processes = repo.list_processes(org_id)
@@ -213,6 +241,40 @@ def create_process():
 @requires_auth
 def get_process(process_id: str):
     """Get a process with its steps"""
+    # Check if demo user - return mock data
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        mock_process = get_mock_process(process_id)
+        if not mock_process:
+            return jsonify({"error": "Process not found"}), 404
+
+        steps = []
+        for step in mock_process["steps"]:
+            steps.append(
+                {
+                    "id": step["id"],
+                    "step_number": step["step_number"],
+                    "name": step["name"],
+                    "description": step["description"],
+                    "inputs": step["inputs"],
+                    "outputs": step["outputs"],
+                }
+            )
+
+        return (
+            jsonify(
+                {
+                    "id": mock_process["id"],
+                    "name": mock_process["name"],
+                    "description": mock_process["description"],
+                    "category": mock_process["category"],
+                    "steps": steps,
+                    "created_at": mock_process["created_at"],
+                }
+            ),
+            200,
+        )
+
     org_id = UUID(g.org_id)
     try:
         process_uuid = UUID(process_id)
@@ -387,6 +449,27 @@ def create_execution():
 @requires_auth
 def list_executions():
     """List executions, optionally filtered by process"""
+    # Check if demo user - return mock data
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        process_id_str = request.args.get("process_id")
+        status_str = request.args.get("status")
+
+        mock_executions = get_mock_executions(process_id_str if process_id_str else None)
+
+        # Filter by status if provided
+        if status_str:
+            status_map = {
+                "in_progress": "in_progress",
+                "completed": "completed",
+                "IN_PROGRESS": "in_progress",
+                "COMPLETED": "completed",
+            }
+            target_status = status_map.get(status_str, status_str.lower())
+            mock_executions = [e for e in mock_executions if e["status"] == target_status]
+
+        return jsonify({"executions": mock_executions}), 200
+
     org_id = UUID(g.org_id)
     process_id_str = request.args.get("process_id")
     status_str = request.args.get("status")
@@ -567,6 +650,13 @@ def complete_step(execution_id: str, execution_step_id: str):
 @requires_auth
 def list_inventory():
     """List inventory items, optionally filtered by type or process"""
+    # Check if demo user - return mock data
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        inventory_type = request.args.get("type")
+        mock_items = get_mock_inventory(inventory_type=inventory_type)
+        return jsonify({"inventory_items": mock_items}), 200
+
     org_id = UUID(g.org_id)
     inventory_type = request.args.get("type")
     process_id_str = request.args.get("process_id")
@@ -600,7 +690,7 @@ def list_inventory():
             }
         )
 
-    return jsonify({"inventory": result}), 200
+    return jsonify({"inventory_items": result}), 200
 
 
 @core_bp.route("/api/core/inventory", methods=["POST"])
@@ -674,6 +764,12 @@ def create_inventory_item():
 @requires_auth
 def get_metrics():
     """Get summary metrics for the dashboard"""
+    # Check if demo user - return mock data
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        mock_metrics = get_mock_metrics()
+        return jsonify(mock_metrics), 200
+
     org_id = UUID(g.org_id)
 
     process_repo = ProcessRepository(db_session)
