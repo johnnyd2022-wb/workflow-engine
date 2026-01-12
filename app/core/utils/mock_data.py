@@ -17,7 +17,13 @@ MOCK_PROCESSES = [
                 "name": "Raw Material Weighing",
                 "description": "Weigh and verify all raw materials according to batch record",
                 "inputs": [
-                    {"id": "inp-001", "name": "API (Active Ingredient)", "quantity": 50, "unit": "kg", "isStatic": False},
+                    {
+                        "id": "inp-001",
+                        "name": "API (Active Ingredient)",
+                        "quantity": 50,
+                        "unit": "kg",
+                        "isStatic": False,
+                    },
                     {"id": "inp-002", "name": "Excipient A", "quantity": 25, "unit": "kg", "isStatic": False},
                     {"id": "inp-003", "name": "Excipient B", "quantity": 15, "unit": "kg", "isStatic": False},
                 ],
@@ -180,7 +186,13 @@ MOCK_PROCESSES = [
                 "description": "Place SMD components on PCB",
                 "inputs": [
                     {"id": "inp-020", "name": "Pasted PCB", "quantity": 100, "unit": "pcs", "isStatic": False},
-                    {"id": "inp-021", "name": "SMD Components Kit", "quantity": 100, "unit": "units", "isStatic": False},
+                    {
+                        "id": "inp-021",
+                        "name": "SMD Components Kit",
+                        "quantity": 100,
+                        "unit": "units",
+                        "isStatic": False,
+                    },
                 ],
                 "outputs": [
                     {"id": "out-012", "name": "Populated PCB", "quantity": 100, "unit": "pcs", "isStatic": False},
