@@ -61,6 +61,17 @@ const CoreAPI = {
         });
     },
     
+    async deleteStep(processId, stepId) {
+        return this.request(`/processes/${processId}/steps/${stepId}`, {
+            method: 'DELETE',
+        });
+    },
+    
+    // Alias for addStep
+    async createStep(processId, stepData) {
+        return this.addStep(processId, stepData);
+    },
+    
     // Executions
     async getExecutions(processId = null, status = null) {
         const params = new URLSearchParams();
