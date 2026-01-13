@@ -402,6 +402,30 @@ def update_step(process_id: str, step_id: str):
     )
 
 
+@core_bp.route("/api/core/processes/<process_id>/steps/<step_id>", methods=["DELETE"])
+@requires_auth
+def delete_step(process_id: str, step_id: str):
+    """Delete a step from a process"""
+    org_id = UUID(g.org_id)
+    try:
+        process_uuid = UUID(process_id)
+        step_uuid = UUID(step_id)
+    except ValueError:
+        return jsonify({"error": "Invalid process or step ID"}), 400
+
+    repo = ProcessRepository(db_session)
+    success = repo.delete_step(
+        step_id=step_uuid,
+        process_id=process_uuid,
+        org_id=org_id,
+    )
+
+    if not success:
+        return jsonify({"error": "Step or process not found"}), 404
+
+    return jsonify({"message": "Step deleted successfully"}), 200
+
+
 @core_bp.route("/api/core/executions", methods=["POST"])
 @requires_auth
 def create_execution():

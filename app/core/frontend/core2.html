@@ -125,8 +125,15 @@
           
           <!-- Inventory Section -->
           <section class="card">
-            <div class="card-header">
-              <h2 class="card-title">Inventory at a Glance</h2>
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h2 class="card-title">Inventory</h2>
+              <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add to Inventory
+              </button>
             </div>
             <div class="card-content">
               <div class="inventory-category-grid" id="inventory-grid">
@@ -301,6 +308,10 @@
       const card = document.createElement('div');
       card.className = `inventory-category-card ${type}`;
       
+      // Store all items in a data attribute for later use
+      card.setAttribute('data-all-items', JSON.stringify(items));
+      card.setAttribute('data-is-expanded', 'false');
+      
       const displayItems = items.slice(0, 3);
       const remaining = items.length - 3;
       
@@ -316,6 +327,32 @@
       
       const categoryTitle = type === 'raw' ? 'Raw Materials' : type === 'intermediate' ? 'Intermediate' : 'Final Products';
       
+      const itemsContainer = document.createElement('div');
+      itemsContainer.className = 'inventory-category-items';
+      
+      // Render initial items
+      displayItems.forEach(item => {
+        const itemEl = document.createElement('p');
+        itemEl.className = 'inventory-category-item';
+        itemEl.textContent = `${escapeHtml(item.name)}: ${item.quantity || '0'} ${item.unit || ''}`;
+        itemsContainer.appendChild(itemEl);
+      });
+      
+      // Add "more" button if there are remaining items
+      if (remaining > 0) {
+        const moreButton = document.createElement('p');
+        moreButton.className = 'inventory-category-more';
+        moreButton.style.cursor = 'pointer';
+        moreButton.style.color = 'var(--primary)';
+        moreButton.style.fontWeight = '500';
+        moreButton.textContent = `+${remaining} more`;
+        moreButton.onclick = function(e) {
+          e.stopPropagation();
+          toggleInventoryItems(card);
+        };
+        itemsContainer.appendChild(moreButton);
+      }
+      
       card.innerHTML = `
         <div class="inventory-category-header">
           <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -324,15 +361,75 @@
           <span class="inventory-category-title">${categoryTitle}</span>
         </div>
         <p class="inventory-category-count">${items.length} items</p>
-        <div class="inventory-category-items">
-          ${displayItems.map(item => `
-            <p class="inventory-category-item">${escapeHtml(item.name)}: ${item.quantity || '0'} ${item.unit || ''}</p>
-          `).join('')}
-          ${remaining > 0 ? `<p class="inventory-category-more">+${remaining} more</p>` : ''}
-        </div>
       `;
       
+      card.appendChild(itemsContainer);
+      
       return card;
+    }
+    
+    function toggleInventoryItems(card) {
+      const isExpanded = card.getAttribute('data-is-expanded') === 'true';
+      const allItems = JSON.parse(card.getAttribute('data-all-items') || '[]');
+      const itemsContainer = card.querySelector('.inventory-category-items');
+      
+      if (!itemsContainer) return;
+      
+      if (isExpanded) {
+        // Collapse: show only first 3 items
+        const displayItems = allItems.slice(0, 3);
+        const remaining = allItems.length - 3;
+        
+        itemsContainer.innerHTML = '';
+        
+        displayItems.forEach(item => {
+          const itemEl = document.createElement('p');
+          itemEl.className = 'inventory-category-item';
+          itemEl.textContent = `${escapeHtml(item.name)}: ${item.quantity || '0'} ${item.unit || ''}`;
+          itemsContainer.appendChild(itemEl);
+        });
+        
+        if (remaining > 0) {
+          const moreButton = document.createElement('p');
+          moreButton.className = 'inventory-category-more';
+          moreButton.style.cursor = 'pointer';
+          moreButton.style.color = 'var(--primary)';
+          moreButton.style.fontWeight = '500';
+          moreButton.textContent = `+${remaining} more`;
+          moreButton.onclick = function(e) {
+            e.stopPropagation();
+            toggleInventoryItems(card);
+          };
+          itemsContainer.appendChild(moreButton);
+        }
+        
+        card.setAttribute('data-is-expanded', 'false');
+      } else {
+        // Expand: show all items
+        itemsContainer.innerHTML = '';
+        
+        allItems.forEach(item => {
+          const itemEl = document.createElement('p');
+          itemEl.className = 'inventory-category-item';
+          itemEl.textContent = `${escapeHtml(item.name)}: ${item.quantity || '0'} ${item.unit || ''}`;
+          itemsContainer.appendChild(itemEl);
+        });
+        
+        // Add "show less" button
+        const lessButton = document.createElement('p');
+        lessButton.className = 'inventory-category-more';
+        lessButton.style.cursor = 'pointer';
+        lessButton.style.color = 'var(--primary)';
+        lessButton.style.fontWeight = '500';
+        lessButton.textContent = 'Show less';
+        lessButton.onclick = function(e) {
+          e.stopPropagation();
+          toggleInventoryItems(card);
+        };
+        itemsContainer.appendChild(lessButton);
+        
+        card.setAttribute('data-is-expanded', 'true');
+      }
     }
     
     // Load dashboard data on page load
