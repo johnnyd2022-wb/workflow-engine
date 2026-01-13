@@ -139,9 +139,12 @@
           
           <!-- Inventory Section -->
           <section class="card">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-              <h2 class="card-title">Inventory</h2>
-              <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h2 class="card-title">Inventory</h2>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Monitor your complete inventory lifecycle from raw materials through intermediate products to finished goods, with real-time visibility across your entire supply chain.</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" style="margin-top: 0;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"/>
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -157,10 +160,13 @@
           </section>
           
           <!-- Processes Section -->
-          <section class="card">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-              <h2 class="card-title">Processes</h2>
-              <button class="btn btn-secondary btn-sm" data-modal-open="create-process-modal">
+          <section class="card" style="margin-top: 32px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h2 class="card-title">Processes</h2>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Design and manage custom workflows to automate execution tracking and inventory management, gaining real-time operational insights through our DAG-powered source-to-sale analytics engine.</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-modal-open="create-process-modal" style="margin-top: 0;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"/>
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -184,6 +190,71 @@
   <script src="{{ url_for('core.serve_core_js', filename='core.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script>
+    // Global variable for notification timeout
+    let notificationTimeout = null;
+    
+    // Define showNotification FIRST so overrides can use it immediately
+    // Auto-dismissing toast notification
+    window.showNotification = function(type, title, message) {
+      const modal = document.getElementById('notification-modal');
+      if (!modal) {
+        console.log(`${type}: ${title} - ${message}`);
+        return;
+      }
+      
+      // Clear any existing timeout
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+      
+      const titleEl = document.getElementById('notification-title');
+      const messageEl = document.getElementById('notification-message');
+      const iconEl = document.getElementById('notification-icon');
+      
+      if (titleEl) titleEl.textContent = title;
+      if (messageEl) messageEl.textContent = message;
+      
+      // Set icon and colors based on type
+      if (type === 'success' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--success, #10b981)';
+      } else if (type === 'error' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--error, #ef4444)';
+      }
+      
+      // Show notification
+      modal.style.display = 'flex';
+      // Don't block body overflow - allow user to see the page
+      
+      // Auto-dismiss after 3.5 seconds
+      notificationTimeout = setTimeout(() => {
+        closeNotification();
+      }, 3500);
+    };
+    
+    // Immediately override showSuccess and showError from core.js
+    // This must happen synchronously right after core.js loads, before DOMContentLoaded
+    window.showSuccess = function(message) {
+      window.showNotification('success', 'Success', message);
+    };
+    
+    window.showError = function(message) {
+      window.showNotification('error', 'Error', message);
+    };
+    
     // Initialize account info component
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function() {
@@ -496,6 +567,41 @@
       
       // Setup modal handlers
       setupModalHandlers();
+      
+      // Override core.js form handler - must happen after core.js runs
+      // Use multiple attempts to ensure we override it
+      const overrideCoreJsHandler = () => {
+        const createProcessForm = document.querySelector('form[onsubmit*="createNewProcess"]');
+        if (createProcessForm) {
+          // Completely replace the onsubmit handler
+          createProcessForm.onsubmit = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            return window.createNewProcess(this);
+          };
+          // Also remove any event listeners core.js might have added
+          const newForm = createProcessForm.cloneNode(true);
+          createProcessForm.parentNode.replaceChild(newForm, createProcessForm);
+          // Re-attach our handler to the new form
+          newForm.onsubmit = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            return window.createNewProcess(this);
+          };
+        }
+      };
+      
+      // Try multiple times to ensure we override core.js
+      overrideCoreJsHandler(); // Try immediately
+      setTimeout(overrideCoreJsHandler, 50);
+      setTimeout(overrideCoreJsHandler, 200);
+      setTimeout(overrideCoreJsHandler, 500);
+      
+      // Also watch for form creation dynamically
+      const observer = new MutationObserver(() => {
+        overrideCoreJsHandler();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
     });
     
     // Modal handlers
@@ -532,43 +638,67 @@
           }
         });
       });
+      
     }
     
-    // Create process handler
-    async function createNewProcess(form) {
-      const formData = new FormData(form);
-      const data = {
-        name: formData.get('name'),
-        description: formData.get('description') || '',
-        category: formData.get('category') || null,
-      };
+    // Close modal helper function (like flows2.html)
+    window.closeModal = function(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+    };
+    
+    // Create process handler - exactly like flows2.html createStepFromForm
+    window.createNewProcess = function(form) {
+      if (!form) return false;
       
-      try {
-        const result = await CoreAPI.createProcess(data);
-        
-        // Close modal
-        const modal = form.closest('.modal-overlay');
-        if (modal) {
-          modal.style.display = 'none';
-          document.body.style.overflow = 'auto';
-        }
-        
-        // Reload processes
-        const processesData = await CoreAPI.getProcesses();
-        renderProcessesV2(processesData.processes);
-        
-        // Reload metrics
-        const metrics = await CoreAPI.getMetrics();
-        updateMetricsV2(metrics);
-        
-        form.reset();
-        return false;
-      } catch (error) {
-        console.error('Failed to create process:', error);
-        alert(error.message || 'Failed to create process. Please try again.');
+      const formData = new FormData(form);
+      const name = formData.get('name');
+      const description = formData.get('description') || '';
+      const category = formData.get('category') || null;
+      
+      if (!name || name.trim() === '') {
+        showNotification('error', 'Validation Error', 'Please enter a process name');
         return false;
       }
-    }
+      
+      const data = {
+        name: name.trim(),
+        description: description.trim(),
+        category: category,
+      };
+      
+      // Close modal FIRST (like flows2.html does immediately)
+      window.closeModal('create-process-modal');
+      
+      // Reset form
+      form.reset();
+      
+      // Do async work in background (after modal is closed)
+      (async () => {
+        try {
+          const result = await CoreAPI.createProcess(data);
+          
+          // Reload processes
+          const processesData = await CoreAPI.getProcesses();
+          renderProcessesV2(processesData.processes);
+          
+          // Reload metrics
+          const metrics = await CoreAPI.getMetrics();
+          updateMetricsV2(metrics);
+          
+          // Show success notification
+          showNotification('success', 'Process Created', `Process "${data.name}" has been created successfully.`);
+        } catch (error) {
+          console.error('Failed to create process:', error);
+          showNotification('error', 'Failed to Create Process', error.message || 'Failed to create process. Please try again.');
+        }
+      })();
+      
+      return false; // Prevent form submission
+    };
     
     // Edit process handler
     let currentEditProcessId = null;
@@ -590,7 +720,7 @@
         document.body.style.overflow = 'hidden';
       } catch (error) {
         console.error('Failed to load process:', error);
-        alert(error.message || 'Failed to load process. Please try again.');
+        showNotification('error', 'Failed to Load Process', error.message || 'Failed to load process. Please try again.');
       }
     }
     
@@ -625,7 +755,7 @@
         return false;
       } catch (error) {
         console.error('Failed to update process:', error);
-        alert(error.message || 'Failed to update process. Please try again.');
+        showNotification('error', 'Failed to Update Process', error.message || 'Failed to update process. Please try again.');
         return false;
       }
     }
@@ -667,7 +797,7 @@
         currentDeleteProcessName = null;
       } catch (error) {
         console.error('Failed to delete process:', error);
-        alert(error.message || 'Failed to delete process. Please try again.');
+        showNotification('error', 'Failed to Delete Process', error.message || 'Failed to delete process. Please try again.');
       }
     }
     
@@ -677,6 +807,20 @@
       document.body.style.overflow = 'auto';
       currentDeleteProcessId = null;
       currentDeleteProcessName = null;
+    }
+    
+    // showNotification is now defined at the top of the script
+    // This is just a reference comment
+    
+    function closeNotification() {
+      const modal = document.getElementById('notification-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
     }
     
     // Add inventory handler
@@ -696,25 +840,25 @@
       try {
         await CoreAPI.createInventoryItem(data);
         
-        // Close modal
-        const modal = form.closest('.modal-overlay');
-        if (modal) {
-          modal.style.display = 'none';
-          document.body.style.overflow = 'auto';
-        }
-        
-        // Reload inventory
+        // Reload inventory first (before closing modal)
         await loadInventoryV2();
         
         // Reload metrics
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
         
+        // Close modal after data is reloaded
+        window.closeModal('add-inventory-modal');
+        
+        // Show success notification
+        showNotification('success', 'Inventory Item Added', `"${data.name}" has been added to inventory successfully.`);
+        
+        // Reset form
         form.reset();
         return false;
       } catch (error) {
         console.error('Failed to add inventory item:', error);
-        alert(error.message || 'Failed to add inventory item. Please try again.');
+        showNotification('error', 'Failed to Add Inventory Item', error.message || 'Failed to add inventory item. Please try again.');
         return false;
       }
     }
@@ -893,6 +1037,44 @@
       </form>
     </div>
   </div>
+  
+  <!-- Notification Toast (auto-dismissing) -->
+  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 1000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
+    <div class="card" style="padding: 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12)); border: 1px solid var(--border-light, #e5e7eb);">
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div id="notification-icon" style="flex-shrink: 0; margin-top: 2px;">
+          <!-- Icon will be set by JavaScript -->
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
+          <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
+        </div>
+        <button onclick="closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <style>
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    #notification-modal {
+      animation: slideInRight 0.3s ease-out;
+    }
+  </style>
   
   <script src="/ui/shared/sidebar-v2.js"></script>
 </body>
