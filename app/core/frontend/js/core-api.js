@@ -47,6 +47,19 @@ const CoreAPI = {
         });
     },
     
+    async updateProcess(processId, data) {
+        return this.request(`/processes/${processId}`, {
+            method: 'PUT',
+            body: data,
+        });
+    },
+    
+    async deleteProcess(processId) {
+        return this.request(`/processes/${processId}`, {
+            method: 'DELETE',
+        });
+    },
+    
     async addStep(processId, stepData) {
         return this.request(`/processes/${processId}/steps`, {
             method: 'POST',

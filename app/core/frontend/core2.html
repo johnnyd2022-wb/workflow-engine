@@ -9,6 +9,27 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .btn-icon-small {
+      padding: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary, #6b7280);
+      cursor: pointer;
+      border-radius: var(--radius-md, 6px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .btn-icon-small:hover {
+      background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+      color: var(--text-primary, #111827);
+    }
+    .btn-icon-small svg {
+      display: block;
+    }
+  </style>
 </head>
 <body>
   <div class="app-layout">
@@ -49,13 +70,6 @@
               <h1 class="page-title">Process Hub</h1>
               <p class="page-subtitle">Manage and monitor all your operational workflows</p>
             </div>
-            <button class="btn btn-primary" data-modal-open="create-process-modal">
-              <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Create New Process
-            </button>
           </div>
           
           <!-- Metrics Grid -->
@@ -143,10 +157,23 @@
           </section>
           
           <!-- Processes Section -->
-          <h2 class="section-title mt-6">Process summary</h2>
-          <div class="processes-grid" id="processes-grid">
-            <!-- Processes will be loaded dynamically from backend -->
-          </div>
+          <section class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h2 class="card-title">Processes</h2>
+              <button class="btn btn-secondary btn-sm" data-modal-open="create-process-modal">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Create New Process
+              </button>
+            </div>
+            <div class="card-content">
+              <div class="processes-grid" id="processes-grid">
+                <!-- Processes will be loaded dynamically from backend -->
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     </div>
@@ -191,7 +218,11 @@
       processGrid.innerHTML = '';
       
       if (!processes || processes.length === 0) {
-        processGrid.innerHTML = '<div class="empty-state"><p class="empty-state-description">No processes yet. Create your first process to get started.</p></div>';
+        processGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
+            <p style="color: var(--text-secondary);">No processes yet. Create your first process to get started.</p>
+          </div>
+        `;
         return;
       }
       
@@ -204,7 +235,6 @@
     function createProcessCardV2(process) {
       const card = document.createElement('div');
       card.className = 'card card-interactive process-card';
-      card.onclick = () => navigateToProcess(process.id);
       
       const categoryBadgeClass = {
         'manufacturing': 'default',
@@ -216,14 +246,28 @@
       
       card.innerHTML = `
         <div class="process-card-header">
-          <div class="process-card-header-content">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="navigateToProcess('${process.id}')">
             <h3 class="process-title">${escapeHtml(process.name)}</h3>
             <p class="process-description">${escapeHtml(process.description || '')}</p>
           </div>
-          <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12"/>
-            <polyline points="12 5 19 12 12 19"/>
-          </svg>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditProcessModal('${process.id}')" title="Edit process">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteConfirmation('${process.id}', '${escapeHtml(process.name)}')" title="Delete process">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer;" onclick="navigateToProcess('${process.id}')">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </div>
         </div>
         <div class="process-card-footer">
           <span class="process-badge ${categoryBadgeClass}">${process.step_count || 0} steps</span>
@@ -526,6 +570,115 @@
       }
     }
     
+    // Edit process handler
+    let currentEditProcessId = null;
+    
+    async function openEditProcessModal(processId) {
+      try {
+        const process = await CoreAPI.getProcess(processId);
+        currentEditProcessId = processId;
+        
+        // Populate form
+        const modal = document.getElementById('edit-process-modal');
+        const form = modal.querySelector('form');
+        form.querySelector('[name="name"]').value = process.name || '';
+        form.querySelector('[name="description"]').value = process.description || '';
+        form.querySelector('[name="category"]').value = process.category || 'manufacturing';
+        
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      } catch (error) {
+        console.error('Failed to load process:', error);
+        alert(error.message || 'Failed to load process. Please try again.');
+      }
+    }
+    
+    async function updateProcess(form) {
+      const formData = new FormData(form);
+      const data = {
+        name: formData.get('name'),
+        description: formData.get('description') || '',
+        category: formData.get('category') || null,
+      };
+      
+      try {
+        await CoreAPI.updateProcess(currentEditProcessId, data);
+        
+        // Close modal
+        const modal = form.closest('.modal-overlay');
+        if (modal) {
+          modal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+        }
+        
+        // Reload processes
+        const processesData = await CoreAPI.getProcesses();
+        renderProcessesV2(processesData.processes);
+        
+        // Reload metrics
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        
+        currentEditProcessId = null;
+        form.reset();
+        return false;
+      } catch (error) {
+        console.error('Failed to update process:', error);
+        alert(error.message || 'Failed to update process. Please try again.');
+        return false;
+      }
+    }
+    
+    // Delete process handler
+    let currentDeleteProcessId = null;
+    let currentDeleteProcessName = null;
+    
+    function showDeleteConfirmation(processId, processName) {
+      currentDeleteProcessId = processId;
+      currentDeleteProcessName = processName;
+      const modal = document.getElementById('delete-process-confirmation-modal');
+      const messageEl = modal.querySelector('#delete-confirmation-message');
+      messageEl.textContent = `Are you sure you want to delete "${processName}"? This action cannot be undone.`;
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    
+    async function confirmDeleteProcess() {
+      if (!currentDeleteProcessId) return;
+      
+      try {
+        await CoreAPI.deleteProcess(currentDeleteProcessId);
+        
+        // Close modal
+        const modal = document.getElementById('delete-process-confirmation-modal');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Reload processes
+        const processesData = await CoreAPI.getProcesses();
+        renderProcessesV2(processesData.processes);
+        
+        // Reload metrics
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        
+        currentDeleteProcessId = null;
+        currentDeleteProcessName = null;
+      } catch (error) {
+        console.error('Failed to delete process:', error);
+        alert(error.message || 'Failed to delete process. Please try again.');
+      }
+    }
+    
+    function cancelDeleteProcess() {
+      const modal = document.getElementById('delete-process-confirmation-modal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      currentDeleteProcessId = null;
+      currentDeleteProcessName = null;
+    }
+    
     // Add inventory handler
     async function addInventoryItem(form) {
       const formData = new FormData(form);
@@ -605,6 +758,69 @@
           <button type="submit" class="btn btn-primary">Create Process</button>
         </div>
       </form>
+    </div>
+  </div>
+  
+  <!-- Edit Process Modal -->
+  <div class="modal-overlay" id="edit-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Edit Process</h2>
+        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form onsubmit="return updateProcess(this)">
+        <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Process Name</label>
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Assembly Line C">
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Description</label>
+            <input type="text" name="description" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Brief description of the process">
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Category</label>
+            <select name="category" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="manufacturing">Manufacturing</option>
+              <option value="chemical">Chemical</option>
+              <option value="packaging">Packaging</option>
+              <option value="assembly">Assembly</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Process</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Delete Process Confirmation Modal -->
+  <div class="modal-overlay" id="delete-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Process</h2>
+        <button onclick="cancelDeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div style="margin-bottom: 24px;">
+        <p id="delete-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="cancelDeleteProcess()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmDeleteProcess()" style="background: var(--danger, #ef4444);">Delete</button>
+      </div>
     </div>
   </div>
   
