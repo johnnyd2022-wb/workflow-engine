@@ -9,6 +9,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Searchable dropdown styles */
+    .searchable-dropdown-container {
+      position: relative;
+    }
+    .searchable-dropdown-list {
+      z-index: 1000;
+    }
+    .searchable-dropdown-list .dropdown-item:hover {
+      background: var(--bg-hover, rgba(0, 0, 0, 0.05)) !important;
+    }
+    .searchable-dropdown-list .dropdown-item.selected {
+      background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+    }
+  </style>
 </head>
 <body>
   <div class="app-layout">
@@ -118,57 +133,83 @@
             
             <!-- Structure Tab -->
             <div id="tab-structure" class="tab-content active">
-              <div class="flex justify-between items-center mt-4 mb-4">
-                <p class="text-sm text-muted" id="step-count-text">0 steps in this process</p>
-                <button class="btn btn-secondary btn-sm" data-modal-open="add-step-modal" onclick="window.openModal('add-step-modal'); return false;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Add Step
-                </button>
-              </div>
-              
-              <div class="steps-container" id="steps-container">
-                <!-- Steps will be loaded dynamically from backend -->
-              </div>
+              <section class="card" style="margin-top: 24px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div>
+                    <h2 class="card-title">Process Steps</h2>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;" id="step-count-text">0 steps in this process</p>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" data-modal-open="add-step-modal" onclick="window.openModal('add-step-modal'); return false;" style="margin-top: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add Step
+                  </button>
+                </div>
+                <div class="card-content">
+                  <div class="steps-container" id="steps-container">
+                    <!-- Steps will be loaded dynamically from backend -->
+                  </div>
+                </div>
+              </section>
             </div>
             
             <!-- Executions Tab -->
             <div id="tab-executions" class="tab-content">
               <!-- In-Flight Section -->
-              <div class="mb-6" id="in-flight-section">
-                <h3 class="execution-section-title in-flight">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  In-Flight Executions (<span id="active-count">0</span>)
-                </h3>
-                <div class="execution-list" id="active-executions-container">
-                  <!-- Active executions will be loaded dynamically -->
+              <section class="card" style="margin-top: 24px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div>
+                    <h2 class="card-title">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 8px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                      In-Flight Executions
+                    </h2>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;"><span id="active-count">0</span> active execution<span id="active-count-plural">s</span></p>
+                  </div>
                 </div>
-              </div>
+                <div class="card-content">
+                  <div class="execution-list" id="active-executions-container">
+                    <!-- Active executions will be loaded dynamically -->
+                  </div>
+                </div>
+              </section>
               
               <!-- Completed Section -->
-              <div id="completed-section">
-                <h3 class="execution-section-title completed">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  Completed Executions (<span id="completed-count">0</span>)
-                </h3>
-                <div class="execution-list" id="completed-executions-container">
-                  <!-- Completed executions will be loaded dynamically -->
+              <section class="card" style="margin-top: 32px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div>
+                    <h2 class="card-title">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 8px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                      Completed Executions
+                    </h2>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;"><span id="completed-count">0</span> completed execution<span id="completed-count-plural">s</span></p>
+                  </div>
                 </div>
-              </div>
+                <div class="card-content">
+                  <div class="execution-list" id="completed-executions-container">
+                    <!-- Completed executions will be loaded dynamically -->
+                  </div>
+                </div>
+              </section>
             </div>
             
             <!-- Inventory Tab -->
             <div id="tab-inventory" class="tab-content">
-              <div class="flex justify-between items-center mb-4">
-                <p class="text-sm text-muted">Track materials connected to this process</p>
-                <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" onclick="window.openModal('add-inventory-modal'); return false;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Add to Inventory
-                </button>
-              </div>
-              
-              <div class="inventory-category-grid" id="inventory-container">
-                <!-- Inventory will be loaded dynamically -->
-              </div>
+              <section class="card" style="margin-top: 24px;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div>
+                    <h2 class="card-title">Inventory</h2>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Track materials connected to this process</p>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" onclick="window.openModal('add-inventory-modal'); return false;" style="margin-top: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add to Inventory
+                  </button>
+                </div>
+                <div class="card-content">
+                  <div class="inventory-category-grid" id="inventory-container">
+                    <!-- Inventory will be loaded dynamically -->
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
         </div>
@@ -181,6 +222,80 @@
   <script src="/ui/shared/sidebar-v2.js"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script>
+    // Global variable for notification timeout
+    let notificationTimeout = null;
+    
+    // Define showNotification FIRST so overrides can use it immediately
+    // Auto-dismissing toast notification
+    window.showNotification = function(type, title, message) {
+      const modal = document.getElementById('notification-modal');
+      if (!modal) {
+        console.log(`${type}: ${title} - ${message}`);
+        return;
+      }
+      
+      // Clear any existing timeout
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+      
+      const titleEl = document.getElementById('notification-title');
+      const messageEl = document.getElementById('notification-message');
+      const iconEl = document.getElementById('notification-icon');
+      
+      if (titleEl) titleEl.textContent = title;
+      if (messageEl) messageEl.textContent = message;
+      
+      // Set icon and colors based on type
+      if (type === 'success' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--success, #10b981)';
+      } else if (type === 'error' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--error, #ef4444)';
+      }
+      
+      // Show notification
+      modal.style.display = 'flex';
+      
+      // Auto-dismiss after 3.5 seconds
+      notificationTimeout = setTimeout(() => {
+        closeNotification();
+      }, 3500);
+    };
+    
+    // Immediately override showSuccess and showError from core.js
+    window.showSuccess = function(message) {
+      window.showNotification('success', 'Success', message);
+    };
+    
+    window.showError = function(message) {
+      window.showNotification('error', 'Error', message);
+    };
+    
+    function closeNotification() {
+      const modal = document.getElementById('notification-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+    }
+    
     // Initialize account info component
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function() {
@@ -199,6 +314,38 @@
     const processId = urlParams.get('id') || '{{ process_id }}';
     
     let currentProcess = null;
+    let currentUser = null;
+    
+    // ============================================================
+    // GET CURRENT USER
+    // ============================================================
+    async function getCurrentUser() {
+      if (currentUser) {
+        return currentUser;
+      }
+      
+      try {
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.user) {
+            currentUser = {
+              email: data.user.email || 'Unknown',
+              username: data.user.email || 'Unknown' // Use full email as username
+            };
+            return currentUser;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to get current user:', error);
+      }
+      
+      return { email: 'Unknown', username: 'Unknown' };
+    }
     
     // Load process data
     async function loadProcessData() {
@@ -232,6 +379,7 @@
         console.error('Failed to load process data:', error);
         document.getElementById('process-name').textContent = 'Error loading process';
         document.getElementById('process-description').textContent = error.message || 'Failed to load process details';
+        showNotification('error', 'Failed to Load Process', error.message || 'Failed to load process details');
       }
     }
     
@@ -243,7 +391,12 @@
       container.innerHTML = '';
       
       if (!steps || steps.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p class="empty-state-description">No steps defined for this process.</p></div>';
+        container.innerHTML = '<div style="text-align: center; padding: 32px;"><p style="color: var(--text-secondary);">No steps defined for this process.</p></div>';
+        // Update step count text
+        const stepCountText = document.getElementById('step-count-text');
+        if (stepCountText) {
+          stepCountText.textContent = '0 steps in this process';
+        }
         return;
       }
       
@@ -260,6 +413,9 @@
         const stepCard = createStepCard(step);
         container.appendChild(stepCard);
       });
+      
+      // Update button visibility after rendering all steps
+      updateFromOutputButtonVisibility();
     }
     
     // Create step card
@@ -299,7 +455,11 @@
             <div class="io-section-title">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
               Inputs
-              <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="addInput(this)">+ Add</button>
+              <div style="margin-left:auto; display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" onclick="addInputFromInventory(this)" title="Add from inventory">+ From Inventory</button>
+                <button class="btn btn-secondary btn-sm" onclick="addInputFromPreviousOutput(this)" title="Add from previous step output" style="display: none;" data-add-from-output-btn>+ From Output</button>
+                <button class="btn btn-secondary btn-sm" onclick="addNewInput(this)" title="Add new manual input">+ New Input</button>
+              </div>
             </div>
             <div class="io-list">
               ${inputs.length > 0 ? inputs.map(input => {
@@ -430,6 +590,99 @@
       toggle.classList.toggle('expanded');
     };
     
+    // Execution expand/collapse (global function for onclick)
+    window.toggleExecution = function(header) {
+      const executionCard = header.closest('.execution-card');
+      const content = executionCard.querySelector('.execution-content');
+      const toggle = executionCard.querySelector('.execution-toggle');
+      
+      if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.style.transform = 'rotate(180deg)';
+      } else {
+        content.style.display = 'none';
+        toggle.style.transform = 'rotate(0deg)';
+      }
+    };
+    
+    window.toggleIOPane = function(paneId, event) {
+      // Stop event propagation to prevent any bubbling issues
+      if (event) {
+        event.stopPropagation();
+      }
+      
+      const pane = document.getElementById(paneId);
+      const toggle = document.getElementById(`${paneId}-toggle`);
+      
+      if (pane && toggle) {
+        const isHidden = pane.style.display === 'none' || !pane.style.display;
+        
+        // Find the flex container that holds both input and output panes for this step
+        // Start from the pane's parent (the pane wrapper div) and traverse up
+        let currentElement = pane.parentElement; // The div containing the pane
+        let stepContainer = null;
+        
+        // Look for the flex container (has display: flex)
+        while (currentElement && currentElement !== document.body) {
+          const computedStyle = window.getComputedStyle(currentElement);
+          if (computedStyle.display === 'flex' && currentElement.querySelectorAll('.io-pane-content').length >= 1) {
+            stepContainer = currentElement;
+            break;
+          }
+          currentElement = currentElement.parentElement;
+        }
+        
+        if (stepContainer) {
+          // Get all IO panes and toggles in this specific step's flex container
+          const stepIOPanes = stepContainer.querySelectorAll('.io-pane-content');
+          const stepIOToggles = stepContainer.querySelectorAll('.io-pane-toggle');
+          
+          if (isHidden) {
+            // Expand all IO panes in this step (both inputs and outputs)
+            stepIOPanes.forEach(p => {
+              p.style.display = 'block';
+            });
+            stepIOToggles.forEach(t => {
+              t.style.transform = 'rotate(180deg)';
+            });
+          } else {
+            // Collapse all IO panes in this step
+            stepIOPanes.forEach(p => {
+              p.style.display = 'none';
+            });
+            stepIOToggles.forEach(t => {
+              t.style.transform = 'rotate(0deg)';
+            });
+          }
+        } else {
+          // Fallback to single pane toggle if container not found
+          if (isHidden) {
+            pane.style.display = 'block';
+            toggle.style.transform = 'rotate(180deg)';
+          } else {
+            pane.style.display = 'none';
+            toggle.style.transform = 'rotate(0deg)';
+          }
+        }
+      }
+    };
+    
+    window.toggleCompletedSteps = function(sectionId) {
+      const section = document.getElementById(sectionId);
+      const toggle = document.getElementById(`${sectionId}-toggle`);
+      
+      if (section && toggle) {
+        const isHidden = section.style.display === 'none' || !section.style.display;
+        if (isHidden) {
+          section.style.display = 'block';
+          toggle.style.transform = 'rotate(180deg)';
+        } else {
+          section.style.display = 'none';
+          toggle.style.transform = 'rotate(0deg)';
+        }
+      }
+    };
+    
     // Load executions
     async function loadExecutions() {
       if (!processId) return;
@@ -450,118 +703,384 @@
         document.getElementById('process-completed-count').textContent = completed.length;
         
         // Render executions
-        renderExecutions(active, completed);
+        await renderExecutions(active, completed);
         
       } catch (error) {
         console.error('Failed to load executions:', error);
+        showNotification('error', 'Failed to Load Executions', error.message || 'Failed to load executions');
       }
     }
     
     // Render executions
-    function renderExecutions(active, completed) {
+    async function renderExecutions(active, completed) {
       const activeContainer = document.getElementById('active-executions-container');
       const completedContainer = document.getElementById('completed-executions-container');
       const activeCountEl = document.getElementById('active-count');
       const completedCountEl = document.getElementById('completed-count');
+      const activePluralEl = document.getElementById('active-count-plural');
+      const completedPluralEl = document.getElementById('completed-count-plural');
       
       if (activeCountEl) activeCountEl.textContent = active.length;
       if (completedCountEl) completedCountEl.textContent = completed.length;
+      if (activePluralEl) activePluralEl.textContent = active.length !== 1 ? 's' : '';
+      if (completedPluralEl) completedPluralEl.textContent = completed.length !== 1 ? 's' : '';
       
       if (activeContainer) {
         activeContainer.innerHTML = '';
         if (active.length === 0) {
-          activeContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px;">No active executions</p>';
+          activeContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px; text-align: center;">No active executions</p>';
         } else {
-          active.forEach(execution => {
-            activeContainer.appendChild(createExecutionCard(execution, 'active'));
-          });
+          for (const execution of active) {
+            const card = await createExecutionCard(execution, 'active');
+            activeContainer.appendChild(card);
+          }
         }
       }
       
       if (completedContainer) {
         completedContainer.innerHTML = '';
         if (completed.length === 0) {
-          completedContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px;">No completed executions</p>';
+          completedContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px; text-align: center;">No completed executions</p>';
         } else {
-          completed.forEach(execution => {
-            completedContainer.appendChild(createExecutionCard(execution, 'completed'));
-          });
+          for (const execution of completed) {
+            const card = await createExecutionCard(execution, 'completed');
+            completedContainer.appendChild(card);
+          }
         }
       }
     }
     
     // Create execution card
-    function createExecutionCard(execution, status) {
+    async function createExecutionCard(execution, status) {
       const card = document.createElement('div');
       card.className = 'execution-card';
+      card.setAttribute('data-execution-id', execution.id);
       
       const currentStep = execution.current_step || {};
       const nextStep = execution.next_step || {};
       const stepNumber = currentStep.step_number || 0;
-      const totalSteps = currentProcess?.steps?.length || 0;
-      const progress = totalSteps > 0 ? Math.round((stepNumber / totalSteps) * 100) : 0;
+      // Use execution's total_steps (snapshot) if available, otherwise fall back to current process steps
+      const totalSteps = execution.total_steps || currentProcess?.steps?.length || 0;
+      
+      // Use the progress from the execution (calculated by backend based on completed steps)
+      // The backend calculates: progress = (completed_steps / total_steps) * 100
+      // This ensures each step completion moves the bar by (1/total_steps) * 100
+      const progress = execution.progress || 0;
+      
       const executionId = execution.id || '';
-      const shortId = executionId.length > 12 ? executionId.substring(0, 12) : executionId;
       
-      const startDate = execution.created_at ? new Date(execution.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown';
-      const completedDate = execution.completed_at ? new Date(execution.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      // Format dates with time
+      const startDate = execution.started_at ? new Date(execution.started_at).toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      }) : 'Unknown';
+      const completedDate = execution.completed_at ? new Date(execution.completed_at).toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      }) : '';
       
+      // Get current user for display
+      const user = await getCurrentUser();
+      
+      // Current step name - use as the execution display name
+      const currentStepName = currentStep.name || 'No step in progress';
+      
+      // Check if current step is terminal (last step) - don't show next step if it is
+      const isTerminalStep = stepNumber === totalSteps && totalSteps > 0;
+      
+      // Execute step button (only for active executions with a current step)
+      // Positioned on the same line as Current Step, aligned to the right
+      let executeStepHtml = '';
+      if (status === 'active' && currentStep.step_id) {
+        executeStepHtml = `<button class="btn btn-primary btn-sm" onclick="completeCurrentStep('${executionId}')" style="white-space: nowrap;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>Execute Step</button>`;
+      }
+      
+      // Fetch execution details once for both completed steps and next step
+      let completedStepsHtml = '';
       let nextStepHtml = '';
-      if (status === 'active' && nextStep.name) {
-        const requirements = nextStep.required_inputs || [];
-        nextStepHtml = `
-          <div class="next-step-section">
-            <div class="next-step-header">
-              <div class="next-step-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              </div>
-              <div class="next-step-info">
-                <div class="next-step-label">Next Step</div>
-                <div class="next-step-name">${escapeHtml(nextStep.name)}</div>
-                ${nextStep.description ? `<div class="next-step-description">${escapeHtml(nextStep.description)}</div>` : ''}
-                ${requirements.length > 0 ? `
-                  <div class="next-step-requirements">
-                    <span class="requirement-label">Requires:</span>
-                    ${requirements.map(req => `<span class="badge-outline">${escapeHtml(req.name)}: ${req.quantity || ''} ${req.unit || ''}</span>`).join('')}
+      if (status === 'active') {
+        try {
+          const executionData = await CoreAPI.getExecution(executionId);
+          const executionSteps = executionData.execution_steps || [];
+          
+          // Get completed steps, sorted by step_number
+          const completedSteps = executionSteps
+            .filter(es => es.status === 'completed' || es.status === 'COMPLETED')
+            .sort((a, b) => a.step_number - b.step_number);
+          
+          if (completedSteps.length > 0) {
+            const completedStepsSectionId = `completed-steps-${executionId}`;
+            completedStepsHtml = `
+              <div class="completed-steps-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
+                <div class="completed-steps-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; margin-bottom: 12px;" onclick="toggleCompletedSteps('${completedStepsSectionId}')">
+                  <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">Completed Steps (${completedSteps.length})</div>
+                  <div class="completed-steps-toggle" id="${completedStepsSectionId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
                   </div>
-                ` : ''}
+                </div>
+                <div class="completed-steps-content" id="${completedStepsSectionId}" style="display: none;">
+                ${completedSteps.map(es => {
+                  const completedDate = es.completed_at ? new Date(es.completed_at).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                  }) : 'Unknown';
+                  const completedBy = es.execution_data?.completed_by || es.execution_data?.completed_by_email || 'Unknown';
+                  const stepName = es.step_name || `Step ${es.step_number}`;
+                  // Use actual inputs/outputs if available, otherwise fall back to step definition
+                  const actualInputs = es.actual_inputs || [];
+                  const actualOutputs = es.actual_outputs || [];
+                  const stepInputs = es.step_inputs || [];
+                  const stepOutputs = es.step_outputs || [];
+                  
+                  // Use actual if available, otherwise use step definition
+                  const displayInputs = actualInputs.length > 0 ? actualInputs : stepInputs;
+                  const displayOutputs = actualOutputs.length > 0 ? actualOutputs : stepOutputs;
+                  
+                  // Create unique IDs for this step's panes using execution step ID
+                  const executionStepId = es.id || `step-${es.step_id}-${es.step_number}-${Math.random().toString(36).substr(2, 9)}`;
+                  const inputsPaneId = `inputs-${executionStepId}`;
+                  const outputsPaneId = `outputs-${executionStepId}`;
+                  
+                  // Create inputs pane
+                  let inputsPaneHtml = '';
+                  if (displayInputs.length > 0) {
+                    inputsPaneHtml = `
+                      <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-right: 8px; overflow: hidden;">
+                        <div class="io-pane-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;" onclick="toggleIOPane('${inputsPaneId}', event)">
+                          <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Inputs (${displayInputs.length})</div>
+                          <div class="io-pane-toggle" id="${inputsPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                          </div>
+                        </div>
+                        <div class="io-pane-content" id="${inputsPaneId}" style="display: none; padding: 0 10px 10px 10px;">
+                          ${displayInputs.map(input => {
+                            const inputName = input.name || 'Unknown';
+                            const inputQty = input.quantity !== null && input.quantity !== undefined ? input.quantity : '';
+                            const inputUnit = input.unit || '';
+                            return `
+                              <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
+                                <div style="font-weight: 500;">${escapeHtml(inputName)}</div>
+                                ${inputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${inputQty} ${inputUnit}</div>` : ''}
+                              </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      </div>
+                    `;
+                  }
+                  
+                  // Create outputs pane
+                  let outputsPaneHtml = '';
+                  if (displayOutputs.length > 0) {
+                    outputsPaneHtml = `
+                      <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-left: 8px; overflow: hidden;">
+                        <div class="io-pane-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;" onclick="toggleIOPane('${outputsPaneId}', event)">
+                          <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Outputs (${displayOutputs.length})</div>
+                          <div class="io-pane-toggle" id="${outputsPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                          </div>
+                        </div>
+                        <div class="io-pane-content" id="${outputsPaneId}" style="display: none; padding: 0 10px 10px 10px;">
+                          ${displayOutputs.map(output => {
+                            const outputName = output.name || 'Unknown';
+                            const outputQty = output.quantity !== null && output.quantity !== undefined ? output.quantity : '';
+                            const outputUnit = output.unit || '';
+                            return `
+                              <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
+                                <div style="font-weight: 500;">${escapeHtml(outputName)}</div>
+                                ${outputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${outputQty} ${outputUnit}</div>` : ''}
+                              </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      </div>
+                    `;
+                  }
+                  
+                  // Only show panes if we have inputs or outputs
+                  let ioPanesHtml = '';
+                  if (inputsPaneHtml || outputsPaneHtml) {
+                    ioPanesHtml = `
+                      <div style="margin-top: 12px; display: flex; gap: 0;">
+                        ${inputsPaneHtml}
+                        ${outputsPaneHtml}
+                      </div>
+                    `;
+                  }
+                  
+                  return `
+                    <div style="padding: 12px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
+                      <div style="display: flex; flex-direction: column;">
+                        <div style="margin-bottom: 8px;">
+                          <div style="font-size: 13px; color: var(--text-primary, #111827); font-weight: 500;">${escapeHtml(stepName)}</div>
+                          <div style="font-size: 12px; color: var(--text-secondary, #6b7280); margin-top: 2px;">Completed: ${completedDate} by ${escapeHtml(completedBy)}</div>
+                        </div>
+                        ${ioPanesHtml}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+                </div>
               </div>
-              <button class="btn btn-primary btn-sm">Execute Step</button>
-            </div>
-          </div>
-        `;
+            `;
+          }
+          
+          // Check for next ready step (only if not terminal)
+          if (!isTerminalStep) {
+            const readySteps = executionSteps.filter(es => es.status === 'ready' || es.status === 'READY');
+            
+            if (readySteps.length > 0) {
+              const nextReadyStep = readySteps[0];
+              const stepDetails = currentProcess?.steps?.find(s => s.id === nextReadyStep.step_id);
+              
+              if (stepDetails) {
+                nextStepHtml = `
+                  <div class="next-step-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
+                    <div class="next-step-header" style="display: flex; align-items: center; gap: 12px;">
+                      <div class="next-step-icon" style="flex-shrink: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                      </div>
+                      <div class="next-step-info" style="flex: 1;">
+                        <div class="next-step-label" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Next Step</div>
+                        <div class="next-step-name" style="font-weight: 500; color: var(--text-primary); font-size: 14px;">${escapeHtml(stepDetails.name || 'Unknown')}</div>
+                        ${stepDetails.description ? `<div class="next-step-description" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(stepDetails.description)}</div>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch execution details:', error);
+        }
+      }
+      
+      // Calculate progress bar color - blend to green starting at 75%
+      let progressColor = 'var(--accent, #3b82f6)'; // Default blue
+      if (progress >= 100) {
+        progressColor = 'var(--success, #10b981)'; // Fully green when complete
+      } else if (progress >= 75) {
+        // Blend from blue to green between 75% and 100%
+        const blendFactor = (progress - 75) / 25; // 0 at 75%, 1 at 100%
+        const blue = [59, 130, 246]; // #3b82f6
+        const green = [16, 185, 129]; // #10b981
+        const r = Math.round(blue[0] + (green[0] - blue[0]) * blendFactor);
+        const g = Math.round(blue[1] + (green[1] - blue[1]) * blendFactor);
+        const b = Math.round(blue[2] + (green[2] - blue[2]) * blendFactor);
+        progressColor = `rgb(${r}, ${g}, ${b})`;
       }
       
       card.innerHTML = `
-        <div class="execution-header">
-          <div>
-            <div class="execution-id">${shortId || 'EXEC-Unknown'}</div>
-            <div class="execution-date">${status === 'active' ? `Started: ${startDate}` : `Completed: ${completedDate || startDate}`}</div>
+        <div class="execution-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);" onclick="toggleExecution(this)">
+          <div style="flex: 1;">
+            <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(currentStepName)}</div>
+            <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">${status === 'active' ? `Batch started: ${startDate}` : `Completed: ${completedDate || startDate}`}</div>
+            ${status === 'active' ? `<div style="font-size: 13px; color: var(--text-secondary);">Started by: ${escapeHtml(user.username)}</div>` : ''}
           </div>
-          <span class="badge ${status === 'active' ? 'badge-accent' : 'badge-success'}">${status === 'active' ? 'In Progress' : 'Completed'}</span>
-        </div>
-        <div class="execution-progress">
-          <div class="progress-bar">
-            <div class="progress-fill" style="width: ${progress}%;"></div>
-          </div>
-        </div>
-        ${nextStepHtml}
-        <div class="execution-details">
-          <div class="execution-detail">
-            <span class="execution-detail-label">Current Step</span>
-            <span class="execution-detail-value">${stepNumber} of ${totalSteps}</span>
-          </div>
-          ${execution.batch_id ? `
-            <div class="execution-detail">
-              <span class="execution-detail-label">Batch ID</span>
-              <span class="execution-detail-value">${escapeHtml(execution.batch_id)}</span>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="badge ${status === 'active' ? 'badge-accent' : 'badge-success'}" style="flex-shrink: 0;">${status === 'active' ? 'In Progress' : 'Completed'}</span>
+            <div class="execution-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
             </div>
-          ` : ''}
+          </div>
+        </div>
+        <div class="execution-content" style="display: none; padding: 12px;">
+          <div class="execution-progress" style="margin-bottom: 12px;">
+            <div class="progress-bar" style="height: 8px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden;">
+              <div class="progress-fill" style="height: 100%; background: ${progressColor}; width: ${progress}%; transition: width 0.3s, background 0.3s;"></div>
+            </div>
+          </div>
+          <div class="execution-details" style="margin-bottom: 12px;">
+            <div class="execution-detail" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
+              <div>
+                <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Current Step</span>
+                <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary); font-weight: 500; margin-left: 8px;">${stepNumber} of ${totalSteps}</span>
+              </div>
+              ${executeStepHtml}
+            </div>
+            ${execution.batch_id ? `
+              <div class="execution-detail" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
+                <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Batch ID</span>
+                <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary);">${escapeHtml(execution.batch_id)}</span>
+              </div>
+            ` : ''}
+          </div>
+          ${nextStepHtml}
+          ${completedStepsHtml}
         </div>
       `;
       
       return card;
     }
+    
+    // ============================================================
+    // COMPLETE CURRENT STEP
+    // ============================================================
+    window.completeCurrentStep = async function(executionId) {
+      try {
+        // Get full execution details to find the ready step
+        const executionData = await CoreAPI.getExecution(executionId);
+        const executionSteps = executionData.execution_steps || [];
+        
+        // Find the ready step (current step to complete)
+        const readyStep = executionSteps.find(es => es.status === 'ready' || es.status === 'READY');
+        
+        if (!readyStep) {
+          showNotification('error', 'No Ready Step', 'There is no step ready to complete.');
+          return;
+        }
+        
+        // Get current user for recording
+        const user = await getCurrentUser();
+        
+        // Complete the step (with empty inputs/outputs for now - can be enhanced later)
+        await CoreAPI.completeStep(executionId, readyStep.id, {
+          actual_inputs: [],
+          actual_outputs: [],
+          execution_data: {
+            completed_by: user.username,
+            completed_by_email: user.email,
+            completed_at: new Date().toISOString()
+          }
+        });
+        
+        showNotification('success', 'Step Completed', `Step "${readyStep.step_name || 'Unknown'}" has been completed successfully.`);
+        
+        // Reload executions to show updated state
+        await loadExecutions();
+        
+      } catch (error) {
+        console.error('Failed to complete step:', error);
+        showNotification('error', 'Failed to Complete Step', error.message || 'Failed to complete step. Please try again.');
+      }
+    };
+    
+    // ============================================================
+    // START NEXT STEP
+    // ============================================================
+    window.startNextStep = async function(executionId) {
+      // This is essentially the same as completing the current step
+      // The backend will automatically advance to the next step
+      await completeCurrentStep(executionId);
+    };
     
     // Load inventory
     async function loadInventory() {
@@ -575,6 +1094,7 @@
         
       } catch (error) {
         console.error('Failed to load inventory:', error);
+        showNotification('error', 'Failed to Load Inventory', error.message || 'Failed to load inventory');
       }
     }
     
@@ -587,12 +1107,8 @@
       
       if (items.length === 0) {
         container.innerHTML = `
-          <div class="empty-state" style="grid-column: 1 / -1;">
-            <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
-            </svg>
-            <h3 class="empty-state-title">Inventory Management</h3>
-            <p class="empty-state-description">No inventory items for this process</p>
+          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
+            <p style="color: var(--text-secondary);">No inventory items for this process</p>
           </div>
         `;
         return;
@@ -661,18 +1177,18 @@
     // Start execution
     async function startExecution() {
       if (!processId) {
-        alert('No process ID available');
+        showNotification('error', 'Error', 'No process ID available');
         return;
       }
       
       try {
         const result = await CoreAPI.createExecution(processId);
-        alert('Execution started successfully!');
+        showNotification('success', 'Execution Started', 'Execution started successfully!');
         // Reload executions
         await loadExecutions();
       } catch (error) {
         console.error('Failed to start execution:', error);
-        alert(error.message || 'Failed to start execution. Please try again.');
+        showNotification('error', 'Failed to Start Execution', error.message || 'Failed to start execution. Please try again.');
       }
     }
     
@@ -795,16 +1311,91 @@
         // Reload inventory
         await loadInventory();
         
+        showNotification('success', 'Inventory Item Added', `"${data.name}" has been added to inventory successfully.`);
+        
         return false; // Prevent form submission
       } catch (error) {
         console.error('Failed to add inventory item:', error);
-        alert(error.message || 'Failed to add inventory item. Please try again.');
+        showNotification('error', 'Failed to Add Inventory Item', error.message || 'Failed to add inventory item. Please try again.');
         return false;
       }
     }
     
     // ============================================================
-    // ADD NEW STEP
+    // OPTIMISTIC STEP RENDERING HELPERS
+    // ============================================================
+    function prependStepCard(step) {
+      const container = document.getElementById('steps-container');
+      if (!container) return;
+
+      // Clear empty state message if present
+      if (container.innerHTML.includes('No steps defined')) {
+        container.innerHTML = '';
+      }
+
+      const card = createStepCard(step);
+      // createStepCard already sets data-step-id, but ensure it's set correctly for optimistic steps
+      if (step.id) {
+        card.setAttribute('data-step-id', step.id);
+      }
+
+      if (step.__optimistic) {
+        card.style.opacity = '0.6';
+      }
+
+      container.prepend(card);
+      
+      // Update step count text
+      const stepCountText = document.getElementById('step-count-text');
+      if (stepCountText) {
+        const totalSteps = container.querySelectorAll('.step-card').length;
+        if (totalSteps === 0) {
+          stepCountText.textContent = '0 steps in this process';
+        } else {
+          stepCountText.textContent = `${totalSteps} step${totalSteps !== 1 ? 's' : ''} in this process`;
+        }
+      }
+    }
+
+    function replaceOptimisticStep(tempId, realStep) {
+      // Update button visibility after replacing
+      setTimeout(() => updateFromOutputButtonVisibility(), 0);
+      const card = document.querySelector(`[data-step-id="${tempId}"]`);
+      if (!card) return;
+
+      const newCard = createStepCard(realStep);
+      // createStepCard already sets data-step-id, but ensure it's set correctly
+      if (realStep.id) {
+        newCard.setAttribute('data-step-id', realStep.id);
+      }
+
+      card.replaceWith(newCard);
+      
+      // Update button visibility after replacing
+      updateFromOutputButtonVisibility();
+    }
+
+    function removeOptimisticStep(tempId) {
+      const card = document.querySelector(`[data-step-id="${tempId}"]`);
+      if (card) {
+        card.remove();
+        // Update step count text
+        const container = document.getElementById('steps-container');
+        const stepCountText = document.getElementById('step-count-text');
+        if (stepCountText && container) {
+          const totalSteps = container.querySelectorAll('.step-card').length;
+          if (totalSteps === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 32px;"><p style="color: var(--text-secondary);">No steps defined for this process.</p></div>';
+            stepCountText.textContent = '0 steps in this process';
+          } else {
+            stepCountText.textContent = `${totalSteps} step${totalSteps !== 1 ? 's' : ''} in this process`;
+          }
+        }
+      }
+    }
+    
+    // ============================================================
+    // ADD NEW STEP (Legacy function - kept for compatibility)
     // ============================================================
     window.addNewStep = function(stepName, stepDescription) {
       const stepsContainer = document.getElementById('steps-container');
@@ -846,7 +1437,11 @@
             <div class="io-section-title">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
               Inputs
-              <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="addInput(this)">+ Add</button>
+              <div style="margin-left:auto; display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" onclick="addInputFromInventory(this)" title="Add from inventory">+ From Inventory</button>
+                <button class="btn btn-secondary btn-sm" onclick="addInputFromPreviousOutput(this)" title="Add from previous step output" style="display: none;" data-add-from-output-btn>+ From Output</button>
+                <button class="btn btn-secondary btn-sm" onclick="addNewInput(this)" title="Add new manual input">+ New Input</button>
+              </div>
             </div>
             <div class="io-list">
               <p style="color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;">No inputs defined</p>
@@ -893,9 +1488,303 @@
     };
     
     // ============================================================
-    // ADD INPUT/OUTPUT
+    // LOAD RAW MATERIALS FOR DROPDOWN
     // ============================================================
-    window.addInput = function(button) {
+    let rawMaterialsCache = null;
+    
+    async function loadRawMaterials() {
+      if (rawMaterialsCache) {
+        return rawMaterialsCache;
+      }
+      
+      try {
+        const inventoryData = await CoreAPI.getInventory('raw_material');
+        rawMaterialsCache = inventoryData.inventory_items || [];
+        return rawMaterialsCache;
+      } catch (error) {
+        console.error('Failed to load raw materials:', error);
+        return [];
+      }
+    }
+    
+    // ============================================================
+    // UNIT GROUPS FOR SMART UNIT SELECTION
+    // ============================================================
+    const unitGroups = {
+      weight: ['kg', 'g'],
+      volume: ['L', 'mL'],
+      count: ['pcs', 'units']
+    };
+    
+    function getUnitGroup(unit) {
+      for (const [group, units] of Object.entries(unitGroups)) {
+        if (units.includes(unit)) {
+          return group;
+        }
+      }
+      return null;
+    }
+    
+    function getRelatedUnits(unit) {
+      const group = getUnitGroup(unit);
+      if (group) {
+        return unitGroups[group];
+      }
+      // If unit not found in groups, return all units
+      return [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count];
+    }
+    
+    function updateUnitDropdown(unitSelect, selectedUnit) {
+      if (!selectedUnit) {
+        // Show all units
+        unitSelect.innerHTML = '';
+        [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
+          const option = document.createElement('option');
+          option.value = unit;
+          option.textContent = unit;
+          unitSelect.appendChild(option);
+        });
+        return;
+      }
+      
+      const relatedUnits = getRelatedUnits(selectedUnit);
+      const currentValue = unitSelect.value;
+      
+      unitSelect.innerHTML = '';
+      relatedUnits.forEach(unit => {
+        const option = document.createElement('option');
+        option.value = unit;
+        option.textContent = unit;
+        if (unit === currentValue || (currentValue === '' && unit === selectedUnit)) {
+          option.selected = true;
+        }
+        unitSelect.appendChild(option);
+      });
+    }
+    
+    // ============================================================
+    // SEARCHABLE DROPDOWN COMPONENT
+    // ============================================================
+    function createSearchableDropdown(items, onSelect, placeholder = 'Search raw materials or type new input...', unitSelect = null) {
+      const uniqueId = `dropdown-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const container = document.createElement('div');
+      container.className = 'searchable-dropdown-container';
+      container.style.position = 'relative';
+      container.style.flex = '1';
+      
+      container.innerHTML = `
+        <input 
+          type="text" 
+          class="form-input io-name-input searchable-dropdown-input" 
+          placeholder="${placeholder}"
+          autocomplete="off"
+          style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;"
+          data-dropdown-id="${uniqueId}"
+        />
+        <div 
+          class="searchable-dropdown-list" 
+          id="${uniqueId}"
+          style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; max-height: 200px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-top: 4px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12));"
+        ></div>
+      `;
+      
+      const input = container.querySelector('.searchable-dropdown-input');
+      const dropdown = container.querySelector('.searchable-dropdown-list');
+      let filteredItems = items;
+      let selectedIndex = -1;
+      const originalItems = items; // Keep reference to original items for comparison
+      
+      function renderDropdown() {
+        if (filteredItems.length === 0) {
+          dropdown.innerHTML = '<div style="padding: 12px; color: var(--text-secondary); text-align: center; font-size: 14px;">No materials found</div>';
+        } else {
+          dropdown.innerHTML = filteredItems.map((item, index) => {
+            const displayName = item.displayName || item.name;
+            const displayText = `${displayName} (${item.quantity || '0'} ${item.unit || ''})`;
+            return `
+              <div 
+                class="dropdown-item ${index === selectedIndex ? 'selected' : ''}"
+                data-index="${index}"
+                style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-light); transition: background 0.15s; ${index === selectedIndex ? 'background: var(--bg-hover, rgba(0, 0, 0, 0.05));' : ''}"
+                onmouseover="this.style.background='var(--bg-hover, rgba(0, 0, 0, 0.05))'"
+                onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'"
+              >
+                <div style="font-weight: 500; color: var(--text-primary); font-size: 14px;">${escapeHtml(displayName)}</div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${item.quantity || '0'} ${item.unit || ''}</div>
+              </div>
+            `;
+          }).join('');
+        }
+        dropdown.style.display = filteredItems.length > 0 || input.value.trim() ? 'block' : 'none';
+      }
+      
+      function filterItems(searchTerm) {
+        const term = searchTerm.toLowerCase().trim();
+        if (!term) {
+          filteredItems = items;
+        } else {
+          filteredItems = items.filter(item => {
+            const name = item.name.toLowerCase();
+            const displayName = item.displayName ? item.displayName.toLowerCase() : '';
+            return name.includes(term) || displayName.includes(term);
+          });
+        }
+        selectedIndex = -1;
+        renderDropdown();
+      }
+      
+      function selectItem(item) {
+        if (onSelect) {
+          onSelect(item);
+        }
+        input.value = item.name;
+        // Update hidden input
+        const hiddenInput = container.closest('.io-item')?.querySelector('.io-name-input-hidden');
+        if (hiddenInput) {
+          hiddenInput.value = item.name;
+        }
+        // Update unit dropdown if provided
+        if (unitSelect && item.unit) {
+          updateUnitDropdown(unitSelect, item.unit);
+        }
+        dropdown.style.display = 'none';
+      }
+      
+      input.addEventListener('input', (e) => {
+        const value = e.target.value;
+        filterItems(value);
+        // Always update hidden input when user types manually (for saving)
+        const hiddenInput = container.closest('.io-item')?.querySelector('.io-name-input-hidden');
+        if (hiddenInput) {
+          hiddenInput.value = value.trim();
+        }
+        // If user is typing manually (not selecting from dropdown), show all units
+        // Check if the typed value exactly matches any item name from original items
+        const exactMatch = originalItems.find(item => item.name.toLowerCase() === value.toLowerCase().trim());
+        if (unitSelect && !exactMatch && value.trim()) {
+          // User is typing a custom name, show all units
+          updateUnitDropdown(unitSelect, null);
+        }
+      });
+      
+      input.addEventListener('focus', () => {
+        if (input.value.trim()) {
+          filterItems(input.value);
+        } else {
+          filteredItems = items;
+          renderDropdown();
+        }
+      });
+      
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          selectedIndex = Math.min(selectedIndex + 1, filteredItems.length - 1);
+          renderDropdown();
+          const selectedEl = dropdown.querySelector(`[data-index="${selectedIndex}"]`);
+          if (selectedEl) {
+            selectedEl.scrollIntoView({ block: 'nearest' });
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          selectedIndex = Math.max(selectedIndex - 1, -1);
+          renderDropdown();
+        } else if (e.key === 'Enter' && selectedIndex >= 0 && filteredItems[selectedIndex]) {
+          e.preventDefault();
+          selectItem(filteredItems[selectedIndex]);
+        } else if (e.key === 'Escape') {
+          dropdown.style.display = 'none';
+        }
+      });
+      
+      dropdown.addEventListener('click', (e) => {
+        const itemEl = e.target.closest('.dropdown-item');
+        if (itemEl) {
+          const index = parseInt(itemEl.getAttribute('data-index'));
+          if (filteredItems[index]) {
+            selectItem(filteredItems[index]);
+          }
+        }
+      });
+      
+      // Close dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+          dropdown.style.display = 'none';
+        }
+      });
+      
+      return container;
+    }
+    
+    // ============================================================
+    // GET PREVIOUS STEP OUTPUTS
+    // ============================================================
+    function getPreviousStepOutputs(currentStepCard) {
+      const allStepCards = document.querySelectorAll('.step-card');
+      const currentStepNumber = parseInt(currentStepCard.querySelector('.step-number')?.textContent || '0');
+      
+      if (currentStepNumber <= 1) {
+        return []; // No previous steps
+      }
+      
+      const previousOutputs = [];
+      
+      // Get outputs from all previous steps, ordered by step number (descending - most recent first)
+      for (let i = currentStepNumber - 1; i >= 1; i--) {
+        const stepCard = Array.from(allStepCards).find(card => {
+          const stepNum = parseInt(card.querySelector('.step-number')?.textContent || '0');
+          return stepNum === i;
+        });
+        
+        if (stepCard) {
+          const allIOSections = stepCard.querySelectorAll('.io-section');
+          if (allIOSections.length > 1) {
+            const outputsSection = allIOSections[allIOSections.length - 1];
+            const outputItems = outputsSection.querySelectorAll('.io-item');
+            
+            outputItems.forEach(item => {
+              const name = item.querySelector('.io-name-input')?.value?.trim();
+              const quantity = item.querySelector('.io-quantity-input')?.value;
+              const unit = item.querySelector('.io-unit-input')?.value;
+              
+              if (name) {
+                previousOutputs.push({
+                  name: name,
+                  quantity: quantity ? parseFloat(quantity) : null,
+                  unit: unit || '',
+                  step_number: i
+                });
+              }
+            });
+          }
+        }
+      }
+      
+      return previousOutputs;
+    }
+    
+    // ============================================================
+    // UPDATE "FROM OUTPUT" BUTTON VISIBILITY
+    // ============================================================
+    function updateFromOutputButtonVisibility() {
+      const allStepCards = document.querySelectorAll('.step-card');
+      allStepCards.forEach(stepCard => {
+        const fromOutputBtn = stepCard.querySelector('[data-add-from-output-btn]');
+        if (fromOutputBtn) {
+          const stepNumberEl = stepCard.querySelector('.step-number');
+          const stepNumberText = stepNumberEl?.textContent?.trim() || '';
+          const stepNumber = stepNumberText ? parseInt(stepNumberText) : 0;
+          // Show button for step 2 and onwards
+          fromOutputBtn.style.display = stepNumber >= 2 ? 'inline-block' : 'none';
+        }
+      });
+    }
+    
+    // ============================================================
+    // ADD INPUT FROM INVENTORY (original behavior)
+    // ============================================================
+    window.addInputFromInventory = async function(button) {
       const ioSection = button.closest('.io-section');
       const ioList = ioSection.querySelector('.io-list');
       
@@ -905,50 +1794,402 @@
         emptyMsg.remove();
       }
       
-      const inputHtml = `
-        <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
-          <span class="io-item-name" style="flex: 1;">
-            <input type="text" class="form-input io-name-input" placeholder="Material name" style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-          </span>
-          <span class="io-item-quantity">
-            <input type="number" class="form-input io-quantity-input" placeholder="0" style="width: 80px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-          </span>
-          <span class="io-item-unit">
-            <select class="form-select io-unit-input" style="width: 90px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="kg">kg</option>
-              <option value="g">g</option>
-              <option value="L">L</option>
-              <option value="mL">mL</option>
-              <option value="pcs">pcs</option>
-              <option value="units">units</option>
-            </select>
-          </span>
-          <span class="io-item-type" style="position: relative;">
-            <select class="form-select io-type-input" style="width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="variable">Variable</option>
-              <option value="static">Static</option>
-            </select>
-            <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-              </svg>
-            </span>
-          </span>
-          <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.io-item').remove(); updateStepMeta(this.closest('.step-card'));" style="padding: 4px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
+      // Load raw materials
+      const rawMaterials = await loadRawMaterials();
+      
+      const ioItem = document.createElement('div');
+      ioItem.className = 'io-item';
+      ioItem.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;';
+      
+      // Create searchable dropdown for material name
+      const nameContainer = document.createElement('span');
+      nameContainer.className = 'io-item-name';
+      nameContainer.style.flex = '1';
+      
+      // Create unit select first so we can pass it to dropdown
+      const unitSelect = document.createElement('select');
+      unitSelect.className = 'form-select io-unit-input';
+      unitSelect.style.cssText = 'width: 90px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      // Initialize with all units
+      [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
+        const option = document.createElement('option');
+        option.value = unit;
+        option.textContent = unit;
+        unitSelect.appendChild(option);
+      });
+      
+      const dropdown = createSearchableDropdown(
+        rawMaterials,
+        (item) => {
+          // When item is selected, update the hidden input and unit dropdown
+          const hiddenInput = ioItem.querySelector('.io-name-input-hidden');
+          if (hiddenInput) {
+            hiddenInput.value = item.name;
+          }
+          // Update unit dropdown with smart units
+          if (item.unit) {
+            updateUnitDropdown(unitSelect, item.unit);
+          }
+        },
+        'Search raw materials or type new input...',
+        unitSelect
+      );
+      
+      // Add hidden input to store the actual name value
+      const hiddenInput = document.createElement('input');
+      hiddenInput.type = 'hidden';
+      hiddenInput.className = 'io-name-input-hidden';
+      hiddenInput.value = '';
+      
+      nameContainer.appendChild(dropdown);
+      nameContainer.appendChild(hiddenInput);
+      
+      // Quantity input
+      const quantitySpan = document.createElement('span');
+      quantitySpan.className = 'io-item-quantity';
+      const quantityInput = document.createElement('input');
+      quantityInput.type = 'number';
+      quantityInput.className = 'form-input io-quantity-input';
+      quantityInput.placeholder = '0';
+      quantityInput.style.cssText = 'width: 80px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      quantitySpan.appendChild(quantityInput);
+      
+      // Unit select (already created above, just need to add to span)
+      const unitSpan = document.createElement('span');
+      unitSpan.className = 'io-item-unit';
+      unitSpan.appendChild(unitSelect);
+      
+      // Listen for manual unit changes to update dropdown if needed
+      unitSelect.addEventListener('change', () => {
+        // If user manually changes unit, we don't need to do anything special
+        // The smart units are only applied when selecting from inventory
+      });
+      
+      // Type select
+      const typeSpan = document.createElement('span');
+      typeSpan.className = 'io-item-type';
+      typeSpan.style.position = 'relative';
+      const typeSelect = document.createElement('select');
+      typeSelect.className = 'form-select io-type-input';
+      typeSelect.style.cssText = 'width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      ['variable', 'static'].forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        typeSelect.appendChild(option);
+      });
+      typeSpan.appendChild(typeSelect);
+      
+      // Tooltip icon
+      const tooltipIcon = document.createElement('span');
+      tooltipIcon.className = 'tooltip-icon';
+      tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
+      tooltipIcon.title = 'Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.';
+      tooltipIcon.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+      `;
+      typeSpan.appendChild(tooltipIcon);
+      
+      // Delete button
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'btn btn-ghost btn-icon btn-sm';
+      deleteButton.style.padding = '4px';
+      deleteButton.onclick = function() {
+        ioItem.remove();
+        updateStepMeta(button.closest('.step-card'));
+      };
+      deleteButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
       `;
       
-      ioList.insertAdjacentHTML('beforeend', inputHtml);
+      // Assemble the item
+      ioItem.appendChild(nameContainer);
+      ioItem.appendChild(quantitySpan);
+      ioItem.appendChild(unitSpan);
+      ioItem.appendChild(typeSpan);
+      ioItem.appendChild(deleteButton);
+      
+      ioList.appendChild(ioItem);
       
       // Update step meta
       updateStepMeta(button.closest('.step-card'));
+    };
+    
+    // ============================================================
+    // ADD INPUT FROM PREVIOUS OUTPUT
+    // ============================================================
+    window.addInputFromPreviousOutput = async function(button) {
+      const ioSection = button.closest('.io-section');
+      const ioList = ioSection.querySelector('.io-list');
+      const stepCard = button.closest('.step-card');
+      
+      // Remove "No inputs defined" message if present
+      const emptyMsg = ioList.querySelector('p');
+      if (emptyMsg && emptyMsg.textContent.includes('No inputs defined')) {
+        emptyMsg.remove();
+      }
+      
+      // Get previous step outputs
+      const previousOutputs = getPreviousStepOutputs(stepCard);
+      
+      if (previousOutputs.length === 0) {
+        showNotification('info', 'No Previous Outputs', 'There are no outputs from previous steps to use as inputs.');
+        return;
+      }
+      
+      const ioItem = document.createElement('div');
+      ioItem.className = 'io-item';
+      ioItem.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;';
+      
+      // Create searchable dropdown for output name
+      const nameContainer = document.createElement('span');
+      nameContainer.className = 'io-item-name';
+      nameContainer.style.flex = '1';
+      
+      // Create unit select
+      const unitSelect = document.createElement('select');
+      unitSelect.className = 'form-select io-unit-input';
+      unitSelect.style.cssText = 'width: 90px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      // Initialize with all units
+      [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
+        const option = document.createElement('option');
+        option.value = unit;
+        option.textContent = unit;
+        unitSelect.appendChild(option);
+      });
+      
+      // Format items for dropdown (add step number prefix for display)
+      const formattedOutputs = previousOutputs.map(output => ({
+        ...output,
+        displayName: `Step ${output.step_number}: ${output.name}`
+      }));
+      
+      const dropdown = createSearchableDropdown(
+        formattedOutputs,
+        (item) => {
+          // When item is selected, update the hidden input, quantity, and unit
+          const hiddenInput = ioItem.querySelector('.io-name-input-hidden');
+          if (hiddenInput) {
+            hiddenInput.value = item.name;
+          }
+          // Set quantity and unit from the output
+          const quantityInput = ioItem.querySelector('.io-quantity-input');
+          if (quantityInput && item.quantity !== null) {
+            quantityInput.value = item.quantity;
+          }
+          // Set unit (show all units but select the output's unit)
+          if (item.unit) {
+            unitSelect.value = item.unit;
+          }
+        },
+        'Select from previous step outputs...',
+        unitSelect
+      );
+      
+      // Add hidden input to store the actual name value
+      const hiddenInput = document.createElement('input');
+      hiddenInput.type = 'hidden';
+      hiddenInput.className = 'io-name-input-hidden';
+      hiddenInput.value = '';
+      
+      nameContainer.appendChild(dropdown);
+      nameContainer.appendChild(hiddenInput);
+      
+      // Quantity input
+      const quantitySpan = document.createElement('span');
+      quantitySpan.className = 'io-item-quantity';
+      const quantityInput = document.createElement('input');
+      quantityInput.type = 'number';
+      quantityInput.className = 'form-input io-quantity-input';
+      quantityInput.placeholder = '0';
+      quantityInput.style.cssText = 'width: 80px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      quantitySpan.appendChild(quantityInput);
+      
+      // Unit select
+      const unitSpan = document.createElement('span');
+      unitSpan.className = 'io-item-unit';
+      unitSpan.appendChild(unitSelect);
+      
+      // Type select
+      const typeSpan = document.createElement('span');
+      typeSpan.className = 'io-item-type';
+      typeSpan.style.position = 'relative';
+      const typeSelect = document.createElement('select');
+      typeSelect.className = 'form-select io-type-input';
+      typeSelect.style.cssText = 'width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      ['variable', 'static'].forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        typeSelect.appendChild(option);
+      });
+      typeSpan.appendChild(typeSelect);
+      
+      // Tooltip icon
+      const tooltipIcon = document.createElement('span');
+      tooltipIcon.className = 'tooltip-icon';
+      tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
+      tooltipIcon.title = 'Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.';
+      tooltipIcon.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+      `;
+      typeSpan.appendChild(tooltipIcon);
+      
+      // Delete button
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'btn btn-ghost btn-icon btn-sm';
+      deleteButton.style.cssText = 'padding: 4px;';
+      deleteButton.onclick = function() {
+        ioItem.remove();
+        updateStepMeta(stepCard);
+        if (ioList.querySelectorAll('.io-item').length === 0) {
+          const emptyMsg = document.createElement('p');
+          emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;';
+          emptyMsg.textContent = 'No inputs defined';
+          ioList.appendChild(emptyMsg);
+        }
+      };
+      deleteButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      `;
+      
+      // Assemble the item
+      ioItem.appendChild(nameContainer);
+      ioItem.appendChild(quantitySpan);
+      ioItem.appendChild(unitSpan);
+      ioItem.appendChild(typeSpan);
+      ioItem.appendChild(deleteButton);
+      
+      ioList.appendChild(ioItem);
+      updateStepMeta(stepCard);
+    };
+    
+    // ============================================================
+    // ADD NEW INPUT (manual entry)
+    // ============================================================
+    window.addNewInput = function(button) {
+      const ioSection = button.closest('.io-section');
+      const ioList = ioSection.querySelector('.io-list');
+      const stepCard = button.closest('.step-card');
+      
+      // Remove "No inputs defined" message if present
+      const emptyMsg = ioList.querySelector('p');
+      if (emptyMsg && emptyMsg.textContent.includes('No inputs defined')) {
+        emptyMsg.remove();
+      }
+      
+      const ioItem = document.createElement('div');
+      ioItem.className = 'io-item';
+      ioItem.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;';
+      
+      // Name input (regular text input, no dropdown)
+      const nameContainer = document.createElement('span');
+      nameContainer.className = 'io-item-name';
+      nameContainer.style.flex = '1';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'form-input io-name-input';
+      nameInput.placeholder = 'Enter input name';
+      nameInput.style.cssText = 'width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      nameContainer.appendChild(nameInput);
+      
+      // Quantity input
+      const quantitySpan = document.createElement('span');
+      quantitySpan.className = 'io-item-quantity';
+      const quantityInput = document.createElement('input');
+      quantityInput.type = 'number';
+      quantityInput.className = 'form-input io-quantity-input';
+      quantityInput.placeholder = '0';
+      quantityInput.style.cssText = 'width: 80px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      quantitySpan.appendChild(quantityInput);
+      
+      // Unit select (all units available)
+      const unitSpan = document.createElement('span');
+      unitSpan.className = 'io-item-unit';
+      const unitSelect = document.createElement('select');
+      unitSelect.className = 'form-select io-unit-input';
+      unitSelect.style.cssText = 'width: 90px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
+        const option = document.createElement('option');
+        option.value = unit;
+        option.textContent = unit;
+        unitSelect.appendChild(option);
+      });
+      unitSpan.appendChild(unitSelect);
+      
+      // Type select
+      const typeSpan = document.createElement('span');
+      typeSpan.className = 'io-item-type';
+      typeSpan.style.position = 'relative';
+      const typeSelect = document.createElement('select');
+      typeSelect.className = 'form-select io-type-input';
+      typeSelect.style.cssText = 'width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      ['variable', 'static'].forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        typeSelect.appendChild(option);
+      });
+      typeSpan.appendChild(typeSelect);
+      
+      // Tooltip icon
+      const tooltipIcon = document.createElement('span');
+      tooltipIcon.className = 'tooltip-icon';
+      tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
+      tooltipIcon.title = 'Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.';
+      tooltipIcon.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+      `;
+      typeSpan.appendChild(tooltipIcon);
+      
+      // Delete button
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'btn btn-ghost btn-icon btn-sm';
+      deleteButton.style.cssText = 'padding: 4px;';
+      deleteButton.onclick = function() {
+        ioItem.remove();
+        updateStepMeta(stepCard);
+        if (ioList.querySelectorAll('.io-item').length === 0) {
+          const emptyMsg = document.createElement('p');
+          emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;';
+          emptyMsg.textContent = 'No inputs defined';
+          ioList.appendChild(emptyMsg);
+        }
+      };
+      deleteButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      `;
+      
+      // Assemble the item
+      ioItem.appendChild(nameContainer);
+      ioItem.appendChild(quantitySpan);
+      ioItem.appendChild(unitSpan);
+      ioItem.appendChild(typeSpan);
+      ioItem.appendChild(deleteButton);
+      
+      ioList.appendChild(ioItem);
+      updateStepMeta(stepCard);
     };
     
     window.addOutput = function(button) {
@@ -1028,7 +2269,7 @@
     // ============================================================
     window.saveStep = async function(stepCard) {
       if (!stepCard || !processId) {
-        alert('Cannot save step: Process ID is missing');
+        showNotification('error', 'Error', 'Cannot save step: Process ID is missing');
         return;
       }
       
@@ -1037,18 +2278,51 @@
       const stepDescriptionInput = stepCard.querySelector('.step-description-input');
       
       if (!stepNameInput || !stepNameInput.value.trim()) {
-        alert('Please enter a step name');
+        showNotification('error', 'Validation Error', 'Please enter a step name');
         return;
       }
       
       const stepName = stepNameInput.value.trim();
       const stepDescription = stepDescriptionInput ? stepDescriptionInput.value.trim() : '';
       
-      // Collect inputs
-      const inputItems = stepCard.querySelectorAll('.io-section:first-of-type .io-item');
+      // Collect inputs and outputs - find all io-sections once
+      const allIOSections = stepCard.querySelectorAll('.io-section');
+      
+      // Get inputs from the first io-section
+      let inputItems = [];
+      if (allIOSections.length > 0) {
+        const firstIOSection = allIOSections[0];
+        inputItems = firstIOSection.querySelectorAll('.io-item');
+      }
+      
       const inputs = [];
       inputItems.forEach(item => {
-        const name = item.querySelector('.io-name-input')?.value?.trim();
+        // Check for dropdown input value first (what user sees/types), then hidden input, then regular input
+        const dropdownInput = item.querySelector('.searchable-dropdown-input');
+        const hiddenInput = item.querySelector('.io-name-input-hidden');
+        const regularInput = item.querySelector('.io-name-input:not(.searchable-dropdown-input)');
+        
+        // Get the name - prioritize visible dropdown input, then hidden input, then regular input
+        // Always read from dropdown input first since that's what the user sees and types in
+        let name = '';
+        if (dropdownInput) {
+          name = dropdownInput.value?.trim() || '';
+          // Sync hidden input with dropdown input value
+          if (hiddenInput && name) {
+            hiddenInput.value = name;
+          }
+        }
+        
+        // Fallback to hidden input if dropdown is empty
+        if (!name && hiddenInput && hiddenInput.value) {
+          name = hiddenInput.value.trim();
+        }
+        
+        // Fallback to regular input if both are empty
+        if (!name && regularInput && regularInput.value) {
+          name = regularInput.value.trim();
+        }
+        
         const quantity = item.querySelector('.io-quantity-input')?.value;
         const unit = item.querySelector('.io-unit-input')?.value;
         const typeSelect = item.querySelector('.io-type-input');
@@ -1064,8 +2338,13 @@
         }
       });
       
-      // Collect outputs
-      const outputItems = stepCard.querySelectorAll('.io-section:last-of-type .io-item');
+      // Get outputs from the last io-section
+      let outputItems = [];
+      if (allIOSections.length > 1) {
+        const lastIOSection = allIOSections[allIOSections.length - 1];
+        outputItems = lastIOSection.querySelectorAll('.io-item');
+      }
+      
       const outputs = [];
       outputItems.forEach(item => {
         const name = item.querySelector('.io-name-input')?.value?.trim();
@@ -1090,27 +2369,23 @@
       
       try {
         let result;
+        const stepData = {
+          step_number: stepNumber,
+          name: stepName,
+          description: stepDescription,
+          inputs: inputs || [],
+          outputs: outputs || []
+        };
+        
         if (stepId && stepId.startsWith('step-new-')) {
           // This is a new step, create it
-          result = await CoreAPI.createStep(processId, {
-            step_number: stepNumber,
-            name: stepName,
-            description: stepDescription,
-            inputs: inputs,
-            outputs: outputs
-          });
+          result = await CoreAPI.createStep(processId, stepData);
           
           // Update the step card with the real ID
           stepCard.setAttribute('data-step-id', result.id);
         } else {
           // This is an existing step, update it
-          result = await CoreAPI.updateStep(processId, stepId, {
-            step_number: stepNumber,
-            name: stepName,
-            description: stepDescription,
-            inputs: inputs,
-            outputs: outputs
-          });
+          result = await CoreAPI.updateStep(processId, stepId, stepData);
         }
         
         // Update the step header with saved data
@@ -1119,14 +2394,20 @@
         if (stepNameEl) stepNameEl.textContent = stepName;
         if (stepDescriptionEl) stepDescriptionEl.textContent = stepDescription;
         
-        alert('Step saved successfully!');
+        showNotification('success', 'Step Saved', `Step "${stepName}" has been saved successfully.`);
         
         // Reload process data to get updated step list
         await loadProcessData();
         
+        // Update button visibility after reload (with a small delay to ensure DOM is updated)
+        setTimeout(() => updateFromOutputButtonVisibility(), 100);
+        
+        // Update button visibility after reload
+        updateFromOutputButtonVisibility();
+        
       } catch (error) {
         console.error('Failed to save step:', error);
-        alert(error.message || 'Failed to save step. Please try again.');
+        showNotification('error', 'Failed to Save Step', error.message || 'Failed to save step. Please try again.');
       }
     };
     
@@ -1135,16 +2416,17 @@
     // ============================================================
     window.deleteStep = async function(stepCard) {
       if (!stepCard || !processId) {
-        alert('Cannot delete step: Process ID is missing');
+        showNotification('error', 'Error', 'Cannot delete step: Process ID is missing');
         return;
       }
       
       const stepId = stepCard.getAttribute('data-step-id');
+      const stepName = stepCard.querySelector('.step-name')?.textContent || 'this step';
       
       // Check if this is a new step (not saved yet)
       if (!stepId || stepId.startsWith('step-new-')) {
         // Just remove from DOM
-        if (confirm('Are you sure you want to delete this step?')) {
+        if (confirm(`Are you sure you want to delete "${stepName}"?`)) {
           stepCard.remove();
           updateStepCount();
         }
@@ -1152,7 +2434,7 @@
       }
       
       // Confirm deletion
-      if (!confirm('Are you sure you want to delete this step? This action cannot be undone.')) {
+      if (!confirm(`Are you sure you want to delete "${stepName}"? This action cannot be undone.`)) {
         return;
       }
       
@@ -1163,14 +2445,14 @@
         stepCard.remove();
         updateStepCount();
         
-        alert('Step deleted successfully!');
+        showNotification('success', 'Step Deleted', `Step "${stepName}" has been deleted successfully.`);
         
         // Reload process data
         await loadProcessData();
         
       } catch (error) {
         console.error('Failed to delete step:', error);
-        alert(error.message || 'Failed to delete step. Please try again.');
+        showNotification('error', 'Failed to Delete Step', error.message || 'Failed to delete step. Please try again.');
       }
     };
     
@@ -1179,31 +2461,93 @@
       const stepCountText = document.getElementById('step-count-text');
       if (stepCountText && stepsContainer) {
         const totalSteps = stepsContainer.querySelectorAll('.step-card').length;
-        stepCountText.textContent = `${totalSteps} step${totalSteps !== 1 ? 's' : ''} in this process`;
+        if (totalSteps === 0) {
+          // Don't update the innerHTML here as it might clear content unnecessarily
+          // The empty state will be handled by renderSteps
+          stepCountText.textContent = '0 steps in this process';
+        } else {
+          stepCountText.textContent = `${totalSteps} step${totalSteps !== 1 ? 's' : ''} in this process`;
+        }
       }
     }
     
     // ============================================================
-    // ADD STEP FORM HANDLER
+    // ADD STEP FORM HANDLER (with optimistic loading)
     // ============================================================
     window.createStepFromForm = function(form) {
       const formData = new FormData(form);
-      const stepName = formData.get('stepName');
-      const stepDescription = formData.get('stepDescription') || '';
+      const stepName = formData.get('stepName')?.trim();
+      const stepDescription = formData.get('stepDescription')?.trim() || '';
       
-      if (!stepName || stepName.trim() === '') {
-        alert('Please enter a step name');
+      if (!stepName) {
+        showNotification('error', 'Validation Error', 'Please enter a step name');
         return false;
       }
       
-      // Create the step with form data
-      window.addNewStep(stepName.trim(), stepDescription.trim());
+      if (!processId) {
+        showNotification('error', 'Error', 'Process ID is missing');
+        return false;
+      }
       
-      // Close modal
-      window.closeModal('add-step-modal');
+      // Calculate step number
+      const stepsContainer = document.getElementById('steps-container');
+      const stepCount = stepsContainer ? stepsContainer.querySelectorAll('.step-card').length + 1 : 1;
       
-      // Reset form
+      const tempId = `temp-step-${Date.now()}`;
+      
+      const optimisticStep = {
+        id: tempId,
+        step_number: stepCount,
+        name: stepName,
+        description: stepDescription,
+        inputs: [],
+        outputs: [],
+        created_at: new Date().toISOString(),
+        __optimistic: true,
+      };
+      
+      // Close modal immediately
+      const modal = document.getElementById('add-step-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
       form.reset();
+      
+      // Render immediately
+      prependStepCard(optimisticStep);
+      
+      // Persist asynchronously
+      (async () => {
+        try {
+          const saved = await CoreAPI.createStep(processId, {
+            step_number: stepCount,
+            name: stepName,
+            description: stepDescription,
+            inputs: [],
+            outputs: []
+          });
+          
+          replaceOptimisticStep(tempId, saved);
+          
+          // Reload process data to update step count
+          await loadProcessData();
+          
+          showNotification(
+            'success',
+            'Step Created',
+            `Step "${stepName}" has been created successfully.`
+          );
+        } catch (error) {
+          removeOptimisticStep(tempId);
+          
+          showNotification(
+            'error',
+            'Failed to Create Step',
+            error.message || 'Failed to create step. Please try again.'
+          );
+        }
+      })();
       
       return false; // Prevent form submission
     };
@@ -1324,5 +2668,43 @@
       </form>
     </div>
   </div>
+  
+  <!-- Notification Toast (auto-dismissing) -->
+  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 1000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
+    <div class="card" style="padding: 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12)); border: 1px solid var(--border-light, #e5e7eb);">
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div id="notification-icon" style="flex-shrink: 0; margin-top: 2px;">
+          <!-- Icon will be set by JavaScript -->
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
+          <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
+        </div>
+        <button onclick="closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <style>
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    #notification-modal {
+      animation: slideInRight 0.3s ease-out;
+    }
+  </style>
 </body>
 </html>
