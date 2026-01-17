@@ -128,6 +128,19 @@ const CoreAPI = {
         });
     },
     
+    async updateInventoryItem(itemId, data) {
+        return this.request(`/inventory/${itemId}`, {
+            method: 'PUT',
+            body: data,
+        });
+    },
+    
+    async deleteInventoryItem(itemId) {
+        return this.request(`/inventory/${itemId}`, {
+            method: 'DELETE',
+        });
+    },
+    
     // Metrics
     async getMetrics() {
         return this.request('/metrics');
