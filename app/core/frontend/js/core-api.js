@@ -47,6 +47,19 @@ const CoreAPI = {
         });
     },
     
+    async updateProcess(processId, data) {
+        return this.request(`/processes/${processId}`, {
+            method: 'PUT',
+            body: data,
+        });
+    },
+    
+    async deleteProcess(processId) {
+        return this.request(`/processes/${processId}`, {
+            method: 'DELETE',
+        });
+    },
+    
     async addStep(processId, stepData) {
         return this.request(`/processes/${processId}/steps`, {
             method: 'POST',
@@ -112,6 +125,19 @@ const CoreAPI = {
         return this.request('/inventory', {
             method: 'POST',
             body: data,
+        });
+    },
+    
+    async updateInventoryItem(itemId, data) {
+        return this.request(`/inventory/${itemId}`, {
+            method: 'PUT',
+            body: data,
+        });
+    },
+    
+    async deleteInventoryItem(itemId) {
+        return this.request(`/inventory/${itemId}`, {
+            method: 'DELETE',
         });
     },
     

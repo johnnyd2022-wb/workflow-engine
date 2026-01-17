@@ -9,6 +9,27 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .btn-icon-small {
+      padding: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary, #6b7280);
+      cursor: pointer;
+      border-radius: var(--radius-md, 6px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .btn-icon-small:hover {
+      background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+      color: var(--text-primary, #111827);
+    }
+    .btn-icon-small svg {
+      display: block;
+    }
+  </style>
 </head>
 <body>
   <div class="app-layout">
@@ -49,13 +70,6 @@
               <h1 class="page-title">Process Hub</h1>
               <p class="page-subtitle">Manage and monitor all your operational workflows</p>
             </div>
-            <button class="btn btn-primary" data-modal-open="create-process-modal">
-              <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Create New Process
-            </button>
           </div>
           
           <!-- Metrics Grid -->
@@ -125,9 +139,12 @@
           
           <!-- Inventory Section -->
           <section class="card">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-              <h2 class="card-title">Inventory</h2>
-              <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h2 class="card-title">Inventory</h2>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Monitor your inventory with real-time visibility across your entire supply chain.</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" style="margin-top: 0;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"/>
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -143,10 +160,26 @@
           </section>
           
           <!-- Processes Section -->
-          <h2 class="section-title mt-6">Process summary</h2>
-          <div class="processes-grid" id="processes-grid">
-            <!-- Processes will be loaded dynamically from backend -->
-          </div>
+          <section class="card" style="margin-top: 32px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h2 class="card-title">Processes</h2>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Create your custom processes to gain real-time operational insights into batch production.</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-modal-open="create-process-modal" style="margin-top: 0;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Create New Process
+              </button>
+            </div>
+            <div class="card-content">
+              <div class="processes-grid" id="processes-grid">
+                <!-- Processes will be loaded dynamically from backend -->
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     </div>
@@ -157,6 +190,71 @@
   <script src="{{ url_for('core.serve_core_js', filename='core.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script>
+    // Global variable for notification timeout
+    let notificationTimeout = null;
+    
+    // Define showNotification FIRST so overrides can use it immediately
+    // Auto-dismissing toast notification
+    window.showNotification = function(type, title, message) {
+      const modal = document.getElementById('notification-modal');
+      if (!modal) {
+        console.log(`${type}: ${title} - ${message}`);
+        return;
+      }
+      
+      // Clear any existing timeout
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+      
+      const titleEl = document.getElementById('notification-title');
+      const messageEl = document.getElementById('notification-message');
+      const iconEl = document.getElementById('notification-icon');
+      
+      if (titleEl) titleEl.textContent = title;
+      if (messageEl) messageEl.textContent = message;
+      
+      // Set icon and colors based on type
+      if (type === 'success' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--success, #10b981)';
+      } else if (type === 'error' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--error, #ef4444)';
+      }
+      
+      // Show notification
+      modal.style.display = 'flex';
+      // Don't block body overflow - allow user to see the page
+      
+      // Auto-dismiss after 3.5 seconds
+      notificationTimeout = setTimeout(() => {
+        closeNotification();
+      }, 3500);
+    };
+    
+    // Immediately override showSuccess and showError from core.js
+    // This must happen synchronously right after core.js loads, before DOMContentLoaded
+    window.showSuccess = function(message) {
+      window.showNotification('success', 'Success', message);
+    };
+    
+    window.showError = function(message) {
+      window.showNotification('error', 'Error', message);
+    };
+    
     // Initialize account info component
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function() {
@@ -191,7 +289,11 @@
       processGrid.innerHTML = '';
       
       if (!processes || processes.length === 0) {
-        processGrid.innerHTML = '<div class="empty-state"><p class="empty-state-description">No processes yet. Create your first process to get started.</p></div>';
+        processGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
+            <p style="color: var(--text-secondary);">No processes yet. Create your first process to get started.</p>
+          </div>
+        `;
         return;
       }
       
@@ -201,10 +303,44 @@
       });
     }
     
-    function createProcessCardV2(process) {
+    // Optimistic rendering helpers
+    function prependProcessCardV2(process) {
+      const grid = document.getElementById('processes-grid');
+      if (!grid) return;
+
+      // Clear empty state message if present
+      if (grid.innerHTML.includes('No processes yet')) {
+        grid.innerHTML = '';
+      }
+
+      const card = renderSingleProcessCardV2(process);
+      card.dataset.processId = process.id;
+
+      if (process.__optimistic) {
+        card.style.opacity = '0.6';
+      }
+
+      grid.prepend(card);
+    }
+
+    function replaceOptimisticProcessV2(tempId, realProcess) {
+      const card = document.querySelector(`[data-process-id="${tempId}"]`);
+      if (!card) return;
+
+      const newCard = renderSingleProcessCardV2(realProcess);
+      newCard.dataset.processId = realProcess.id;
+
+      card.replaceWith(newCard);
+    }
+
+    function removeOptimisticProcessV2(tempId) {
+      const card = document.querySelector(`[data-process-id="${tempId}"]`);
+      if (card) card.remove();
+    }
+    
+    function renderSingleProcessCardV2(process) {
       const card = document.createElement('div');
       card.className = 'card card-interactive process-card';
-      card.onclick = () => navigateToProcess(process.id);
       
       const categoryBadgeClass = {
         'manufacturing': 'default',
@@ -216,14 +352,28 @@
       
       card.innerHTML = `
         <div class="process-card-header">
-          <div class="process-card-header-content">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="navigateToProcess('${process.id}')">
             <h3 class="process-title">${escapeHtml(process.name)}</h3>
             <p class="process-description">${escapeHtml(process.description || '')}</p>
           </div>
-          <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12"/>
-            <polyline points="12 5 19 12 12 19"/>
-          </svg>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditProcessModal('${process.id}')" title="Edit process">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteConfirmation('${process.id}', '${escapeHtml(process.name)}')" title="Delete process">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer;" onclick="navigateToProcess('${process.id}')">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </div>
         </div>
         <div class="process-card-footer">
           <span class="process-badge ${categoryBadgeClass}">${process.step_count || 0} steps</span>
@@ -240,6 +390,10 @@
       `;
       
       return card;
+    }
+    
+    function createProcessCardV2(process) {
+      return renderSingleProcessCardV2(process);
     }
     
     function escapeHtml(text) {
@@ -292,28 +446,29 @@
         }
       });
       
-      // Render each category card
-      if (grouped.raw_material.length > 0) {
+      // If raw materials exist, show all three categories (even if empty) to help users understand the lifecycle
+      const hasRawMaterials = grouped.raw_material.length > 0;
+      
+      // Always show raw materials if they exist
+      if (hasRawMaterials) {
         inventoryGrid.appendChild(createInventoryCategoryCard('raw', grouped.raw_material));
-      }
-      if (grouped.work_in_progress.length > 0) {
+        // Also show intermediate and final product categories even if empty
         inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
-      }
-      if (grouped.final_product.length > 0) {
         inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
+      } else {
+        // Only show categories that have items if no raw materials exist
+        if (grouped.work_in_progress.length > 0) {
+          inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
+        }
+        if (grouped.final_product.length > 0) {
+          inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
+        }
       }
     }
     
     function createInventoryCategoryCard(type, items) {
       const card = document.createElement('div');
       card.className = `inventory-category-card ${type}`;
-      
-      // Store all items in a data attribute for later use
-      card.setAttribute('data-all-items', JSON.stringify(items));
-      card.setAttribute('data-is-expanded', 'false');
-      
-      const displayItems = items.slice(0, 3);
-      const remaining = items.length - 3;
       
       // Icon SVG based on type
       let iconSvg = '';
@@ -329,28 +484,33 @@
       
       const itemsContainer = document.createElement('div');
       itemsContainer.className = 'inventory-category-items';
+      itemsContainer.style.display = 'flex';
+      itemsContainer.style.flexDirection = 'column';
+      itemsContainer.style.gap = '12px';
       
-      // Render initial items
-      displayItems.forEach(item => {
-        const itemEl = document.createElement('p');
-        itemEl.className = 'inventory-category-item';
-        itemEl.textContent = `${escapeHtml(item.name)}: ${item.quantity || '0'} ${item.unit || ''}`;
-        itemsContainer.appendChild(itemEl);
-      });
-      
-      // Add "more" button if there are remaining items
-      if (remaining > 0) {
-        const moreButton = document.createElement('p');
-        moreButton.className = 'inventory-category-more';
-        moreButton.style.cursor = 'pointer';
-        moreButton.style.color = 'var(--primary)';
-        moreButton.style.fontWeight = '500';
-        moreButton.textContent = `+${remaining} more`;
-        moreButton.onclick = function(e) {
-          e.stopPropagation();
-          toggleInventoryItems(card);
-        };
-        itemsContainer.appendChild(moreButton);
+      // Render all items as individual cards, or show empty state
+      if (items.length > 0) {
+        items.forEach(item => {
+          const itemCard = createInventoryItemCardV2(item);
+          itemsContainer.appendChild(itemCard);
+        });
+      } else {
+        // Show empty state message for empty categories
+        const emptyMessage = document.createElement('div');
+        emptyMessage.style.padding = '16px';
+        emptyMessage.style.textAlign = 'center';
+        emptyMessage.style.color = 'var(--text-secondary, #6b7280)';
+        emptyMessage.style.fontSize = '14px';
+        
+        if (type === 'intermediate') {
+          emptyMessage.textContent = 'Work in progress products will appear here until all process steps are completed';
+        } else if (type === 'final') {
+          emptyMessage.innerHTML = 'Final products in stock will appear here when all process steps are completed';
+        } else {
+          emptyMessage.textContent = 'No items yet';
+        }
+        
+        itemsContainer.appendChild(emptyMessage);
       }
       
       card.innerHTML = `
@@ -368,68 +528,191 @@
       return card;
     }
     
-    function toggleInventoryItems(card) {
-      const isExpanded = card.getAttribute('data-is-expanded') === 'true';
-      const allItems = JSON.parse(card.getAttribute('data-all-items') || '[]');
-      const itemsContainer = card.querySelector('.inventory-category-items');
+    function createInventoryItemCardV2(item) {
+      const card = document.createElement('div');
+      card.className = 'card card-interactive process-card';
+      card.dataset.inventoryId = item.id;
+      card.dataset.isExpanded = 'false';
+      card.style.marginBottom = '0';
       
-      if (!itemsContainer) return;
+      const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' : 
+                       item.inventory_type === 'work_in_progress' ? 'Work in Progress' : 
+                       'Final Product';
+      
+      // Format dates
+      const formatDate = (dateStr) => {
+        if (!dateStr) return 'N/A';
+        try {
+          const date = new Date(dateStr);
+          return date.toLocaleDateString();
+        } catch {
+          return dateStr;
+        }
+      };
+      
+      card.innerHTML = `
+        <div class="process-card-header">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="toggleInventoryItemDetails('${item.id}')">
+            <h3 class="process-title">${escapeHtml(item.name)}</h3>
+            <p class="process-description">${item.quantity || '0'} ${item.unit || ''}</p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditInventoryModal('${item.id}')" title="Edit inventory item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteInventoryConfirmation('${item.id}', '${escapeHtml(item.name)}')" title="Delete inventory item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" onclick="toggleInventoryItemDetails('${item.id}')" id="arrow-${item.id}">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </div>
+        </div>
+        <div class="inventory-item-details" id="details-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px;">
+            <div>
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Quantity</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${item.quantity || '0'} ${item.unit || ''}</p>
+            </div>
+            <div>
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Inventory Type</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${typeLabel}</p>
+            </div>
+            ${item.supplier ? `
+            <div>
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Supplier</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${escapeHtml(item.supplier)}</p>
+            </div>
+            ` : ''}
+            ${item.purchase_date ? `
+            <div>
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Purchase Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.purchase_date)}</p>
+            </div>
+            ` : ''}
+            ${item.supplier_batch_number ? `
+            <div>
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Batch Number</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${escapeHtml(item.supplier_batch_number)}</p>
+            </div>
+            ` : ''}
+            ${item.expiry_date ? `
+            <div>
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Expiry Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.expiry_date)}</p>
+            </div>
+            ` : ''}
+            ${item.created_at ? `
+            <div>
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Created</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.created_at)}</p>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+      
+      return card;
+    }
+    
+    function toggleInventoryItemDetails(itemId) {
+      const card = document.querySelector(`[data-inventory-id="${itemId}"]`);
+      if (!card) return;
+      
+      const details = document.getElementById(`details-${itemId}`);
+      const arrow = document.getElementById(`arrow-${itemId}`);
+      const isExpanded = card.dataset.isExpanded === 'true';
       
       if (isExpanded) {
-        // Collapse: show only first 3 items
-        const displayItems = allItems.slice(0, 3);
-        const remaining = allItems.length - 3;
-        
-        itemsContainer.innerHTML = '';
-        
-        displayItems.forEach(item => {
-          const itemEl = document.createElement('p');
-          itemEl.className = 'inventory-category-item';
-          itemEl.textContent = `${escapeHtml(item.name)}: ${item.quantity || '0'} ${item.unit || ''}`;
-          itemsContainer.appendChild(itemEl);
-        });
-        
-        if (remaining > 0) {
-          const moreButton = document.createElement('p');
-          moreButton.className = 'inventory-category-more';
-          moreButton.style.cursor = 'pointer';
-          moreButton.style.color = 'var(--primary)';
-          moreButton.style.fontWeight = '500';
-          moreButton.textContent = `+${remaining} more`;
-          moreButton.onclick = function(e) {
-            e.stopPropagation();
-            toggleInventoryItems(card);
-          };
-          itemsContainer.appendChild(moreButton);
-        }
-        
-        card.setAttribute('data-is-expanded', 'false');
+        details.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+        card.dataset.isExpanded = 'false';
       } else {
-        // Expand: show all items
-        itemsContainer.innerHTML = '';
-        
-        allItems.forEach(item => {
-          const itemEl = document.createElement('p');
-          itemEl.className = 'inventory-category-item';
-          itemEl.textContent = `${escapeHtml(item.name)}: ${item.quantity || '0'} ${item.unit || ''}`;
-          itemsContainer.appendChild(itemEl);
-        });
-        
-        // Add "show less" button
-        const lessButton = document.createElement('p');
-        lessButton.className = 'inventory-category-more';
-        lessButton.style.cursor = 'pointer';
-        lessButton.style.color = 'var(--primary)';
-        lessButton.style.fontWeight = '500';
-        lessButton.textContent = 'Show less';
-        lessButton.onclick = function(e) {
-          e.stopPropagation();
-          toggleInventoryItems(card);
-        };
-        itemsContainer.appendChild(lessButton);
-        
-        card.setAttribute('data-is-expanded', 'true');
+        details.style.display = 'block';
+        arrow.style.transform = 'rotate(90deg)';
+        card.dataset.isExpanded = 'true';
       }
+    }
+    
+    // Optimistic inventory rendering helpers
+    function prependInventoryItemV2(item) {
+      // Find the raw materials category card
+      const inventoryGrid = document.getElementById('inventory-grid');
+      if (!inventoryGrid) return;
+
+      // Check if raw materials category exists
+      let rawCategoryCard = null;
+      const categoryCards = inventoryGrid.querySelectorAll('.inventory-category-card');
+      categoryCards.forEach(card => {
+        const title = card.querySelector('.inventory-category-title');
+        if (title && title.textContent === 'Raw Materials') {
+          rawCategoryCard = card;
+        }
+      });
+
+      const itemCard = createInventoryItemCardV2(item);
+      itemCard.dataset.inventoryId = item.id;
+
+      if (item.__optimistic) {
+        itemCard.style.opacity = '0.6';
+      }
+
+      if (rawCategoryCard) {
+        // Add to existing raw materials category
+        const itemsContainer = rawCategoryCard.querySelector('.inventory-category-items');
+        if (itemsContainer) {
+          itemsContainer.prepend(itemCard);
+          // Update count
+          const countEl = rawCategoryCard.querySelector('.inventory-category-count');
+          if (countEl) {
+            const currentCount = parseInt(countEl.textContent) || 0;
+            countEl.textContent = `${currentCount + 1} items`;
+          }
+        }
+      } else {
+        // Create new raw materials category card
+        const newCategoryCard = createInventoryCategoryCard('raw', [item]);
+        inventoryGrid.prepend(newCategoryCard);
+      }
+    }
+
+    function replaceOptimisticInventoryV2(tempId, realItem) {
+      const card = document.querySelector(`[data-inventory-id="${tempId}"]`);
+      if (!card) return;
+
+      const newCard = createInventoryItemCardV2(realItem);
+      newCard.dataset.inventoryId = realItem.id;
+
+      card.replaceWith(newCard);
+    }
+
+    function removeOptimisticInventoryV2(tempId) {
+      const card = document.querySelector(`[data-inventory-id="${tempId}"]`);
+      if (!card) return;
+
+      // Find the category card and update count
+      const categoryCard = card.closest('.inventory-category-card');
+      if (categoryCard) {
+        const countEl = categoryCard.querySelector('.inventory-category-count');
+        if (countEl) {
+          const currentCount = parseInt(countEl.textContent) || 0;
+          if (currentCount > 1) {
+            countEl.textContent = `${currentCount - 1} items`;
+          } else {
+            // Remove the entire category card if it's the last item
+            categoryCard.remove();
+          }
+        }
+      }
+
+      card.remove();
     }
     
     // Load dashboard data on page load
@@ -488,10 +771,138 @@
           }
         });
       });
+      
     }
     
-    // Create process handler
-    async function createNewProcess(form) {
+    // Close modal helper function (like flows2.html)
+    window.closeModal = function(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+    };
+    
+    // Attach the Create Process Form Handler Once
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.querySelector('#create-process-modal form');
+      if (!form) return;
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.createNewProcess(this);
+        return false;
+      });
+      
+      // Attach the Add Inventory Form Handler Once
+      const inventoryForm = document.querySelector('#add-inventory-modal form');
+      if (inventoryForm) {
+        inventoryForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.addInventoryItem(this);
+          return false;
+        });
+      }
+    });
+    
+    // Create process handler with optimistic UI
+    window.createNewProcess = function (form) {
+      const formData = new FormData(form);
+      const name = formData.get('name')?.trim();
+      const description = formData.get('description')?.trim() || '';
+      const category = formData.get('category') || 'manufacturing';
+
+      if (!name) {
+        showNotification('error', 'Validation Error', 'Please enter a process name');
+        return false;
+      }
+
+      const tempId = `temp-${Date.now()}`;
+
+      const optimisticProcess = {
+        id: tempId,
+        name,
+        description,
+        category,
+        created_at: new Date().toISOString(),
+        __optimistic: true,
+        step_count: 0,
+        active_executions: 0,
+        completed_executions: 0,
+      };
+
+      // Close modal immediately (like delete does)
+      const modal = document.getElementById('create-process-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+      form.reset();
+
+      // Render immediately
+      prependProcessCardV2(optimisticProcess);
+
+      // Persist asynchronously
+      (async () => {
+        try {
+          const saved = await CoreAPI.createProcess({
+            name,
+            description,
+            category,
+          });
+
+          replaceOptimisticProcessV2(tempId, saved);
+
+          // Update metrics
+          const metrics = await CoreAPI.getMetrics();
+          updateMetricsV2(metrics);
+
+          showNotification(
+            'success',
+            'Process Created',
+            `Process "${name}" has been created successfully.`
+          );
+        } catch (error) {
+          removeOptimisticProcessV2(tempId);
+
+          showNotification(
+            'error',
+            'Failed to Create Process',
+            error.message || 'Failed to create process. Please try again.'
+          );
+        }
+      })();
+
+      return false;
+    };
+    
+    // Edit process handler
+    let currentEditProcessId = null;
+    
+    async function openEditProcessModal(processId) {
+      try {
+        const process = await CoreAPI.getProcess(processId);
+        currentEditProcessId = processId;
+        
+        // Populate form
+        const modal = document.getElementById('edit-process-modal');
+        const form = modal.querySelector('form');
+        form.querySelector('[name="name"]').value = process.name || '';
+        form.querySelector('[name="description"]').value = process.description || '';
+        form.querySelector('[name="category"]').value = process.category || 'manufacturing';
+        
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      } catch (error) {
+        console.error('Failed to load process:', error);
+        showNotification('error', 'Failed to Load Process', error.message || 'Failed to load process. Please try again.');
+      }
+    }
+    
+    async function updateProcess(form) {
       const formData = new FormData(form);
       const data = {
         name: formData.get('name'),
@@ -500,7 +911,7 @@
       };
       
       try {
-        const result = await CoreAPI.createProcess(data);
+        await CoreAPI.updateProcess(currentEditProcessId, data);
         
         // Close modal
         const modal = form.closest('.modal-overlay');
@@ -517,17 +928,208 @@
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
         
+        currentEditProcessId = null;
         form.reset();
         return false;
       } catch (error) {
-        console.error('Failed to create process:', error);
-        alert(error.message || 'Failed to create process. Please try again.');
+        console.error('Failed to update process:', error);
+        showNotification('error', 'Failed to Update Process', error.message || 'Failed to update process. Please try again.');
         return false;
       }
     }
     
-    // Add inventory handler
-    async function addInventoryItem(form) {
+    // Delete process handler
+    let currentDeleteProcessId = null;
+    let currentDeleteProcessName = null;
+    
+    function showDeleteConfirmation(processId, processName) {
+      currentDeleteProcessId = processId;
+      currentDeleteProcessName = processName;
+      const modal = document.getElementById('delete-process-confirmation-modal');
+      const messageEl = modal.querySelector('#delete-confirmation-message');
+      messageEl.textContent = `Are you sure you want to delete "${processName}"? This action cannot be undone.`;
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    
+    async function confirmDeleteProcess() {
+      if (!currentDeleteProcessId) return;
+      
+      try {
+        await CoreAPI.deleteProcess(currentDeleteProcessId);
+        
+        // Close modal
+        const modal = document.getElementById('delete-process-confirmation-modal');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Reload processes
+        const processesData = await CoreAPI.getProcesses();
+        renderProcessesV2(processesData.processes);
+        
+        // Reload metrics
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        
+        currentDeleteProcessId = null;
+        currentDeleteProcessName = null;
+      } catch (error) {
+        console.error('Failed to delete process:', error);
+        showNotification('error', 'Failed to Delete Process', error.message || 'Failed to delete process. Please try again.');
+      }
+    }
+    
+    function cancelDeleteProcess() {
+      const modal = document.getElementById('delete-process-confirmation-modal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      currentDeleteProcessId = null;
+      currentDeleteProcessName = null;
+    }
+    
+    // showNotification is now defined at the top of the script
+    // This is just a reference comment
+    
+    function closeNotification() {
+      const modal = document.getElementById('notification-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+    }
+    
+    // Add inventory handler with optimistic UI
+    window.addInventoryItem = function (form) {
+      const formData = new FormData(form);
+      const name = formData.get('name')?.trim();
+      const quantity = parseFloat(formData.get('quantity'));
+      const unit = formData.get('unit');
+      const supplier = formData.get('supplier')?.trim() || null;
+      const purchaseDate = formData.get('purchaseDate') || null;
+      const batchNumber = formData.get('batchNumber')?.trim() || null;
+      const expiryDate = formData.get('expiryDate') || null;
+
+      if (!name) {
+        showNotification('error', 'Validation Error', 'Please enter an item name');
+        return false;
+      }
+
+      if (!quantity || isNaN(quantity)) {
+        showNotification('error', 'Validation Error', 'Please enter a valid quantity');
+        return false;
+      }
+
+      if (!unit) {
+        showNotification('error', 'Validation Error', 'Please select a unit');
+        return false;
+      }
+
+      const tempId = `temp-inv-${Date.now()}`;
+
+      const optimisticItem = {
+        id: tempId,
+        name,
+        quantity: quantity.toString(),
+        unit,
+        inventory_type: 'raw_material', // Always raw_material for manually added items
+        supplier,
+        purchase_date: purchaseDate,
+        supplier_batch_number: batchNumber,
+        expiry_date: expiryDate,
+        created_at: new Date().toISOString(),
+        __optimistic: true,
+      };
+
+      // Close modal immediately
+      const modal = document.getElementById('add-inventory-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+      form.reset();
+
+      // Render immediately
+      prependInventoryItemV2(optimisticItem);
+
+      // Persist asynchronously
+      (async () => {
+        try {
+          const saved = await CoreAPI.createInventoryItem({
+            name,
+            quantity,
+            unit,
+            inventory_type: 'raw_material', // Always raw_material for manually added items
+            supplier,
+            purchase_date: purchaseDate,
+            supplier_batch_number: batchNumber,
+            expiry_date: expiryDate,
+          });
+
+          replaceOptimisticInventoryV2(tempId, saved);
+
+          // Update metrics
+          const metrics = await CoreAPI.getMetrics();
+          updateMetricsV2(metrics);
+
+          showNotification(
+            'success',
+            'Inventory Item Added',
+            `"${name}" has been added to inventory successfully.`
+          );
+        } catch (error) {
+          removeOptimisticInventoryV2(tempId);
+
+          showNotification(
+            'error',
+            'Failed to Add Inventory Item',
+            error.message || 'Failed to add inventory item. Please try again.'
+          );
+        }
+      })();
+
+      return false;
+    };
+    
+    // Edit inventory handler
+    let currentEditInventoryId = null;
+    
+    async function openEditInventoryModal(itemId) {
+      try {
+        const inventoryData = await CoreAPI.getInventory();
+        const item = inventoryData.inventory_items.find(i => i.id === itemId);
+        
+        if (!item) {
+          showNotification('error', 'Error', 'Inventory item not found');
+          return;
+        }
+        
+        currentEditInventoryId = itemId;
+        
+        // Populate form
+        const modal = document.getElementById('edit-inventory-modal');
+        const form = modal.querySelector('form');
+        form.querySelector('[name="name"]').value = item.name || '';
+        form.querySelector('[name="quantity"]').value = item.quantity || '';
+        form.querySelector('[name="unit"]').value = item.unit || 'kg';
+        form.querySelector('[name="inventoryType"]').value = item.inventory_type || 'raw_material';
+        form.querySelector('[name="supplier"]').value = item.supplier || '';
+        form.querySelector('[name="purchaseDate"]').value = item.purchase_date ? item.purchase_date.split('T')[0] : '';
+        form.querySelector('[name="batchNumber"]').value = item.supplier_batch_number || '';
+        form.querySelector('[name="expiryDate"]').value = item.expiry_date ? item.expiry_date.split('T')[0] : '';
+        
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      } catch (error) {
+        console.error('Failed to load inventory item:', error);
+        showNotification('error', 'Failed to Load Inventory Item', error.message || 'Failed to load inventory item. Please try again.');
+      }
+    }
+    
+    async function updateInventoryItem(form) {
       const formData = new FormData(form);
       const data = {
         name: formData.get('name'),
@@ -541,7 +1143,7 @@
       };
       
       try {
-        await CoreAPI.createInventoryItem(data);
+        await CoreAPI.updateInventoryItem(currentEditInventoryId, data);
         
         // Close modal
         const modal = form.closest('.modal-overlay');
@@ -557,13 +1159,62 @@
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
         
+        currentEditInventoryId = null;
         form.reset();
         return false;
       } catch (error) {
-        console.error('Failed to add inventory item:', error);
-        alert(error.message || 'Failed to add inventory item. Please try again.');
+        console.error('Failed to update inventory item:', error);
+        showNotification('error', 'Failed to Update Inventory Item', error.message || 'Failed to update inventory item. Please try again.');
         return false;
       }
+    }
+    
+    // Delete inventory handler
+    let currentDeleteInventoryId = null;
+    let currentDeleteInventoryName = null;
+    
+    function showDeleteInventoryConfirmation(itemId, itemName) {
+      currentDeleteInventoryId = itemId;
+      currentDeleteInventoryName = itemName;
+      const modal = document.getElementById('delete-inventory-confirmation-modal');
+      const messageEl = modal.querySelector('#delete-inventory-confirmation-message');
+      messageEl.textContent = `Are you sure you want to delete "${itemName}"? This action cannot be undone.`;
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    
+    async function confirmDeleteInventory() {
+      if (!currentDeleteInventoryId) return;
+      
+      try {
+        await CoreAPI.deleteInventoryItem(currentDeleteInventoryId);
+        
+        // Close modal
+        const modal = document.getElementById('delete-inventory-confirmation-modal');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Reload inventory
+        await loadInventoryV2();
+        
+        // Reload metrics
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        
+        currentDeleteInventoryId = null;
+        currentDeleteInventoryName = null;
+      } catch (error) {
+        console.error('Failed to delete inventory item:', error);
+        showNotification('error', 'Failed to Delete Inventory Item', error.message || 'Failed to delete inventory item. Please try again.');
+      }
+    }
+    
+    function cancelDeleteInventory() {
+      const modal = document.getElementById('delete-inventory-confirmation-modal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      currentDeleteInventoryId = null;
+      currentDeleteInventoryName = null;
     }
   </script>
   
@@ -579,7 +1230,7 @@
           </svg>
         </button>
       </div>
-      <form onsubmit="return createNewProcess(this)">
+      <form>
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Process Name</label>
@@ -608,6 +1259,69 @@
     </div>
   </div>
   
+  <!-- Edit Process Modal -->
+  <div class="modal-overlay" id="edit-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Edit Process</h2>
+        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form onsubmit="return updateProcess(this)">
+        <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Process Name</label>
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Assembly Line C">
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Description</label>
+            <input type="text" name="description" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Brief description of the process">
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Category</label>
+            <select name="category" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="manufacturing">Manufacturing</option>
+              <option value="chemical">Chemical</option>
+              <option value="packaging">Packaging</option>
+              <option value="assembly">Assembly</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Process</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Delete Process Confirmation Modal -->
+  <div class="modal-overlay" id="delete-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Process</h2>
+        <button onclick="cancelDeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div style="margin-bottom: 24px;">
+        <p id="delete-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="cancelDeleteProcess()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmDeleteProcess()" style="background: var(--danger, #ef4444);">Delete</button>
+      </div>
+    </div>
+  </div>
+  
   <!-- Add Inventory Modal -->
   <div class="modal-overlay" id="add-inventory-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
     <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
@@ -620,7 +1334,7 @@
           </svg>
         </button>
       </div>
-      <form onsubmit="return addInventoryItem(this)">
+      <form>
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
@@ -642,14 +1356,6 @@
                 <option value="pcs">Pieces</option>
               </select>
             </div>
-          </div>
-          <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Inventory Type</label>
-            <select name="inventoryType" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="raw_material">Raw Material</option>
-              <option value="work_in_progress">Work in Progress</option>
-              <option value="final_product">Final Product</option>
-            </select>
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Supplier (optional)</label>
@@ -677,6 +1383,136 @@
       </form>
     </div>
   </div>
+  
+  <!-- Edit Inventory Modal -->
+  <div class="modal-overlay" id="edit-inventory-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Edit Inventory Item</h2>
+        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form onsubmit="return updateInventoryItem(this)">
+        <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Steel Rods">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity</label>
+              <input type="number" name="quantity" required step="0.01" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="0">
+            </div>
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit</label>
+              <select name="unit" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                <option value="kg">Kilograms (kg)</option>
+                <option value="g">Grams (g)</option>
+                <option value="L">Liters (L)</option>
+                <option value="mL">Milliliters (mL)</option>
+                <option value="units">Units</option>
+                <option value="pcs">Pieces</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Inventory Type</label>
+            <select name="inventoryType" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="raw_material" selected>Raw Material</option>
+              <option value="work_in_progress">Work in Progress</option>
+              <option value="final_product">Final Product</option>
+            </select>
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Supplier (optional)</label>
+            <input type="text" name="supplier" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Supplier name">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Purchase Date (optional)</label>
+              <input type="date" name="purchaseDate" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Batch Number (optional)</label>
+              <input type="text" name="batchNumber" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., BN-2024-001">
+            </div>
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Expiry Date (optional)</label>
+            <input type="date" name="expiryDate" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Inventory Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Delete Inventory Confirmation Modal -->
+  <div class="modal-overlay" id="delete-inventory-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Inventory Item</h2>
+        <button onclick="cancelDeleteInventory()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div style="margin-bottom: 24px;">
+        <p id="delete-inventory-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="cancelDeleteInventory()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmDeleteInventory()" style="background: var(--danger, #ef4444);">Delete</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Notification Toast (auto-dismissing) -->
+  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 1000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
+    <div class="card" style="padding: 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12)); border: 1px solid var(--border-light, #e5e7eb);">
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div id="notification-icon" style="flex-shrink: 0; margin-top: 2px;">
+          <!-- Icon will be set by JavaScript -->
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
+          <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
+        </div>
+        <button onclick="closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <style>
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    #notification-modal {
+      animation: slideInRight 0.3s ease-out;
+    }
+  </style>
   
   <script src="/ui/shared/sidebar-v2.js"></script>
 </body>

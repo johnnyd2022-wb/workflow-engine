@@ -298,33 +298,38 @@ def login():
 
             # If user exists, track failed attempts for account lockout
             if user_by_email:
+                # Extract user ID and org ID before any commits to avoid DetachedInstanceError
+                user_id = user_by_email.id
+                user_org_id = user_by_email.org_id
+
                 # Increment failed login attempts
-                user_repo.increment_failed_login_attempts(user_by_email.id)
+                user_repo.increment_failed_login_attempts(user_id)
                 db.commit()
 
                 # Refresh user to get updated failed_login_attempts count
                 db.refresh(user_by_email)
+                failed_attempts = user_by_email.failed_login_attempts
 
                 # Lock account after 5 failed attempts for 1 minute
-                if user_by_email.failed_login_attempts >= 5:
-                    user_repo.lock_account(user_by_email.id, lockout_duration_minutes=1)
+                if failed_attempts >= 5:
+                    user_repo.lock_account(user_id, lockout_duration_minutes=1)
                     db.commit()
 
                     # Log account lockout event with IP and User-Agent
                     log_action(
                         "account_locked",
                         "user",
-                        user_by_email.id,
+                        user_id,
                         {
                             "ip_address": ip_address,
                             "user_agent": user_agent,
-                            "failed_attempts": user_by_email.failed_login_attempts,
+                            "failed_attempts": failed_attempts,
                         },
-                        user_by_email.org_id,
-                        user_by_email.id,
+                        user_org_id,
+                        user_id,
                     )
                     logger.warning(
-                        f"Account locked for user {user_by_email.id} after 5 failed login attempts "
+                        f"Account locked for user {user_id} after 5 failed login attempts "
                         f"from IP {ip_address} (User-Agent: {user_agent[:50]})"
                     )
 
@@ -332,14 +337,14 @@ def login():
                 log_action(
                     "login_failure",
                     "user",
-                    user_by_email.id,
+                    user_id,
                     {
                         "ip_address": ip_address,
                         "user_agent": user_agent,
-                        "failed_attempts": user_by_email.failed_login_attempts,
+                        "failed_attempts": failed_attempts,
                     },
-                    user_by_email.org_id,
-                    user_by_email.id,
+                    user_org_id,
+                    user_id,
                 )
 
             # Always return the same error message to prevent user enumeration

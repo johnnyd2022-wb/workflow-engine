@@ -237,6 +237,89 @@ def create_process():
         return jsonify({"error": "Failed to create process"}), 500
 
 
+@core_bp.route("/api/core/processes/<process_id>", methods=["PUT"])
+@requires_auth
+def update_process(process_id: str):
+    """Update a process"""
+    org_id = UUID(g.org_id)
+    try:
+        process_uuid = UUID(process_id)
+    except ValueError:
+        return jsonify({"error": "Invalid process ID"}), 400
+
+    data = request.get_json()
+    name = data.get("name")
+    description = data.get("description")
+    category_str = data.get("category")
+
+    category = None
+    if category_str:
+        try:
+            category = ProcessCategory(category_str)
+        except ValueError:
+            return jsonify({"error": f"Invalid category: {category_str}"}), 400
+
+    repo = ProcessRepository(db_session)
+    try:
+        process = repo.update_process(
+            process_id=process_uuid,
+            org_id=org_id,
+            name=name,
+            description=description,
+            category=category,
+        )
+
+        if not process:
+            return jsonify({"error": "Process not found"}), 404
+
+        return (
+            jsonify(
+                {
+                    "id": str(process.id),
+                    "name": process.name,
+                    "description": process.description,
+                    "category": process.category.value if process.category else None,
+                    "created_at": process.created_at.isoformat() if process.created_at else None,
+                }
+            ),
+            200,
+        )
+    except Exception:
+        # Log the full error for debugging but return generic message to client
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error updating process")
+        return jsonify({"error": "Failed to update process"}), 500
+
+
+@core_bp.route("/api/core/processes/<process_id>", methods=["DELETE"])
+@requires_auth
+def delete_process(process_id: str):
+    """Delete a process"""
+    org_id = UUID(g.org_id)
+    try:
+        process_uuid = UUID(process_id)
+    except ValueError:
+        return jsonify({"error": "Invalid process ID"}), 400
+
+    repo = ProcessRepository(db_session)
+    try:
+        success = repo.delete_process(process_id=process_uuid, org_id=org_id)
+
+        if not success:
+            return jsonify({"error": "Process not found"}), 404
+
+        return jsonify({"message": "Process deleted successfully"}), 200
+    except Exception:
+        # Log the full error for debugging but return generic message to client
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error deleting process")
+        return jsonify({"error": "Failed to delete process"}), 500
+
+
 @core_bp.route("/api/core/processes/<process_id>", methods=["GET"])
 @requires_auth
 def get_process(process_id: str):
@@ -782,6 +865,100 @@ def create_inventory_item():
         logger = logging.getLogger(__name__)
         logger.exception("Error creating process")
         return jsonify({"error": "Failed to create process"}), 500
+
+
+@core_bp.route("/api/core/inventory/<item_id>", methods=["PUT"])
+@requires_auth
+def update_inventory_item(item_id):
+    """Update an existing inventory item"""
+    org_id = UUID(g.org_id)
+    data = request.get_json()
+
+    name = data.get("name")
+    quantity = data.get("quantity")
+    unit = data.get("unit")
+    inventory_type = data.get("inventory_type", InventoryType.RAW_MATERIAL.value)
+
+    if not all([name, quantity, unit]):
+        return jsonify({"error": "name, quantity, and unit are required"}), 400
+
+    repo = InventoryRepository(db_session)
+    try:
+        # Parse purchase date if provided
+        purchase_date = None
+        if data.get("purchase_date"):
+            purchase_date = datetime.fromisoformat(data.get("purchase_date").replace("Z", "+00:00")).date()
+
+        expiry_date = None
+        if data.get("expiry_date"):
+            expiry_date = datetime.fromisoformat(data.get("expiry_date").replace("Z", "+00:00")).date()
+
+        # Get existing item
+        item = repo.get_inventory_item_by_id(UUID(item_id), org_id)
+        if not item:
+            return jsonify({"error": "Inventory item not found"}), 404
+
+        # Update item
+        item.name = name
+        item.quantity = str(quantity)
+        item.unit = unit
+        item.inventory_type = inventory_type
+        item.supplier = data.get("supplier")
+        item.purchase_date = purchase_date
+        item.supplier_batch_number = data.get("supplier_batch_number")
+        item.expiry_date = expiry_date
+        if data.get("metadata"):
+            item.extra_data = data.get("metadata")
+
+        db_session.commit()
+        db_session.refresh(item)
+
+        return (
+            jsonify(
+                {
+                    "id": str(item.id),
+                    "name": item.name,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "inventory_type": item.inventory_type,
+                    "supplier": item.supplier,
+                    "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+                    "supplier_batch_number": item.supplier_batch_number,
+                    "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+                    "created_at": item.created_at.isoformat() if item.created_at else None,
+                }
+            ),
+            200,
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error updating inventory item")
+        return jsonify({"error": "Failed to update inventory item"}), 500
+
+
+@core_bp.route("/api/core/inventory/<item_id>", methods=["DELETE"])
+@requires_auth
+def delete_inventory_item(item_id):
+    """Delete an inventory item"""
+    org_id = UUID(g.org_id)
+    repo = InventoryRepository(db_session)
+
+    try:
+        success = repo.delete_inventory_item(UUID(item_id), org_id)
+        if not success:
+            return jsonify({"error": "Inventory item not found"}), 404
+
+        return jsonify({"message": "Inventory item deleted successfully"}), 200
+    except Exception:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception("Error deleting inventory item")
+        return jsonify({"error": "Failed to delete inventory item"}), 500
 
 
 @core_bp.route("/api/core/metrics", methods=["GET"])

@@ -296,12 +296,20 @@ function escapeHtml(text) {
 }
 
 function showSuccess(message) {
-    // Simple alert for now - can be replaced with toast notification
-    alert(message);
+    // Use notification modal if available, otherwise log to console
+    if (typeof window.showNotification === 'function') {
+        window.showNotification('success', 'Success', message);
+    } else {
+        console.log('Success:', message);
+    }
 }
 
 function showError(message) {
-    // Simple alert for now - can be replaced with toast notification
-    alert('Error: ' + message);
+    // Use notification modal if available, otherwise log to console
+    if (typeof window.showNotification === 'function') {
+        window.showNotification('error', 'Error', message);
+    } else {
+        console.error('Error:', message);
+    }
 }
 
