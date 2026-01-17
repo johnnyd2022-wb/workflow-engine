@@ -616,11 +616,68 @@
       
       if (pane && toggle) {
         const isHidden = pane.style.display === 'none' || !pane.style.display;
+        
+        // Find the flex container that holds both input and output panes for this step
+        // Start from the pane's parent (the pane wrapper div) and traverse up
+        let currentElement = pane.parentElement; // The div containing the pane
+        let stepContainer = null;
+        
+        // Look for the flex container (has display: flex)
+        while (currentElement && currentElement !== document.body) {
+          const computedStyle = window.getComputedStyle(currentElement);
+          if (computedStyle.display === 'flex' && currentElement.querySelectorAll('.io-pane-content').length >= 1) {
+            stepContainer = currentElement;
+            break;
+          }
+          currentElement = currentElement.parentElement;
+        }
+        
+        if (stepContainer) {
+          // Get all IO panes and toggles in this specific step's flex container
+          const stepIOPanes = stepContainer.querySelectorAll('.io-pane-content');
+          const stepIOToggles = stepContainer.querySelectorAll('.io-pane-toggle');
+          
+          if (isHidden) {
+            // Expand all IO panes in this step (both inputs and outputs)
+            stepIOPanes.forEach(p => {
+              p.style.display = 'block';
+            });
+            stepIOToggles.forEach(t => {
+              t.style.transform = 'rotate(180deg)';
+            });
+          } else {
+            // Collapse all IO panes in this step
+            stepIOPanes.forEach(p => {
+              p.style.display = 'none';
+            });
+            stepIOToggles.forEach(t => {
+              t.style.transform = 'rotate(0deg)';
+            });
+          }
+        } else {
+          // Fallback to single pane toggle if container not found
+          if (isHidden) {
+            pane.style.display = 'block';
+            toggle.style.transform = 'rotate(180deg)';
+          } else {
+            pane.style.display = 'none';
+            toggle.style.transform = 'rotate(0deg)';
+          }
+        }
+      }
+    };
+    
+    window.toggleCompletedSteps = function(sectionId) {
+      const section = document.getElementById(sectionId);
+      const toggle = document.getElementById(`${sectionId}-toggle`);
+      
+      if (section && toggle) {
+        const isHidden = section.style.display === 'none' || !section.style.display;
         if (isHidden) {
-          pane.style.display = 'block';
+          section.style.display = 'block';
           toggle.style.transform = 'rotate(180deg)';
         } else {
-          pane.style.display = 'none';
+          section.style.display = 'none';
           toggle.style.transform = 'rotate(0deg)';
         }
       }
@@ -758,9 +815,18 @@
             .sort((a, b) => a.step_number - b.step_number);
           
           if (completedSteps.length > 0) {
+            const completedStepsSectionId = `completed-steps-${executionId}`;
             completedStepsHtml = `
               <div class="completed-steps-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; font-weight: 500;">Completed Steps</div>
+                <div class="completed-steps-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; margin-bottom: 12px;" onclick="toggleCompletedSteps('${completedStepsSectionId}')">
+                  <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">Completed Steps (${completedSteps.length})</div>
+                  <div class="completed-steps-toggle" id="${completedStepsSectionId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </div>
+                </div>
+                <div class="completed-steps-content" id="${completedStepsSectionId}" style="display: none;">
                 ${completedSteps.map(es => {
                   const completedDate = es.completed_at ? new Date(es.completed_at).toLocaleString('en-US', {
                     month: 'short',
@@ -869,6 +935,7 @@
                     </div>
                   `;
                 }).join('')}
+                </div>
               </div>
             `;
           }
