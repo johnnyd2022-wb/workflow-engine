@@ -659,9 +659,12 @@ def get_execution(execution_id: str):
                 "status": es.status.value,
                 "actual_inputs": es.actual_inputs or [],
                 "actual_outputs": es.actual_outputs or [],
+                "execution_data": es.execution_data or {},
                 "started_at": es.started_at.isoformat() if es.started_at else None,
                 "completed_at": es.completed_at.isoformat() if es.completed_at else None,
                 "step_name": es.step.name if es.step else None,
+                "step_inputs": es.step.inputs or [] if es.step else [],
+                "step_outputs": es.step.outputs or [] if es.step else [],
             }
         )
 
@@ -695,6 +698,16 @@ def complete_step(execution_id: str, execution_step_id: str):
     actual_inputs = data.get("actual_inputs", [])
     actual_outputs = data.get("actual_outputs", [])
     execution_data = data.get("execution_data", {})
+
+    # Get current user from Flask g and always store in execution_data for accuracy
+    user_email = getattr(g, "user_email", None)
+    if user_email:
+        execution_data["completed_by"] = user_email
+        execution_data["completed_by_email"] = user_email
+        # Also store user_id if available
+        user_id = getattr(g, "user_id", None)
+        if user_id:
+            execution_data["completed_by_user_id"] = str(user_id)
 
     repo = ExecutionRepository(db_session)
     try:
