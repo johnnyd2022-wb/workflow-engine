@@ -22,6 +22,7 @@ from app.core.utils.mock_data import (
     get_mock_processes,
     is_demo_user,
 )
+from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -379,6 +380,7 @@ def get_process(process_id: str):
                 "description": step.description,
                 "inputs": step.inputs or [],
                 "outputs": step.outputs or [],
+                "execution_prompts": step.execution_prompts or [],
             }
         )
 
@@ -423,6 +425,7 @@ def add_step(process_id: str):
         description=data.get("description"),
         inputs=data.get("inputs", []),
         outputs=data.get("outputs", []),
+        execution_prompts=data.get("execution_prompts", []),
     )
 
     if not step:
@@ -437,6 +440,7 @@ def add_step(process_id: str):
                 "description": step.description,
                 "inputs": step.inputs or [],
                 "outputs": step.outputs or [],
+                "execution_prompts": step.execution_prompts or [],
             }
         ),
         201,
@@ -465,6 +469,7 @@ def update_step(process_id: str, step_id: str):
         description=data.get("description"),
         inputs=data.get("inputs"),
         outputs=data.get("outputs"),
+        execution_prompts=data.get("execution_prompts"),
     )
 
     if not step:
@@ -479,6 +484,7 @@ def update_step(process_id: str, step_id: str):
                 "description": step.description,
                 "inputs": step.inputs or [],
                 "outputs": step.outputs or [],
+                "execution_prompts": step.execution_prompts or [],
             }
         ),
         200,
@@ -722,25 +728,151 @@ def complete_step(execution_id: str, execution_step_id: str):
         if not execution_step:
             return jsonify({"error": "Execution step not found"}), 404
 
+        # Refresh execution_step to ensure we have the latest data including execution_data
+        db_session.refresh(execution_step)
+
+        # Consume inventory for variable inputs
+        if actual_inputs:
+            inventory_repo = InventoryRepository(db_session)
+            for input_data in actual_inputs:
+                inventory_item_id = input_data.get("inventory_item_id")
+                quantity_consumed = input_data.get("quantity", 0)
+                consumed_unit = input_data.get("unit", "")
+
+                if inventory_item_id:
+                    try:
+                        inventory_item = inventory_repo.get_inventory_item_by_id(UUID(inventory_item_id), org_id)
+                        if inventory_item:
+                            # Convert consumed quantity to inventory item's unit
+                            current_quantity = float(inventory_item.quantity)
+                            inventory_unit = inventory_item.unit or ""
+
+                            # Check if units are compatible
+                            if consumed_unit and inventory_unit:
+                                if not are_units_compatible(consumed_unit, inventory_unit):
+                                    import logging
+
+                                    logger = logging.getLogger(__name__)
+                                    logger.warning(
+                                        f"Cannot consume {quantity_consumed} {consumed_unit} from inventory "
+                                        f"item {inventory_item_id} with unit {inventory_unit}: units are incompatible"
+                                    )
+                                    continue
+
+                                # Convert consumed quantity to inventory unit
+                                try:
+                                    quantity_consumed_converted = convert_to_inventory_unit(
+                                        float(quantity_consumed), consumed_unit, inventory_unit
+                                    )
+                                except ValueError as conv_error:
+                                    import logging
+
+                                    logger = logging.getLogger(__name__)
+                                    logger.warning(
+                                        f"Failed to convert {quantity_consumed} {consumed_unit} to {inventory_unit}: {conv_error}"
+                                    )
+                                    continue
+                            else:
+                                # If no unit specified, assume same unit (backward compatibility)
+                                quantity_consumed_converted = float(quantity_consumed)
+
+                            # Decrease inventory quantity
+                            new_quantity = max(0, current_quantity - quantity_consumed_converted)
+                            # Format quantity to avoid floating point precision issues
+                            # Always set to exactly "0" string if quantity is effectively zero
+                            if abs(new_quantity) < 0.0001:
+                                inventory_item.quantity = "0"
+                            else:
+                                # Format to remove unnecessary trailing zeros
+                                formatted_qty = (
+                                    str(new_quantity).rstrip("0").rstrip(".")
+                                    if "." in str(new_quantity)
+                                    else str(int(new_quantity))
+                                )
+                                # Ensure we don't end up with "0.0" or "0.00" etc.
+                                if float(formatted_qty) == 0:
+                                    inventory_item.quantity = "0"
+                                else:
+                                    inventory_item.quantity = formatted_qty
+                            # Commit the quantity update immediately
+                            db_session.commit()
+                            # Refresh the item to ensure we have the latest quantity
+                            db_session.refresh(inventory_item)
+                    except Exception as e:
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Failed to consume inventory {inventory_item_id}: {e}")
+
         # Create inventory items for outputs if specified
+        # All non-terminal outputs are stored as intermediate products (WORK_IN_PROGRESS)
+        # Terminal outputs are stored as FINAL_PRODUCT
+        # This provides a live view of stock at any moment
         if actual_outputs:
             inventory_repo = InventoryRepository(db_session)
             for output in actual_outputs:
+                output_quantity = output.get("quantity", 0)
+                # Skip creating inventory items with zero or negative quantity
+                try:
+                    quantity_float = float(output_quantity)
+                    if quantity_float <= 0:
+                        continue
+                except (ValueError, TypeError):
+                    # If quantity is not a valid number, skip this output
+                    continue
+
                 # Determine inventory type based on terminal step detection
                 # Use is_terminal_step field for deterministic detection
+                # Non-terminal steps produce intermediate products (work_in_progress)
+                # Terminal steps produce final products
                 inventory_type = InventoryType.WORK_IN_PROGRESS.value
                 if execution_step.is_terminal_step:
                     inventory_type = InventoryType.FINAL_PRODUCT.value
 
+                # Store execution metadata in extra_data for traceability
+                # This includes execution prompts, variable inputs, and variable outputs
+                # Read from execution_step.execution_data (from DB) so existing entries can be updated
+                extra_data = {}
+                # Get execution_data from the execution_step (read from DB after refresh)
+                step_execution_data = execution_step.execution_data if execution_step.execution_data else {}
+                if step_execution_data:
+                    # Store execution prompts (metadata captured during execution)
+                    # Keep completed_by for user tracing, but filter out email and user_id
+                    execution_prompts = {}
+                    internal_fields = {"completed_by_email", "completed_by_user_id", "completed_at"}
+                    for key, value in step_execution_data.items():
+                        if key not in internal_fields and value is not None and value != "":
+                            execution_prompts[key] = value
+                    if execution_prompts:
+                        extra_data["execution_prompts"] = execution_prompts
+
+                # Store variable inputs used to produce this output
+                # Get actual_inputs from the execution_step (it was stored when the step was completed)
+                step_actual_inputs = execution_step.actual_inputs if execution_step.actual_inputs else []
+                if step_actual_inputs:
+                    extra_data["variable_inputs"] = step_actual_inputs
+
+                # Store variable outputs (for this specific output item)
+                # Only include the output that matches this inventory item
+                output_name = output.get("name", "Unknown")
+                # Get actual_outputs from the execution_step (it was stored when the step was completed)
+                step_actual_outputs = execution_step.actual_outputs if execution_step.actual_outputs else []
+                if step_actual_outputs:
+                    # Find the matching output in actual_outputs
+                    matching_output = next((o for o in step_actual_outputs if o.get("name") == output_name), None)
+                    if matching_output:
+                        extra_data["variable_output"] = matching_output
+
                 inventory_repo.create_inventory_item(
                     org_id=org_id,
                     name=output.get("name", "Unknown"),
-                    quantity=str(output.get("quantity", 0)),
+                    quantity=str(output_quantity),
                     unit=output.get("unit", "units"),
                     inventory_type=inventory_type,
                     source_execution_id=execution_uuid,
                     source_execution_step_id=execution_step_uuid,
                     source_step_name=execution_step.step.name if execution_step.step else None,
+                    extra_data=extra_data if extra_data else None,
                 )
 
         return (
@@ -791,8 +923,219 @@ def list_inventory():
     repo = InventoryRepository(db_session)
     items = repo.list_inventory_items(org_id=org_id, inventory_type=inventory_type, process_id=process_id)
 
+    # Import ExecutionStep and InventoryItem models for lookups
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
+
     result = []
     for item in items:
+        # Filter out items with zero or negative quantity
+        # Handle string quantities like "0", "0.0", etc. more robustly
+        try:
+            qty_str = str(item.quantity).strip() if item.quantity else "0"
+            quantity_float = float(qty_str)
+            # Skip items with zero or negative quantity (including very small numbers)
+            if quantity_float <= 0 or abs(quantity_float) < 0.0001:
+                continue  # Skip this item
+        except (ValueError, TypeError):
+            # If quantity is not a valid number, skip this item
+            continue
+
+        # If extra_data doesn't exist but source_execution_step_id does, look up execution_data from DB
+        # This allows existing inventory items to show metadata
+        extra_data = item.extra_data if item.extra_data else {}
+        if not extra_data.get("execution_prompts") and item.source_execution_step_id:
+            try:
+                execution_step = (
+                    db_session.query(ExecutionStep).filter(ExecutionStep.id == item.source_execution_step_id).first()
+                )
+                if execution_step and execution_step.execution_data:
+                    # Build execution_prompts from execution_data, keeping completed_by for tracing
+                    execution_prompts = {}
+                    internal_fields = {"completed_by_email", "completed_by_user_id", "completed_at"}
+                    for key, value in execution_step.execution_data.items():
+                        if key not in internal_fields and value is not None and value != "":
+                            execution_prompts[key] = value
+                    if execution_prompts:
+                        extra_data["execution_prompts"] = execution_prompts
+
+                    # Also include variable inputs and outputs if not already in extra_data
+                    # This is important for existing items that may not have variable_inputs populated
+                    if not extra_data.get("variable_inputs"):
+                        if execution_step.actual_inputs:
+                            extra_data["variable_inputs"] = execution_step.actual_inputs
+                        else:
+                            # Ensure variable_inputs exists as empty list if not present
+                            extra_data["variable_inputs"] = []
+                    if not extra_data.get("variable_output") and execution_step.actual_outputs:
+                        # Find matching output
+                        output_name = item.name
+                        matching_output = next(
+                            (o for o in execution_step.actual_outputs if o.get("name") == output_name), None
+                        )
+                        if matching_output:
+                            extra_data["variable_output"] = matching_output
+            except Exception:
+                # If lookup fails, just use existing extra_data
+                pass
+
+        # Look up previous steps data for intermediate products AND final products
+        # Traverse the full chain of steps that produced the inputs
+        previous_steps_data = []
+        # Check if this is a WIP or final product that has variable inputs
+        has_variable_inputs = extra_data.get("variable_inputs") and len(extra_data.get("variable_inputs", [])) > 0
+        if (
+            item.inventory_type == InventoryType.WORK_IN_PROGRESS.value
+            or item.inventory_type == InventoryType.FINAL_PRODUCT.value
+        ) and has_variable_inputs:
+            try:
+                # Helper function to recursively trace back through the chain of steps
+                def trace_step_chain(
+                    inventory_item_id, input_name=None, input_quantity=None, input_unit=None, visited_ids=None
+                ):
+                    """Recursively trace back through all steps that produced this inventory item"""
+                    if visited_ids is None:
+                        visited_ids = set()
+
+                    # Prevent infinite loops
+                    if inventory_item_id in visited_ids:
+                        return []
+                    visited_ids.add(inventory_item_id)
+
+                    steps_data = []
+
+                    # Look up the input inventory item
+                    input_inventory_item = (
+                        db_session.query(InventoryItem)
+                        .filter(InventoryItem.id == UUID(inventory_item_id), InventoryItem.org_id == org_id)
+                        .first()
+                    )
+
+                    if not input_inventory_item or not input_inventory_item.source_execution_step_id:
+                        return steps_data
+
+                    # Look up the execution step that produced this input
+                    input_execution_step = (
+                        db_session.query(ExecutionStep)
+                        .filter(ExecutionStep.id == input_inventory_item.source_execution_step_id)
+                        .first()
+                    )
+
+                    if not input_execution_step:
+                        return steps_data
+
+                    # Build step data for this step
+                    step_data = {
+                        "step_name": input_execution_step.step.name if input_execution_step.step else None,
+                        "step_number": input_execution_step.step_number,
+                        "completed_at": input_execution_step.completed_at.isoformat()
+                        if input_execution_step.completed_at
+                        else None,
+                    }
+
+                    # Add input information (what was consumed from the previous step)
+                    if input_name:
+                        step_data["input_name"] = input_name
+                    if input_quantity is not None:
+                        step_data["input_quantity"] = input_quantity
+                    if input_unit:
+                        step_data["input_unit"] = input_unit
+
+                    # Add execution prompts from this step
+                    if input_execution_step.execution_data:
+                        prev_execution_prompts = {}
+                        # Exclude internal fields and completed_by (we display it separately)
+                        internal_fields = {
+                            "completed_by",
+                            "completed_by_email",
+                            "completed_by_user_id",
+                            "completed_at",
+                        }
+                        for key, value in input_execution_step.execution_data.items():
+                            if key not in internal_fields and value is not None and value != "":
+                                prev_execution_prompts[key] = value
+                        if prev_execution_prompts:
+                            step_data["execution_prompts"] = prev_execution_prompts
+                        # Include completed_by for tracing (displayed separately)
+                        if "completed_by" in input_execution_step.execution_data:
+                            step_data["completed_by"] = input_execution_step.execution_data["completed_by"]
+
+                    # Add this step to the list
+                    steps_data.append(step_data)
+
+                    # Now trace back through this step's inputs
+                    if input_execution_step.actual_inputs:
+                        for prev_input_data in input_execution_step.actual_inputs:
+                            prev_inventory_item_id = prev_input_data.get("inventory_item_id")
+                            if prev_inventory_item_id:
+                                # Recursively get steps that produced this input
+                                # Pass the input information so we know what was consumed
+                                prev_steps = trace_step_chain(
+                                    prev_inventory_item_id,
+                                    input_name=prev_input_data.get("name"),
+                                    input_quantity=prev_input_data.get("quantity"),
+                                    input_unit=prev_input_data.get("unit"),
+                                    visited_ids=visited_ids,
+                                )
+                                # Prepend previous steps (so they appear in chronological order)
+                                steps_data = prev_steps + steps_data
+
+                    return steps_data
+
+                # For each variable input, trace back through the full chain
+                for input_data in extra_data["variable_inputs"]:
+                    inventory_item_id = input_data.get("inventory_item_id")
+                    if inventory_item_id:
+                        # Trace the full chain of steps, passing the input information
+                        chain_steps = trace_step_chain(
+                            inventory_item_id,
+                            input_name=input_data.get("name"),
+                            input_quantity=input_data.get("quantity"),
+                            input_unit=input_data.get("unit"),
+                        )
+                        previous_steps_data.extend(chain_steps)
+
+                # Remove duplicates (same step_number and step_name) while preserving order
+                seen = set()
+                unique_steps = []
+                for step in previous_steps_data:
+                    step_key = (step.get("step_number"), step.get("step_name"))
+                    if step_key not in seen:
+                        seen.add(step_key)
+                        unique_steps.append(step)
+                previous_steps_data = unique_steps
+
+                # Sort by step_number in descending order (most recent first, oldest at bottom)
+                previous_steps_data.sort(key=lambda x: x.get("step_number", 0), reverse=True)
+
+            except Exception:
+                # If lookup fails, just continue without previous steps data
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.exception("Error tracing step chain")
+                pass
+
+        # Add previous_steps_data to extra_data if we found any
+        if previous_steps_data:
+            extra_data["previous_steps_data"] = previous_steps_data
+
+        # Get process name from execution if available
+        process_name = None
+        if item.source_execution_id:
+            try:
+                from app.core.db.models.execution import Execution
+                from app.core.db.models.process import Process
+
+                execution = db_session.query(Execution).filter(Execution.id == item.source_execution_id).first()
+                if execution and execution.process_id:
+                    process = db_session.query(Process).filter(Process.id == execution.process_id).first()
+                    if process:
+                        process_name = process.name
+            except Exception:
+                # If lookup fails, just continue without process name
+                pass
+
         result.append(
             {
                 "id": str(item.id),
@@ -805,8 +1148,13 @@ def list_inventory():
                 "supplier_batch_number": item.supplier_batch_number,
                 "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
                 "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
+                "source_execution_step_id": str(item.source_execution_step_id)
+                if item.source_execution_step_id
+                else None,
                 "source_step_name": item.source_step_name,
+                "process_name": process_name,
                 "created_at": item.created_at.isoformat() if item.created_at else None,
+                "extra_data": extra_data,
             }
         )
 

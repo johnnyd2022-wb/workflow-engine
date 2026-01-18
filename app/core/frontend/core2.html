@@ -429,6 +429,11 @@
             <p style="color: var(--text-secondary);">No inventory items yet. Add your first item to get started.</p>
           </div>
         `;
+        // Update the summary metric to 0
+        const inventoryEl = document.getElementById('metric-inventory');
+        if (inventoryEl) {
+          inventoryEl.textContent = '0';
+        }
         return;
       }
       
@@ -439,34 +444,90 @@
         final_product: []
       };
       
+      // Count items with quantity > 0 for the summary metric
+      let visibleItemCount = 0;
+      
       items.forEach(item => {
+        // Filter out items with zero or negative quantity
+        // Parse quantity more robustly - handle string "0", "0.0", "0.00", etc.
+        let quantity = 0;
+        try {
+          const qtyStr = String(item.quantity || '0').trim();
+          quantity = parseFloat(qtyStr);
+          if (isNaN(quantity)) {
+            quantity = 0;
+          }
+        } catch (e) {
+          quantity = 0;
+        }
+        
+        // Skip items with zero or negative quantity (including very small numbers due to floating point)
+        if (quantity <= 0 || Math.abs(quantity) < 0.0001) {
+          return; // Skip this item
+        }
+        
+        // Count this item as visible
+        visibleItemCount++;
+        
         const type = item.inventory_type || 'raw_material';
         if (grouped[type]) {
           grouped[type].push(item);
         }
       });
       
+      // Update the summary metric to reflect only visible items (quantity > 0)
+      const inventoryEl = document.getElementById('metric-inventory');
+      if (inventoryEl) {
+        inventoryEl.textContent = visibleItemCount;
+      }
+      
       // If raw materials exist, show all three categories (even if empty) to help users understand the lifecycle
       const hasRawMaterials = grouped.raw_material.length > 0;
+      
+      // Calculate totals for final products (grouped by process name and unit)
+      // Structure: { "Process Name": { "unit": total, ... }, ... }
+      const finalProductTotals = {};
+      grouped.final_product.forEach(item => {
+        const processName = item.process_name || 'Unknown Process';
+        const unit = item.unit || 'units';
+        let quantity = 0;
+        try {
+          quantity = parseFloat(item.quantity || '0');
+          if (isNaN(quantity)) {
+            quantity = 0;
+          }
+        } catch (e) {
+          quantity = 0;
+        }
+        if (quantity > 0) {
+          if (!finalProductTotals[processName]) {
+            finalProductTotals[processName] = {};
+          }
+          if (!finalProductTotals[processName][unit]) {
+            finalProductTotals[processName][unit] = 0;
+          }
+          finalProductTotals[processName][unit] += quantity;
+        }
+      });
       
       // Always show raw materials if they exist
       if (hasRawMaterials) {
         inventoryGrid.appendChild(createInventoryCategoryCard('raw', grouped.raw_material));
         // Also show intermediate and final product categories even if empty
         inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
-        inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
+        inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product, finalProductTotals));
       } else {
         // Only show categories that have items if no raw materials exist
         if (grouped.work_in_progress.length > 0) {
           inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
         }
         if (grouped.final_product.length > 0) {
-          inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
+          inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product, finalProductTotals));
         }
       }
     }
     
-    function createInventoryCategoryCard(type, items) {
+    function createInventoryCategoryCard(type, items, totals = null) {
       const card = document.createElement('div');
       card.className = `inventory-category-card ${type}`;
       
@@ -481,6 +542,24 @@
       }
       
       const categoryTitle = type === 'raw' ? 'Raw Materials' : type === 'intermediate' ? 'Intermediate' : 'Final Products';
+      
+      // Build totals display for final products (grouped by process name)
+      let totalsDisplay = '';
+      if (type === 'final' && totals && Object.keys(totals).length > 0) {
+        const totalsLines = Object.entries(totals)
+          .map(([processName, unitTotals]) => {
+            const totalsText = Object.entries(unitTotals)
+              .map(([unit, total]) => {
+                // Format number to remove unnecessary decimals
+                const formattedTotal = total % 1 === 0 ? total.toString() : total.toFixed(2).replace(/\.?0+$/, '');
+                return `${formattedTotal} ${unit}`;
+              })
+              .join(' + ');
+            return `<div style="margin-top: 4px;"><strong>${escapeHtml(processName)}:</strong> ${totalsText}</div>`;
+          })
+          .join('');
+        totalsDisplay = `<div class="inventory-category-totals" style="font-size: 13px; font-weight: 600; color: var(--text-primary, #0f172a); margin: 4px 0 0 0;">${totalsLines}</div>`;
+      }
       
       const itemsContainer = document.createElement('div');
       itemsContainer.className = 'inventory-category-items';
@@ -521,6 +600,7 @@
           <span class="inventory-category-title">${categoryTitle}</span>
         </div>
         <p class="inventory-category-count">${items.length} items</p>
+        ${totalsDisplay}
       `;
       
       card.appendChild(itemsContainer);
@@ -534,6 +614,9 @@
       card.dataset.inventoryId = item.id;
       card.dataset.isExpanded = 'false';
       card.style.marginBottom = '0';
+      // Apply wrapping to the card itself to prevent overflow
+      card.style.wordWrap = 'break-word';
+      card.style.overflowWrap = 'break-word';
       
       const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' : 
                        item.inventory_type === 'work_in_progress' ? 'Work in Progress' : 
@@ -550,11 +633,29 @@
         }
       };
       
+      // Format quantity to 4 decimal places for accuracy, but only show decimals when needed
+      // e.g., 78 → "78", 42.1 → "42.1", 1.0062 → "1.0062"
+      const formatQuantity = (qtyStr) => {
+        if (!qtyStr) return '0';
+        try {
+          const qty = parseFloat(qtyStr);
+          if (isNaN(qty)) return qtyStr;
+          // Round to 4 decimal places first for accuracy
+          const rounded = qty.toFixed(4);
+          // Remove trailing zeros, but keep up to 4 decimal places if they're significant
+          return parseFloat(rounded).toString();
+        } catch {
+          return qtyStr;
+        }
+      };
+      
+      const formattedQuantity = formatQuantity(item.quantity);
+      
       card.innerHTML = `
-        <div class="process-card-header">
-          <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="toggleInventoryItemDetails('${item.id}')">
-            <h3 class="process-title">${escapeHtml(item.name)}</h3>
-            <p class="process-description">${item.quantity || '0'} ${item.unit || ''}</p>
+        <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word;">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetails('${item.id}')">
+            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(item.name)}</h3>
+            <p class="process-description" style="word-wrap: break-word; overflow-wrap: break-word;">${formattedQuantity} ${item.unit || ''}</p>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
             <button class="btn-icon-small" onclick="event.stopPropagation(); openEditInventoryModal('${item.id}')" title="Edit inventory item">
@@ -575,47 +676,107 @@
             </svg>
           </div>
         </div>
-        <div class="inventory-item-details" id="details-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px;">
-            <div>
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Quantity</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${item.quantity || '0'} ${item.unit || ''}</p>
-            </div>
-            <div>
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Inventory Type</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${typeLabel}</p>
+        <div class="inventory-item-details" id="details-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Quantity</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formattedQuantity} ${item.unit || ''}</p>
             </div>
             ${item.supplier ? `
-            <div>
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Supplier</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${escapeHtml(item.supplier)}</p>
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Supplier</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(item.supplier)}</p>
             </div>
             ` : ''}
             ${item.purchase_date ? `
-            <div>
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Purchase Date</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.purchase_date)}</p>
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Purchase Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.purchase_date)}</p>
             </div>
             ` : ''}
             ${item.supplier_batch_number ? `
-            <div>
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Batch Number</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${escapeHtml(item.supplier_batch_number)}</p>
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Batch Number</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(item.supplier_batch_number)}</p>
             </div>
             ` : ''}
             ${item.expiry_date ? `
-            <div>
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Expiry Date</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.expiry_date)}</p>
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Expiry Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.expiry_date)}</p>
             </div>
             ` : ''}
             ${item.created_at ? `
-            <div>
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Created</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.created_at)}</p>
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Created</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.created_at)}</p>
             </div>
             ` : ''}
           </div>
+          ${item.extra_data && (item.extra_data.execution_prompts || item.extra_data.variable_inputs || item.extra_data.previous_steps_data) ? `
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb);">
+            <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Execution Metadata</h4>
+            ${item.extra_data.execution_prompts && Object.keys(item.extra_data.execution_prompts).length > 0 ? `
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${Object.entries(item.extra_data.execution_prompts).map(([key, value]) => `
+                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 11px; font-weight: 500;">${escapeHtml(key)}</p>
+                    <p style="color: var(--text-primary); margin: 0; font-size: 13px; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(String(value))}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+            ${item.extra_data.variable_inputs && item.extra_data.variable_inputs.length > 0 ? `
+            <div style="margin-bottom: 12px;">
+              <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; font-weight: 500;">Variable Inputs Used</p>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                ${item.extra_data.variable_inputs.map(input => {
+                  const inputFormattedQty = formatQuantity(input.quantity);
+                  return `
+                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-primary); margin: 0 0 4px 0; font-size: 13px; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(input.name || 'Unknown')}</p>
+                    <p style="color: var(--text-secondary); margin: 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">${inputFormattedQty} ${input.unit || ''}</p>
+                  </div>
+                `;
+                }).join('')}
+              </div>
+            </div>
+            ` : ''}
+            ${item.extra_data.previous_steps_data && item.extra_data.previous_steps_data.length > 0 ? `
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb);">
+              <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Previous Steps Data</h4>
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                ${item.extra_data.previous_steps_data.map(prevStep => `
+                  <div style="padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-primary); margin: 0 0 8px 0; font-size: 13px; font-weight: 600; word-wrap: break-word; overflow-wrap: break-word;">Step ${prevStep.step_number}: ${escapeHtml(prevStep.step_name || 'Unknown')}</p>
+                    <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Input: ${escapeHtml(prevStep.input_name || 'Unknown')} - ${formatQuantity(prevStep.input_quantity)} ${prevStep.input_unit || ''}</p>
+                    ${prevStep.completed_by ? `
+                      <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed by: ${escapeHtml(prevStep.completed_by)}</p>
+                    ` : ''}
+                    ${prevStep.completed_at ? `
+                      <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed date: ${formatDate(prevStep.completed_at)}</p>
+                    ` : ''}
+                    ${prevStep.execution_prompts && Object.keys(prevStep.execution_prompts).length > 0 ? `
+                      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light, #e5e7eb);">
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                          ${Object.entries(prevStep.execution_prompts).map(([key, value]) => `
+                            <div>
+                              <p style="color: var(--text-secondary); margin: 0 0 2px 0; font-size: 11px; font-weight: 500;">${escapeHtml(key)}</p>
+                              <p style="color: var(--text-primary); margin: 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(String(value))}</p>
+                            </div>
+                          `).join('')}
+                        </div>
+                      </div>
+                    ` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+          ` : ''}
         </div>
       `;
       

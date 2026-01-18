@@ -296,6 +296,83 @@
       }
     }
     
+    // Show custom modal for static input warning
+    window.showStaticInputWarningModal = function(callback) {
+      // Create modal if it doesn't exist
+      let modal = document.getElementById('static-input-warning-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'static-input-warning-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;';
+        modal.innerHTML = `
+          <div class="modal-content" style="background: var(--bg-card, #ffffff); border-radius: var(--radius-lg, 12px); padding: 24px; max-width: 500px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+              <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--warning-bg, #fef3c7); display: flex; align-items: center; justify-content: center;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--warning, #f59e0b);">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">Changing to Static Input</h2>
+            </div>
+            <div style="margin-bottom: 24px;">
+              <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 16px 0; line-height: 1.6;">
+                Outputs from previous steps are stored in inventory, which allows the system to:
+              </p>
+              <ul style="font-size: 14px; color: var(--text-primary); margin: 0 0 16px 0; padding-left: 20px; line-height: 1.8;">
+                <li>Track live stock levels dynamically</li>
+                <li>Update inventory automatically when steps complete</li>
+                <li>See which physical items are being used</li>
+              </ul>
+              <p style="font-size: 14px; color: var(--text-primary); margin: 0; line-height: 1.6; font-weight: 500;">
+                Using "Select inventory at execution" is recommended for outputs.
+              </p>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" id="static-warning-cancel" style="padding: 10px 20px;">Cancel</button>
+              <button type="button" class="btn btn-primary" id="static-warning-continue" style="padding: 10px 20px; background: var(--warning, #f59e0b); border-color: var(--warning, #f59e0b);">Continue with Static</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Close on overlay click
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            if (callback) callback(false);
+          }
+        });
+        
+        // Cancel button
+        const cancelBtn = modal.querySelector('#static-warning-cancel');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            if (callback) callback(false);
+          });
+        }
+        
+        // Continue button
+        const continueBtn = modal.querySelector('#static-warning-continue');
+        if (continueBtn) {
+          continueBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            if (callback) callback(true);
+          });
+        }
+      }
+      
+      // Show modal
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    };
+    
     // Initialize account info component
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function() {
@@ -426,6 +503,7 @@
       
       const inputs = step.inputs || [];
       const outputs = step.outputs || [];
+      const executionPrompts = step.execution_prompts || [];
       
       card.innerHTML = `
         <div class="step-header" onclick="toggleStep(this)">
@@ -463,7 +541,12 @@
             </div>
             <div class="io-list">
               ${inputs.length > 0 ? inputs.map(input => {
-                const isVariable = input.is_variable !== false; // Default to variable if not specified
+                // Determine type: variable (inventory selection), confirm (editable qty/unit), or static
+                const isInventorySelection = input.requires_inventory_selection !== false && input.is_variable !== false;
+                const isConfirm = input.is_variable !== false && input.requires_inventory_selection === false;
+                const isStatic = input.is_variable === false && input.requires_inventory_selection === false;
+                // Default to confirm if unclear
+                const inputType = isInventorySelection ? 'variable' : isStatic ? 'static' : 'confirm';
                 return `
                   <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
                     <span class="io-item-name" style="flex: 1;">
@@ -483,11 +566,11 @@
                       </select>
                     </span>
                     <span class="io-item-type" style="position: relative;">
-                      <select class="form-select io-type-input" style="width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                        <option value="variable" ${isVariable ? 'selected' : ''}>Variable</option>
-                        <option value="static" ${!isVariable ? 'selected' : ''}>Static</option>
+                      <select class="form-select io-type-input" style="width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                        <option value="confirm" ${inputType === 'confirm' ? 'selected' : ''}>Confirm at execution</option>
+                        <option value="static" ${inputType === 'static' ? 'selected' : ''}>Static</option>
                       </select>
-                      <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.">
+                      <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Confirm at execution: You will confirm or override the quantity and unit when this step runs. Static: System will not prompt for confirmation upon execution.">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <circle cx="12" cy="12" r="10"></circle>
                           <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -514,7 +597,7 @@
             </div>
             <div class="io-list">
               ${outputs.length > 0 ? outputs.map(output => {
-                const isVariable = output.is_variable !== false; // Default to variable if not specified
+                const isVariable = output.requires_execution_confirmation !== false && output.is_variable !== false; // Support both old and new format
                 return `
                   <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
                     <span class="io-item-name" style="flex: 1;">
@@ -534,11 +617,11 @@
                       </select>
                     </span>
                     <span class="io-item-type" style="position: relative;">
-                      <select class="form-select io-type-input" style="width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                        <option value="variable" ${isVariable ? 'selected' : ''}>Variable</option>
+                      <select class="form-select io-type-input" style="width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                        <option value="variable" ${isVariable ? 'selected' : ''}>Confirm at execution</option>
                         <option value="static" ${!isVariable ? 'selected' : ''}>Static</option>
                       </select>
-                      <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.">
+                      <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Confirm at execution: You will confirm or override the actual quantity produced when this step runs. Static: System will not prompt for confirmation upon execution.">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <circle cx="12" cy="12" r="10"></circle>
                           <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -555,6 +638,47 @@
                   </div>
                 `;
               }).join('') : '<p style="color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;">No outputs defined</p>'}
+            </div>
+          </div>
+          <div class="io-section" style="margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border-default);">
+            <div class="io-section-title" style="color: var(--text-secondary);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+              Execution Prompts (recorded when step runs)
+              <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="addExecutionPrompt(this)">+ Add Prompt</button>
+            </div>
+            <div class="io-list">
+              ${executionPrompts.length > 0 ? executionPrompts.map(prompt => {
+                return `
+                  <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
+                    <span class="io-item-name" style="flex: 1;">
+                      <input type="text" class="form-input prompt-label-input" value="${escapeHtml(prompt.label || '')}" placeholder="Label (e.g., Batch number)" style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                    </span>
+                    <span class="io-item-type">
+                      <select class="form-select prompt-type-input" style="width: 120px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                        <option value="text" ${prompt.type === 'text' ? 'selected' : ''}>Text</option>
+                        <option value="number" ${prompt.type === 'number' ? 'selected' : ''}>Number</option>
+                        <option value="date" ${prompt.type === 'date' ? 'selected' : ''}>Date</option>
+                        <option value="select" ${prompt.type === 'select' ? 'selected' : ''}>Select</option>
+                      </select>
+                    </span>
+                    <span class="io-item-unit">
+                      <input type="text" class="form-input prompt-unit-input" value="${escapeHtml(prompt.unit || '')}" placeholder="Unit (optional)" style="width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                    </span>
+                    <span class="io-item-type">
+                      <select class="form-select prompt-required-input" style="width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                        <option value="true" ${prompt.required !== false ? 'selected' : ''}>Required</option>
+                        <option value="false" ${prompt.required === false ? 'selected' : ''}>Optional</option>
+                      </select>
+                    </span>
+                    <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.io-item').remove(); updateStepMeta(this.closest('.step-card'));" style="padding: 4px;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                `;
+              }).join('') : '<p style="color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;">No execution prompts defined</p>'}
             </div>
           </div>
           <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-light);">
@@ -788,8 +912,16 @@
       // Get current user for display
       const user = await getCurrentUser();
       
-      // Current step name - use as the execution display name
-      const currentStepName = currentStep.name || 'No step in progress';
+      // Determine execution display name based on status
+      let executionDisplayName = '';
+      if (status === 'completed') {
+        // For completed executions, show process name and completion date
+        const processName = currentProcess?.name || 'Process';
+        executionDisplayName = `${processName} - ${completedDate || startDate}`;
+      } else {
+        // For active executions, show current step name
+        executionDisplayName = currentStep.name || 'No step in progress';
+      }
       
       // Check if current step is terminal (last step) - don't show next step if it is
       const isTerminalStep = stepNumber === totalSteps && totalSteps > 0;
@@ -802,9 +934,10 @@
       }
       
       // Fetch execution details once for both completed steps and next step
+      // Do this for both active and completed executions
       let completedStepsHtml = '';
       let nextStepHtml = '';
-      if (status === 'active') {
+      if (status === 'active' || status === 'completed') {
         try {
           const executionData = await CoreAPI.getExecution(executionId);
           const executionSteps = executionData.execution_steps || [];
@@ -816,10 +949,11 @@
           
           if (completedSteps.length > 0) {
             const completedStepsSectionId = `completed-steps-${executionId}`;
+            const sectionTitle = status === 'completed' ? `All Steps (${completedSteps.length})` : `Completed Steps (${completedSteps.length})`;
             completedStepsHtml = `
               <div class="completed-steps-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
                 <div class="completed-steps-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; margin-bottom: 12px;" onclick="toggleCompletedSteps('${completedStepsSectionId}')">
-                  <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">Completed Steps (${completedSteps.length})</div>
+                  <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">${sectionTitle}</div>
                   <div class="completed-steps-toggle" id="${completedStepsSectionId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="6 9 12 15 18 9"></polyline>
@@ -847,6 +981,20 @@
                   const displayInputs = actualInputs.length > 0 ? actualInputs : stepInputs;
                   const displayOutputs = actualOutputs.length > 0 ? actualOutputs : stepOutputs;
                   
+                  // Get execution metadata (execution prompts and other data)
+                  const executionData = es.execution_data || {};
+                  const executionMetadata = [];
+                  // Extract execution prompts (exclude internal fields)
+                  const internalFields = ['completed_by', 'completed_by_email', 'completed_by_user_id', 'completed_at'];
+                  Object.keys(executionData).forEach(key => {
+                    if (!internalFields.includes(key) && executionData[key] !== null && executionData[key] !== undefined && executionData[key] !== '') {
+                      executionMetadata.push({
+                        label: key,
+                        value: executionData[key]
+                      });
+                    }
+                  });
+                  
                   // Create unique IDs for this step's panes using execution step ID
                   const executionStepId = es.id || `step-${es.step_id}-${es.step_number}-${Math.random().toString(36).substr(2, 9)}`;
                   const inputsPaneId = `inputs-${executionStepId}`;
@@ -870,10 +1018,12 @@
                             const inputName = input.name || 'Unknown';
                             const inputQty = input.quantity !== null && input.quantity !== undefined ? input.quantity : '';
                             const inputUnit = input.unit || '';
+                            const inventoryItemId = input.inventory_item_id || null;
                             return `
                               <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
                                 <div style="font-weight: 500;">${escapeHtml(inputName)}</div>
                                 ${inputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${inputQty} ${inputUnit}</div>` : ''}
+                                ${inventoryItemId ? `<div style="font-size: 10px; color: var(--text-tertiary, #9ca3af); margin-top: 2px;">Inventory ID: ${escapeHtml(inventoryItemId)}</div>` : ''}
                               </div>
                             `;
                           }).join('')}
@@ -912,7 +1062,37 @@
                     `;
                   }
                   
-                  // Only show panes if we have inputs or outputs
+                  // Create execution metadata pane
+                  let metadataPaneHtml = '';
+                  if (executionMetadata.length > 0) {
+                    const metadataPaneId = `metadata-${executionStepId}`;
+                    metadataPaneHtml = `
+                      <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-top: 8px; overflow: hidden;">
+                        <div class="io-pane-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;" onclick="toggleIOPane('${metadataPaneId}', event)">
+                          <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Execution Metadata (${executionMetadata.length})</div>
+                          <div class="io-pane-toggle" id="${metadataPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                          </div>
+                        </div>
+                        <div class="io-pane-content" id="${metadataPaneId}" style="display: none; padding: 0 10px 10px 10px;">
+                          ${executionMetadata.map(meta => {
+                            const metaLabel = meta.label || 'Unknown';
+                            const metaValue = meta.value;
+                            return `
+                              <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
+                                <div style="font-weight: 500;">${escapeHtml(metaLabel)}</div>
+                                <div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${escapeHtml(String(metaValue))}</div>
+                              </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      </div>
+                    `;
+                  }
+                  
+                  // Only show panes if we have inputs, outputs, or metadata
                   let ioPanesHtml = '';
                   if (inputsPaneHtml || outputsPaneHtml) {
                     ioPanesHtml = `
@@ -931,6 +1111,7 @@
                           <div style="font-size: 12px; color: var(--text-secondary, #6b7280); margin-top: 2px;">Completed: ${completedDate} by ${escapeHtml(completedBy)}</div>
                         </div>
                         ${ioPanesHtml}
+                        ${metadataPaneHtml}
                       </div>
                     </div>
                   `;
@@ -989,9 +1170,13 @@
       card.innerHTML = `
         <div class="execution-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);" onclick="toggleExecution(this)">
           <div style="flex: 1;">
-            <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(currentStepName)}</div>
-            <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">${status === 'active' ? `Batch started: ${startDate}` : `Completed: ${completedDate || startDate}`}</div>
-            ${status === 'active' ? `<div style="font-size: 13px; color: var(--text-secondary);">Started by: ${escapeHtml(user.username)}</div>` : ''}
+            <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(executionDisplayName)}</div>
+            ${status === 'active' ? `
+              <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">Batch started: ${startDate}</div>
+              <div style="font-size: 13px; color: var(--text-secondary);">Started by: ${escapeHtml(user.username)}</div>
+            ` : `
+              <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">Completed: ${completedDate || startDate}</div>
+            `}
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
             <span class="badge ${status === 'active' ? 'badge-accent' : 'badge-success'}" style="flex-shrink: 0;">${status === 'active' ? 'In Progress' : 'Completed'}</span>
@@ -1009,21 +1194,30 @@
             </div>
           </div>
           <div class="execution-details" style="margin-bottom: 12px;">
-            <div class="execution-detail" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
-              <div>
-                <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Current Step</span>
-                <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary); font-weight: 500; margin-left: 8px;">${stepNumber} of ${totalSteps}</span>
+            ${status === 'active' ? `
+              <div class="execution-detail" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
+                <div>
+                  <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Current Step</span>
+                  <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary); font-weight: 500; margin-left: 8px;">${stepNumber} of ${totalSteps}</span>
+                </div>
+                ${executeStepHtml}
               </div>
-              ${executeStepHtml}
-            </div>
-            ${execution.batch_id ? `
-              <div class="execution-detail" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
-                <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Batch ID</span>
-                <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary);">${escapeHtml(execution.batch_id)}</span>
-              </div>
-            ` : ''}
+              ${execution.batch_id ? `
+                <div class="execution-detail" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
+                  <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Batch ID</span>
+                  <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary);">${escapeHtml(execution.batch_id)}</span>
+                </div>
+              ` : ''}
+            ` : `
+              ${execution.batch_id ? `
+                <div class="execution-detail" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
+                  <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Batch ID</span>
+                  <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary);">${escapeHtml(execution.batch_id)}</span>
+                </div>
+              ` : ''}
+            `}
           </div>
-          ${nextStepHtml}
+          ${status === 'active' ? nextStepHtml : ''}
           ${completedStepsHtml}
         </div>
       `;
@@ -1032,7 +1226,7 @@
     }
     
     // ============================================================
-    // COMPLETE CURRENT STEP
+    // COMPLETE CURRENT STEP - Opens execution modal
     // ============================================================
     window.completeCurrentStep = async function(executionId) {
       try {
@@ -1048,24 +1242,726 @@
           return;
         }
         
-        // Get current user for recording
-        const user = await getCurrentUser();
+        // Get the step definition from the process
+        const processData = await CoreAPI.getProcess(executionData.process_id);
+        const stepDefinition = processData.steps.find(s => s.id === readyStep.step_id);
         
-        // Complete the step (with empty inputs/outputs for now - can be enhanced later)
-        await CoreAPI.completeStep(executionId, readyStep.id, {
-          actual_inputs: [],
-          actual_outputs: [],
-          execution_data: {
-            completed_by: user.username,
-            completed_by_email: user.email,
-            completed_at: new Date().toISOString()
+        if (!stepDefinition) {
+          showNotification('error', 'Step Not Found', 'Step definition not found.');
+          return;
+        }
+        
+        // Open execution modal
+        openExecutionModal(executionId, readyStep, stepDefinition);
+        
+      } catch (error) {
+        console.error('Failed to open execution modal:', error);
+        showNotification('error', 'Failed to Open Execution Modal', error.message || 'Failed to open execution modal. Please try again.');
+      }
+    };
+    
+    // ============================================================
+    // OPEN EXECUTION MODAL
+    // ============================================================
+    window.openExecutionModal = async function(executionId, executionStep, stepDefinition) {
+      const modal = document.getElementById('execute-step-modal');
+      if (!modal) {
+        console.error('Execution modal not found');
+        return;
+      }
+      
+      // Store current execution context
+      modal.dataset.executionId = executionId;
+      modal.dataset.executionStepId = executionStep.id;
+      
+      // Set step name
+      const stepNameEl = modal.querySelector('#execute-step-name');
+      if (stepNameEl) {
+        stepNameEl.textContent = stepDefinition.name || 'Unknown Step';
+      }
+      
+      // Clear previous content
+      const inputsContainer = modal.querySelector('#execute-inputs-container');
+      const promptsContainer = modal.querySelector('#execute-prompts-container');
+      const outputsContainer = modal.querySelector('#execute-outputs-container');
+      
+      if (inputsContainer) inputsContainer.innerHTML = '';
+      if (promptsContainer) promptsContainer.innerHTML = '';
+      if (outputsContainer) outputsContainer.innerHTML = '';
+      
+      // Load inventory for variable inputs
+      const inventoryData = await CoreAPI.getInventory();
+      const allInventory = inventoryData.inventory_items || [];
+      
+      // Simple unit conversion function for frontend
+      function convertUnit(quantity, fromUnit, toUnit) {
+        if (!fromUnit || !toUnit || fromUnit.toLowerCase() === toUnit.toLowerCase()) {
+          return quantity;
+        }
+        
+        const from = fromUnit.toLowerCase();
+        const to = toUnit.toLowerCase();
+        
+        // Mass conversions (to kg)
+        const massFactors = {
+          'kg': 1.0,
+          'g': 0.001,
+          'mg': 0.000001,
+          'lb': 0.453592,
+          'oz': 0.0283495,
+          'ton': 1000.0,
+          'tonne': 1000.0
+        };
+        
+        // Volume conversions (to L)
+        const volumeFactors = {
+          'l': 1.0,
+          'ml': 0.001,
+          'gal': 3.78541,
+          'm3': 1000.0,
+          'ft3': 28.3168
+        };
+        
+        // Length conversions (to m)
+        const lengthFactors = {
+          'm': 1.0,
+          'cm': 0.01,
+          'mm': 0.001,
+          'ft': 0.3048,
+          'in': 0.0254
+        };
+        
+        // Check if both units are in the same category
+        const fromMass = from in massFactors;
+        const toMass = to in massFactors;
+        const fromVolume = from in volumeFactors;
+        const toVolume = to in volumeFactors;
+        const fromLength = from in lengthFactors;
+        const toLength = to in lengthFactors;
+        
+        if (fromMass && toMass) {
+          const fromFactor = massFactors[from];
+          const toFactor = massFactors[to];
+          return (quantity * fromFactor) / toFactor;
+        }
+        if (fromVolume && toVolume) {
+          const fromFactor = volumeFactors[from];
+          const toFactor = volumeFactors[to];
+          return (quantity * fromFactor) / toFactor;
+        }
+        if (fromLength && toLength) {
+          const fromFactor = lengthFactors[from];
+          const toFactor = lengthFactors[to];
+          return (quantity * fromFactor) / toFactor;
+        }
+        
+        // If units don't match or are incompatible, return original quantity
+        return quantity;
+      }
+      
+      // Render variable inputs (inventory selection)
+      const variableInputs = (stepDefinition.inputs || []).filter(input => 
+        input.requires_inventory_selection !== false && input.is_variable !== false
+      );
+      
+      // Render confirm inputs (editable quantity/unit at execution)
+      // These are inputs where is_variable is true but requires_inventory_selection is false
+      const confirmInputs = (stepDefinition.inputs || []).filter(input => {
+        const isVariable = input.is_variable !== false;
+        const requiresInventory = input.requires_inventory_selection !== false;
+        // Confirm at execution: variable but doesn't require inventory selection
+        return isVariable && !requiresInventory;
+      });
+      
+      if (variableInputs.length > 0 && inputsContainer) {
+        variableInputs.forEach(input => {
+          const inputSection = document.createElement('div');
+          inputSection.className = 'execute-input-section';
+          inputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
+          
+          // Filter inventory by material name
+          const matchingInventory = allInventory.filter(inv => 
+            inv.name.toLowerCase().includes(input.name.toLowerCase()) || 
+            input.name.toLowerCase().includes(inv.name.toLowerCase())
+          );
+          
+          // Check if no matching inventory is available
+          const hasNoInventory = matchingInventory.length === 0;
+          const errorStyle = hasNoInventory ? 'border: 2px solid var(--error, #ef4444);' : '';
+          const errorMessage = hasNoInventory ? `<p style="color: var(--error, #ef4444); font-size: 12px; margin-top: 4px; font-weight: 500;">⚠️ No matching inventory items found. Please add inventory before executing this step.</p>` : '';
+          
+          inputSection.innerHTML = `
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+                ${escapeHtml(input.name)} 
+                <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${input.quantity || '0'} ${input.unit || ''})</span>
+                <span style="color: var(--error, #ef4444);">*</span>
+              </label>
+              <select class="form-select execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-required="true" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); ${errorStyle} background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                <option value="">Select inventory item...</option>
+                ${matchingInventory.map(inv => {
+                  // Build metadata display string
+                  const metadataParts = [];
+                  
+                  // Add created date if available
+                  if (inv.created_at) {
+                    try {
+                      const date = new Date(inv.created_at);
+                      const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                      metadataParts.push(`Created: ${formattedDate}`);
+                    } catch (e) {
+                      // Ignore date parsing errors
+                    }
+                  }
+                  
+                  // Add execution prompts/metadata if available
+                  if (inv.extra_data && inv.extra_data.execution_prompts) {
+                    const prompts = inv.extra_data.execution_prompts;
+                    const promptEntries = Object.entries(prompts).slice(0, 2); // Show first 2 prompts
+                    if (promptEntries.length > 0) {
+                      const promptStr = promptEntries.map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(String(value))}`).join(', ');
+                      metadataParts.push(promptStr);
+                    }
+                  }
+                  
+                  // Add process name if available
+                  if (inv.process_name) {
+                    metadataParts.push(`Process: ${escapeHtml(inv.process_name)}`);
+                  }
+                  
+                  // Build the display text
+                  let displayText = `${escapeHtml(inv.name)} - ${inv.quantity} ${inv.unit}`;
+                  
+                  // Add supplier/batch info if available (for raw materials)
+                  if (inv.supplier) {
+                    displayText += ` (${escapeHtml(inv.supplier)})`;
+                  }
+                  if (inv.supplier_batch_number) {
+                    displayText += ` - Batch: ${escapeHtml(inv.supplier_batch_number)}`;
+                  }
+                  
+                  // Add metadata if available
+                  if (metadataParts.length > 0) {
+                    displayText += ` | ${metadataParts.join(' | ')}`;
+                  }
+                  
+                  return `
+                    <option value="${inv.id}" data-quantity="${inv.quantity}" data-unit="${inv.unit}" title="${escapeHtml(displayText)}">
+                      ${displayText}
+                    </option>
+                  `;
+                }).join('')}
+              </select>
+              ${errorMessage}
+            </div>
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume <span style="color: var(--error, #ef4444);">*</span></label>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="number" class="form-input execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0.01" style="flex: 1; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
+              </div>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Quantity will be converted to selected inventory item's unit automatically</p>
+            </div>
+          `;
+          
+          // Add event listeners to clear error styling when user fixes issues
+          const select = inputSection.querySelector('.execute-inventory-select');
+          const quantityInput = inputSection.querySelector('.execute-quantity-input');
+          const unitDisplay = inputSection.querySelector('.execute-quantity-unit-display');
+          
+          if (select) {
+            select.addEventListener('change', function() {
+              if (this.value) {
+                this.style.border = '';
+                // Update unit display and convert quantity to match selected inventory item
+                const option = this.options[this.selectedIndex];
+                if (option && unitDisplay && quantityInput) {
+                  const inventoryUnit = option.dataset.unit || '';
+                  const stepUnit = quantityInput.dataset.stepUnit || '';
+                  const currentQuantity = parseFloat(quantityInput.value) || 0;
+                  
+                  // Convert quantity from step definition unit to inventory unit
+                  if (stepUnit && inventoryUnit && stepUnit.toLowerCase() !== inventoryUnit.toLowerCase()) {
+                    const convertedQuantity = convertUnit(currentQuantity, stepUnit, inventoryUnit);
+                    quantityInput.value = convertedQuantity.toFixed(6).replace(/\.?0+$/, ''); // Remove trailing zeros
+                  }
+                  
+                  // Update unit display
+                  unitDisplay.textContent = inventoryUnit;
+                  // Store the unit on the quantity input for validation
+                  quantityInput.dataset.inventoryUnit = inventoryUnit;
+                }
+                // Clear quantity error if inventory is selected
+                if (quantityInput) {
+                  quantityInput.style.border = '';
+                }
+                // Re-enable submit button if it was disabled
+                const submitBtn = modal.querySelector('#execute-step-submit-btn');
+                if (submitBtn && submitBtn.disabled) {
+                  // Check if all required inputs now have inventory
+                  const allRequiredSelects = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
+                  let allHaveInventory = true;
+                  allRequiredSelects.forEach(s => {
+                    if (!s.value || s.value === '') {
+                      allHaveInventory = false;
+                    }
+                  });
+                  if (allHaveInventory) {
+                    submitBtn.disabled = false;
+                    submitBtn.style.opacity = '1';
+                    submitBtn.style.cursor = 'pointer';
+                    submitBtn.title = '';
+                  }
+                }
+              } else if (unitDisplay && quantityInput) {
+                // Reset unit display and quantity to step definition values when no inventory is selected
+                const stepUnit = quantityInput.dataset.stepUnit || input.unit || '';
+                unitDisplay.textContent = stepUnit;
+                // Reset quantity to original step definition value
+                quantityInput.value = input.quantity || '';
+                quantityInput.dataset.inventoryUnit = '';
+              }
+            });
+          }
+          
+          if (quantityInput) {
+            quantityInput.addEventListener('input', function() {
+              const qty = parseFloat(this.value);
+              if (qty && qty > 0) {
+                this.style.border = '';
+              }
+            });
+          }
+          
+          inputsContainer.appendChild(inputSection);
+        });
+      }
+      
+      // Render confirm inputs (editable quantity/unit)
+      if (confirmInputs.length > 0 && inputsContainer) {
+        confirmInputs.forEach(input => {
+          const inputSection = document.createElement('div');
+          inputSection.className = 'execute-input-section';
+          inputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
+          
+          inputSection.innerHTML = `
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+                ${escapeHtml(input.name)} 
+                <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${input.quantity || '0'} ${input.unit || ''})</span>
+                <span style="color: var(--error, #ef4444);">*</span>
+              </label>
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity <span style="color: var(--error, #ef4444);">*</span></label>
+              <input type="number" class="form-input execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit <span style="color: var(--error, #ef4444);">*</span></label>
+              <select class="form-select execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                <option value="">Select unit...</option>
+                ${['kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in', 'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers'].map(unit => `
+                  <option value="${unit}" ${input.unit === unit ? 'selected' : ''}>${unit}</option>
+                `).join('')}
+              </select>
+            </div>
+          `;
+          
+          // Add event listeners to clear error styling
+          const quantityInput = inputSection.querySelector('.execute-confirm-quantity-input');
+          const unitSelect = inputSection.querySelector('.execute-confirm-unit-input');
+          
+          if (quantityInput) {
+            quantityInput.addEventListener('input', function() {
+              if (this.value && parseFloat(this.value) > 0) {
+                this.style.border = '';
+              }
+            });
+          }
+          
+          if (unitSelect) {
+            unitSelect.addEventListener('change', function() {
+              if (this.value) {
+                this.style.border = '';
+              }
+            });
+          }
+          
+          inputsContainer.appendChild(inputSection);
+        });
+      }
+      
+      if (inputsContainer && variableInputs.length === 0 && confirmInputs.length === 0) {
+        inputsContainer.innerHTML = '<p style="color: var(--text-secondary); font-size: 14px; padding: 16px;">No variable inputs for this step.</p>';
+      }
+      
+      // Render execution prompts
+      const executionPrompts = stepDefinition.execution_prompts || [];
+      if (executionPrompts.length > 0 && promptsContainer) {
+        executionPrompts.forEach(prompt => {
+          const promptSection = document.createElement('div');
+          promptSection.className = 'execute-prompt-section';
+          promptSection.style.cssText = 'margin-bottom: 16px;';
+          
+          let inputHtml = '';
+          if (prompt.type === 'text') {
+            inputHtml = `<input type="text" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          } else if (prompt.type === 'number') {
+            inputHtml = `<input type="number" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} step="0.01" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          } else if (prompt.type === 'date') {
+            inputHtml = `<input type="date" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          } else if (prompt.type === 'select') {
+            inputHtml = `<select class="form-select execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;"><option value="">Select...</option></select>`;
+          }
+          
+          promptSection.innerHTML = `
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              ${escapeHtml(prompt.label)}${prompt.required !== false ? ' <span style="color: var(--error);">*</span>' : ''}${prompt.unit ? ` (${escapeHtml(prompt.unit)})` : ''}
+            </label>
+            ${inputHtml}
+          `;
+          
+          // Add event listener to clear error styling when user fixes issues
+          const promptInput = promptSection.querySelector('.execute-prompt-input');
+          if (promptInput) {
+            promptInput.addEventListener('input', function() {
+              if (this.value.trim()) {
+                this.style.border = '';
+              }
+            });
+            promptInput.addEventListener('change', function() {
+              if (this.value.trim()) {
+                this.style.border = '';
+              }
+            });
+          }
+          
+          promptsContainer.appendChild(promptSection);
+        });
+      } else if (promptsContainer) {
+        promptsContainer.innerHTML = '<p style="color: var(--text-secondary); font-size: 14px; padding: 16px;">No execution prompts for this step.</p>';
+      }
+      
+      // Render variable outputs (confirmation/override)
+      const variableOutputs = (stepDefinition.outputs || []).filter(output => 
+        output.requires_execution_confirmation !== false && output.is_variable !== false
+      );
+      
+      if (variableOutputs.length > 0 && outputsContainer) {
+        variableOutputs.forEach(output => {
+          const outputSection = document.createElement('div');
+          outputSection.className = 'execute-output-section';
+          outputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
+          
+          outputSection.innerHTML = `
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+                ${escapeHtml(output.name)} 
+                <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${output.quantity || '0'} ${output.unit || ''})</span>
+              </label>
+              <input type="number" class="form-input execute-output-quantity-input" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
+            </div>
+          `;
+          
+          outputsContainer.appendChild(outputSection);
+        });
+      } else if (outputsContainer) {
+        outputsContainer.innerHTML = '<p style="color: var(--text-secondary); font-size: 14px; padding: 16px;">No variable outputs for this step.</p>';
+      }
+      
+      // Check if any required inputs have no available inventory
+      let hasMissingInventory = false;
+      const missingInventoryInputs = [];
+      const allInputSections = inputsContainer.querySelectorAll('.execute-input-section');
+      allInputSections.forEach(section => {
+        const select = section.querySelector('.execute-inventory-select');
+        if (select && select.dataset.required === 'true') {
+          // Get all options and filter out empty values (CSS doesn't support != in selectors)
+          const allOptions = select.querySelectorAll('option');
+          const validOptions = Array.from(allOptions).filter(opt => opt.value && opt.value !== '');
+          if (validOptions.length === 0) {
+            hasMissingInventory = true;
+            const inputName = select.dataset.inputName;
+            missingInventoryInputs.push(inputName);
+          }
+        }
+      });
+      
+      // Disable submit button if required inventory is missing
+      const submitButton = modal.querySelector('#execute-step-submit-btn');
+      if (submitButton) {
+        if (hasMissingInventory) {
+          submitButton.disabled = true;
+          submitButton.style.opacity = '0.5';
+          submitButton.style.cursor = 'not-allowed';
+          const missingList = missingInventoryInputs.map(name => `"${name}"`).join(', ');
+          submitButton.title = `Cannot execute: Required inventory items are not available for: ${missingList}. Please add inventory before executing this step.`;
+          
+          // Show a warning notification
+          showNotification('error', 'Missing Inventory', `Cannot execute: No matching inventory found for required inputs: ${missingList}. Please add inventory items before executing this step.`);
+        } else {
+          submitButton.disabled = false;
+          submitButton.style.opacity = '1';
+          submitButton.style.cursor = 'pointer';
+          submitButton.title = '';
+        }
+      }
+      
+      // Show modal
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    };
+    
+    // ============================================================
+    // SUBMIT EXECUTION (Complete Step with Data)
+    // ============================================================
+    window.submitExecution = async function() {
+      const modal = document.getElementById('execute-step-modal');
+      if (!modal) return;
+      
+      const executionId = modal.dataset.executionId;
+      const executionStepId = modal.dataset.executionStepId;
+      
+      if (!executionId || !executionStepId) {
+        showNotification('error', 'Error', 'Execution context missing.');
+        return;
+      }
+      
+      // VALIDATION: Check required variable inputs
+      const validationErrors = [];
+      
+      // Check inventory selections for variable inputs
+      const inventorySelects = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
+      inventorySelects.forEach(select => {
+        const inventoryId = select.value;
+        const inputName = select.dataset.inputName;
+        
+        // Check if inventory is selected
+        if (!inventoryId || inventoryId === '') {
+          validationErrors.push(`Please select inventory for "${inputName}"`);
+          // Highlight the field
+          select.style.border = '2px solid var(--error, #ef4444)';
+        } else {
+          select.style.border = '';
+          
+          // Check quantity
+          const quantityInput = modal.querySelector(`.execute-quantity-input[data-input-name="${inputName}"]`);
+          if (quantityInput) {
+            const quantity = parseFloat(quantityInput.value);
+            if (!quantity || isNaN(quantity) || quantity <= 0) {
+              validationErrors.push(`Please enter a valid quantity for "${inputName}"`);
+              quantityInput.style.border = '2px solid var(--error, #ef4444)';
+            } else {
+              quantityInput.style.border = '';
+              
+              // Check if quantity exceeds available inventory
+              // Note: Quantity is assumed to be in the inventory item's unit
+              const option = select.options[select.selectedIndex];
+              if (option && option.dataset.quantity) {
+                const availableQty = parseFloat(option.dataset.quantity);
+                const inventoryUnit = option.dataset.unit || '';
+                const quantityUnit = quantityInput.dataset.inventoryUnit || inventoryUnit;
+                
+                // Since the quantity is entered in the inventory item's unit (shown in the unit display),
+                // we can compare directly. The backend will handle any unit conversion if needed.
+                if (quantity > availableQty) {
+                  validationErrors.push(`Quantity for "${inputName}" (${quantity} ${quantityUnit}) exceeds available inventory (${availableQty} ${inventoryUnit})`);
+                  quantityInput.style.border = '2px solid var(--error, #ef4444)';
+                }
+              }
+            }
+          }
+        }
+      });
+      
+      // VALIDATION: Check required execution prompts
+      const promptInputs = modal.querySelectorAll('.execute-prompt-input[required]');
+      promptInputs.forEach(input => {
+        const label = input.dataset.promptLabel;
+        const value = input.value.trim();
+        
+        if (!value) {
+          validationErrors.push(`Please fill in required field: "${label}"`);
+          input.style.border = '2px solid var(--error, #ef4444)';
+        } else {
+          input.style.border = '';
+        }
+      });
+      
+      // Validate confirm inputs (editable quantity/unit)
+      const confirmQuantityInputs = modal.querySelectorAll('.execute-confirm-quantity-input[data-required="true"]');
+      const confirmUnitSelects = modal.querySelectorAll('.execute-confirm-unit-input[data-required="true"]');
+      
+      confirmQuantityInputs.forEach(input => {
+        const quantity = parseFloat(input.value);
+        const inputName = input.dataset.inputName;
+        const unitSelect = Array.from(confirmUnitSelects).find(sel => sel.dataset.inputName === inputName);
+        const unit = unitSelect ? unitSelect.value : '';
+        
+        if (isNaN(quantity) || quantity <= 0) {
+          validationErrors.push(`Please enter a valid quantity for "${inputName}"`);
+          input.style.border = '2px solid var(--error, #ef4444)';
+        } else {
+          input.style.border = '';
+        }
+        
+        if (!unit) {
+          validationErrors.push(`Please select a unit for "${inputName}"`);
+          if (unitSelect) unitSelect.style.border = '2px solid var(--error, #ef4444)';
+        } else if (unitSelect) {
+          unitSelect.style.border = '';
+        }
+      });
+      
+      // If validation errors exist, show them and prevent submission
+      if (validationErrors.length > 0) {
+        showNotification('error', 'Validation Error', validationErrors.join('. ') + '.');
+        // Scroll to first error
+        const firstError = modal.querySelector('[style*="border: 2px solid var(--error"]');
+        if (firstError) {
+          firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstError.focus();
+        }
+        return;
+      }
+      
+      // Additional check: Ensure all required variable inputs have inventory selected
+      const requiredSelects = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
+      const missingSelections = [];
+      for (const select of requiredSelects) {
+        if (!select.value || select.value === '') {
+          missingSelections.push(select.dataset.inputName);
+          select.style.border = '2px solid var(--error, #ef4444)';
+        }
+      }
+      
+      if (missingSelections.length > 0) {
+        const missingList = missingSelections.map(name => `"${name}"`).join(', ');
+        showNotification('error', 'Validation Error', `Please select inventory for all required inputs: ${missingList}.`);
+        const firstMissing = modal.querySelector('.execute-inventory-select[data-required="true"]:not([value])');
+        if (firstMissing) {
+          firstMissing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstMissing.focus();
+        }
+        return;
+      }
+      
+      try {
+        // Collect variable inputs (inventory selections)
+        const actualInputs = [];
+        inventorySelects.forEach(select => {
+          const inventoryId = select.value;
+          if (inventoryId) {
+            const quantityInput = modal.querySelector(`.execute-quantity-input[data-input-name="${select.dataset.inputName}"]`);
+            const quantity = quantityInput ? parseFloat(quantityInput.value) : 0;
+            const option = select.options[select.selectedIndex];
+            const unit = option ? option.dataset.unit : '';
+            
+            actualInputs.push({
+              name: select.dataset.inputName,
+              inventory_item_id: inventoryId,
+              quantity: quantity,
+              unit: unit
+            });
           }
         });
         
-        showNotification('success', 'Step Completed', `Step "${readyStep.step_name || 'Unknown'}" has been completed successfully.`);
+        // Collect confirm inputs (editable quantity/unit)
+        const confirmQuantityInputs = modal.querySelectorAll('.execute-confirm-quantity-input');
+        const confirmUnitSelects = modal.querySelectorAll('.execute-confirm-unit-input');
+        confirmQuantityInputs.forEach(quantityInput => {
+          const inputName = quantityInput.dataset.inputName;
+          const quantity = parseFloat(quantityInput.value);
+          // Find matching unit select
+          const unitSelect = Array.from(confirmUnitSelects).find(sel => sel.dataset.inputName === inputName);
+          const unit = unitSelect ? unitSelect.value : '';
+          
+          if (inputName && !isNaN(quantity) && quantity > 0 && unit) {
+            actualInputs.push({
+              name: inputName,
+              quantity: quantity,
+              unit: unit
+            });
+          }
+        });
+        
+        // Collect execution prompts
+        const executionData = {};
+        const allPromptInputs = modal.querySelectorAll('.execute-prompt-input');
+        allPromptInputs.forEach(input => {
+          const label = input.dataset.promptLabel;
+          const value = input.value.trim();
+          if (label && value) {
+            executionData[label] = value;
+          }
+        });
+        
+        // Get step definition for output units
+        const executionDataForOutputs = await CoreAPI.getExecution(executionId);
+        const executionStepsForOutputs = executionDataForOutputs.execution_steps || [];
+        const readyStepForOutputs = executionStepsForOutputs.find(es => es.id === executionStepId);
+        const processDataForOutputs = await CoreAPI.getProcess(executionDataForOutputs.process_id);
+        const stepDefinitionForOutputs = processDataForOutputs.steps.find(s => s.id === readyStepForOutputs.step_id);
+        
+        // Collect ALL outputs (both variable and static) to store as intermediate products
+        const actualOutputs = [];
+        const allStepOutputs = stepDefinitionForOutputs.outputs || [];
+        
+        // First, collect variable outputs (user-entered quantities)
+        const outputInputs = modal.querySelectorAll('.execute-output-quantity-input');
+        const variableOutputNames = new Set();
+        outputInputs.forEach(input => {
+          const name = input.dataset.outputName;
+          const quantity = parseFloat(input.value);
+          if (name && !isNaN(quantity)) {
+            const outputDef = allStepOutputs.find(o => o.name === name);
+            
+            actualOutputs.push({
+              name: name,
+              quantity: quantity,
+              unit: outputDef ? (outputDef.unit || 'units') : 'units'
+            });
+            variableOutputNames.add(name);
+          }
+        });
+        
+        // Then, add static outputs (use step definition quantities)
+        allStepOutputs.forEach(outputDef => {
+          // Skip if already added as variable output
+          if (!variableOutputNames.has(outputDef.name)) {
+            actualOutputs.push({
+              name: outputDef.name,
+              quantity: outputDef.quantity || 0,
+              unit: outputDef.unit || 'units'
+            });
+          }
+        });
+        
+        // Get current user for recording
+        const user = await getCurrentUser();
+        executionData.completed_by = user.username;
+        executionData.completed_by_email = user.email;
+        executionData.completed_at = new Date().toISOString();
+        
+        // Complete the step
+        await CoreAPI.completeStep(executionId, executionStepId, {
+          actual_inputs: actualInputs,
+          actual_outputs: actualOutputs,
+          execution_data: executionData
+        });
+        
+        // Close modal
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        showNotification('success', 'Step Completed', 'Step has been completed successfully.');
         
         // Reload executions to show updated state
         await loadExecutions();
+        
+        // Reload inventory to reflect consumed items and new outputs
+        await loadInventory();
         
       } catch (error) {
         console.error('Failed to complete step:', error);
@@ -1160,10 +2056,20 @@
                 <span class="inventory-item-name">${escapeHtml(item.name)}</span>
                 <span class="inventory-item-quantity">${item.quantity || '0'} ${item.unit || ''}</span>
               </div>
-              ${item.supplier || item.source_execution_id ? `
+              ${item.supplier || item.source_execution_id || (item.extra_data && (item.extra_data.execution_prompts || item.extra_data.variable_inputs)) ? `
                 <div class="inventory-item-meta">
                   ${item.supplier ? `Supplier: ${escapeHtml(item.supplier)}` : ''}
-                  ${item.source_execution_id ? `From: ${escapeHtml(item.source_execution_id)}` : ''}
+                  ${item.source_execution_id ? `From: ${escapeHtml(item.source_step_name || 'Execution')}` : ''}
+                  ${item.extra_data && item.extra_data.execution_prompts && Object.keys(item.extra_data.execution_prompts).length > 0 ? `
+                    <div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">
+                      ${Object.entries(item.extra_data.execution_prompts).slice(0, 2).map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(String(value))}`).join(', ')}${Object.keys(item.extra_data.execution_prompts).length > 2 ? '...' : ''}
+                    </div>
+                  ` : ''}
+                  ${item.extra_data && item.extra_data.variable_inputs && item.extra_data.variable_inputs.length > 0 ? `
+                    <div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">
+                      Inputs: ${item.extra_data.variable_inputs.map(i => `${escapeHtml(i.name || 'Unknown')} (${i.quantity || '0'} ${i.unit || ''})`).join(', ')}
+                    </div>
+                  ` : ''}
                 </div>
               ` : ''}
             </div>
@@ -1738,9 +2644,26 @@
         });
         
         if (stepCard) {
+          // Find the Outputs section specifically (not the last section, since we now have execution prompts)
+          // Look for the io-section that contains "Outputs" in its title
           const allIOSections = stepCard.querySelectorAll('.io-section');
-          if (allIOSections.length > 1) {
-            const outputsSection = allIOSections[allIOSections.length - 1];
+          let outputsSection = null;
+          
+          // Find the section with "Outputs" in the title
+          for (const section of allIOSections) {
+            const title = section.querySelector('.io-section-title');
+            if (title && title.textContent.includes('Outputs')) {
+              outputsSection = section;
+              break;
+            }
+          }
+          
+          // Fallback: if we can't find by title, use the second section (index 1) which should be outputs
+          if (!outputsSection && allIOSections.length > 1) {
+            outputsSection = allIOSections[1];
+          }
+          
+          if (outputsSection) {
             const outputItems = outputsSection.querySelectorAll('.io-item');
             
             outputItems.forEach(item => {
@@ -1871,20 +2794,22 @@
       typeSpan.style.position = 'relative';
       const typeSelect = document.createElement('select');
       typeSelect.className = 'form-select io-type-input';
-      typeSelect.style.cssText = 'width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
-      ['variable', 'static'].forEach(type => {
-        const option = document.createElement('option');
-        option.value = type;
-        option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
-        typeSelect.appendChild(option);
-      });
+      typeSelect.style.cssText = 'width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      const variableOption = document.createElement('option');
+      variableOption.value = 'variable';
+      variableOption.textContent = 'Select inventory at execution';
+      typeSelect.appendChild(variableOption);
+      const staticOption = document.createElement('option');
+      staticOption.value = 'static';
+      staticOption.textContent = 'Static';
+      typeSelect.appendChild(staticOption);
       typeSpan.appendChild(typeSelect);
       
       // Tooltip icon
       const tooltipIcon = document.createElement('span');
       tooltipIcon.className = 'tooltip-icon';
       tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
-      tooltipIcon.title = 'Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.';
+      tooltipIcon.title = 'Select inventory at execution: You will choose which supplier batch is consumed when this step runs. Do NOT ask for batch numbers here. Static: System will not prompt for confirmation upon execution.';
       tooltipIcon.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"></circle>
@@ -2023,12 +2948,30 @@
       typeSpan.style.position = 'relative';
       const typeSelect = document.createElement('select');
       typeSelect.className = 'form-select io-type-input';
-      typeSelect.style.cssText = 'width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
-      ['variable', 'static'].forEach(type => {
-        const option = document.createElement('option');
-        option.value = type;
-        option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
-        typeSelect.appendChild(option);
+      typeSelect.style.cssText = 'width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      const variableOption = document.createElement('option');
+      variableOption.value = 'variable';
+      variableOption.textContent = 'Select inventory at execution';
+      typeSelect.appendChild(variableOption);
+      const staticOption = document.createElement('option');
+      staticOption.value = 'static';
+      staticOption.textContent = 'Static';
+      typeSelect.appendChild(staticOption);
+      // Set default to "Select inventory at execution" (variable) for outputs
+      typeSelect.value = 'variable';
+      // Mark this as created from output for confirmation dialog
+      typeSelect.dataset.fromOutput = 'true';
+      // Add change listener to show confirmation when changing away from "Select inventory at execution"
+      typeSelect.addEventListener('change', function() {
+        if (this.dataset.fromOutput === 'true' && this.value === 'static') {
+          // Show custom modal instead of browser confirm
+          showStaticInputWarningModal((confirmed) => {
+            if (!confirmed) {
+              // Revert to "Select inventory at execution"
+              this.value = 'variable';
+            }
+          });
+        }
       });
       typeSpan.appendChild(typeSelect);
       
@@ -2036,7 +2979,7 @@
       const tooltipIcon = document.createElement('span');
       tooltipIcon.className = 'tooltip-icon';
       tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
-      tooltipIcon.title = 'Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.';
+      tooltipIcon.title = 'Select inventory at execution: You will choose which supplier batch is consumed when this step runs. Do NOT ask for batch numbers here. Static: System will not prompt for confirmation upon execution.';
       tooltipIcon.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"></circle>
@@ -2137,20 +3080,22 @@
       typeSpan.style.position = 'relative';
       const typeSelect = document.createElement('select');
       typeSelect.className = 'form-select io-type-input';
-      typeSelect.style.cssText = 'width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
-      ['variable', 'static'].forEach(type => {
-        const option = document.createElement('option');
-        option.value = type;
-        option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
-        typeSelect.appendChild(option);
-      });
+      typeSelect.style.cssText = 'width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      const variableOption = document.createElement('option');
+      variableOption.value = 'variable';
+      variableOption.textContent = 'Select inventory at execution';
+      typeSelect.appendChild(variableOption);
+      const staticOption = document.createElement('option');
+      staticOption.value = 'static';
+      staticOption.textContent = 'Static';
+      typeSelect.appendChild(staticOption);
       typeSpan.appendChild(typeSelect);
       
       // Tooltip icon
       const tooltipIcon = document.createElement('span');
       tooltipIcon.className = 'tooltip-icon';
       tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
-      tooltipIcon.title = 'Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.';
+      tooltipIcon.title = 'Select inventory at execution: You will choose which supplier batch is consumed when this step runs. Do NOT ask for batch numbers here. Static: System will not prompt for confirmation upon execution.';
       tooltipIcon.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"></circle>
@@ -2192,6 +3137,56 @@
       updateStepMeta(stepCard);
     };
     
+    // ============================================================
+    // ADD EXECUTION PROMPT
+    // ============================================================
+    window.addExecutionPrompt = function(button) {
+      const ioSection = button.closest('.io-section');
+      const ioList = ioSection.querySelector('.io-list');
+      
+      // Remove "No execution prompts defined" message if present
+      const emptyMsg = ioList.querySelector('p');
+      if (emptyMsg && emptyMsg.textContent.includes('No execution prompts defined')) {
+        emptyMsg.remove();
+      }
+      
+      const promptHtml = `
+        <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
+          <span class="io-item-name" style="flex: 1;">
+            <input type="text" class="form-input prompt-label-input" placeholder="Label (e.g., Batch number)" style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+          </span>
+          <span class="io-item-type">
+            <select class="form-select prompt-type-input" style="width: 120px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="text">Text</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+              <option value="select">Select</option>
+            </select>
+          </span>
+          <span class="io-item-unit">
+            <input type="text" class="form-input prompt-unit-input" placeholder="Unit (optional)" style="width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+          </span>
+          <span class="io-item-type">
+            <select class="form-select prompt-required-input" style="width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="true">Required</option>
+              <option value="false">Optional</option>
+            </select>
+          </span>
+          <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.io-item').remove(); updateStepMeta(this.closest('.step-card'));" style="padding: 4px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      `;
+      
+      ioList.insertAdjacentHTML('beforeend', promptHtml);
+      
+      // Update step meta
+      updateStepMeta(button.closest('.step-card'));
+    };
+    
     window.addOutput = function(button) {
       const ioSection = button.closest('.io-section');
       const ioList = ioSection.querySelector('.io-list');
@@ -2221,11 +3216,11 @@
             </select>
           </span>
           <span class="io-item-type" style="position: relative;">
-            <select class="form-select io-type-input" style="width: 110px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="variable">Variable</option>
+            <select class="form-select io-type-input" style="width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="variable">Confirm at execution</option>
               <option value="static">Static</option>
             </select>
-            <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Variable: System will prompt for confirmation upon execution. Static: System will not prompt for confirmation upon execution.">
+            <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Confirm at execution: You will confirm or override the actual quantity produced when this step runs. Static: System will not prompt for confirmation upon execution.">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="16" x2="12" y2="12"></line>
@@ -2326,23 +3321,31 @@
         const quantity = item.querySelector('.io-quantity-input')?.value;
         const unit = item.querySelector('.io-unit-input')?.value;
         const typeSelect = item.querySelector('.io-type-input');
-        const isVariable = typeSelect ? typeSelect.value === 'variable' : true;
+        const typeValue = typeSelect ? typeSelect.value : 'confirm';
+        // Determine flags based on type:
+        // - "confirm" = Confirm at execution (editable quantity/unit, no inventory selection)
+        // - "variable" = Select inventory at execution (inventory selection required)
+        // - "static" = Static (no prompts)
+        const isConfirm = typeValue === 'confirm';
+        const isVariable = typeValue === 'variable';
+        const isStatic = typeValue === 'static';
         
         if (name) {
           inputs.push({
             name: name,
             quantity: quantity ? parseFloat(quantity) : null,
             unit: unit || '',
-            is_variable: isVariable
+            is_variable: isConfirm || isVariable, // Both confirm and variable are "variable" (not static)
+            requires_inventory_selection: isVariable // Only inventory selection requires inventory
           });
         }
       });
       
-      // Get outputs from the last io-section
+      // Get outputs from the second io-section (outputs section)
       let outputItems = [];
       if (allIOSections.length > 1) {
-        const lastIOSection = allIOSections[allIOSections.length - 1];
-        outputItems = lastIOSection.querySelectorAll('.io-item');
+        const outputsSection = allIOSections[1];
+        outputItems = outputsSection.querySelectorAll('.io-item');
       }
       
       const outputs = [];
@@ -2358,7 +3361,33 @@
             name: name,
             quantity: quantity ? parseFloat(quantity) : null,
             unit: unit || '',
-            is_variable: isVariable
+            is_variable: isVariable, // Keep for backward compatibility
+            requires_execution_confirmation: isVariable
+          });
+        }
+      });
+      
+      // Get execution prompts from the third io-section (execution prompts section)
+      let promptItems = [];
+      if (allIOSections.length > 2) {
+        const promptsSection = allIOSections[2];
+        promptItems = promptsSection.querySelectorAll('.io-item');
+      }
+      
+      const executionPrompts = [];
+      promptItems.forEach(item => {
+        const label = item.querySelector('.prompt-label-input')?.value?.trim();
+        const type = item.querySelector('.prompt-type-input')?.value || 'text';
+        const unit = item.querySelector('.prompt-unit-input')?.value?.trim() || null;
+        const requiredSelect = item.querySelector('.prompt-required-input');
+        const required = requiredSelect ? requiredSelect.value === 'true' : true;
+        
+        if (label) {
+          executionPrompts.push({
+            label: label,
+            type: type,
+            unit: unit,
+            required: required
           });
         }
       });
@@ -2374,7 +3403,8 @@
           name: stepName,
           description: stepDescription,
           inputs: inputs || [],
-          outputs: outputs || []
+          outputs: outputs || [],
+          execution_prompts: executionPrompts || []
         };
         
         if (stepId && stepId.startsWith('step-new-')) {
@@ -2706,5 +3736,68 @@
       animation: slideInRight 0.3s ease-out;
     }
   </style>
+  
+  <!-- Execute Step Modal -->
+  <div class="modal-overlay" id="execute-step-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; overflow-y: auto;">
+    <div class="card" style="max-width: 700px; width: 90%; padding: 24px; margin: 24px auto; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Execute Step: <span id="execute-step-name">Unknown</span></h2>
+        <button onclick="document.getElementById('execute-step-modal').style.display='none'; document.body.style.overflow='auto';" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Variable Inputs Section -->
+      <div style="margin-bottom: 32px;">
+        <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-default);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+            <path d="M12 5v14M5 12l7-7 7 7"/>
+          </svg>
+          Select Inventory (Variable Inputs)
+        </h3>
+        <div id="execute-inputs-container">
+          <!-- Variable inputs will be rendered here -->
+        </div>
+      </div>
+      
+      <!-- Execution Prompts Section -->
+      <div style="margin-bottom: 32px;">
+        <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-default);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          Execution Prompts (Recorded when step runs)
+        </h3>
+        <div id="execute-prompts-container">
+          <!-- Execution prompts will be rendered here -->
+        </div>
+      </div>
+      
+      <!-- Variable Outputs Section -->
+      <div style="margin-bottom: 32px;">
+        <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-default);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+            <path d="M12 19V5M5 12l7 7 7-7"/>
+          </svg>
+          Confirm Outputs (Variable Outputs)
+        </h3>
+        <div id="execute-outputs-container">
+          <!-- Variable outputs will be rendered here -->
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-light);">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('execute-step-modal').style.display='none'; document.body.style.overflow='auto';">Cancel</button>
+        <button type="button" id="execute-step-submit-btn" class="btn btn-primary" onclick="submitExecution()">Complete Step</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
