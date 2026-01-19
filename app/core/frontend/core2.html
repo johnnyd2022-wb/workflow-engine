@@ -619,10 +619,12 @@
       if (hasMoreThanThree) {
         scrollContainer.style.maxHeight = '306px'; // Exactly 3 cards + gaps
         scrollContainer.style.overflowY = 'auto';
+        scrollContainer.dataset.originalMaxHeight = '306px';
       } else {
         // If 3 or fewer items, no scroll needed
         scrollContainer.style.maxHeight = 'none';
         scrollContainer.style.overflowY = 'visible';
+        scrollContainer.dataset.originalMaxHeight = 'none';
       }
       
       scrollContainer.appendChild(itemsContainer);
@@ -882,14 +884,79 @@
       const arrow = document.getElementById(`arrow-${itemId}`);
       const isExpanded = card.dataset.isExpanded === 'true';
       
+      // Find the scroll container that contains this card
+      const scrollContainer = card.closest('.inventory-items-scroll-container');
+      
       if (isExpanded) {
+        // Collapse: hide details and restore fixed height
         details.style.display = 'none';
         arrow.style.transform = 'rotate(0deg)';
+        card.style.height = '90px';
+        card.style.overflow = 'hidden';
         card.dataset.isExpanded = 'false';
+        
+        // Restore scroll container's original maxHeight if it exists
+        if (scrollContainer) {
+          const originalMaxHeight = scrollContainer.dataset.originalMaxHeight;
+          if (originalMaxHeight) {
+            scrollContainer.style.maxHeight = originalMaxHeight;
+            scrollContainer.style.overflowY = originalMaxHeight === 'none' ? 'visible' : 'auto';
+          }
+        }
       } else {
+        // Expand: show details and allow card to grow
         details.style.display = 'block';
         arrow.style.transform = 'rotate(90deg)';
+        card.style.height = 'auto';
+        card.style.overflow = 'visible';
         card.dataset.isExpanded = 'true';
+        
+        // Temporarily expand scroll container's maxHeight to show full expanded card
+        if (scrollContainer) {
+          // Store original maxHeight if not already stored
+          if (!scrollContainer.dataset.originalMaxHeight) {
+            scrollContainer.dataset.originalMaxHeight = scrollContainer.style.maxHeight || '306px';
+          }
+          
+          // Use setTimeout to ensure DOM has updated, then calculate and set height
+          setTimeout(() => {
+            // Get the items container (direct child of scroll container)
+            const itemsContainer = scrollContainer.querySelector('.inventory-category-items');
+            if (!itemsContainer) return;
+            
+            // Get all card elements
+            const allCards = Array.from(itemsContainer.children);
+            
+            // Find the index of the expanded card
+            const cardIndex = allCards.indexOf(card);
+            if (cardIndex === -1) return;
+            
+            // Calculate the position of the card within the container
+            let cardsHeightBefore = 0;
+            for (let i = 0; i < cardIndex; i++) {
+              const itemCard = allCards[i];
+              if (itemCard) {
+                const itemHeight = itemCard.offsetHeight || 90; // Use offsetHeight for accurate measurement
+                cardsHeightBefore += itemHeight + 12; // 12px gap between cards
+              }
+            }
+            
+            // Get the expanded card's full height (wait a bit more for full expansion)
+            setTimeout(() => {
+              const expandedCardHeight = card.offsetHeight;
+              
+              // Calculate total height needed: cards before + expanded card + buffer
+              const heightNeeded = cardsHeightBefore + expandedCardHeight + 60; // 60px buffer for safety
+              
+              // Set maxHeight to accommodate the full expanded card
+              scrollContainer.style.maxHeight = `${Math.max(heightNeeded, 500)}px`; // At least 500px
+              scrollContainer.style.overflowY = 'auto';
+              
+              // Scroll the expanded card into view
+              card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+            }, 50);
+          }, 100);
+        }
       }
     }
     
@@ -904,8 +971,10 @@
       
       if (isExpanded) {
         // Collapse: show only 3 cards
-        scrollContainer.style.maxHeight = '306px'; // Exactly 3 cards + gaps
-        scrollContainer.style.overflowY = 'auto';
+        // Restore original maxHeight if it exists, otherwise use default
+        const originalMaxHeight = scrollContainer.dataset.originalMaxHeight || '306px';
+        scrollContainer.style.maxHeight = originalMaxHeight;
+        scrollContainer.style.overflowY = originalMaxHeight === 'none' ? 'visible' : 'auto';
         toggleButton.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
             <polyline points="6 9 12 15 18 9"/>
