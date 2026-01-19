@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
@@ -731,7 +732,13 @@ def complete_step(execution_id: str, execution_step_id: str):
         # Refresh execution_step to ensure we have the latest data including execution_data
         db_session.refresh(execution_step)
 
+        # Collect execution warnings for structured error reporting
+        execution_warnings = []
+        execution_errors = []
+
         # Consume inventory for variable inputs
+        # TRANSACTION INTEGRITY: Collect all inventory updates first, then commit atomically
+        inventory_updates = []
         if actual_inputs:
             inventory_repo = InventoryRepository(db_session)
             for input_data in actual_inputs:
@@ -742,83 +749,120 @@ def complete_step(execution_id: str, execution_step_id: str):
                 if inventory_item_id:
                     try:
                         inventory_item = inventory_repo.get_inventory_item_by_id(UUID(inventory_item_id), org_id)
-                        if inventory_item:
-                            # Convert consumed quantity to inventory item's unit
-                            current_quantity = float(inventory_item.quantity)
-                            inventory_unit = inventory_item.unit or ""
+                        if not inventory_item:
+                            execution_warnings.append(
+                                f"Inventory item {inventory_item_id} not found for input '{input_data.get('name', 'Unknown')}'"
+                            )
+                            continue
 
-                            # Check if units are compatible
-                            if consumed_unit and inventory_unit:
-                                if not are_units_compatible(consumed_unit, inventory_unit):
-                                    import logging
+                        # QUANTITY PRECISION: Use Decimal for safe arithmetic
+                        try:
+                            current_quantity = Decimal(str(inventory_item.quantity))
+                        except (InvalidOperation, ValueError, TypeError):
+                            execution_errors.append(
+                                f"Invalid quantity format for inventory item {inventory_item_id}: {inventory_item.quantity}"
+                            )
+                            continue
 
-                                    logger = logging.getLogger(__name__)
-                                    logger.warning(
-                                        f"Cannot consume {quantity_consumed} {consumed_unit} from inventory "
-                                        f"item {inventory_item_id} with unit {inventory_unit}: units are incompatible"
-                                    )
-                                    continue
+                        inventory_unit = inventory_item.unit or ""
 
-                                # Convert consumed quantity to inventory unit
-                                try:
-                                    quantity_consumed_converted = convert_to_inventory_unit(
-                                        float(quantity_consumed), consumed_unit, inventory_unit
-                                    )
-                                except ValueError as conv_error:
-                                    import logging
-
-                                    logger = logging.getLogger(__name__)
-                                    logger.warning(
-                                        f"Failed to convert {quantity_consumed} {consumed_unit} to {inventory_unit}: {conv_error}"
-                                    )
-                                    continue
-                            else:
-                                # If no unit specified, assume same unit (backward compatibility)
-                                quantity_consumed_converted = float(quantity_consumed)
-
-                            # Decrease inventory quantity
-                            new_quantity = max(0, current_quantity - quantity_consumed_converted)
-                            # Format quantity to avoid floating point precision issues
-                            # Always set to exactly "0" string if quantity is effectively zero
-                            if abs(new_quantity) < 0.0001:
-                                inventory_item.quantity = "0"
-                            else:
-                                # Format to remove unnecessary trailing zeros
-                                formatted_qty = (
-                                    str(new_quantity).rstrip("0").rstrip(".")
-                                    if "." in str(new_quantity)
-                                    else str(int(new_quantity))
+                        # Check if units are compatible
+                        if consumed_unit and inventory_unit:
+                            if not are_units_compatible(consumed_unit, inventory_unit):
+                                execution_errors.append(
+                                    f"Cannot consume {quantity_consumed} {consumed_unit} from inventory "
+                                    f"item {inventory_item_id} (unit: {inventory_unit}): units are incompatible"
                                 )
-                                # Ensure we don't end up with "0.0" or "0.00" etc.
-                                if float(formatted_qty) == 0:
-                                    inventory_item.quantity = "0"
-                                else:
-                                    inventory_item.quantity = formatted_qty
-                            # Commit the quantity update immediately
-                            db_session.commit()
-                            # Refresh the item to ensure we have the latest quantity
-                            db_session.refresh(inventory_item)
+                                continue
+
+                            # Convert consumed quantity to inventory unit
+                            try:
+                                quantity_consumed_decimal = Decimal(str(quantity_consumed))
+                                quantity_consumed_converted = Decimal(
+                                    str(
+                                        convert_to_inventory_unit(
+                                            float(quantity_consumed_decimal), consumed_unit, inventory_unit
+                                        )
+                                    )
+                                )
+                            except (ValueError, InvalidOperation) as conv_error:
+                                execution_errors.append(
+                                    f"Failed to convert {quantity_consumed} {consumed_unit} to {inventory_unit}: {conv_error}"
+                                )
+                                continue
+                        else:
+                            # If no unit specified, assume same unit (backward compatibility)
+                            try:
+                                quantity_consumed_converted = Decimal(str(quantity_consumed))
+                            except (InvalidOperation, ValueError, TypeError):
+                                execution_errors.append(
+                                    f"Invalid quantity format for input '{input_data.get('name', 'Unknown')}': {quantity_consumed}"
+                                )
+                                continue
+
+                        # Decrease inventory quantity using Decimal arithmetic
+                        new_quantity = max(Decimal("0"), current_quantity - quantity_consumed_converted)
+
+                        # Format quantity deterministically (audit-safe)
+                        # Always set to exactly "0" string if quantity is effectively zero
+                        if abs(new_quantity) < Decimal("0.0001"):
+                            formatted_qty = "0"
+                        else:
+                            # Format to remove unnecessary trailing zeros while preserving precision
+                            formatted_qty = str(new_quantity.normalize())
+                            # Remove trailing .0 if present
+                            if formatted_qty.endswith(".0"):
+                                formatted_qty = formatted_qty[:-2]
+
+                        # Store update for atomic commit
+                        inventory_updates.append((inventory_item, formatted_qty))
+
                     except Exception as e:
                         import logging
 
                         logger = logging.getLogger(__name__)
-                        logger.warning(f"Failed to consume inventory {inventory_item_id}: {e}")
+                        logger.exception(f"Unexpected error consuming inventory {inventory_item_id}")
+                        execution_errors.append(f"Failed to consume inventory {inventory_item_id}: {str(e)}")
+
+        # FAILURE HANDLING: Block execution if critical errors occurred
+        if execution_errors:
+            # Persist errors to execution_data for audit trail
+            if not execution_step.execution_data:
+                execution_step.execution_data = {}
+            execution_step.execution_data["execution_errors"] = execution_errors
+            db_session.commit()
+            return jsonify({"error": "Execution failed", "details": execution_errors}), 400
+
+        # Apply all inventory updates atomically (single commit per execution step)
+        for inventory_item, new_quantity in inventory_updates:
+            inventory_item.quantity = new_quantity
 
         # Create inventory items for outputs if specified
         # All non-terminal outputs are stored as intermediate products (WORK_IN_PROGRESS)
         # Terminal outputs are stored as FINAL_PRODUCT
         # This provides a live view of stock at any moment
+        # TRANSACTION INTEGRITY: Collect all output creations, then commit atomically
+        output_creations = []
         if actual_outputs:
-            inventory_repo = InventoryRepository(db_session)
+            # Reuse inventory_repo if already created, otherwise create it
+            if "inventory_repo" not in locals():
+                inventory_repo = InventoryRepository(db_session)
             for output in actual_outputs:
                 output_quantity = output.get("quantity", 0)
-                # Skip creating inventory items with zero or negative quantity
+                output_name = output.get("name", "Unknown")
+
+                # QUANTITY PRECISION: Use Decimal for validation
                 try:
-                    quantity_float = float(output_quantity)
-                    if quantity_float <= 0:
+                    quantity_decimal = Decimal(str(output_quantity))
+                    if quantity_decimal <= 0:
+                        execution_warnings.append(
+                            f"Skipping output '{output_name}' with zero or negative quantity: {output_quantity}"
+                        )
                         continue
-                except (ValueError, TypeError):
-                    # If quantity is not a valid number, skip this output
+                except (InvalidOperation, ValueError, TypeError):
+                    execution_warnings.append(
+                        f"Skipping output '{output_name}' with invalid quantity format: {output_quantity}"
+                    )
                     continue
 
                 # Determine inventory type based on terminal step detection
@@ -829,9 +873,12 @@ def complete_step(execution_id: str, execution_step_id: str):
                 if execution_step.is_terminal_step:
                     inventory_type = InventoryType.FINAL_PRODUCT.value
 
-                # Store execution metadata in extra_data for traceability
-                # This includes execution prompts, variable inputs, and variable outputs
-                # Read from execution_step.execution_data (from DB) so existing entries can be updated
+                # EXTRA_DATA DISCIPLINE: Store only source execution data (not derived data)
+                # extra_data schema:
+                # - execution_prompts: Source data from execution_step.execution_data (user-entered metadata)
+                # - variable_inputs: Source data from execution_step.actual_inputs (what was consumed)
+                # - variable_output: Source data from execution_step.actual_outputs (this specific output)
+                # NOTE: previous_steps_data is derived/read-only and should NEVER be persisted here
                 extra_data = {}
                 # Get execution_data from the execution_step (read from DB after refresh)
                 step_execution_data = execution_step.execution_data if execution_step.execution_data else {}
@@ -839,7 +886,13 @@ def complete_step(execution_id: str, execution_step_id: str):
                     # Store execution prompts (metadata captured during execution)
                     # Keep completed_by for user tracing, but filter out email and user_id
                     execution_prompts = {}
-                    internal_fields = {"completed_by_email", "completed_by_user_id", "completed_at"}
+                    internal_fields = {
+                        "completed_by_email",
+                        "completed_by_user_id",
+                        "completed_at",
+                        "execution_errors",
+                        "execution_warnings",
+                    }
                     for key, value in step_execution_data.items():
                         if key not in internal_fields and value is not None and value != "":
                             execution_prompts[key] = value
@@ -854,8 +907,6 @@ def complete_step(execution_id: str, execution_step_id: str):
 
                 # Store variable outputs (for this specific output item)
                 # Only include the output that matches this inventory item
-                output_name = output.get("name", "Unknown")
-                # Get actual_outputs from the execution_step (it was stored when the step was completed)
                 step_actual_outputs = execution_step.actual_outputs if execution_step.actual_outputs else []
                 if step_actual_outputs:
                     # Find the matching output in actual_outputs
@@ -863,17 +914,47 @@ def complete_step(execution_id: str, execution_step_id: str):
                     if matching_output:
                         extra_data["variable_output"] = matching_output
 
-                inventory_repo.create_inventory_item(
-                    org_id=org_id,
-                    name=output.get("name", "Unknown"),
-                    quantity=str(output_quantity),
-                    unit=output.get("unit", "units"),
-                    inventory_type=inventory_type,
-                    source_execution_id=execution_uuid,
-                    source_execution_step_id=execution_step_uuid,
-                    source_step_name=execution_step.step.name if execution_step.step else None,
-                    extra_data=extra_data if extra_data else None,
+                # Store creation parameters for atomic commit
+                output_creations.append(
+                    {
+                        "org_id": org_id,
+                        "name": output_name,
+                        "quantity": str(quantity_decimal),  # Convert Decimal to string for storage
+                        "unit": output.get("unit", "units"),
+                        "inventory_type": inventory_type,
+                        "source_execution_id": execution_uuid,
+                        "source_execution_step_id": execution_step_uuid,
+                        "source_step_name": execution_step.step.name if execution_step.step else None,
+                        "extra_data": extra_data if extra_data else None,
+                    }
                 )
+
+        # FAILURE HANDLING: Persist warnings to execution_data for audit trail
+        if execution_warnings:
+            if not execution_step.execution_data:
+                execution_step.execution_data = {}
+            execution_step.execution_data["execution_warnings"] = execution_warnings
+
+        # TRANSACTION INTEGRITY: Commit all inventory operations atomically
+        # This ensures inventory consumption and output creation are atomic per execution step
+        try:
+            # Apply inventory updates
+            for inventory_item, new_quantity in inventory_updates:
+                inventory_item.quantity = new_quantity
+
+            # Create inventory items for outputs
+            for output_params in output_creations:
+                inventory_repo.create_inventory_item(**output_params)
+
+            # Single commit for all inventory operations
+            db_session.commit()
+        except Exception as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.exception("Failed to commit inventory operations atomically")
+            db_session.rollback()
+            return jsonify({"error": "Failed to update inventory", "details": str(e)}), 500
 
         return (
             jsonify(
@@ -930,14 +1011,14 @@ def list_inventory():
     result = []
     for item in items:
         # Filter out items with zero or negative quantity
-        # Handle string quantities like "0", "0.0", etc. more robustly
+        # QUANTITY PRECISION: Use Decimal for safe comparison
         try:
             qty_str = str(item.quantity).strip() if item.quantity else "0"
-            quantity_float = float(qty_str)
+            quantity_decimal = Decimal(qty_str)
             # Skip items with zero or negative quantity (including very small numbers)
-            if quantity_float <= 0 or abs(quantity_float) < 0.0001:
+            if quantity_decimal <= 0 or abs(quantity_decimal) < Decimal("0.0001"):
                 continue  # Skip this item
-        except (ValueError, TypeError):
+        except (InvalidOperation, ValueError, TypeError):
             # If quantity is not a valid number, skip this item
             continue
 
@@ -980,6 +1061,15 @@ def list_inventory():
                 pass
 
         # Look up previous steps data for intermediate products AND final products
+        # DAG TRAVERSAL PERFORMANCE WARNING:
+        # This recursive traversal happens inside list_inventory() which is called frequently.
+        # For large DAGs with deep chains, this can become a scalability bottleneck.
+        # Consider:
+        # 1. Caching previous_steps_data in extra_data (but mark as derived/read-only)
+        # 2. Separating traceability queries into a dedicated endpoint
+        # 3. Adding depth limits or pagination for very deep chains
+        # 4. Using materialized views or denormalized data for common queries
+        #
         # Traverse the full chain of steps that produced the inputs
         previous_steps_data = []
         # Check if this is a WIP or final product that has variable inputs
@@ -990,15 +1080,44 @@ def list_inventory():
         ) and has_variable_inputs:
             try:
                 # Helper function to recursively trace back through the chain of steps
+                # PERFORMANCE: This recursive traversal can be expensive for deep DAGs
+                # Consider adding depth limits or caching strategies for production use
                 def trace_step_chain(
-                    inventory_item_id, input_name=None, input_quantity=None, input_unit=None, visited_ids=None
+                    inventory_item_id, input_name=None, input_quantity=None, input_unit=None, visited_ids=None, depth=0
                 ):
-                    """Recursively trace back through all steps that produced this inventory item"""
+                    """Recursively trace back through all steps that produced this inventory item
+
+                    Args:
+                        inventory_item_id: UUID of inventory item to trace
+                        input_name: Name of input consumed from this step
+                        input_quantity: Quantity consumed
+                        input_unit: Unit of quantity consumed
+                        visited_ids: Set of visited inventory item IDs to prevent cycles
+                        depth: Current recursion depth (for safety limits)
+
+                    Returns:
+                        List of step data dictionaries in chronological order (oldest first)
+                    """
+                    # Safety limit to prevent excessive recursion (configurable)
+                    max_dag_depth = 50
+                    if depth > max_dag_depth:
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"DAG traversal depth limit ({max_dag_depth}) reached for inventory item {inventory_item_id}"
+                        )
+                        return []
+
                     if visited_ids is None:
                         visited_ids = set()
 
-                    # Prevent infinite loops
+                    # Prevent infinite loops (cycle detection)
                     if inventory_item_id in visited_ids:
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Cycle detected in DAG traversal at inventory item {inventory_item_id}")
                         return []
                     visited_ids.add(inventory_item_id)
 
@@ -1070,12 +1189,14 @@ def list_inventory():
                             if prev_inventory_item_id:
                                 # Recursively get steps that produced this input
                                 # Pass the input information so we know what was consumed
+                                # Increment depth to track recursion level
                                 prev_steps = trace_step_chain(
                                     prev_inventory_item_id,
                                     input_name=prev_input_data.get("name"),
                                     input_quantity=prev_input_data.get("quantity"),
                                     input_unit=prev_input_data.get("unit"),
                                     visited_ids=visited_ids,
+                                    depth=depth + 1,
                                 )
                                 # Prepend previous steps (so they appear in chronological order)
                                 steps_data = prev_steps + steps_data
@@ -1116,7 +1237,9 @@ def list_inventory():
                 logger.exception("Error tracing step chain")
                 pass
 
-        # Add previous_steps_data to extra_data if we found any
+        # EXTRA_DATA DISCIPLINE: previous_steps_data is derived/read-only data for display only
+        # It should NEVER be persisted to the database - it's computed on-the-fly for traceability
+        # This ensures we don't accidentally persist derived data that could become stale
         if previous_steps_data:
             extra_data["previous_steps_data"] = previous_steps_data
 
