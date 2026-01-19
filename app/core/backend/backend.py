@@ -707,6 +707,10 @@ def complete_step(execution_id: str, execution_step_id: str):
     execution_data = data.get("execution_data", {})
 
     # Get current user from Flask g and always store in execution_data for accuracy
+    # TODO: execution_data is becoming a structured contract with known fields:
+    # - User metadata: completed_by, completed_by_email, completed_by_user_id
+    # - Execution metadata: execution_prompts (user-entered), execution_errors, execution_warnings
+    # Consider formalizing this as a schema/validator in the future to prevent drift
     user_email = getattr(g, "user_email", None)
     if user_email:
         execution_data["completed_by"] = user_email
@@ -732,7 +736,17 @@ def complete_step(execution_id: str, execution_step_id: str):
         # Refresh execution_step to ensure we have the latest data including execution_data
         db_session.refresh(execution_step)
 
+        # Initialize inventory repository once for reuse throughout this function
+        inventory_repo = InventoryRepository(db_session)
+
         # Collect execution warnings for structured error reporting
+        # FAILURE HANDLING POLICY:
+        # - Errors: Block execution, persist to execution_data, return 400
+        #   Examples: Invalid quantity format, unit incompatibility, missing required inventory
+        # - Warnings: Allow execution to continue, persist to execution_data for audit
+        #   Examples: Zero-quantity outputs (skipped), missing optional inventory items
+        # This distinction ensures critical failures are caught early while non-critical issues
+        # are recorded for review without blocking workflow progress.
         execution_warnings = []
         execution_errors = []
 
@@ -740,7 +754,6 @@ def complete_step(execution_id: str, execution_step_id: str):
         # TRANSACTION INTEGRITY: Collect all inventory updates first, then commit atomically
         inventory_updates = []
         if actual_inputs:
-            inventory_repo = InventoryRepository(db_session)
             for input_data in actual_inputs:
                 inventory_item_id = input_data.get("inventory_item_id")
                 quantity_consumed = input_data.get("quantity", 0)
@@ -833,10 +846,6 @@ def complete_step(execution_id: str, execution_step_id: str):
             db_session.commit()
             return jsonify({"error": "Execution failed", "details": execution_errors}), 400
 
-        # Apply all inventory updates atomically (single commit per execution step)
-        for inventory_item, new_quantity in inventory_updates:
-            inventory_item.quantity = new_quantity
-
         # Create inventory items for outputs if specified
         # All non-terminal outputs are stored as intermediate products (WORK_IN_PROGRESS)
         # Terminal outputs are stored as FINAL_PRODUCT
@@ -844,9 +853,6 @@ def complete_step(execution_id: str, execution_step_id: str):
         # TRANSACTION INTEGRITY: Collect all output creations, then commit atomically
         output_creations = []
         if actual_outputs:
-            # Reuse inventory_repo if already created, otherwise create it
-            if "inventory_repo" not in locals():
-                inventory_repo = InventoryRepository(db_session)
             for output in actual_outputs:
                 output_quantity = output.get("quantity", 0)
                 output_name = output.get("name", "Unknown")
