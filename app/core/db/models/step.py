@@ -21,9 +21,12 @@ class Step(Base):
     name = Column(String(255), nullable=False)
     description = Column(String(1000), nullable=True)
     # Inputs and outputs stored as JSONB array
-    # Format: [{"name": "Aluminum Sheets", "quantity": 100, "unit": "kg", "is_variable": true}, ...]
+    # Format: [{"name": "Aluminum Sheets", "quantity": 100, "unit": "kg", "requires_inventory_selection": true}, ...]
     inputs = Column(JSONB, nullable=False, default=list)
     outputs = Column(JSONB, nullable=False, default=list)
+    # Execution prompts stored as JSONB array
+    # Format: [{"label": "Botanical batch number", "type": "text", "unit": null, "required": true}, ...]
+    execution_prompts = Column(JSONB, nullable=False, default=list)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

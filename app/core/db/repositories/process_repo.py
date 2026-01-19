@@ -84,6 +84,7 @@ class ProcessRepository:
         description: str | None = None,
         inputs: list | None = None,
         outputs: list | None = None,
+        execution_prompts: list | None = None,
     ) -> Step | None:
         """Add a step to a process"""
         process = self.get_process_by_id(process_id, org_id)
@@ -97,6 +98,7 @@ class ProcessRepository:
             description=description,
             inputs=inputs or [],
             outputs=outputs or [],
+            execution_prompts=execution_prompts or [],
         )
         self.db.add(step)
         self.db.flush()
@@ -114,6 +116,7 @@ class ProcessRepository:
         description: str | None = None,
         inputs: list | None = None,
         outputs: list | None = None,
+        execution_prompts: list | None = None,
     ) -> Step | None:
         """Update a step"""
         process = self.get_process_by_id(process_id, org_id)
@@ -134,6 +137,8 @@ class ProcessRepository:
             step.inputs = inputs
         if outputs is not None:
             step.outputs = outputs
+        if execution_prompts is not None:
+            step.execution_prompts = execution_prompts
 
         self.db.commit()
         self.db.expire(step, ["updated_at"])
