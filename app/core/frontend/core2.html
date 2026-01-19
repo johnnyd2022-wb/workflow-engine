@@ -651,10 +651,13 @@
       
       const formattedQuantity = formatQuantity(item.quantity);
       
+      // Prepend process name to product name for quick identification
+      const displayName = item.process_name ? `${escapeHtml(item.process_name)} - ${escapeHtml(item.name)}` : escapeHtml(item.name);
+      
       card.innerHTML = `
         <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word;">
           <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetails('${item.id}')">
-            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(item.name)}</h3>
+            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word;">${displayName}</h3>
             <p class="process-description" style="word-wrap: break-word; overflow-wrap: break-word;">${formattedQuantity} ${item.unit || ''}</p>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">

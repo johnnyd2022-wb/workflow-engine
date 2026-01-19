@@ -1429,8 +1429,9 @@
                     metadataParts.push(`Process: ${escapeHtml(inv.process_name)}`);
                   }
                   
-                  // Build the display text
-                  let displayText = `${escapeHtml(inv.name)} - ${inv.quantity} ${inv.unit}`;
+                  // Build the display text - prepend process name to product name
+                  const productName = inv.process_name ? `${escapeHtml(inv.process_name)} - ${escapeHtml(inv.name)}` : escapeHtml(inv.name);
+                  let displayText = `${productName} - ${inv.quantity} ${inv.unit}`;
                   
                   // Add supplier/batch info if available (for raw materials)
                   if (inv.supplier) {
@@ -2050,10 +2051,13 @@
           <span class="inventory-category-count">${items.length}</span>
         </div>
         <div class="inventory-category-content">
-          ${items.map(item => `
+          ${items.map(item => {
+            // Prepend process name to product name for quick identification
+            const displayName = item.process_name ? `${escapeHtml(item.process_name)} - ${escapeHtml(item.name)}` : escapeHtml(item.name);
+            return `
             <div class="inventory-category-item">
               <div class="inventory-item-row">
-                <span class="inventory-item-name">${escapeHtml(item.name)}</span>
+                <span class="inventory-item-name">${displayName}</span>
                 <span class="inventory-item-quantity">${item.quantity || '0'} ${item.unit || ''}</span>
               </div>
               ${item.supplier || item.source_execution_id || (item.extra_data && (item.extra_data.execution_prompts || item.extra_data.variable_inputs)) ? `
@@ -2073,7 +2077,8 @@
                 </div>
               ` : ''}
             </div>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
       `;
       
@@ -2505,7 +2510,9 @@
           dropdown.innerHTML = '<div style="padding: 12px; color: var(--text-secondary); text-align: center; font-size: 14px;">No materials found</div>';
         } else {
           dropdown.innerHTML = filteredItems.map((item, index) => {
-            const displayName = item.displayName || item.name;
+            // Prepend process name to product name for quick identification
+            const baseDisplayName = item.displayName || item.name;
+            const displayName = item.process_name ? `${item.process_name} - ${baseDisplayName}` : baseDisplayName;
             const displayText = `${displayName} (${item.quantity || '0'} ${item.unit || ''})`;
             return `
               <div 
@@ -2532,7 +2539,9 @@
           filteredItems = items.filter(item => {
             const name = item.name.toLowerCase();
             const displayName = item.displayName ? item.displayName.toLowerCase() : '';
-            return name.includes(term) || displayName.includes(term);
+            const processName = item.process_name ? item.process_name.toLowerCase() : '';
+            // Search in product name, display name, and process name
+            return name.includes(term) || displayName.includes(term) || processName.includes(term);
           });
         }
         selectedIndex = -1;
