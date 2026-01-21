@@ -139,10 +139,16 @@
                     <h2 class="card-title">Process Steps</h2>
                     <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;" id="step-count-text">0 steps in this process</p>
                   </div>
-                  <button class="btn btn-secondary btn-sm" data-modal-open="add-step-modal" onclick="window.openModal('add-step-modal'); return false;" style="margin-top: 0;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Add Step
-                  </button>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="btn btn-secondary btn-sm" data-modal-open="add-step-modal" onclick="window.openModal('add-step-modal'); return false;" style="margin-top: 0;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Add Step
+                    </button>
+                    <button class="btn btn-primary btn-sm" data-modal-open="create-process-modal" onclick="window.openCreateProcessModal(); return false;" style="margin-top: 0;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Create process
+                    </button>
+                  </div>
                 </div>
                 <div class="card-content">
                   <div class="steps-container" id="steps-container">
@@ -233,6 +239,7 @@
     };
   </script>
   <script src="{{ url_for('core.serve_core_js', filename='execution-modal.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='create-process-modal.js') }}"></script>
   <script>
     // Global variable for notification timeout
     let notificationTimeout = null;
@@ -3044,6 +3051,9 @@
       </form>
     </div>
   </div>
+  
+  <!-- Create Process Guided Flow Modal -->
+  {% include 'shared/create-process-modal.html' %}
   
   <!-- Notification Toast (auto-dismissing) -->
   <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 1000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">

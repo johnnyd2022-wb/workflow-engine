@@ -1,0 +1,143 @@
+<!-- Create Process Guided Flow Modal -->
+<div class="modal-overlay" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+  <div class="card" style="max-width: 700px; width: 90%; padding: 24px; max-height: 90vh; overflow-y: auto;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+      <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Create Process Step</h2>
+      <button class="modal-close" data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    
+    <!-- Step Indicator -->
+    <div style="display: flex; justify-content: center; margin-bottom: 24px; gap: 8px;">
+      <div class="step-indicator active" data-step="1" style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;">1</div>
+      <div style="width: 40px; height: 2px; background: var(--border-default, #e5e7eb); margin-top: 15px;"></div>
+      <div class="step-indicator" data-step="2" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; border: 2px solid var(--border-default, #e5e7eb);">2</div>
+      <div style="width: 40px; height: 2px; background: var(--border-default, #e5e7eb); margin-top: 15px;"></div>
+      <div class="step-indicator" data-step="3" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; border: 2px solid var(--border-default, #e5e7eb);">3</div>
+    </div>
+    
+    <!-- Step 1: Name and Description -->
+    <div id="create-process-step-1" class="create-process-step" style="display: block;">
+      <div style="margin-bottom: 24px;">
+        <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">What are Custom Processes?</h3>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
+            Custom processes allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
+          </p>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+            <strong>Examples:</strong> In food manufacturing, you might have steps like "Mixing", "Fermentation", "Packaging". In pharmaceuticals, steps could be "Active Ingredient Mixing", "Tablet Pressing", "Quality Control". In cosmetics, steps might include "Emulsion Creation", "Filling", "Labeling".
+          </p>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+            Step Name <span style="color: var(--error, #ef4444);">*</span>
+          </label>
+          <input type="text" id="guided-step-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Mixing, Fermentation, Tablet Pressing">
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
+            Use the name you already call this process internally. This helps your team recognize the step immediately.
+          </p>
+        </div>
+        
+        <div>
+          <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+            Description
+          </label>
+          <textarea id="guided-step-description" rows="3" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; resize: vertical;" placeholder="Brief summary of what this step involves..."></textarea>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
+            Provide a high-level summary of what this process step involves. This helps others understand the step's purpose.
+          </p>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
+      </div>
+    </div>
+    
+    <!-- Step 2: Inputs -->
+    <div id="create-process-step-2" class="create-process-step" style="display: none;">
+      <div style="margin-bottom: 24px;">
+        <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Define Inputs</h3>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
+            Inputs are the physical materials you add to this step. These can be raw materials, ingredients, or outputs from previous steps.
+          </p>
+          <div style="margin-top: 12px;">
+            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">+ Add from inventory</p>
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
+              Select from existing inventory items. Use this when you have materials already in stock (e.g., raw materials from suppliers, outputs from previous steps). You'll define the quantity and unit here, and at execution time you'll choose which specific batch to consume from your inventory.
+            </p>
+            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">+ New Input</p>
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+              Define a new input that will be manually entered at execution time. Use this for materials not yet in inventory or for variable quantities (e.g., water, specific ingredient amounts that change per batch). You can set a default quantity and unit, or choose to be prompted at execution.
+            </p>
+          </div>
+        </div>
+        
+        <div id="guided-inputs-container" style="margin-bottom: 20px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('inventory')" style="flex: 1;">
+              + Add from inventory
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new')" style="flex: 1;">
+              + New Input
+            </button>
+          </div>
+          <div id="guided-inputs-list" style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Inputs will be added here dynamically -->
+          </div>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
+        <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
+      </div>
+    </div>
+    
+    <!-- Step 3: Outputs -->
+    <div id="create-process-step-3" class="create-process-step" style="display: none;">
+      <div style="margin-bottom: 24px;">
+        <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Define Outputs</h3>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
+            Outputs are the products or materials produced by this step. These can be used as inputs in subsequent steps, creating a complete workflow chain.
+          </p>
+          <div style="margin-top: 12px; padding: 12px; background: var(--bg-card, #ffffff); border-radius: var(--radius-md); border-left: 3px solid var(--primary, #3b82f6);">
+            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Example Workflow:</p>
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+              <strong>Step 1 "Mixing":</strong> Outputs "Mixed Base" → <strong>Step 2 "Fermentation":</strong> Uses "Mixed Base" as input, outputs "Fermented Product" → <strong>Step 3 "Packaging":</strong> Uses "Fermented Product" as input, outputs "Final Product"
+            </p>
+          </div>
+          <div style="margin-top: 12px;">
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+              <strong>Industry Examples:</strong> In pharmaceuticals, a "Tablet Pressing" step might output "Compressed Tablets". In food manufacturing, "Baking" outputs "Baked Goods". In cosmetics, "Emulsion" outputs "Cream Base" that can be used in "Filling" steps.
+            </p>
+          </div>
+        </div>
+        
+        <div id="guided-outputs-container" style="margin-bottom: 20px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedOutput()" style="flex: 1;">
+              + Add Output
+            </button>
+          </div>
+          <div id="guided-outputs-list" style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Outputs will be added here dynamically -->
+          </div>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
+        <button type="button" class="btn btn-primary" onclick="window.createProcessFromGuidedFlow()">Create Step</button>
+      </div>
+    </div>
+  </div>
+</div>
