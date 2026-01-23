@@ -2,13 +2,26 @@
 <div class="modal-overlay" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
   <div class="card" style="max-width: 700px; width: 90%; padding: 24px; max-height: 90vh; overflow-y: auto;">
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-      <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Create Process Step</h2>
+      <div>
+        <h2 id="modal-title" style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">Create Process Step</h2>
+        <p id="modal-description" style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+          You can expand existing steps to edit them, or use this interactive editor to add additional steps.
+        </p>
+      </div>
       <button class="modal-close" data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
         </svg>
       </button>
+    </div>
+    
+    <!-- Step Summaries Container (shown when adding another step) -->
+    <div id="step-summaries-container" style="display: none; margin-bottom: 24px;">
+      <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;">Created Steps</h3>
+      <div id="step-summaries-list" style="display: flex; flex-direction: column; gap: 12px;">
+        <!-- Step summaries will be added here -->
+      </div>
     </div>
     
     <!-- Step Indicator -->
@@ -18,6 +31,8 @@
       <div class="step-indicator" data-step="2" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; border: 2px solid var(--border-default, #e5e7eb);">2</div>
       <div style="width: 40px; height: 2px; background: var(--border-default, #e5e7eb); margin-top: 15px;"></div>
       <div class="step-indicator" data-step="3" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; border: 2px solid var(--border-default, #e5e7eb);">3</div>
+      <div style="width: 40px; height: 2px; background: var(--border-default, #e5e7eb); margin-top: 15px;"></div>
+      <div class="step-indicator" data-step="4" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; border: 2px solid var(--border-default, #e5e7eb);">4</div>
     </div>
     
     <!-- Step 1: Name and Description -->
@@ -54,9 +69,14 @@
         </div>
       </div>
       
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
+      <div style="display: flex; gap: 12px; justify-content: space-between;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()" style="margin-right: auto;">
+          Save as draft
+        </button>
+        <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
+        </div>
       </div>
     </div>
     
@@ -69,11 +89,11 @@
             Inputs are the physical materials you add to this step. These can be raw materials, ingredients, or outputs from previous steps.
           </p>
           <div style="margin-top: 12px;">
-            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">+ Add from inventory</p>
+            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Add from inventory</p>
             <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
               Select from existing inventory items. Use this when you have materials already in stock (e.g., raw materials from suppliers, outputs from previous steps). You'll define the quantity and unit here, and at execution time you'll choose which specific batch to consume from your inventory.
             </p>
-            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">+ New Input</p>
+            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">New Input</p>
             <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
               Define a new input that will be manually entered at execution time. Use this for materials not yet in inventory or for variable quantities (e.g., water, specific ingredient amounts that change per batch). You can set a default quantity and unit, or choose to be prompted at execution.
             </p>
@@ -81,23 +101,33 @@
         </div>
         
         <div id="guided-inputs-container" style="margin-bottom: 20px;">
-          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('inventory')" style="flex: 1;">
-              + Add from inventory
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new')" style="flex: 1;">
-              + New Input
-            </button>
-          </div>
-          <div id="guided-inputs-list" style="display: flex; flex-direction: column; gap: 12px;">
+          <div id="guided-inputs-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
             <!-- Inputs will be added here dynamically -->
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" id="add-inventory-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('inventory')" style="flex: 1;">
+              <span>+ Add input</span>
+              <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">from inventory</span>
+            </button>
+            <button type="button" id="add-new-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new')" style="flex: 1;">
+              <span>+ Add input</span>
+              <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">not from inventory</span>
+            </button>
+            <button type="button" id="add-previous-output-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('previous_output')" style="flex: 1; display: none;">
+              <span>+ Add output from previous step</span>
+            </button>
           </div>
         </div>
       </div>
       
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
-        <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
+      <div style="display: flex; gap: 12px; justify-content: space-between;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()" style="margin-right: auto;">
+          Save as draft
+        </button>
+        <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
+          <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
+        </div>
       </div>
     </div>
     
@@ -123,20 +153,148 @@
         </div>
         
         <div id="guided-outputs-container" style="margin-bottom: 20px;">
-          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedOutput()" style="flex: 1;">
-              + Add Output
-            </button>
-          </div>
-          <div id="guided-outputs-list" style="display: flex; flex-direction: column; gap: 12px;">
+          <div id="guided-outputs-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
             <!-- Outputs will be added here dynamically -->
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="add-output-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedOutput()" style="flex: 1;">
+              + Add output
+            </button>
           </div>
         </div>
       </div>
       
+      <div style="display: flex; gap: 12px; justify-content: space-between;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()" style="margin-right: auto;">
+          Save as draft
+        </button>
+        <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
+          <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Step 4: Execution Prompts -->
+    <div id="create-process-step-4" class="create-process-step" style="display: none;">
+      <div style="margin-bottom: 24px;">
+        <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Execution Prompts</h3>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
+            Execution prompts are custom fields that will be recorded when this step runs. Use these to capture important metadata like batch numbers, quality control measurements, or other execution-specific information.
+          </p>
+          <div style="margin-top: 12px;">
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+              <strong>Examples:</strong> Batch number (text), Temperature reading (number with unit "°C"), Production date (date), Quality grade (select with options). These values are stored with each execution and can be used for traceability and reporting.
+            </p>
+          </div>
+        </div>
+        
+        <div id="guided-prompts-container" style="margin-bottom: 20px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedPrompt()" style="flex: 1;">
+              + Add Prompt
+            </button>
+          </div>
+          <div id="guided-prompts-list" style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Execution prompts will be added here dynamically -->
+          </div>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 12px; justify-content: space-between;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()" style="margin-right: auto;">
+          Save as draft
+        </button>
+        <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()" style="margin-right: auto;">
+            Save as draft
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
+          <button type="button" class="btn btn-primary" onclick="window.createProcessFromGuidedFlow()">Create Step</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Post-Creation Options (shown after step is created) -->
+    <div id="post-creation-options" style="display: none; margin-top: 24px; padding-top: 24px; border-top: 2px solid var(--border-default);">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px;">Step created successfully! What would you like to do next?</p>
+        <div style="display: flex; gap: 12px; justify-content: center;">
+          <button type="button" class="btn btn-secondary" onclick="window.addAnotherStep()" style="min-width: 180px;">
+            + Add another step
+          </button>
+          <button type="button" class="btn btn-primary" onclick="window.finishProcess()" style="min-width: 180px;">
+            Finish process
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Finish Process Confirmation Modal -->
+  <div class="modal-overlay" id="finish-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 600px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Finish Creating Process</h2>
+        <button class="modal-close" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      
+      <div style="margin-bottom: 24px;">
+        <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+          <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">
+            <strong>By finishing this process, you are locking in the process definition.</strong>
+          </p>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
+            Once you execute this process, your inventory will automatically update in real-time. Each execution will consume inputs and produce outputs according to the steps you've defined.
+          </p>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+            You can edit this process at any time by expanding the process steps in the process view. All changes will apply to future executions.
+          </p>
+        </div>
+        
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+          Press <strong>"Finish creating process"</strong> to save and lock in this process, or select <strong>"Back"</strong> if you want to edit a step or add another step.
+        </p>
+      </div>
+      
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
-        <button type="button" class="btn btn-primary" onclick="window.createProcessFromGuidedFlow()">Create Step</button>
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'">Back</button>
+        <button type="button" class="btn btn-primary" onclick="window.confirmFinishProcess()">Finish creating process</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Resume Draft Confirmation Modal -->
+  <div class="modal-overlay" id="resume-draft-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1002; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">Resume Draft Process</h2>
+        <button class="modal-close" onclick="window.cancelResumeDraft()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      
+      <div style="margin-bottom: 24px;">
+        <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">
+          To resume editing this process click <strong>Resume Draft</strong>, if you would like to start a new process click <strong>Start New</strong>.
+        </p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+          Your previous progress will be restored, and you can continue where you left off.
+        </p>
+      </div>
+      
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="window.cancelResumeDraft()">Start New</button>
+        <button type="button" class="btn btn-primary" onclick="window.confirmResumeDraft()">Resume Draft</button>
       </div>
     </div>
   </div>

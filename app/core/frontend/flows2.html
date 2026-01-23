@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="SupplyChain V2 - Process Flow Details">
   <title>Process Flow | SupplyChain V2</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles2.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -144,9 +144,9 @@
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                       Add Step
                     </button>
-                    <button class="btn btn-primary btn-sm" data-modal-open="create-process-modal" onclick="window.openCreateProcessModal(); return false;" style="margin-top: 0;">
+                    <button id="create-edit-process-btn" class="btn btn-primary btn-sm" data-modal-open="create-process-modal" onclick="window.openCreateProcessModal(); return false;" style="margin-top: 0;">
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                      Create process
+                      <span id="create-edit-process-btn-text">Create process</span>
                     </button>
                   </div>
                 </div>
@@ -289,10 +289,11 @@
       // Show notification
       modal.style.display = 'flex';
       
-      // Auto-dismiss after 3.5 seconds
+      // Auto-dismiss: errors stay longer (8 seconds), success messages (6 seconds)
+      const timeoutDuration = type === 'error' ? 8000 : 6000;
       notificationTimeout = setTimeout(() => {
         closeNotification();
-      }, 3500);
+      }, timeoutDuration);
     };
     
     // Immediately override showSuccess and showError from core.js
@@ -357,14 +358,14 @@
         `;
         document.body.appendChild(modal);
         
-        // Close on overlay click
-        modal.addEventListener('click', function(e) {
-          if (e.target === modal) {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-            if (callback) callback(false);
-          }
-        });
+        // Close on overlay click - DISABLED to prevent accidental closes
+        // modal.addEventListener('click', function(e) {
+        //   if (e.target === modal) {
+        //     modal.style.display = 'none';
+        //     document.body.style.overflow = 'auto';
+        //     if (callback) callback(false);
+        //   }
+        // });
         
         // Cancel button
         const cancelBtn = modal.querySelector('#static-warning-cancel');
@@ -461,6 +462,50 @@
         
         // Update stats
         document.getElementById('process-step-count').textContent = processData.steps?.length || 0;
+        
+        // Update button text based on whether steps exist
+        const createEditBtn = document.getElementById('create-edit-process-btn');
+        const createEditBtnText = document.getElementById('create-edit-process-btn-text');
+        if (createEditBtn && createEditBtnText) {
+          if (processData.steps && processData.steps.length > 0) {
+            createEditBtnText.textContent = 'Edit process';
+            // Update icon to edit icon
+            const icon = createEditBtn.querySelector('svg');
+            if (icon) {
+              icon.innerHTML = '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>';
+            }
+          } else {
+            createEditBtnText.textContent = 'Create process';
+            // Reset icon to plus icon
+            const icon = createEditBtn.querySelector('svg');
+            if (icon) {
+              icon.innerHTML = '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>';
+            }
+          }
+        }
+        
+        // Show draft status if applicable
+        if (processData.is_draft) {
+          // Add draft badge near process name or in header
+          let draftBadge = document.getElementById('process-draft-badge');
+          if (!draftBadge) {
+            draftBadge = document.createElement('span');
+            draftBadge.id = 'process-draft-badge';
+            draftBadge.className = 'badge';
+            draftBadge.style.cssText = 'background: var(--warning, #f59e0b); color: white; margin-left: 8px; font-size: 11px; padding: 4px 8px; border-radius: 4px;';
+            draftBadge.textContent = 'DRAFT';
+            const processNameEl = document.getElementById('process-name');
+            if (processNameEl && processNameEl.parentNode) {
+              processNameEl.parentNode.appendChild(draftBadge);
+            }
+          }
+          draftBadge.style.display = 'inline-block';
+        } else {
+          const draftBadge = document.getElementById('process-draft-badge');
+          if (draftBadge) {
+            draftBadge.style.display = 'none';
+          }
+        }
         
         // Render steps
         renderSteps(processData.steps || []);
@@ -1489,15 +1534,15 @@
         });
       });
       
-      // Close on overlay click
-      const overlays = document.querySelectorAll('.modal-overlay');
-      overlays.forEach(overlay => {
-        overlay.addEventListener('click', function(e) {
-          if (e.target === this) {
-            window.closeModal(this.id);
-          }
-        });
-      });
+      // Close on overlay click - DISABLED to prevent accidental closes
+      // const overlays = document.querySelectorAll('.modal-overlay');
+      // overlays.forEach(overlay => {
+      //   overlay.addEventListener('click', function(e) {
+      //     if (e.target === this) {
+      //       window.closeModal(this.id);
+      //     }
+      //   });
+      // });
       
       // Close on Escape key
       document.addEventListener('keydown', function(e) {
@@ -3056,7 +3101,7 @@
   {% include 'shared/create-process-modal.html' %}
   
   <!-- Notification Toast (auto-dismissing) -->
-  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 1000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
+  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 10000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
     <div class="card" style="padding: 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12)); border: 1px solid var(--border-light, #e5e7eb);">
       <div style="display: flex; align-items: flex-start; gap: 12px;">
         <div id="notification-icon" style="flex-shrink: 0; margin-top: 2px;">

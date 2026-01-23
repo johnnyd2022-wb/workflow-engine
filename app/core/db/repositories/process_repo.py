@@ -20,9 +20,10 @@ class ProcessRepository:
         name: str,
         description: str | None = None,
         category: ProcessCategory | None = None,
+        is_draft: bool = False,
     ) -> Process:
         """Create a new process"""
-        process = Process(org_id=org_id, name=name, description=description, category=category)
+        process = Process(org_id=org_id, name=name, description=description, category=category, is_draft=is_draft)
         self.db.add(process)
         self.db.flush()
         _ = process.id
@@ -47,6 +48,7 @@ class ProcessRepository:
         name: str | None = None,
         description: str | None = None,
         category: ProcessCategory | None = None,
+        is_draft: bool | None = None,
     ) -> Process | None:
         """Update process (must belong to org)"""
         process = self.get_process_by_id(process_id, org_id)
@@ -59,6 +61,8 @@ class ProcessRepository:
             process.description = description
         if category is not None:
             process.category = category
+        if is_draft is not None:
+            process.is_draft = is_draft
 
         self.db.commit()
         self.db.expire(process, ["updated_at"])

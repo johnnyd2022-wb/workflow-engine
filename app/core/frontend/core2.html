@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="SupplyChain V2 - Modern Process Hub for managing manufacturing workflows and executions">
   <title>Core - Process Hub</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles2.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -266,10 +266,11 @@
       modal.style.display = 'flex';
       // Don't block body overflow - allow user to see the page
       
-      // Auto-dismiss after 3.5 seconds
+      // Auto-dismiss: errors stay longer (8 seconds), success messages (6 seconds)
+      const timeoutDuration = type === 'error' ? 8000 : 6000;
       notificationTimeout = setTimeout(() => {
         closeNotification();
-      }, 3500);
+      }, timeoutDuration);
     };
     
     // Immediately override showSuccess and showError from core.js
@@ -380,7 +381,10 @@
       card.innerHTML = `
         <div class="process-card-header">
           <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="navigateToProcess('${process.id}')">
-            <h3 class="process-title">${escapeHtml(process.name)}</h3>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <h3 class="process-title">${escapeHtml(process.name)}</h3>
+              ${process.is_draft ? '<span class="badge" style="background: var(--warning, #f59e0b); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">DRAFT</span>' : ''}
+            </div>
             <p class="process-description">${escapeHtml(process.description || '')}</p>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
@@ -1118,15 +1122,15 @@
         });
       });
       
-      // Close on overlay click
-      document.querySelectorAll('.modal-overlay').forEach(modal => {
-        modal.addEventListener('click', (e) => {
-          if (e.target === modal) {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-          }
-        });
-      });
+      // Close on overlay click - DISABLED to prevent accidental closes
+      // document.querySelectorAll('.modal-overlay').forEach(modal => {
+      //   modal.addEventListener('click', (e) => {
+      //     if (e.target === modal) {
+      //       modal.style.display = 'none';
+      //       document.body.style.overflow = 'auto';
+      //     }
+      //   });
+      // });
       
     }
     
@@ -1906,7 +1910,7 @@
   </div>
   
   <!-- Notification Toast (auto-dismissing) -->
-  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 1000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
+  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 10000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
     <div class="card" style="padding: 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12)); border: 1px solid var(--border-light, #e5e7eb);">
       <div style="display: flex; align-items: flex-start; gap: 12px;">
         <div id="notification-icon" style="flex-shrink: 0; margin-top: 2px;">

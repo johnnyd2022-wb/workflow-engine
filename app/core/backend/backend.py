@@ -7,6 +7,7 @@ from uuid import UUID
 
 from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
 
+from app.api.routes.auth_routes import limiter
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryType
@@ -51,6 +52,7 @@ def flows():
 
 
 @core_bp.route("/static/js/<filename>")
+@limiter.exempt
 @requires_auth
 def serve_core_js(filename):
     """Serve JavaScript files from core frontend - requires authentication"""
@@ -96,6 +98,7 @@ def serve_core_js(filename):
 
 
 @core_bp.route("/static/css/<filename>")
+@limiter.exempt
 @requires_auth
 def serve_core_css(filename):
     """Serve CSS files from core frontend - requires authentication"""
@@ -183,6 +186,7 @@ def list_processes():
                 "name": process.name,
                 "description": process.description,
                 "category": process.category.value if process.category else None,
+                "is_draft": process.is_draft,
                 "step_count": step_count,
                 "active_executions": active_count,
                 "completed_executions": completed_count,
@@ -213,9 +217,13 @@ def create_process():
         except ValueError:
             return jsonify({"error": f"Invalid category: {category_str}"}), 400
 
+    is_draft = data.get("is_draft", False)
+
     repo = ProcessRepository(db_session)
     try:
-        process = repo.create_process(org_id=org_id, name=name, description=description, category=category)
+        process = repo.create_process(
+            org_id=org_id, name=name, description=description, category=category, is_draft=is_draft
+        )
         return (
             jsonify(
                 {
@@ -223,6 +231,7 @@ def create_process():
                     "name": process.name,
                     "description": process.description,
                     "category": process.category.value if process.category else None,
+                    "is_draft": process.is_draft,
                     "created_at": process.created_at.isoformat() if process.created_at else None,
                 }
             ),
@@ -253,6 +262,7 @@ def update_process(process_id: str):
     name = data.get("name")
     description = data.get("description")
     category_str = data.get("category")
+    is_draft = data.get("is_draft")  # Extract is_draft from request
 
     category = None
     if category_str:
@@ -269,6 +279,7 @@ def update_process(process_id: str):
             name=name,
             description=description,
             category=category,
+            is_draft=is_draft,  # Pass is_draft to repository
         )
 
         if not process:
@@ -281,6 +292,7 @@ def update_process(process_id: str):
                     "name": process.name,
                     "description": process.description,
                     "category": process.category.value if process.category else None,
+                    "is_draft": process.is_draft,
                     "created_at": process.created_at.isoformat() if process.created_at else None,
                 }
             ),
@@ -353,6 +365,7 @@ def get_process(process_id: str):
                     "name": mock_process["name"],
                     "description": mock_process["description"],
                     "category": mock_process["category"],
+                    "is_draft": mock_process.get("is_draft", False),
                     "steps": steps,
                     "created_at": mock_process["created_at"],
                 }
@@ -392,6 +405,7 @@ def get_process(process_id: str):
                 "name": process.name,
                 "description": process.description,
                 "category": process.category.value if process.category else None,
+                "is_draft": process.is_draft,
                 "steps": steps,
                 "created_at": process.created_at.isoformat() if process.created_at else None,
             }
