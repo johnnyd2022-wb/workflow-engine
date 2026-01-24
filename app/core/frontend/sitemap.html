@@ -68,6 +68,11 @@
     .flowchart-svg {
       width: 100%;
       height: 100%;
+      pointer-events: all;
+    }
+    
+    .flowchart-svg * {
+      pointer-events: auto;
     }
     
     .flowchart-process-group {
@@ -166,6 +171,34 @@
     .flowchart-inventory-node:hover {
       fill: #fbbf24;
       stroke-width: 3;
+    }
+    
+    /* Expand/collapse button styling - matches core2.html arrow style */
+    .flowchart-expand-btn {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .flowchart-expand-btn:hover {
+      opacity: 0.7;
+    }
+    
+    .flowchart-expand-btn .expand-arrow {
+      transition: transform 0.2s ease;
+      transform-origin: center;
+    }
+    
+    .flowchart-expand-btn.expanded .expand-arrow {
+      transform: rotate(90deg);
+    }
+    
+    /* Inventory card styling in flowchart */
+    .flowchart-inventory-card {
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));
+    }
+    
+    .flowchart-inventory-card:hover {
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
     }
     
     .flowchart-inventory-node.raw {
@@ -1133,6 +1166,13 @@
       if (!inventoryItem || !inventoryItem.source_execution_step_id) return null;
       if (!allExecutions || !Array.isArray(allExecutions)) return null;
       
+      // Fields to exclude from display
+      const excludeFields = ['completed_by_email', 'completed_by_user_id'];
+      // Fields to rename for better display
+      const renameFields = {
+        'completed_by': 'Completed by'
+      };
+      
       // Find the execution step
       for (const exec of allExecutions) {
         if (!exec || !exec.execution_steps || !Array.isArray(exec.execution_steps)) continue;
@@ -1142,9 +1182,14 @@
           // Format: { "prompt_label_1": "value1", "prompt_label_2": "value2", ... }
           const promptData = {};
           for (const [key, value] of Object.entries(step.execution_data)) {
+            // Skip excluded fields
+            if (excludeFields.includes(key)) continue;
+            
             // Only include non-empty string values (prompt responses)
             if (typeof value === 'string' && value.trim()) {
-              promptData[key] = value;
+              // Rename field if needed
+              const displayKey = renameFields[key] || key;
+              promptData[displayKey] = value;
             }
           }
           if (Object.keys(promptData).length > 0) {
@@ -1266,10 +1311,11 @@
       const svgContainer = document.createElement('div');
       svgContainer.className = 'flowchart-svg-container';
       svgContainer.style.width = '100%';
-      svgContainer.style.height = '1000px';
+      svgContainer.style.minHeight = '200px';  // Will be dynamically set based on content
       svgContainer.style.position = 'relative';
       svgContainer.style.overflow = 'auto';
       svgContainer.style.background = '#f9fafb';
+      svgContainer.style.borderRadius = '8px';
       svgContainer.id = 'flowchart-svg-container';
       
       // Create transform wrapper
@@ -1280,9 +1326,8 @@
       
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.className = 'flowchart-svg';
-      svg.style.width = '100%';
-      svg.style.height = '100%';
       svg.style.display = 'block';
+      svg.style.pointerEvents = 'all';
       
       // Add arrow marker definition
       const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -1684,12 +1729,23 @@
       // If not tracing, just show raw materials with trace buttons (already rendered above)
       // No additional rendering needed - the raw materials are already displayed
       
-      // Set SVG viewBox
-      svg.setAttribute('viewBox', `0 0 ${maxX + 50} ${maxY + 100}`);
+      // Set SVG viewBox and dynamic container height
+      const svgWidth = maxX + 50;
+      const svgHeight = maxY + 100;
+      svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
       svg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+      svg.setAttribute('width', svgWidth);
+      svg.setAttribute('height', svgHeight);
       
       transformWrapper.appendChild(svg);
       svgContainer.appendChild(transformWrapper);
+      
+      // Set dynamic container height based on content (min 200px, max 90vh)
+      const minHeight = 200;
+      const maxHeight = window.innerHeight * 0.85;
+      const dynamicHeight = Math.max(minHeight, Math.min(svgHeight + 20, maxHeight));
+      svgContainer.style.height = `${dynamicHeight}px`;
+      
       container.insertBefore(svgContainer, container.firstChild);
       
       // Add tooltip element if it doesn't exist
@@ -1887,34 +1943,59 @@
         stepData = getStepDataForItem(item);
       }
       
+      // Card-like styling matching core2.html inventory exactly
+      // Raw materials: blue tint, Intermediates: amber/yellow tint, Finals: green tint
       const fillColor = type === 'raw' ? (isConsumed ? '#f3f4f6' : '#dbeafe') : 
                        type === 'wip' ? '#fef3c7' : '#d1fae5';
-      const strokeColor = type === 'raw' ? (isConsumed ? '#9ca3af' : '#3b82f6') : 
+      const strokeColor = type === 'raw' ? (isConsumed ? '#d1d5db' : '#3b82f6') : 
+                         type === 'wip' ? '#f59e0b' : '#10b981';
+      const accentColor = type === 'raw' ? (isConsumed ? '#9ca3af' : '#3b82f6') : 
                          type === 'wip' ? '#f59e0b' : '#10b981';
       
       // Create a group for this item
       const itemGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       itemGroup.setAttribute('data-inventory-id', itemId);
       itemGroup.setAttribute('data-inventory-type', type);
-      itemGroup.className = 'inventory-item-group';
+      itemGroup.className = 'inventory-item-group flowchart-inventory-card';
       
-      // Item box
+      // Calculate expanded height first to set correct card size
+      const promptDataForHeight = getExecutionPromptData(item);
+      const expandedContentHeight = calculateExpandedHeight(item, stepData, promptDataForHeight);
+      const totalHeight = isExpanded ? itemHeight + expandedContentHeight : itemHeight;
+      
+      // Item box - colored background matching core2.html inventory
       const itemBox = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       itemBox.setAttribute('x', x);
       itemBox.setAttribute('y', y);
       itemBox.setAttribute('width', width);
-      itemBox.setAttribute('height', itemHeight);
+      itemBox.setAttribute('height', totalHeight);
       itemBox.setAttribute('fill', fillColor);
       itemBox.setAttribute('stroke', strokeColor);
       itemBox.setAttribute('stroke-width', '2');
-      itemBox.setAttribute('rx', '6');
+      itemBox.setAttribute('rx', '8');
+      itemBox.setAttribute('data-item-box', itemId);
       itemBox.style.cursor = 'pointer';
+      itemBox.style.filter = 'drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1))';
+      itemBox.style.transition = 'height 0.2s ease';
       itemBox.className = 'flowchart-element';
       if (isConsumed) {
         itemBox.classList.add('consumed-item');
         itemBox.setAttribute('opacity', '0.6');
       }
       itemBox.setAttribute('data-inventory-id', itemId);
+      
+      // Left accent bar to indicate type (like core2.html card styling)
+      const accentBar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      accentBar.setAttribute('x', x);
+      accentBar.setAttribute('y', y);
+      accentBar.setAttribute('width', '4');
+      accentBar.setAttribute('height', totalHeight);
+      accentBar.setAttribute('fill', accentColor);
+      accentBar.setAttribute('rx', '2');
+      accentBar.setAttribute('data-accent-bar', itemId);
+      accentBar.style.transition = 'height 0.2s ease';
+      itemGroup.appendChild(accentBar);
+      
       itemBox.addEventListener('mouseenter', function(e) {
         this.setAttribute('stroke-width', '3');
         if (item && item.id) {
@@ -1927,33 +2008,73 @@
         hideTooltip();
         clearHighlights();
       });
-      itemGroup.appendChild(itemBox);
       
-      // Expand/collapse button (styled like flows2.html)
-      const expandButtonGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      expandButtonGroup.setAttribute('data-inventory-id', itemId);
-      expandButtonGroup.style.cursor = 'pointer';
-      expandButtonGroup.setAttribute('transform', `translate(${x + width - 24}, ${y + 16})`);
-      expandButtonGroup.addEventListener('click', async function(e) {
+      // Click on card to expand/collapse (like core2.html)
+      itemBox.addEventListener('click', async function(e) {
         e.stopPropagation();
+        console.log('Card clicked for:', itemId);
         await toggleItemExpansion(itemId, svg, x, y, width, type, stepData);
       });
       
-      // Chevron icon (downward pointing, rotates when expanded - matches flows2.html style)
-      const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-      chevron.setAttribute('points', '6 9 12 15 18 9');
-      chevron.setAttribute('stroke', strokeColor);
-      chevron.setAttribute('stroke-width', '2');
-      chevron.setAttribute('fill', 'none');
-      chevron.setAttribute('stroke-linecap', 'round');
-      chevron.setAttribute('stroke-linejoin', 'round');
-      chevron.setAttribute('data-chevron', itemId);
-      chevron.setAttribute('data-expanded', isExpanded ? 'true' : 'false');
-      if (isExpanded) {
-        chevron.setAttribute('transform', 'rotate(180 12 12)');
-      }
-      expandButtonGroup.appendChild(chevron);
+      itemGroup.appendChild(itemBox);
       
+      // Expand/collapse button (styled like core2.html arrow)
+      const expandButtonGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      expandButtonGroup.setAttribute('data-inventory-id', itemId);
+      expandButtonGroup.setAttribute('class', `flowchart-expand-btn${isExpanded ? ' expanded' : ''}`);
+      expandButtonGroup.setAttribute('transform', `translate(${x + width - 26}, ${y + 6})`);
+      expandButtonGroup.style.cursor = 'pointer';
+      expandButtonGroup.style.pointerEvents = 'all';
+      
+      // Add a clickable background rect to ensure click area
+      const clickBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      clickBg.setAttribute('x', '0');
+      clickBg.setAttribute('y', '0');
+      clickBg.setAttribute('width', '20');
+      clickBg.setAttribute('height', '20');
+      clickBg.setAttribute('fill', 'transparent');
+      clickBg.style.cursor = 'pointer';
+      expandButtonGroup.appendChild(clickBg);
+      
+      expandButtonGroup.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        console.log('Expand button clicked for:', itemId);
+        await toggleItemExpansion(itemId, svg, x, y, width, type, stepData);
+      });
+      
+      // Arrow icon (→ that rotates 90° when expanded - matches core2.html style)
+      const arrowGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      arrowGroup.setAttribute('class', 'expand-arrow');
+      arrowGroup.setAttribute('data-arrow', itemId);
+      arrowGroup.style.transition = 'transform 0.2s ease';
+      arrowGroup.style.transformOrigin = '10px 10px';
+      if (isExpanded) {
+        arrowGroup.style.transform = 'rotate(90deg)';
+      }
+      
+      // Arrow line
+      const arrowLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      arrowLine.setAttribute('x1', '5');
+      arrowLine.setAttribute('y1', '10');
+      arrowLine.setAttribute('x2', '15');
+      arrowLine.setAttribute('y2', '10');
+      arrowLine.setAttribute('stroke', strokeColor);
+      arrowLine.setAttribute('stroke-width', '2');
+      arrowLine.setAttribute('stroke-linecap', 'round');
+      arrowGroup.appendChild(arrowLine);
+      
+      // Arrow head
+      const arrowHead = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      arrowHead.setAttribute('points', '11 6 15 10 11 14');
+      arrowHead.setAttribute('stroke', strokeColor);
+      arrowHead.setAttribute('stroke-width', '2');
+      arrowHead.setAttribute('fill', 'none');
+      arrowHead.setAttribute('stroke-linecap', 'round');
+      arrowHead.setAttribute('stroke-linejoin', 'round');
+      arrowGroup.appendChild(arrowHead);
+      
+      expandButtonGroup.appendChild(arrowGroup);
       itemGroup.appendChild(expandButtonGroup);
       
       // Item name
@@ -2027,39 +2148,37 @@
         }
       }
       
-      // Display execution prompt data (collapsed view - only 2)
+      // "Click to expand/collapse" hint text next to arrow
+      const hintText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      hintText.setAttribute('x', x + width - 45);
+      hintText.setAttribute('y', y + 32);
+      hintText.setAttribute('font-size', '8');
+      hintText.setAttribute('fill', '#9ca3af');
+      hintText.setAttribute('text-anchor', 'end');
+      hintText.setAttribute('data-hint', itemId);
+      hintText.textContent = isExpanded ? 'collapse' : 'expand';
+      itemGroup.appendChild(hintText);
+      
+      // Get expanded content height for this item
       const promptData = getExecutionPromptData(item);
-      if (promptData && Object.keys(promptData).length > 0 && !isExpanded) {
-        const promptKeys = Object.keys(promptData);
-        const maxPrompts = 2;
-        const promptsToShow = promptKeys.slice(0, maxPrompts);
-        
-        promptsToShow.forEach((key, idx) => {
-          const promptText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          promptText.setAttribute('x', x + 10);
-          promptText.setAttribute('y', y + (item.supplier_batch_number ? 82 : 62) + promptYOffset + (idx * 10));
-          promptText.setAttribute('font-size', '8');
-          promptText.setAttribute('fill', '#92400e');
-          const value = String(promptData[key]).substring(0, 30);
-          promptText.textContent = `${key.substring(0, 12)}: ${value}`;
-          itemGroup.appendChild(promptText);
-        });
-        
-        if (promptKeys.length > maxPrompts) {
-          const moreText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          moreText.setAttribute('x', x + 10);
-          moreText.setAttribute('y', y + (item.supplier_batch_number ? 82 : 62) + promptYOffset + (maxPrompts * 10));
-          moreText.setAttribute('font-size', '8');
-          moreText.setAttribute('fill', '#9ca3af');
-          moreText.textContent = `+${promptKeys.length - maxPrompts} more...`;
-          itemGroup.appendChild(moreText);
-        }
+      const expandedHeight = calculateExpandedHeight(item, stepData, promptData);
+      
+      // Store the expanded height for layout calculations
+      item._expandedHeight = expandedHeight;
+      
+      // Create expanded content group (always rendered, visibility toggled)
+      const expandedGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      expandedGroup.setAttribute('data-expanded-group', itemId);
+      expandedGroup.style.opacity = isExpanded ? '1' : '0';
+      expandedGroup.style.transition = 'opacity 0.2s ease';
+      expandedGroup.style.pointerEvents = isExpanded ? 'all' : 'none';
+      
+      // Render expanded content inside the card
+      if (isExpanded) {
+        renderExpandedContentInCard(expandedGroup, item, x, y, width, type, stepData, promptData, itemHeight);
       }
       
-      // Expanded content
-      if (isExpanded) {
-        renderExpandedContent(itemGroup, item, x, y, width, type, stepData, promptData);
-      }
+      itemGroup.appendChild(expandedGroup);
       
       svg.appendChild(itemGroup);
       
@@ -2068,7 +2187,183 @@
       item._flowchartY = y + itemHeight / 2;
     }
     
-    // Render expanded content showing inputs, outputs, and all execution prompts
+    // Calculate expanded content height
+    function calculateExpandedHeight(item, stepData, promptData) {
+      const padding = 12;
+      const lineHeight = 16;
+      let height = padding + 10; // Top padding + separator
+      
+      // Format date helper
+      const formatDate = (dateStr) => {
+        if (!dateStr) return null;
+        try { return new Date(dateStr).toLocaleDateString(); } catch { return dateStr; }
+      };
+      
+      // Count details to show
+      const detailsToShow = [];
+      if (item.quantity) detailsToShow.push(1);
+      if (item.supplier) detailsToShow.push(1);
+      if (item.supplier_batch_number) detailsToShow.push(1);
+      if (item.purchase_date && formatDate(item.purchase_date)) detailsToShow.push(1);
+      if (item.expiry_date && formatDate(item.expiry_date)) detailsToShow.push(1);
+      
+      if (detailsToShow.length > 0) {
+        height += Math.ceil(detailsToShow.length / 2) * 36 + 8;
+      }
+      
+      // Execution prompts
+      if (promptData && Object.keys(promptData).length > 0) {
+        height += 24; // Header
+        height += Object.keys(promptData).length * 36 + 4;
+      }
+      
+      if (detailsToShow.length === 0 && (!promptData || Object.keys(promptData).length === 0)) {
+        height += 20; // "No data" message
+      }
+      
+      height += padding; // Bottom padding
+      return height;
+    }
+    
+    // Render expanded content inside the card (not in a separate box)
+    function renderExpandedContentInCard(group, item, x, y, width, type, stepData, promptData, itemHeight) {
+      const startY = y + itemHeight + 5;
+      const padding = 12;
+      const lineHeight = 16;
+      let currentY = startY + padding;
+      
+      // If stepData wasn't provided, try to get it
+      if (!stepData && (type === 'wip' || type === 'final')) {
+        stepData = getStepDataForItem(item);
+      }
+      
+      // Separator line at top of expanded area
+      const separator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      separator.setAttribute('x1', x + padding);
+      separator.setAttribute('y1', y + itemHeight);
+      separator.setAttribute('x2', x + width - padding);
+      separator.setAttribute('y2', y + itemHeight);
+      separator.setAttribute('stroke', '#e5e7eb');
+      separator.setAttribute('stroke-width', '1');
+      group.appendChild(separator);
+      
+      // Format date helper
+      const formatDate = (dateStr) => {
+        if (!dateStr) return null;
+        try { return new Date(dateStr).toLocaleDateString(); } catch { return dateStr; }
+      };
+      
+      // Build details list
+      const detailsToShow = [];
+      if (item.quantity) detailsToShow.push({ label: 'Quantity', value: `${formatQuantity(item.quantity)} ${item.unit || ''}` });
+      if (item.supplier) detailsToShow.push({ label: 'Supplier', value: item.supplier });
+      if (item.supplier_batch_number) detailsToShow.push({ label: 'Batch #', value: item.supplier_batch_number });
+      if (item.purchase_date) {
+        const fd = formatDate(item.purchase_date);
+        if (fd) detailsToShow.push({ label: 'Purchase Date', value: fd });
+      }
+      if (item.expiry_date) {
+        const fd = formatDate(item.expiry_date);
+        if (fd) detailsToShow.push({ label: 'Expiry Date', value: fd });
+      }
+      
+      // Render details in 2-column grid
+      if (detailsToShow.length > 0) {
+        const colWidth = (width - padding * 3) / 2;
+        let col = 0;
+        let rowY = currentY;
+        
+        detailsToShow.forEach((detail) => {
+          const colX = col === 0 ? x + padding : x + padding + colWidth + padding;
+          
+          const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          labelText.setAttribute('x', colX);
+          labelText.setAttribute('y', rowY);
+          labelText.setAttribute('font-size', '10');
+          labelText.setAttribute('fill', '#6b7280');
+          labelText.textContent = detail.label;
+          group.appendChild(labelText);
+          
+          const valueText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          valueText.setAttribute('x', colX);
+          valueText.setAttribute('y', rowY + 14);
+          valueText.setAttribute('font-size', '12');
+          valueText.setAttribute('font-weight', '500');
+          valueText.setAttribute('fill', '#111827');
+          const displayValue = String(detail.value).length > 18 ? String(detail.value).substring(0, 18) + '...' : String(detail.value);
+          valueText.textContent = displayValue;
+          group.appendChild(valueText);
+          
+          col++;
+          if (col >= 2) {
+            col = 0;
+            rowY += 36;
+          }
+        });
+        
+        currentY = rowY + (col > 0 ? 36 : 0) + 8;
+      }
+      
+      // Execution metadata
+      if (promptData && Object.keys(promptData).length > 0) {
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', x + padding);
+        label.setAttribute('y', currentY);
+        label.setAttribute('font-size', '11');
+        label.setAttribute('font-weight', '600');
+        label.setAttribute('fill', '#111827');
+        label.textContent = 'Execution Metadata';
+        group.appendChild(label);
+        currentY += 16;
+        
+        Object.entries(promptData).forEach(([key, value]) => {
+          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          bg.setAttribute('x', x + padding);
+          bg.setAttribute('y', currentY - 2);
+          bg.setAttribute('width', width - padding * 2);
+          bg.setAttribute('height', '28');
+          bg.setAttribute('fill', '#f9fafb');
+          bg.setAttribute('stroke', '#e5e7eb');
+          bg.setAttribute('stroke-width', '1');
+          bg.setAttribute('rx', '4');
+          group.appendChild(bg);
+          
+          const keyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          keyText.setAttribute('x', x + padding + 8);
+          keyText.setAttribute('y', currentY + 8);
+          keyText.setAttribute('font-size', '9');
+          keyText.setAttribute('fill', '#6b7280');
+          keyText.textContent = key;
+          group.appendChild(keyText);
+          
+          const valText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          valText.setAttribute('x', x + padding + 8);
+          valText.setAttribute('y', currentY + 20);
+          valText.setAttribute('font-size', '10');
+          valText.setAttribute('font-weight', '500');
+          valText.setAttribute('fill', '#111827');
+          const dv = String(value).length > 35 ? String(value).substring(0, 35) + '...' : String(value);
+          valText.textContent = dv;
+          group.appendChild(valText);
+          
+          currentY += 32;
+        });
+      }
+      
+      // No data message if empty
+      if (detailsToShow.length === 0 && (!promptData || Object.keys(promptData).length === 0)) {
+        const noData = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        noData.setAttribute('x', x + padding);
+        noData.setAttribute('y', currentY);
+        noData.setAttribute('font-size', '10');
+        noData.setAttribute('font-style', 'italic');
+        noData.setAttribute('fill', '#9ca3af');
+        noData.textContent = 'No additional data available';
+        group.appendChild(noData);
+      }
+    }
+    
+    // Render expanded content showing inputs, outputs, and all execution prompts (legacy - keeping for compatibility)
     function renderExpandedContent(group, item, x, y, width, type, stepData, promptData) {
       const itemHeight = 90;
       const expandedY = y + itemHeight + 5;
@@ -2079,21 +2374,104 @@
         stepData = getStepDataForItem(item);
       }
       
-      // Expanded content background
+      // Expanded content background with subtle shadow effect
       const expandedBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       expandedBg.setAttribute('x', x);
       expandedBg.setAttribute('y', expandedY);
       expandedBg.setAttribute('width', width);
-      expandedBg.setAttribute('rx', '6');
-      expandedBg.setAttribute('fill', '#f9fafb');
+      expandedBg.setAttribute('rx', '8');
+      expandedBg.setAttribute('fill', '#ffffff');
       expandedBg.setAttribute('stroke', '#e5e7eb');
       expandedBg.setAttribute('stroke-width', '1');
       expandedBg.setAttribute('data-expanded-bg', item.id);
+      expandedBg.style.filter = 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.05))';
       group.appendChild(expandedBg);
       
-      const padding = 10;
-      const lineHeight = 14;
+      const padding = 12;
+      const lineHeight = 16;
       let contentHeight = padding;
+      
+      // Format date helper
+      const formatDate = (dateStr) => {
+        if (!dateStr) return null;
+        try {
+          const date = new Date(dateStr);
+          return date.toLocaleDateString();
+        } catch {
+          return dateStr;
+        }
+      };
+      
+      // Basic item details section (matching core2.html grid layout)
+      const detailsToShow = [];
+      
+      // Quantity
+      if (item.quantity) {
+        detailsToShow.push({ label: 'Quantity', value: `${formatQuantity(item.quantity)} ${item.unit || ''}` });
+      }
+      
+      // Supplier
+      if (item.supplier) {
+        detailsToShow.push({ label: 'Supplier', value: item.supplier });
+      }
+      
+      // Batch Number
+      if (item.supplier_batch_number) {
+        detailsToShow.push({ label: 'Batch #', value: item.supplier_batch_number });
+      }
+      
+      // Purchase Date
+      if (item.purchase_date) {
+        const formattedDate = formatDate(item.purchase_date);
+        if (formattedDate) detailsToShow.push({ label: 'Purchase Date', value: formattedDate });
+      }
+      
+      // Expiry Date
+      if (item.expiry_date) {
+        const formattedDate = formatDate(item.expiry_date);
+        if (formattedDate) detailsToShow.push({ label: 'Expiry Date', value: formattedDate });
+      }
+      
+      // Render details in 2-column grid like core2.html
+      if (detailsToShow.length > 0) {
+        const colWidth = (width - padding * 3) / 2;
+        let col = 0;
+        let rowY = contentHeight;
+        
+        detailsToShow.forEach((detail, idx) => {
+          const colX = col === 0 ? x + padding : x + padding + colWidth + padding;
+          
+          // Label
+          const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          labelText.setAttribute('x', colX);
+          labelText.setAttribute('y', currentExpandedY + rowY);
+          labelText.setAttribute('font-size', '10');
+          labelText.setAttribute('fill', '#6b7280');
+          labelText.textContent = detail.label;
+          group.appendChild(labelText);
+          
+          // Value
+          const valueText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          valueText.setAttribute('x', colX);
+          valueText.setAttribute('y', currentExpandedY + rowY + 14);
+          valueText.setAttribute('font-size', '12');
+          valueText.setAttribute('font-weight', '500');
+          valueText.setAttribute('fill', '#111827');
+          const displayValue = String(detail.value).length > 18 ? String(detail.value).substring(0, 18) + '...' : String(detail.value);
+          valueText.textContent = displayValue;
+          group.appendChild(valueText);
+          
+          col++;
+          if (col >= 2) {
+            col = 0;
+            rowY += 36;
+          }
+        });
+        
+        // Adjust content height based on how many rows we added
+        const rowsUsed = Math.ceil(detailsToShow.length / 2);
+        contentHeight += rowsUsed * 36 + 8;
+      }
       
       // Extract inputs - handle different stepData structures
       let inputs = [];
@@ -2111,24 +2489,35 @@
       
       // Section: Inputs
       if (inputs && Array.isArray(inputs) && inputs.length > 0) {
+        // Separator line before section
+        const inputsSeparator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        inputsSeparator.setAttribute('x1', x + padding);
+        inputsSeparator.setAttribute('y1', currentExpandedY + contentHeight - 4);
+        inputsSeparator.setAttribute('x2', x + width - padding);
+        inputsSeparator.setAttribute('y2', currentExpandedY + contentHeight - 4);
+        inputsSeparator.setAttribute('stroke', '#e5e7eb');
+        inputsSeparator.setAttribute('stroke-width', '1');
+        group.appendChild(inputsSeparator);
+        contentHeight += 4;
+        
         const inputsLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         inputsLabel.setAttribute('x', x + padding);
         inputsLabel.setAttribute('y', currentExpandedY + contentHeight);
-        inputsLabel.setAttribute('font-size', '10');
+        inputsLabel.setAttribute('font-size', '12');
         inputsLabel.setAttribute('font-weight', '600');
-        inputsLabel.setAttribute('fill', '#374151');
-        inputsLabel.textContent = 'Inputs:';
+        inputsLabel.setAttribute('fill', '#111827');
+        inputsLabel.textContent = 'Inputs';
         group.appendChild(inputsLabel);
-        contentHeight += lineHeight + 2;
+        contentHeight += lineHeight + 4;
         
         inputs.forEach((input, idx) => {
           const inputText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          inputText.setAttribute('x', x + padding + 8);
+          inputText.setAttribute('x', x + padding + 10);
           inputText.setAttribute('y', currentExpandedY + contentHeight);
-          inputText.setAttribute('font-size', '9');
-          inputText.setAttribute('fill', '#6b7280');
+          inputText.setAttribute('font-size', '11');
+          inputText.setAttribute('fill', '#374151');
           const inputName = input.name || 'Unnamed';
-          const inputQty = input.quantity ? ` (${formatQuantity(String(input.quantity))} ${input.unit || ''})` : '';
+          const inputQty = input.quantity ? ` - ${formatQuantity(String(input.quantity))} ${input.unit || ''}` : '';
           inputText.textContent = `• ${inputName}${inputQty}`;
           group.appendChild(inputText);
           contentHeight += lineHeight;
@@ -2152,24 +2541,35 @@
       
       // Section: Outputs
       if (outputs && Array.isArray(outputs) && outputs.length > 0) {
+        // Separator line before section
+        const outputsSeparator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        outputsSeparator.setAttribute('x1', x + padding);
+        outputsSeparator.setAttribute('y1', currentExpandedY + contentHeight - 4);
+        outputsSeparator.setAttribute('x2', x + width - padding);
+        outputsSeparator.setAttribute('y2', currentExpandedY + contentHeight - 4);
+        outputsSeparator.setAttribute('stroke', '#e5e7eb');
+        outputsSeparator.setAttribute('stroke-width', '1');
+        group.appendChild(outputsSeparator);
+        contentHeight += 4;
+        
         const outputsLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         outputsLabel.setAttribute('x', x + padding);
         outputsLabel.setAttribute('y', currentExpandedY + contentHeight);
-        outputsLabel.setAttribute('font-size', '10');
+        outputsLabel.setAttribute('font-size', '12');
         outputsLabel.setAttribute('font-weight', '600');
-        outputsLabel.setAttribute('fill', '#374151');
-        outputsLabel.textContent = 'Outputs:';
+        outputsLabel.setAttribute('fill', '#111827');
+        outputsLabel.textContent = 'Outputs';
         group.appendChild(outputsLabel);
-        contentHeight += lineHeight + 2;
+        contentHeight += lineHeight + 4;
         
         outputs.forEach((output, idx) => {
           const outputText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          outputText.setAttribute('x', x + padding + 8);
+          outputText.setAttribute('x', x + padding + 10);
           outputText.setAttribute('y', currentExpandedY + contentHeight);
-          outputText.setAttribute('font-size', '9');
-          outputText.setAttribute('fill', '#6b7280');
+          outputText.setAttribute('font-size', '11');
+          outputText.setAttribute('fill', '#374151');
           const outputName = output.name || 'Unnamed';
-          const outputQty = output.quantity ? ` (${formatQuantity(String(output.quantity))} ${output.unit || ''})` : '';
+          const outputQty = output.quantity ? ` - ${formatQuantity(String(output.quantity))} ${output.unit || ''}` : '';
           outputText.textContent = `• ${outputName}${outputQty}`;
           group.appendChild(outputText);
           contentHeight += lineHeight;
@@ -2184,28 +2584,63 @@
       }
       
       if (promptData && Object.keys(promptData).length > 0) {
+        // Separator line before section
+        const promptsSeparator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        promptsSeparator.setAttribute('x1', x + padding);
+        promptsSeparator.setAttribute('y1', currentExpandedY + contentHeight - 4);
+        promptsSeparator.setAttribute('x2', x + width - padding);
+        promptsSeparator.setAttribute('y2', currentExpandedY + contentHeight - 4);
+        promptsSeparator.setAttribute('stroke', '#e5e7eb');
+        promptsSeparator.setAttribute('stroke-width', '1');
+        group.appendChild(promptsSeparator);
+        contentHeight += 4;
+        
         const promptsLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         promptsLabel.setAttribute('x', x + padding);
         promptsLabel.setAttribute('y', currentExpandedY + contentHeight);
-        promptsLabel.setAttribute('font-size', '10');
+        promptsLabel.setAttribute('font-size', '12');
         promptsLabel.setAttribute('font-weight', '600');
-        promptsLabel.setAttribute('fill', '#374151');
-        promptsLabel.textContent = 'Execution Prompts:';
+        promptsLabel.setAttribute('fill', '#111827');
+        promptsLabel.textContent = 'Execution Metadata';
         group.appendChild(promptsLabel);
-        contentHeight += lineHeight + 2;
+        contentHeight += lineHeight + 4;
         
         Object.entries(promptData).forEach(([key, value]) => {
-          const promptText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          promptText.setAttribute('x', x + padding + 8);
-          promptText.setAttribute('y', currentExpandedY + contentHeight);
-          promptText.setAttribute('font-size', '9');
-          promptText.setAttribute('fill', '#92400e');
-          const displayValue = String(value).length > 35 ? String(value).substring(0, 35) + '...' : String(value);
-          promptText.textContent = `• ${key}: ${displayValue}`;
-          group.appendChild(promptText);
-          contentHeight += lineHeight;
+          // Background box for each prompt (like core2.html)
+          const promptBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          promptBg.setAttribute('x', x + padding);
+          promptBg.setAttribute('y', currentExpandedY + contentHeight - 10);
+          promptBg.setAttribute('width', width - padding * 2);
+          promptBg.setAttribute('height', '30');
+          promptBg.setAttribute('fill', '#f9fafb');
+          promptBg.setAttribute('stroke', '#e5e7eb');
+          promptBg.setAttribute('stroke-width', '1');
+          promptBg.setAttribute('rx', '4');
+          group.appendChild(promptBg);
+          
+          // Key label
+          const keyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          keyText.setAttribute('x', x + padding + 8);
+          keyText.setAttribute('y', currentExpandedY + contentHeight);
+          keyText.setAttribute('font-size', '10');
+          keyText.setAttribute('fill', '#6b7280');
+          keyText.textContent = key;
+          group.appendChild(keyText);
+          
+          // Value
+          const valueText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          valueText.setAttribute('x', x + padding + 8);
+          valueText.setAttribute('y', currentExpandedY + contentHeight + 14);
+          valueText.setAttribute('font-size', '11');
+          valueText.setAttribute('font-weight', '500');
+          valueText.setAttribute('fill', '#111827');
+          const displayValue = String(value).length > 30 ? String(value).substring(0, 30) + '...' : String(value);
+          valueText.textContent = displayValue;
+          group.appendChild(valueText);
+          
+          contentHeight += 36;
         });
-        contentHeight += 5;
+        contentHeight += 4;
       }
       
       // If no expanded content, show message
@@ -2213,7 +2648,8 @@
         const noDataText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         noDataText.setAttribute('x', x + padding);
         noDataText.setAttribute('y', currentExpandedY + contentHeight);
-        noDataText.setAttribute('font-size', '9');
+        noDataText.setAttribute('font-size', '10');
+        noDataText.setAttribute('font-style', 'italic');
         noDataText.setAttribute('fill', '#9ca3af');
         noDataText.textContent = 'No additional data available';
         group.appendChild(noDataText);
@@ -2228,8 +2664,8 @@
       item._expandedHeight = contentHeight;
     }
     
-    // Toggle item expansion
-    async function toggleItemExpansion(itemId, svg, x, y, width, type, stepData) {
+    // Toggle item expansion - smooth in-place toggle like core2.html
+    async function toggleItemExpansion(itemId, svgElement, x, y, width, type, stepData) {
       const wasExpanded = expandedItems.has(itemId);
       
       if (wasExpanded) {
@@ -2238,33 +2674,76 @@
         expandedItems.add(itemId);
       }
       
-      // Update chevron rotation immediately for better UX
-      const chevron = svg.querySelector(`polyline[data-chevron="${itemId}"]`);
-      if (chevron) {
+      // Find the actual SVG in the DOM
+      const svgContainer = document.getElementById('flowchart-svg-container');
+      const svg = svgContainer ? svgContainer.querySelector('svg') : svgElement;
+      if (!svg) return;
+      
+      // Find the item elements
+      const itemGroup = svg.querySelector(`g[data-inventory-id="${itemId}"]`);
+      const itemBox = svg.querySelector(`rect[data-item-box="${itemId}"]`);
+      const arrowGroup = svg.querySelector(`g[data-arrow="${itemId}"]`);
+      const expandBtn = svg.querySelector(`.flowchart-expand-btn[data-inventory-id="${itemId}"]`);
+      const hintText = svg.querySelector(`text[data-hint="${itemId}"]`);
+      const expandedGroup = svg.querySelector(`g[data-expanded-group="${itemId}"]`);
+      
+      // Get the item from inventory
+      const item = allInventory.find(inv => inv && inv.id === itemId);
+      if (!item) return;
+      
+      const itemHeight = 90;
+      const promptData = getExecutionPromptData(item);
+      const expandedHeight = calculateExpandedHeight(item, stepData, promptData);
+      
+      // Animate arrow rotation
+      if (arrowGroup) {
+        arrowGroup.style.transition = 'transform 0.2s ease';
+        arrowGroup.style.transform = wasExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
+      }
+      
+      // Update expand button class
+      if (expandBtn) {
+        expandBtn.classList.toggle('expanded', !wasExpanded);
+      }
+      
+      // Update hint text
+      if (hintText) {
+        hintText.textContent = wasExpanded ? 'expand' : 'collapse';
+      }
+      
+      // Animate card height and accent bar
+      const newHeight = wasExpanded ? itemHeight : itemHeight + expandedHeight;
+      if (itemBox) {
+        itemBox.style.transition = 'height 0.2s ease';
+        itemBox.setAttribute('height', newHeight);
+      }
+      
+      const accentBar = svg.querySelector(`rect[data-accent-bar="${itemId}"]`);
+      if (accentBar) {
+        accentBar.style.transition = 'height 0.2s ease';
+        accentBar.setAttribute('height', newHeight);
+      }
+      
+      // Toggle expanded content visibility with animation
+      if (expandedGroup) {
         if (wasExpanded) {
-          chevron.removeAttribute('transform');
-          chevron.setAttribute('data-expanded', 'false');
+          // Collapse: fade out then hide
+          expandedGroup.style.transition = 'opacity 0.15s ease';
+          expandedGroup.style.opacity = '0';
+          expandedGroup.style.pointerEvents = 'none';
         } else {
-          chevron.setAttribute('transform', 'rotate(180 12 12)');
-          chevron.setAttribute('data-expanded', 'true');
+          // Expand: show then fade in, and render content if not already there
+          if (!expandedGroup.hasChildNodes()) {
+            renderExpandedContentInCard(expandedGroup, item, x, y, width, type, stepData, promptData, itemHeight);
+          }
+          expandedGroup.style.transition = 'opacity 0.2s ease 0.1s';
+          expandedGroup.style.opacity = '1';
+          expandedGroup.style.pointerEvents = 'all';
         }
       }
       
-      // Re-render the flowchart to update expanded state
-      // Store current scroll position to maintain it
-      const container = document.getElementById('process-flowchart-container');
-      const scrollTop = container ? container.scrollTop : 0;
-      const scrollLeft = container ? container.scrollLeft : 0;
-      
-      await renderProcessFlowcharts(allProcesses);
-      
-      // Restore scroll position
-      if (container) {
-        setTimeout(() => {
-          container.scrollTop = scrollTop;
-          container.scrollLeft = scrollLeft;
-        }, 50);
-      }
+      // Update item's expanded height for connection calculations
+      item._expandedHeight = wasExpanded ? 0 : expandedHeight;
     }
     
     // Render inventory pane (raw materials, intermediate, or final products)
