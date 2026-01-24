@@ -1200,6 +1200,10 @@
     background: var(--secondary-bg);
   }
   
+  .step-drag-handle {
+    flex-shrink: 0;
+  }
+  
   .step-number {
     width: 2rem;
     height: 2rem;

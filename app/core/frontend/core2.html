@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="SupplyChain V2 - Modern Process Hub for managing manufacturing workflows and executions">
   <title>Core - Process Hub</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles2.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -28,6 +28,23 @@
     }
     .btn-icon-small svg {
       display: block;
+    }
+    .inventory-items-scroll-container {
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-default, #e5e7eb) transparent;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-thumb {
+      background-color: var(--border-default, #e5e7eb);
+      border-radius: 3px;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-thumb:hover {
+      background-color: var(--text-tertiary, #9ca3af);
     }
   </style>
 </head>
@@ -190,6 +207,16 @@
   <script src="{{ url_for('core.serve_core_js', filename='core.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script>
+    // Configure execution modal callbacks before loading shared script
+    window.ExecutionModalConfig = {
+      onStepCompleted: async function() {
+        // Reload inventory to reflect consumed items and new outputs
+        await loadInventoryV2();
+      }
+    };
+  </script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-modal.js') }}"></script>
+  <script>
     // Global variable for notification timeout
     let notificationTimeout = null;
     
@@ -239,10 +266,11 @@
       modal.style.display = 'flex';
       // Don't block body overflow - allow user to see the page
       
-      // Auto-dismiss after 3.5 seconds
+      // Auto-dismiss: errors stay longer (8 seconds), success messages (6 seconds)
+      const timeoutDuration = type === 'error' ? 8000 : 6000;
       notificationTimeout = setTimeout(() => {
         closeNotification();
-      }, 3500);
+      }, timeoutDuration);
     };
     
     // Immediately override showSuccess and showError from core.js
@@ -353,7 +381,10 @@
       card.innerHTML = `
         <div class="process-card-header">
           <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="navigateToProcess('${process.id}')">
-            <h3 class="process-title">${escapeHtml(process.name)}</h3>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <h3 class="process-title">${escapeHtml(process.name)}</h3>
+              ${process.is_draft ? '<span class="badge" style="background: var(--warning, #f59e0b); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">DRAFT</span>' : ''}
+            </div>
             <p class="process-description">${escapeHtml(process.description || '')}</p>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
@@ -515,19 +546,19 @@
         inventoryGrid.appendChild(createInventoryCategoryCard('raw', grouped.raw_material));
         // Also show intermediate and final product categories even if empty
         inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
-        inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product, finalProductTotals));
+        inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
       } else {
         // Only show categories that have items if no raw materials exist
         if (grouped.work_in_progress.length > 0) {
           inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
         }
         if (grouped.final_product.length > 0) {
-          inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product, finalProductTotals));
+          inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
         }
       }
     }
     
-    function createInventoryCategoryCard(type, items, totals = null) {
+    function createInventoryCategoryCard(type, items) {
       const card = document.createElement('div');
       card.className = `inventory-category-card ${type}`;
       
@@ -543,29 +574,16 @@
       
       const categoryTitle = type === 'raw' ? 'Raw Materials' : type === 'intermediate' ? 'Intermediate' : 'Final Products';
       
-      // Build totals display for final products (grouped by process name)
-      let totalsDisplay = '';
-      if (type === 'final' && totals && Object.keys(totals).length > 0) {
-        const totalsLines = Object.entries(totals)
-          .map(([processName, unitTotals]) => {
-            const totalsText = Object.entries(unitTotals)
-              .map(([unit, total]) => {
-                // Format number to remove unnecessary decimals
-                const formattedTotal = total % 1 === 0 ? total.toString() : total.toFixed(2).replace(/\.?0+$/, '');
-                return `${formattedTotal} ${unit}`;
-              })
-              .join(' + ');
-            return `<div style="margin-top: 4px;"><strong>${escapeHtml(processName)}:</strong> ${totalsText}</div>`;
-          })
-          .join('');
-        totalsDisplay = `<div class="inventory-category-totals" style="font-size: 13px; font-weight: 600; color: var(--text-primary, #0f172a); margin: 4px 0 0 0;">${totalsLines}</div>`;
-      }
-      
       const itemsContainer = document.createElement('div');
       itemsContainer.className = 'inventory-category-items';
       itemsContainer.style.display = 'flex';
       itemsContainer.style.flexDirection = 'column';
       itemsContainer.style.gap = '12px';
+      
+      // Create scrollable container wrapper
+      const scrollContainer = document.createElement('div');
+      scrollContainer.className = 'inventory-items-scroll-container';
+      scrollContainer.style.overflowX = 'hidden';
       
       // Render all items as individual cards, or show empty state
       if (items.length > 0) {
@@ -592,18 +610,68 @@
         itemsContainer.appendChild(emptyMessage);
       }
       
-      card.innerHTML = `
-        <div class="inventory-category-header">
-          <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            ${iconSvg}
-          </svg>
-          <span class="inventory-category-title">${categoryTitle}</span>
-        </div>
-        <p class="inventory-category-count">${items.length} items</p>
-        ${totalsDisplay}
+      // Always limit to 3 cards with scroll and expand/collapse option
+      const hasMoreThanThree = items.length > 3;
+      const isExpanded = false; // Start collapsed
+      const categoryId = `category-${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Set initial scroll container height (show exactly 3 cards when collapsed)
+      // Always limit to 3 cards max - if more than 3 items, show scroll with expand option
+      // Each card is 90px tall (fixed height), plus 12px gap between cards
+      // 3 cards = (90px * 3) + (12px * 2) = 270px + 24px = 294px
+      // Add a small buffer to ensure 3 full cards are visible
+      if (hasMoreThanThree) {
+        scrollContainer.style.maxHeight = '306px'; // Exactly 3 cards + gaps
+        scrollContainer.style.overflowY = 'auto';
+        scrollContainer.dataset.originalMaxHeight = '306px';
+      } else {
+        // If 3 or fewer items, no scroll needed
+        scrollContainer.style.maxHeight = 'none';
+        scrollContainer.style.overflowY = 'visible';
+        scrollContainer.dataset.originalMaxHeight = 'none';
+      }
+      
+      scrollContainer.appendChild(itemsContainer);
+      
+      // Build card structure
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'inventory-category-header';
+      headerDiv.innerHTML = `
+        <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          ${iconSvg}
+        </svg>
+        <span class="inventory-category-title">${categoryTitle}</span>
       `;
       
-      card.appendChild(itemsContainer);
+      const countP = document.createElement('p');
+      countP.className = 'inventory-category-count';
+      countP.textContent = `${items.length} items`;
+      
+      // Clear card and build structure
+      card.innerHTML = '';
+      card.appendChild(headerDiv);
+      card.appendChild(countP);
+      card.appendChild(scrollContainer);
+      
+      // Store category ID and expanded state
+      card.dataset.categoryId = categoryId;
+      card.dataset.isExpanded = 'false';
+      
+      // Add expand/collapse button if there are more than 3 items
+      if (hasMoreThanThree) {
+        const expandButton = document.createElement('button');
+        expandButton.className = 'btn btn-secondary btn-sm';
+        expandButton.id = `toggle-${categoryId}`;
+        expandButton.style.cssText = 'margin-top: 12px; width: 100%; padding: 8px; font-size: 12px;';
+        expandButton.onclick = () => toggleInventoryCategory(categoryId);
+        expandButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show ${items.length - 3} more
+        `;
+        card.appendChild(expandButton);
+      }
       
       return card;
     }
@@ -617,6 +685,16 @@
       // Apply wrapping to the card itself to prevent overflow
       card.style.wordWrap = 'break-word';
       card.style.overflowWrap = 'break-word';
+      // Set fixed height to match raw materials cards (ensure consistency)
+      // Raw materials cards are approximately 90px tall (header + content)
+      // We'll use a fixed height to ensure all cards are the same size
+      // The button section (if present) must fit within this height
+      // Override default process-card padding to fit content
+      card.style.height = '90px';
+      card.style.display = 'flex';
+      card.style.flexDirection = 'column';
+      card.style.overflow = 'hidden';
+      card.style.padding = '12px 24px'; // Reduced from default 24px to fit content
       
       const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' : 
                        item.inventory_type === 'work_in_progress' ? 'Work in Progress' : 
@@ -651,16 +729,17 @@
       
       const formattedQuantity = formatQuantity(item.quantity);
       
-      // Prepend process name to product name for quick identification
-      const displayName = item.process_name ? `${escapeHtml(item.process_name)} - ${escapeHtml(item.name)}` : escapeHtml(item.name);
+      // Format display name: if process_name exists, show "Process: name" on one line and "Output name" on next
+      const titleContent = item.process_name 
+        ? `<span style="color: var(--text-secondary); font-size: 12px; font-weight: 500;">Process: ${escapeHtml(item.process_name)}</span><br><span style="color: var(--text-primary);">${escapeHtml(item.name)}</span>`
+        : escapeHtml(item.name);
       
       card.innerHTML = `
-        <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word;">
+        <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
           <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetails('${item.id}')">
-            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word;">${displayName}</h3>
-            <p class="process-description" style="word-wrap: break-word; overflow-wrap: break-word;">${formattedQuantity} ${item.unit || ''}</p>
+            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
           </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
             <button class="btn-icon-small" onclick="event.stopPropagation(); openEditInventoryModal('${item.id}')" title="Edit inventory item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -679,6 +758,21 @@
             </svg>
           </div>
         </div>
+        ${item.source_execution_id ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 20px 4px 24px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 0; flex-shrink: 0;">
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); executeNextStepFromInventory('${item.source_execution_id}')" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; border: none; box-shadow: none; line-height: 1.2; height: 18px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: middle;">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Execute next step
+          </button>
+        </div>
+        ` : `
+        <div style="padding: 4px 24px; margin-top: 0; flex-shrink: 0; border-top: 1px solid var(--border-default, #e5e7eb);">
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+        </div>
+        `}
         <div class="inventory-item-details" id="details-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
             <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
@@ -794,14 +888,116 @@
       const arrow = document.getElementById(`arrow-${itemId}`);
       const isExpanded = card.dataset.isExpanded === 'true';
       
+      // Find the scroll container that contains this card
+      const scrollContainer = card.closest('.inventory-items-scroll-container');
+      
       if (isExpanded) {
+        // Collapse: hide details and restore fixed height
         details.style.display = 'none';
         arrow.style.transform = 'rotate(0deg)';
+        card.style.height = '90px';
+        card.style.overflow = 'hidden';
         card.dataset.isExpanded = 'false';
+        
+        // Restore scroll container's original maxHeight if it exists
+        if (scrollContainer) {
+          const originalMaxHeight = scrollContainer.dataset.originalMaxHeight;
+          if (originalMaxHeight) {
+            scrollContainer.style.maxHeight = originalMaxHeight;
+            scrollContainer.style.overflowY = originalMaxHeight === 'none' ? 'visible' : 'auto';
+          }
+        }
       } else {
+        // Expand: show details and allow card to grow
         details.style.display = 'block';
         arrow.style.transform = 'rotate(90deg)';
+        card.style.height = 'auto';
+        card.style.overflow = 'visible';
         card.dataset.isExpanded = 'true';
+        
+        // Temporarily expand scroll container's maxHeight to show full expanded card
+        if (scrollContainer) {
+          // Store original maxHeight if not already stored
+          if (!scrollContainer.dataset.originalMaxHeight) {
+            scrollContainer.dataset.originalMaxHeight = scrollContainer.style.maxHeight || '306px';
+          }
+          
+          // Use setTimeout to ensure DOM has updated, then calculate and set height
+          setTimeout(() => {
+            // Get the items container (direct child of scroll container)
+            const itemsContainer = scrollContainer.querySelector('.inventory-category-items');
+            if (!itemsContainer) return;
+            
+            // Get all card elements
+            const allCards = Array.from(itemsContainer.children);
+            
+            // Find the index of the expanded card
+            const cardIndex = allCards.indexOf(card);
+            if (cardIndex === -1) return;
+            
+            // Calculate the position of the card within the container
+            let cardsHeightBefore = 0;
+            for (let i = 0; i < cardIndex; i++) {
+              const itemCard = allCards[i];
+              if (itemCard) {
+                const itemHeight = itemCard.offsetHeight || 90; // Use offsetHeight for accurate measurement
+                cardsHeightBefore += itemHeight + 12; // 12px gap between cards
+              }
+            }
+            
+            // Get the expanded card's full height (wait a bit more for full expansion)
+            setTimeout(() => {
+              const expandedCardHeight = card.offsetHeight;
+              
+              // Calculate total height needed: cards before + expanded card + buffer
+              const heightNeeded = cardsHeightBefore + expandedCardHeight + 60; // 60px buffer for safety
+              
+              // Set maxHeight to accommodate the full expanded card
+              scrollContainer.style.maxHeight = `${Math.max(heightNeeded, 500)}px`; // At least 500px
+              scrollContainer.style.overflowY = 'auto';
+              
+              // Scroll the expanded card into view
+              card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+            }, 50);
+          }, 100);
+        }
+      }
+    }
+    
+    function toggleInventoryCategory(categoryId) {
+      const categoryCard = document.querySelector(`[data-category-id="${categoryId}"]`);
+      if (!categoryCard) return;
+      
+      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
+      const toggleButton = document.getElementById(`toggle-${categoryId}`);
+      const toggleIcon = document.getElementById(`toggle-icon-${categoryId}`);
+      const isExpanded = categoryCard.dataset.isExpanded === 'true';
+      
+      if (isExpanded) {
+        // Collapse: show only 3 cards
+        // Restore original maxHeight if it exists, otherwise use default
+        const originalMaxHeight = scrollContainer.dataset.originalMaxHeight || '306px';
+        scrollContainer.style.maxHeight = originalMaxHeight;
+        scrollContainer.style.overflowY = originalMaxHeight === 'none' ? 'visible' : 'auto';
+        toggleButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show ${parseInt(categoryCard.querySelector('.inventory-category-count').textContent) - 3} more
+        `;
+        categoryCard.dataset.isExpanded = 'false';
+      } else {
+        // Expand: show all cards
+        scrollContainer.style.maxHeight = 'none';
+        scrollContainer.style.overflowY = 'visible';
+        const itemCount = parseInt(categoryCard.querySelector('.inventory-category-count').textContent);
+        toggleButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s; transform: rotate(180deg);" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show less
+        `;
+        categoryCard.dataset.isExpanded = 'true';
       }
     }
     
@@ -926,15 +1122,15 @@
         });
       });
       
-      // Close on overlay click
-      document.querySelectorAll('.modal-overlay').forEach(modal => {
-        modal.addEventListener('click', (e) => {
-          if (e.target === modal) {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-          }
-        });
-      });
+      // Close on overlay click - DISABLED to prevent accidental closes
+      // document.querySelectorAll('.modal-overlay').forEach(modal => {
+      //   modal.addEventListener('click', (e) => {
+      //     if (e.target === modal) {
+      //       modal.style.display = 'none';
+      //       document.body.style.overflow = 'auto';
+      //     }
+      //   });
+      // });
       
     }
     
@@ -1380,6 +1576,79 @@
       currentDeleteInventoryId = null;
       currentDeleteInventoryName = null;
     }
+    
+    // ============================================================
+    // EXECUTION FUNCTIONS (from flows2.html)
+    // ============================================================
+    
+    // Get current user
+    let currentUser = null;
+    async function getCurrentUser() {
+      if (currentUser) {
+        return currentUser;
+      }
+      
+      try {
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          currentUser = await response.json();
+          return currentUser;
+        } else {
+          return { username: 'Unknown', email: 'unknown@example.com' };
+        }
+      } catch (error) {
+        console.error('Failed to get current user:', error);
+        return { username: 'Unknown', email: 'unknown@example.com' };
+      }
+    }
+    
+    // Execute next step from inventory item
+    window.executeNextStepFromInventory = async function(sourceExecutionId) {
+      try {
+        // Get full execution details to find the ready step
+        const executionData = await CoreAPI.getExecution(sourceExecutionId);
+        const executionSteps = executionData.execution_steps || [];
+        
+        // Find the ready step (current step to complete)
+        const readyStep = executionSteps.find(es => es.status === 'ready' || es.status === 'READY');
+        
+        if (!readyStep) {
+          showNotification('error', 'No Ready Step', 'There is no step ready to complete for this execution.');
+          return;
+        }
+        
+        // Get the step definition from the process
+        const processData = await CoreAPI.getProcess(executionData.process_id);
+        const stepDefinition = processData.steps.find(s => s.id === readyStep.step_id);
+        
+        if (!stepDefinition) {
+          showNotification('error', 'Step Not Found', 'Step definition not found.');
+          return;
+        }
+        
+        // Open execution modal
+        if (typeof window.openExecutionModal === 'function') {
+          await window.openExecutionModal(sourceExecutionId, readyStep, stepDefinition);
+        } else {
+          showNotification('error', 'Modal Not Loaded', 'Execution modal functions are not available. Please refresh the page.');
+          console.error('openExecutionModal is not defined. Make sure execution-modal.js is loaded.');
+        }
+        
+      } catch (error) {
+        console.error('Failed to open execution modal:', error);
+        showNotification('error', 'Failed to Open Execution Modal', error.message || 'Failed to open execution modal. Please try again.');
+      }
+    };
+    
+    // ============================================================
+    // EXECUTION MODAL FUNCTIONS
+    // ============================================================
+    // openExecutionModal and submitExecution are now loaded from js/execution-modal.js
+    // Configuration is set above in ExecutionModalConfig
   </script>
   
   <!-- Create Process Modal -->
@@ -1641,7 +1910,7 @@
   </div>
   
   <!-- Notification Toast (auto-dismissing) -->
-  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 1000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
+  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 10000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
     <div class="card" style="padding: 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12)); border: 1px solid var(--border-light, #e5e7eb);">
       <div style="display: flex; align-items: flex-start; gap: 12px;">
         <div id="notification-icon" style="flex-shrink: 0; margin-top: 2px;">
@@ -1677,6 +1946,9 @@
       animation: slideInRight 0.3s ease-out;
     }
   </style>
+  
+  <!-- Execute Step Modal (Shared) -->
+  {% include 'shared/execution-modal.html' %}
   
   <script src="/ui/shared/sidebar-v2.js"></script>
 </body>

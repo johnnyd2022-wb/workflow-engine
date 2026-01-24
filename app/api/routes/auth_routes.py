@@ -91,7 +91,9 @@ def get_rate_limit_key():
 
 
 # Create a limiter instance with custom key function (will be initialized with app in app_factory)
-limiter = Limiter(key_func=get_rate_limit_key, default_limits=["100 per 5 minutes"])
+# Increased default limit to 1000 per minute to prevent rate limiting on static files and general API usage
+# Specific endpoints (login, 2FA, etc.) have stricter limits applied individually
+limiter = Limiter(key_func=get_rate_limit_key, default_limits=["1000 per minute"])
 
 # Pending 2FA session expiry (Using 5 minutes as default)
 PENDING_2FA_EXPIRY_MINUTES = 5
