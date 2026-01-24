@@ -141,6 +141,14 @@ const CoreAPI = {
         });
     },
     
+    async traceRawMaterial(rawMaterialId) {
+        return this.request(`/inventory/trace/${rawMaterialId}`);
+    },
+    
+    async traceInventoryBackward(inventoryItemId) {
+        return this.request(`/inventory/trace-backward/${inventoryItemId}`);
+    },
+    
     // Metrics
     async getMetrics() {
         return this.request('/metrics');
