@@ -1426,20 +1426,22 @@ def list_check_needed_items():
 
     for raw_material in expired_with_stock:
         # Add expired raw material to result
-        result_expired.append({
-            "id": str(raw_material.id),
-            "name": raw_material.name,
-            "quantity": raw_material.quantity,
-            "unit": raw_material.unit,
-            "inventory_type": raw_material.inventory_type,
-            "supplier": raw_material.supplier,
-            "purchase_date": raw_material.purchase_date.isoformat() if raw_material.purchase_date else None,
-            "supplier_batch_number": raw_material.supplier_batch_number,
-            "expiry_date": raw_material.expiry_date.isoformat() if raw_material.expiry_date else None,
-            "created_at": raw_material.created_at.isoformat() if raw_material.created_at else None,
-            "extra_data": raw_material.extra_data if raw_material.extra_data else {},
-            "is_expired": True,
-        })
+        result_expired.append(
+            {
+                "id": str(raw_material.id),
+                "name": raw_material.name,
+                "quantity": raw_material.quantity,
+                "unit": raw_material.unit,
+                "inventory_type": raw_material.inventory_type,
+                "supplier": raw_material.supplier,
+                "purchase_date": raw_material.purchase_date.isoformat() if raw_material.purchase_date else None,
+                "supplier_batch_number": raw_material.supplier_batch_number,
+                "expiry_date": raw_material.expiry_date.isoformat() if raw_material.expiry_date else None,
+                "created_at": raw_material.created_at.isoformat() if raw_material.created_at else None,
+                "extra_data": raw_material.extra_data if raw_material.extra_data else {},
+                "is_expired": True,
+            }
+        )
 
         # Find all execution steps that used this raw material
         # Join with Execution to filter by org_id since ExecutionStep doesn't have org_id
@@ -1457,8 +1459,7 @@ def list_check_needed_items():
 
             # Check if this step used the expired raw material
             used_expired = any(
-                input_data.get("inventory_item_id")
-                and str(input_data.get("inventory_item_id")) == raw_material_id_str
+                input_data.get("inventory_item_id") and str(input_data.get("inventory_item_id")) == raw_material_id_str
                 for input_data in step.actual_inputs
             )
 
@@ -1482,9 +1483,15 @@ def list_check_needed_items():
                 # Check if execution happened after raw material expired
                 execution_date = None
                 if execution.completed_at:
-                    execution_date = execution.completed_at.date() if hasattr(execution.completed_at, 'date') else execution.completed_at
+                    execution_date = (
+                        execution.completed_at.date()
+                        if hasattr(execution.completed_at, "date")
+                        else execution.completed_at
+                    )
                 elif execution.started_at:
-                    execution_date = execution.started_at.date() if hasattr(execution.started_at, 'date') else execution.started_at
+                    execution_date = (
+                        execution.started_at.date() if hasattr(execution.started_at, "date") else execution.started_at
+                    )
 
                 # Mark as impacted if execution was after expiry date
                 is_made_with_expired = False
@@ -1501,33 +1508,43 @@ def list_check_needed_items():
 
                 if has_stock and produced_item.id not in impacted_item_ids:
                     impacted_item_ids.add(produced_item.id)
-                    result_impacted.append({
-                        "id": str(produced_item.id),
-                        "name": produced_item.name,
-                        "quantity": produced_item.quantity,
-                        "unit": produced_item.unit,
-                        "inventory_type": produced_item.inventory_type,
-                        "source_execution_id": str(produced_item.source_execution_id) if produced_item.source_execution_id else None,
-                        "source_execution_step_id": str(produced_item.source_execution_step_id) if produced_item.source_execution_step_id else None,
-                        "source_step_name": produced_item.source_step_name,
-                        "created_at": produced_item.created_at.isoformat() if produced_item.created_at else None,
-                        "extra_data": produced_item.extra_data if produced_item.extra_data else {},
-                        "expired_raw_material_id": raw_material_id_str,
-                        "expired_raw_material_name": raw_material.name,
-                        "is_made_with_expired": is_made_with_expired,
-                    })
+                    result_impacted.append(
+                        {
+                            "id": str(produced_item.id),
+                            "name": produced_item.name,
+                            "quantity": produced_item.quantity,
+                            "unit": produced_item.unit,
+                            "inventory_type": produced_item.inventory_type,
+                            "source_execution_id": str(produced_item.source_execution_id)
+                            if produced_item.source_execution_id
+                            else None,
+                            "source_execution_step_id": str(produced_item.source_execution_step_id)
+                            if produced_item.source_execution_step_id
+                            else None,
+                            "source_step_name": produced_item.source_step_name,
+                            "created_at": produced_item.created_at.isoformat() if produced_item.created_at else None,
+                            "extra_data": produced_item.extra_data if produced_item.extra_data else {},
+                            "expired_raw_material_id": raw_material_id_str,
+                            "expired_raw_material_name": raw_material.name,
+                            "is_made_with_expired": is_made_with_expired,
+                        }
+                    )
 
-                    result_connections.append({
-                        "from_id": raw_material_id_str,
-                        "to_id": str(produced_item.id),
-                        "execution_id": str(step.execution_id) if step.execution_id else None,
-                    })
+                    result_connections.append(
+                        {
+                            "from_id": raw_material_id_str,
+                            "to_id": str(produced_item.id),
+                            "execution_id": str(step.execution_id) if step.execution_id else None,
+                        }
+                    )
 
-    return jsonify({
-        "expired_raw_materials": result_expired,
-        "impacted_items": result_impacted,
-        "connections": result_connections,
-    }), 200
+    return jsonify(
+        {
+            "expired_raw_materials": result_expired,
+            "impacted_items": result_impacted,
+            "connections": result_connections,
+        }
+    ), 200
 
 
 @core_bp.route("/api/core/inventory", methods=["POST"])
