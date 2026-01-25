@@ -1791,9 +1791,7 @@ def trace_raw_material(raw_material_id: str):
     #
     # Strategy: Group all connected items by execution_id, then within each execution,
     # connect items based on step sequence and actual_inputs verification
-    non_raw_items = [
-        item for item in connected_items if item["inventory_type"] != InventoryType.RAW_MATERIAL.value
-    ]
+    non_raw_items = [item for item in connected_items if item["inventory_type"] != InventoryType.RAW_MATERIAL.value]
 
     # Group items by execution_id
     items_by_execution = {}
