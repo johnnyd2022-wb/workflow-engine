@@ -561,108 +561,95 @@
       font-size: 11px;
     }
     
-    .inventory-traceability-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 20px;
+    /* Check needed (expired/compliance) styling */
+    .check-needed-glow {
+      filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6)) drop-shadow(0 0 4px rgba(239, 68, 68, 0.4));
+      animation: check-needed-pulse 2s ease-in-out infinite;
     }
     
-    .inventory-trace-card {
-      background: white;
-      border: 1px solid var(--border-default, #e5e7eb);
-      border-radius: var(--radius-lg, 12px);
-      padding: 20px;
-      transition: all 0.2s;
-      position: relative;
+    @keyframes check-needed-pulse {
+      0%, 100% { filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6)) drop-shadow(0 0 4px rgba(239, 68, 68, 0.4)); }
+      50% { filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.8)) drop-shadow(0 0 6px rgba(239, 68, 68, 0.6)); }
     }
     
-    .inventory-trace-card:hover {
-      box-shadow: var(--shadow-md, 0 4px 6px rgba(0, 0, 0, 0.1));
-      border-color: var(--primary, #3b82f6);
-    }
-    
-    .inventory-trace-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border-light, #f3f4f6);
-    }
-    
-    .inventory-trace-name {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text-primary, #111827);
-      margin: 0;
-    }
-    
-    .inventory-trace-badge {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: var(--radius-sm, 6px);
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-    
-    .inventory-trace-badge.raw {
-      background: #dbeafe;
-      color: #1e40af;
-    }
-    
-    .inventory-trace-badge.wip {
-      background: #fef3c7;
-      color: #92400e;
-    }
-    
-    .inventory-trace-badge.final {
-      background: #d1fae5;
-      color: #065f46;
-    }
-    
-    .inventory-trace-qty {
-      font-size: 14px;
-      color: var(--text-secondary, #6b7280);
-      margin: 8px 0;
-    }
-    
-    .inventory-trace-processes {
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border-light, #f3f4f6);
-    }
-    
-    .inventory-trace-process-title {
+    .check-needed-tooltip {
+      position: absolute;
+      background: #1f2937;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
       font-size: 12px;
-      font-weight: 600;
-      color: var(--text-secondary, #6b7280);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin: 0 0 8px 0;
+      white-space: nowrap;
+      z-index: 1000;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
     }
     
-    .inventory-trace-process-item {
+    .check-needed-tooltip.visible {
+      opacity: 1;
+    }
+    
+    .quick-filter-toggle {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px;
-      background: var(--bg-secondary, #f9fafb);
-      border-radius: var(--radius-sm, 6px);
-      margin-bottom: 6px;
+      padding: 8px 16px;
+      background: white;
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: var(--radius-md, 8px);
+      cursor: pointer;
+      transition: all 0.2s;
       font-size: 13px;
-      color: var(--text-primary, #111827);
-      text-decoration: none;
+      font-weight: 500;
+    }
+    
+    .quick-filter-toggle:hover {
+      border-color: #ef4444;
+    }
+    
+    .quick-filter-toggle.active {
+      background: #fef2f2;
+      border-color: #ef4444;
+      color: #dc2626;
+    }
+    
+    .quick-filter-toggle .toggle-indicator {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #d1d5db;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       transition: all 0.2s;
     }
     
-    .inventory-trace-process-item:hover {
-      background: var(--primary, #3b82f6);
+    .quick-filter-toggle.active .toggle-indicator {
+      background: #ef4444;
+      border-color: #ef4444;
+    }
+    
+    .quick-filter-toggle.active .toggle-indicator svg {
       color: white;
     }
     
-    .inventory-trace-process-item svg {
-      flex-shrink: 0;
+    .legend-check-needed {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #dc2626;
+      cursor: help;
+    }
+    
+    .legend-check-needed-dot {
+      width: 12px;
+      height: 12px;
+      background: #fecaca;
+      border: 2px solid #ef4444;
+      border-radius: 3px;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
     }
     
     .empty-state {
@@ -999,6 +986,32 @@
                 </div>
               </div>
               
+              <!-- Quick Filters and Legend -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; gap: 12px; align-items: center;">
+                  <button id="check-needed-filter" class="quick-filter-toggle" onclick="toggleCheckNeededFilter()">
+                    <span class="toggle-indicator">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    Show Check Needed
+                  </button>
+                </div>
+                
+                <div style="display: flex; gap: 16px; align-items: center;">
+                  <div class="legend-check-needed" title="Expired ingredients, compliance issues, or other items requiring attention">
+                    <span class="legend-check-needed-dot"></span>
+                    <span>Check needed</span>
+                  </div>
+                </div>
+              </div>
+              
               <div id="process-flowchart-container" class="process-flowchart">
                 <div class="loading-state">
                   <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1054,32 +1067,6 @@
               </div>
             </section>
             
-            <!-- Inventory Traceability Section -->
-            <section class="sitemap-section">
-              <div class="sitemap-section-header">
-                <div class="sitemap-section-title">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
-                  </svg>
-                  Live Inventory Traceability
-                </div>
-                <div class="filter-controls">
-                  <button class="filter-btn active" data-filter="all" onclick="filterInventory('all')">All</button>
-                  <button class="filter-btn" data-filter="raw_material" onclick="filterInventory('raw_material')">Raw Materials</button>
-                  <button class="filter-btn" data-filter="work_in_progress" onclick="filterInventory('work_in_progress')">Work in Progress</button>
-                  <button class="filter-btn" data-filter="final_product" onclick="filterInventory('final_product')">Final Products</button>
-                </div>
-              </div>
-              <div id="inventory-traceability-container" class="inventory-traceability-grid">
-                <div class="loading-state">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                  <p>Loading inventory...</p>
-                </div>
-              </div>
-            </section>
           </div>
         </div>
       </main>
@@ -1109,6 +1096,8 @@
     let allExecutions = [];
     let allExecutionMetadata = [];
     let allOutOfStockRawMaterials = [];
+    let checkNeededData = { expired_raw_materials: [], impacted_items: [], connections: [] };
+    let showCheckNeededOnly = false;
     let processDetailsForMapping = [];
     let currentInventoryFilter = 'all';
     
@@ -1205,13 +1194,14 @@
     // Load all data needed for sitemap
     async function loadProcesses() {
       try {
-        // Load processes, inventory, executions, metadata, and out-of-stock items in parallel
-        const [processesData, inventoryData, executionsData, metadataData, outOfStockData] = await Promise.all([
+        // Load processes, inventory, executions, metadata, out-of-stock, and check-needed items in parallel
+        const [processesData, inventoryData, executionsData, metadataData, outOfStockData, checkNeededResult] = await Promise.all([
           CoreAPI.getProcesses(),
           CoreAPI.getInventory(),
           CoreAPI.getExecutions(),
           CoreAPI.getExecutionMetadata(),
-          CoreAPI.getOutOfStockRawMaterials()
+          CoreAPI.getOutOfStockRawMaterials(),
+          CoreAPI.getCheckNeededItems()
         ]);
         
         allProcesses = processesData.processes || [];
@@ -1219,6 +1209,7 @@
         allExecutions = executionsData.executions || [];
         allExecutionMetadata = metadataData.metadata || [];
         allOutOfStockRawMaterials = outOfStockData.inventory_items || [];
+        checkNeededData = checkNeededResult || { expired_raw_materials: [], impacted_items: [], connections: [] };
         
         // Filter out any invalid executions before loading details
         const validExecutions = allExecutions.filter(exec => exec && exec.id);
@@ -1297,11 +1288,6 @@
       
       // Create visual flowchart with pane-based layout
       await createVisualFlowchart(container, processes);
-      
-      // Re-render inventory with updated process details
-      if (allInventory.length > 0) {
-        renderInventoryTraceability(allInventory);
-      }
     }
     
     // Create visual flowchart diagram - left to right flow
@@ -1397,10 +1383,99 @@
       }
       
       // Don't render anything if not tracing - user needs to search and select an item
-      // Only render when tracing
+      // Only render when tracing or in check needed mode
       
+      // If check needed filter is active, show all expired items and impacted products
+      if (showCheckNeededOnly && checkNeededData) {
+        const expiredRawMaterials = checkNeededData.expired_raw_materials || [];
+        const impactedItems = checkNeededData.impacted_items || [];
+        const connections = checkNeededData.connections || [];
+        
+        if (expiredRawMaterials.length === 0) {
+          const noIssuesText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          noIssuesText.setAttribute('x', maxX / 2);
+          noIssuesText.setAttribute('y', maxY / 2);
+          noIssuesText.setAttribute('font-size', '14');
+          noIssuesText.setAttribute('fill', '#10b981');
+          noIssuesText.setAttribute('text-anchor', 'middle');
+          noIssuesText.setAttribute('dominant-baseline', 'middle');
+          noIssuesText.textContent = '✓ No expired raw materials with stock found';
+          svg.appendChild(noIssuesText);
+        } else {
+          // Render check needed flow: expired raw materials -> impacted items
+          const paneWidth = 200;
+          const paneGap = 120;
+          const itemSpacing = 15;
+          const col1X = 50;
+          const col2X = col1X + paneWidth + paneGap;
+          
+          let startY = 50;
+          
+          // Render expired raw materials
+          expiredRawMaterials.forEach((rawMaterial, index) => {
+            const itemY = startY + (index * (90 + itemSpacing));
+            rawMaterial._flowchartX = col1X + paneWidth;
+            rawMaterial._flowchartY = itemY + 45;
+            
+            renderSingleInventoryItem(svg, rawMaterial, col1X, itemY, paneWidth, 'raw', null);
+            maxY = Math.max(maxY, itemY + 90);
+          });
+          
+          // Render impacted items (intermediates and finals)
+          impactedItems.forEach((item, index) => {
+            const itemY = startY + (index * (90 + itemSpacing));
+            item._flowchartX = col2X;
+            item._flowchartY = itemY + 45;
+            
+            const itemType = item.inventory_type === 'work_in_progress' ? 'wip' : 'final';
+            renderSingleInventoryItem(svg, item, col2X, itemY, paneWidth, itemType, null);
+            maxY = Math.max(maxY, itemY + 90);
+          });
+          
+          maxX = col2X + paneWidth + 50;
+          
+          // Draw connections
+          connections.forEach(conn => {
+            const fromItem = expiredRawMaterials.find(r => r.id === conn.from_id);
+            const toItem = impactedItems.find(i => i.id === conn.to_id);
+            
+            if (fromItem && toItem && fromItem._flowchartY && toItem._flowchartY) {
+              const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+              line.setAttribute('x1', col1X + paneWidth);
+              line.setAttribute('y1', fromItem._flowchartY);
+              line.setAttribute('x2', col2X);
+              line.setAttribute('y2', toItem._flowchartY);
+              line.setAttribute('stroke', '#ef4444');
+              line.setAttribute('stroke-width', '2');
+              line.setAttribute('stroke-dasharray', '4,4');
+              line.setAttribute('opacity', '0.7');
+              line.setAttribute('marker-end', 'url(#arrowhead-check-needed)');
+              line.className = 'flowchart-connection-line check-needed-connection';
+              line.setAttribute('data-from-inventory', conn.from_id);
+              line.setAttribute('data-to-inventory', conn.to_id);
+              svg.insertBefore(line, svg.firstChild);
+            }
+          });
+          
+          // Add arrowhead marker for check needed connections
+          const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+          const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+          marker.setAttribute('id', 'arrowhead-check-needed');
+          marker.setAttribute('markerWidth', '10');
+          marker.setAttribute('markerHeight', '7');
+          marker.setAttribute('refX', '9');
+          marker.setAttribute('refY', '3.5');
+          marker.setAttribute('orient', 'auto');
+          const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+          polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+          polygon.setAttribute('fill', '#ef4444');
+          marker.appendChild(polygon);
+          defs.appendChild(marker);
+          svg.insertBefore(defs, svg.firstChild);
+        }
+      }
       // If tracing, render the traced item and its flow
-      if (tracedRawMaterialId) {
+      else if (tracedRawMaterialId) {
         // Find the traced item (could be raw, intermediate, or final)
         // Also search in out-of-stock items for recall traceability
         let tracedItem = allInventory.find(item => item && item.id === tracedRawMaterialId);
@@ -2035,12 +2110,22 @@
       
       // Card-like styling matching core2.html inventory exactly
       // Raw materials: blue tint, Intermediates: amber/yellow tint, Finals: green tint
-      const fillColor = type === 'raw' ? (isConsumed ? '#f3f4f6' : '#dbeafe') : 
+      // Check if this item needs attention (expired or made with expired)
+      const needsCheck = isCheckNeededItem(itemId);
+      const expiredSourceName = needsCheck ? getExpiredSourceName(itemId) : null;
+      
+      let fillColor = type === 'raw' ? (isConsumed ? '#f3f4f6' : '#dbeafe') : 
                        type === 'wip' ? '#fef3c7' : '#d1fae5';
-      const strokeColor = type === 'raw' ? (isConsumed ? '#d1d5db' : '#3b82f6') : 
+      let strokeColor = type === 'raw' ? (isConsumed ? '#d1d5db' : '#3b82f6') : 
                          type === 'wip' ? '#f59e0b' : '#10b981';
-      const accentColor = type === 'raw' ? (isConsumed ? '#9ca3af' : '#3b82f6') : 
+      let accentColor = type === 'raw' ? (isConsumed ? '#9ca3af' : '#3b82f6') : 
                          type === 'wip' ? '#f59e0b' : '#10b981';
+      
+      // Override colors if item needs check
+      if (needsCheck) {
+        strokeColor = '#ef4444';
+        accentColor = '#ef4444';
+      }
       
       // Create a group for this item
       const itemGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -2065,14 +2150,24 @@
       itemBox.setAttribute('rx', '8');
       itemBox.setAttribute('data-item-box', itemId);
       itemBox.style.cursor = 'pointer';
-      itemBox.style.filter = 'drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1))';
+      // Apply red glow for check needed items
+      if (needsCheck) {
+        itemBox.style.filter = 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.6)) drop-shadow(0 0 4px rgba(239, 68, 68, 0.4))';
+        itemBox.classList.add('check-needed-glow');
+      } else {
+        itemBox.style.filter = 'drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1))';
+      }
       itemBox.style.transition = 'height 0.2s ease';
-      itemBox.className = 'flowchart-element';
+      itemBox.className = 'flowchart-element' + (needsCheck ? ' check-needed-glow' : '');
       if (isConsumed) {
         itemBox.classList.add('consumed-item');
         itemBox.setAttribute('opacity', '0.6');
       }
       itemBox.setAttribute('data-inventory-id', itemId);
+      if (needsCheck) {
+        itemBox.setAttribute('data-check-needed', 'true');
+        itemBox.setAttribute('data-expired-source', expiredSourceName || '');
+      }
       
       // Left accent bar to indicate type (like core2.html card styling)
       const accentBar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -2089,13 +2184,19 @@
       itemBox.addEventListener('mouseenter', function(e) {
         this.setAttribute('stroke-width', '3');
         if (item && item.id) {
-          showInventoryTooltip(e, item);
+          // Show expired tooltip if check needed
+          if (needsCheck && expiredSourceName) {
+            showCheckNeededTooltip(e, expiredSourceName);
+          } else {
+            showInventoryTooltip(e, item);
+          }
           highlightInventoryFlow(item.id);
         }
       });
       itemBox.addEventListener('mouseleave', function() {
         this.setAttribute('stroke-width', '2');
         hideTooltip();
+        hideCheckNeededTooltip();
         clearHighlights();
       });
       
@@ -4900,6 +5001,50 @@
       }
     }
     
+    // Show check needed tooltip (for expired items)
+    function showCheckNeededTooltip(event, message) {
+      let tooltip = document.getElementById('check-needed-tooltip');
+      if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'check-needed-tooltip';
+        tooltip.className = 'check-needed-tooltip';
+        document.body.appendChild(tooltip);
+      }
+      
+      tooltip.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span style="color: #fecaca;">${message}</span>
+        </div>
+      `;
+      
+      tooltip.style.position = 'fixed';
+      tooltip.style.left = (event.clientX + 12) + 'px';
+      tooltip.style.top = (event.clientY - 10) + 'px';
+      tooltip.style.background = '#1f2937';
+      tooltip.style.padding = '8px 12px';
+      tooltip.style.borderRadius = '6px';
+      tooltip.style.fontSize = '12px';
+      tooltip.style.zIndex = '10000';
+      tooltip.style.pointerEvents = 'none';
+      tooltip.style.border = '1px solid #ef4444';
+      tooltip.classList.add('visible');
+      tooltip.style.opacity = '1';
+    }
+    
+    // Hide check needed tooltip
+    function hideCheckNeededTooltip() {
+      const tooltip = document.getElementById('check-needed-tooltip');
+      if (tooltip) {
+        tooltip.classList.remove('visible');
+        tooltip.style.opacity = '0';
+      }
+    }
+    
     // Setup flowchart interactions
     function setupFlowchartInteractions(svg, container) {
       // Pan functionality - only pan when clicking on empty space, not on elements
@@ -4965,30 +5110,6 @@
       flowchartPanY = 0;
       updateFlowchartTransform();
     };
-    
-    // Load and render inventory
-    async function loadInventory() {
-      try {
-        const data = await CoreAPI.getInventory();
-        allInventory = data.inventory_items || [];
-        renderInventoryTraceability(allInventory);
-      } catch (error) {
-        console.error('Failed to load inventory:', error);
-        const container = document.getElementById('inventory-traceability-container');
-        if (container) {
-          container.innerHTML = `
-            <div class="empty-state">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              <p>Failed to load inventory. Please refresh the page.</p>
-            </div>
-          `;
-        }
-      }
-    }
     
     // Build inventory to process mapping
     function buildInventoryProcessMap() {
@@ -5088,128 +5209,60 @@
       return map;
     }
     
-    
-    // Render inventory traceability
-    function renderInventoryTraceability(inventory) {
-      const container = document.getElementById('inventory-traceability-container');
-      if (!container) return;
+    // Toggle check needed filter (show expired raw materials and impacted items)
+    function toggleCheckNeededFilter() {
+      showCheckNeededOnly = !showCheckNeededOnly;
       
-      // Filter inventory based on current filter
-      let filteredInventory = inventory;
-      if (currentInventoryFilter !== 'all') {
-        filteredInventory = inventory.filter(item => {
-          const qty = parseFloat(item.quantity || '0');
-          return item.inventory_type === currentInventoryFilter && qty > 0;
-        });
-      } else {
-        filteredInventory = inventory.filter(item => {
-          const qty = parseFloat(item.quantity || '0');
-          return qty > 0;
-        });
+      const filterBtn = document.getElementById('check-needed-filter');
+      const checkIcon = filterBtn ? filterBtn.querySelector('.toggle-indicator svg') : null;
+      
+      if (filterBtn) {
+        filterBtn.classList.toggle('active', showCheckNeededOnly);
+      }
+      if (checkIcon) {
+        checkIcon.style.display = showCheckNeededOnly ? 'block' : 'none';
       }
       
-      if (filteredInventory.length === 0) {
-        container.innerHTML = `
-          <div class="empty-state" style="grid-column: 1 / -1;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
-            </svg>
-            <p>No inventory items found${currentInventoryFilter !== 'all' ? ` for ${currentInventoryFilter.replace('_', ' ')}` : ''}.</p>
-          </div>
-        `;
-        return;
-      }
-      
-      // Use enhanced mapping if process details are available
-      const inventoryMap = processDetailsForMapping.length > 0 
-        ? buildInventoryProcessMapWithDetails(processDetailsForMapping)
-        : buildInventoryProcessMap();
-      
-      container.innerHTML = '';
-      
-      filteredInventory.forEach(item => {
-        const card = createInventoryTraceCard(item, inventoryMap);
-        container.appendChild(card);
-      });
+      // Re-render flowchart with check needed filter
+      renderProcessFlowcharts(allProcesses);
     }
     
-    // Create inventory trace card
-    function createInventoryTraceCard(item, inventoryMap) {
-      const card = document.createElement('div');
-      card.className = 'inventory-trace-card';
+    // Check if an item needs attention (expired or made with expired ingredients)
+    function isCheckNeededItem(itemId) {
+      if (!checkNeededData) return false;
       
-      const typeClass = item.inventory_type === 'raw_material' ? 'raw' : 
-                       item.inventory_type === 'work_in_progress' ? 'wip' : 'final';
-      const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' :
-                       item.inventory_type === 'work_in_progress' ? 'Work in Progress' : 'Final Product';
+      // Check if it's an expired raw material
+      const isExpiredRaw = (checkNeededData.expired_raw_materials || []).some(
+        rm => rm.id === itemId
+      );
+      if (isExpiredRaw) return true;
       
-      const mapEntry = inventoryMap.get(item.id);
-      const processes = mapEntry ? mapEntry.processes : [];
-      
-      let processesHtml = '';
-      if (processes.length === 0) {
-        processesHtml = '<div style="font-size: 12px; color: var(--text-tertiary, #9ca3af); font-style: italic;">Not linked to any process</div>';
-      } else {
-        processesHtml = processes.map(process => {
-          if (process.id) {
-            return `
-              <a href="/core/flows?id=${process.id}" class="inventory-trace-process-item">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-                ${escapeHtml(process.name)}
-              </a>
-            `;
-          }
-          return `
-            <div class="inventory-trace-process-item" style="cursor: default;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-              ${escapeHtml(process.name)}
-            </div>
-          `;
-        }).join('');
-      }
-      
-      card.innerHTML = `
-        <div class="inventory-trace-header">
-          <div style="flex: 1;">
-            <h4 class="inventory-trace-name">${escapeHtml(item.name || 'Unnamed Item')}</h4>
-            <span class="inventory-trace-badge ${typeClass}">${typeLabel}</span>
-          </div>
-        </div>
-        <div class="inventory-trace-qty">
-          <strong>${formatQuantity(item.quantity || '0')}</strong> ${item.unit || ''}
-        </div>
-        ${item.process_name ? `
-          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light, #f3f4f6);">
-            <div style="font-size: 12px; color: var(--text-secondary, #6b7280); margin-bottom: 4px;">Source Process</div>
-            <div style="font-size: 13px; color: var(--text-primary, #111827); font-weight: 500;">${escapeHtml(item.process_name)}</div>
-          </div>
-        ` : ''}
-        <div class="inventory-trace-processes">
-          <div class="inventory-trace-process-title">Used In Processes</div>
-          ${processesHtml}
-        </div>
-      `;
-      
-      return card;
+      // Check if it's an impacted item (made with expired ingredients)
+      const isImpacted = (checkNeededData.impacted_items || []).some(
+        item => item.id === itemId
+      );
+      return isImpacted;
     }
     
-    // Filter inventory
-    function filterInventory(type) {
-      currentInventoryFilter = type;
+    // Get the expired raw material name for an impacted item
+    function getExpiredSourceName(itemId) {
+      if (!checkNeededData) return null;
       
-      // Update filter buttons
-      document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.filter === type) {
-          btn.classList.add('active');
-        }
-      });
+      // Check if it's an expired raw material itself
+      const expiredRaw = (checkNeededData.expired_raw_materials || []).find(
+        rm => rm.id === itemId
+      );
+      if (expiredRaw) return expiredRaw.name + ' is expired';
       
-      renderInventoryTraceability(allInventory);
+      // Check if it's an impacted item
+      const impactedItem = (checkNeededData.impacted_items || []).find(
+        item => item.id === itemId
+      );
+      if (impactedItem && impactedItem.expired_raw_material_name) {
+        return impactedItem.expired_raw_material_name + ' is expired';
+      }
+      
+      return null;
     }
     
     // Search functionality for inventory tracing
@@ -5641,10 +5694,7 @@
     
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', async function() {
-      await Promise.all([
-        loadProcesses(),
-        loadInventory()
-      ]);
+      await loadProcesses();
       
       // Update search inventory list
       if (allInventory && allInventory.length > 0) {

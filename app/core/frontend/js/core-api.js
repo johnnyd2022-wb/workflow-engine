@@ -125,6 +125,10 @@ const CoreAPI = {
         return this.request('/inventory/out-of-stock');
     },
     
+    async getCheckNeededItems() {
+        return this.request('/inventory/check-needed');
+    },
+    
     async createInventoryItem(data) {
         return this.request('/inventory', {
             method: 'POST',
