@@ -1786,70 +1786,77 @@ def trace_raw_material(raw_material_id: str):
             except (InvalidOperation, ValueError, TypeError):
                 continue
 
-    # Now build intermediate-to-final connections based on execution_id
-    # For each intermediate in connected_items, find finals in the same execution that use it
-    intermediates_in_connected = [
-        item for item in connected_items if item["inventory_type"] == InventoryType.WORK_IN_PROGRESS.value
+    # Build intermediate-to-output connections using execution_id as the core tracing mechanism
+    # Items in the same execution with sequential steps are connected through the execution flow
+    #
+    # Strategy: Group all connected items by execution_id, then within each execution,
+    # connect items based on step sequence and actual_inputs verification
+    non_raw_items = [
+        item for item in connected_items if item["inventory_type"] != InventoryType.RAW_MATERIAL.value
     ]
-    finals_in_connected = [
-        item for item in connected_items if item["inventory_type"] == InventoryType.FINAL_PRODUCT.value
-    ]
 
-    for intermediate in intermediates_in_connected:
-        if not intermediate.get("source_execution_id") or not intermediate.get("source_execution_step_id"):
-            continue
+    # Group items by execution_id
+    items_by_execution = {}
+    for item in non_raw_items:
+        exec_id = item.get("source_execution_id")
+        if exec_id:
+            if exec_id not in items_by_execution:
+                items_by_execution[exec_id] = []
+            items_by_execution[exec_id].append(item)
 
-        # Get the execution step that produced this intermediate
-        intermediate_step = (
-            db_session.query(ExecutionStep)
-            .filter(ExecutionStep.id == UUID(intermediate["source_execution_step_id"]))
-            .first()
-        )
+    # For each execution, build connections based on step sequence
+    for exec_id, items in items_by_execution.items():
+        if len(items) < 2:
+            continue  # Need at least 2 items to have a connection
 
-        if not intermediate_step:
-            continue
+        # Get step numbers for all items in this execution
+        step_info = {}
+        for item in items:
+            step_id = item.get("source_execution_step_id")
+            if step_id:
+                step = db_session.query(ExecutionStep).filter(ExecutionStep.id == UUID(step_id)).first()
+                if step:
+                    step_info[item["id"]] = {
+                        "item": item,
+                        "step": step,
+                        "step_number": step.step_number,
+                    }
 
-        # Find all execution steps in the same execution that come after this step
-        execution_steps = (
-            db_session.query(ExecutionStep)
-            .filter(
-                ExecutionStep.execution_id == UUID(intermediate["source_execution_id"]),
-                ExecutionStep.step_number > intermediate_step.step_number,
-            )
-            .order_by(ExecutionStep.step_number)
-            .all()
-        )
+        # Sort items by step number
+        sorted_items = sorted(step_info.values(), key=lambda x: x["step_number"])
 
-        # Check each subsequent step to see if it uses this intermediate
-        for next_step in execution_steps:
-            if not next_step.actual_inputs:
+        # Connect items based on actual_inputs - the step that produces an output
+        # should reference its inputs via inventory_item_id
+        for i, later_info in enumerate(sorted_items):
+            later_step = later_info["step"]
+            later_item = later_info["item"]
+
+            if not later_step.actual_inputs:
                 continue
 
-            # Check if this step uses the intermediate (by ID or name)
-            uses_intermediate = any(
-                (input_data.get("inventory_item_id") and str(input_data.get("inventory_item_id")) == intermediate["id"])
-                or (input_data.get("name") and input_data.get("name").lower() == intermediate["name"].lower())
-                for input_data in next_step.actual_inputs
-            )
+            # Check which earlier items were used as inputs to this step
+            for earlier_info in sorted_items[:i]:
+                earlier_item = earlier_info["item"]
 
-            if uses_intermediate:
-                # Find finals produced by this step (same execution, in our connected items)
-                for final in finals_in_connected:
-                    if final.get("source_execution_id") == intermediate["source_execution_id"] and final.get(
-                        "source_execution_step_id"
-                    ) == str(next_step.id):
-                        # Check if connection already exists
-                        if not any(
-                            c["from_id"] == intermediate["id"] and c["to_id"] == final["id"] for c in connections
-                        ):
-                            connections.append(
-                                {
-                                    "from_id": intermediate["id"],
-                                    "to_id": final["id"],
-                                    "execution_id": intermediate["source_execution_id"],
-                                }
-                            )
-                break  # Only connect to first step that uses the intermediate
+                # Verify the later step actually used this earlier item as input
+                uses_earlier = any(
+                    input_data.get("inventory_item_id")
+                    and str(input_data.get("inventory_item_id")) == earlier_item["id"]
+                    for input_data in later_step.actual_inputs
+                )
+
+                if uses_earlier:
+                    # Add connection if not already exists
+                    if not any(
+                        c["from_id"] == earlier_item["id"] and c["to_id"] == later_item["id"] for c in connections
+                    ):
+                        connections.append(
+                            {
+                                "from_id": earlier_item["id"],
+                                "to_id": later_item["id"],
+                                "execution_id": exec_id,
+                            }
+                        )
 
     # Always include the raw material itself (even if consumed) for traceability
     raw_material_data = {
@@ -2160,6 +2167,88 @@ def trace_inventory_backward(inventory_item_id: str):
             "connections": connections,  # Direct connections based on execution_id
         }
     ), 200
+
+
+@core_bp.route("/api/core/execution-metadata", methods=["GET"])
+@requires_auth
+def get_execution_metadata():
+    """Get unique execution metadata values for search/tracing.
+    Returns all unique key-value pairs from execution_data across all execution steps.
+    """
+    from app.core.db.models.inventory_item import InventoryItem
+
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        # Return mock data for demo
+        return jsonify({"metadata": []}), 200
+
+    org_id = UUID(g.org_id)
+
+    # Get all executions for this org
+    execution_repo = ExecutionRepository(db_session)
+    executions = execution_repo.list_executions(org_id)
+
+    # Collect unique metadata key-value pairs
+    metadata_map = {}  # key -> set of values
+    metadata_items = []  # List of {key, value, execution_ids, inventory_item_ids}
+
+    # Fields to exclude from metadata display
+    exclude_fields = {"completed_by_email", "completed_by_user_id", "execution_errors"}
+
+    for execution in executions:
+        if not execution.execution_steps:
+            continue
+        for step in execution.execution_steps:
+            if not step.execution_data:
+                continue
+            for key, value in step.execution_data.items():
+                if key in exclude_fields:
+                    continue
+                if value is None or value == "":
+                    continue
+                # Convert value to string for consistency
+                str_value = str(value)
+                # Create a unique key for this metadata pair
+                pair_key = f"{key}::{str_value}"
+                if pair_key not in metadata_map:
+                    metadata_map[pair_key] = {
+                        "key": key,
+                        "value": str_value,
+                        "execution_ids": set(),
+                        "execution_step_ids": set(),
+                    }
+                metadata_map[pair_key]["execution_ids"].add(str(execution.id))
+                metadata_map[pair_key]["execution_step_ids"].add(str(step.id))
+
+    # Convert to list format
+    for pair_key, data in metadata_map.items():
+        # Find inventory items linked to these execution steps
+        inventory_item_ids = []
+        for step_id in data["execution_step_ids"]:
+            items = (
+                db_session.query(InventoryItem)
+                .filter(InventoryItem.org_id == org_id)
+                .filter(InventoryItem.source_execution_step_id == UUID(step_id))
+                .all()
+            )
+            for item in items:
+                inventory_item_ids.append(str(item.id))
+
+        metadata_items.append(
+            {
+                "key": data["key"],
+                "value": data["value"],
+                "display_key": data["key"].replace("_", " ").title(),
+                "execution_count": len(data["execution_ids"]),
+                "execution_ids": list(data["execution_ids"]),
+                "inventory_item_ids": inventory_item_ids,
+            }
+        )
+
+    # Sort by key then value
+    metadata_items.sort(key=lambda x: (x["key"].lower(), x["value"].lower()))
+
+    return jsonify({"metadata": metadata_items}), 200
 
 
 @core_bp.route("/api/core/metrics", methods=["GET"])

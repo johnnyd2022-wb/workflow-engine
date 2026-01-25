@@ -149,6 +149,11 @@ const CoreAPI = {
         return this.request(`/inventory/trace-backward/${inventoryItemId}`);
     },
     
+    // Execution Metadata
+    async getExecutionMetadata() {
+        return this.request('/execution-metadata');
+    },
+    
     // Metrics
     async getMetrics() {
         return this.request('/metrics');

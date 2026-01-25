@@ -1107,6 +1107,7 @@
     let allProcesses = [];
     let allInventory = [];
     let allExecutions = [];
+    let allExecutionMetadata = [];
     let processDetailsForMapping = [];
     let currentInventoryFilter = 'all';
     
@@ -1203,16 +1204,18 @@
     // Load all data needed for sitemap
     async function loadProcesses() {
       try {
-        // Load processes, inventory, and executions in parallel
-        const [processesData, inventoryData, executionsData] = await Promise.all([
+        // Load processes, inventory, executions, and metadata in parallel
+        const [processesData, inventoryData, executionsData, metadataData] = await Promise.all([
           CoreAPI.getProcesses(),
           CoreAPI.getInventory(),
-          CoreAPI.getExecutions()
+          CoreAPI.getExecutions(),
+          CoreAPI.getExecutionMetadata()
         ]);
         
         allProcesses = processesData.processes || [];
         allInventory = inventoryData.inventory_items || [];
         allExecutions = executionsData.executions || [];
+        allExecutionMetadata = metadataData.metadata || [];
         
         // Filter out any invalid executions before loading details
         const validExecutions = allExecutions.filter(exec => exec && exec.id);
@@ -1461,7 +1464,16 @@
             
             if (isForwardTrace) {
               // Forward trace: raw -> intermediates -> finals
-              // Column 1: Traced raw material
+              // Check if there are inter-item connections (not from raw material)
+              // These indicate actual flow between products (e.g., intermediate -> final in same execution)
+              const hasInterItemConnections = connections.some(conn => 
+                conn.from_id !== tracedItem.id && conn.to_id !== tracedItem.id
+              );
+              
+              const validIntermediates = connectedIntermediates.filter(i => i && i.id);
+              const validFinals = connectedFinals.filter(f => f && f.id);
+              
+              // Column 1: Traced raw material (always on the left)
               const col1X = 50;
               let col1Y = startY;
               
@@ -1471,20 +1483,91 @@
               const tracedExpandedHeight = expandedItems.has(tracedItem.id) ? (tracedItem._expandedHeight || 0) : 0;
               col1Y += itemHeight + itemSpacing + tracedExpandedHeight;
               
-              // Column 2: Intermediates (if any)
-              const col2X = col1X + paneWidth + paneSpacing;
-              let col2Y = startY;
-              
-              const validIntermediates = connectedIntermediates.filter(i => i && i.id);
-              if (validIntermediates.length > 0) {
-                validIntermediates.forEach(intermediate => {
+              if (hasInterItemConnections) {
+                // HORIZONTAL FLOW LAYOUT: There are connections between items (same execution flow)
+                // Use 3-column layout: raw -> intermediates -> finals
+                const col2X = col1X + paneWidth + paneSpacing;
+                let col2Y = startY;
+                
+                if (validIntermediates.length > 0) {
+                  validIntermediates.forEach(intermediate => {
+                    let stepData = null;
+                    if (intermediate.source_execution_step_id) {
+                      for (const exec of allExecutions) {
+                        if (exec && exec.execution_steps) {
+                          const step = exec.execution_steps.find(es => es && es.id === intermediate.source_execution_step_id);
+                          if (step) {
+                            stepData = { step: step, execution: exec, intermediateProducts: [intermediate] };
+                            break;
+                          }
+                        }
+                      }
+                    }
+                    
+                    try {
+                      renderSingleInventoryItem(svg, intermediate, col2X, col2Y, paneWidth, 'wip', stepData);
+                      intermediate._flowchartX = col2X + paneWidth;
+                      intermediate._flowchartY = col2Y + itemHeight / 2;
+                      const expandedHeight = expandedItems.has(intermediate.id) ? (intermediate._expandedHeight || 0) : 0;
+                      col2Y += itemHeight + itemSpacing + expandedHeight;
+                    } catch (error) {
+                      console.error('Error rendering intermediate:', intermediate, error);
+                    }
+                  });
+                }
+                
+                // Column 3: Finals
+                const col3X = validIntermediates.length > 0 ? col2X + paneWidth + paneSpacing : col2X;
+                let col3Y = startY;
+                
+                if (validFinals.length > 0) {
+                  validFinals.forEach(final => {
+                    try {
+                      renderSingleInventoryItem(svg, final, col3X, col3Y, paneWidth, 'final');
+                      final._flowchartX = col3X + paneWidth;
+                      final._flowchartY = col3Y + itemHeight / 2;
+                      renderedFinalIds.add(final.id);
+                      const expandedHeight = expandedItems.has(final.id) ? (final._expandedHeight || 0) : 0;
+                      col3Y += itemHeight + itemSpacing + expandedHeight;
+                    } catch (error) {
+                      console.error('Error rendering final:', final, error);
+                    }
+                  });
+                }
+                
+                maxY = Math.max(maxY, Math.max(col1Y, Math.max(col2Y, col3Y)));
+                maxX = Math.max(maxX, col3X + paneWidth);
+                
+                // Connect items with horizontal flow
+                connectTracedItems(svg, tracedItem, connectedIntermediates, connectedFinals, col1X, col2X, col3X, paneWidth, tracedIsConsumed, connections, isForwardTrace);
+                
+              } else {
+                // STACKED LAYOUT: No inter-item connections (items from different executions)
+                // Stack all items in a single column (column 2) since they're independent
+                const col2X = col1X + paneWidth + paneSpacing;
+                let col2Y = startY;
+                
+                // Combine and sort all items by type, then by name
+                const allConnectedItems = [...validIntermediates, ...validFinals];
+                allConnectedItems.sort((a, b) => {
+                  // Sort by type first (intermediates before finals), then by name
+                  const typeOrder = { 'work_in_progress': 0, 'final_product': 1 };
+                  const typeA = typeOrder[a.inventory_type] || 2;
+                  const typeB = typeOrder[b.inventory_type] || 2;
+                  if (typeA !== typeB) return typeA - typeB;
+                  return (a.name || '').localeCompare(b.name || '');
+                });
+                
+                allConnectedItems.forEach(item => {
+                  const itemType = item.inventory_type === 'work_in_progress' ? 'wip' : 'final';
                   let stepData = null;
-                  if (intermediate.source_execution_step_id) {
+                  
+                  if (item.source_execution_step_id) {
                     for (const exec of allExecutions) {
                       if (exec && exec.execution_steps) {
-                        const step = exec.execution_steps.find(es => es && es.id === intermediate.source_execution_step_id);
+                        const step = exec.execution_steps.find(es => es && es.id === item.source_execution_step_id);
                         if (step) {
-                          stepData = { step: step, execution: exec, intermediateProducts: [intermediate] };
+                          stepData = { step: step, execution: exec, intermediateProducts: [item] };
                           break;
                         }
                       }
@@ -1492,42 +1575,26 @@
                   }
                   
                   try {
-                    renderSingleInventoryItem(svg, intermediate, col2X, col2Y, paneWidth, 'wip', stepData);
-                    intermediate._flowchartX = col2X + paneWidth;
-                    intermediate._flowchartY = col2Y + itemHeight / 2;
-                    const expandedHeight = expandedItems.has(intermediate.id) ? (intermediate._expandedHeight || 0) : 0;
+                    renderSingleInventoryItem(svg, item, col2X, col2Y, paneWidth, itemType, stepData);
+                    item._flowchartX = col2X + paneWidth;
+                    item._flowchartY = col2Y + itemHeight / 2;
+                    if (item.inventory_type === 'final_product') {
+                      renderedFinalIds.add(item.id);
+                    }
+                    const expandedHeight = expandedItems.has(item.id) ? (item._expandedHeight || 0) : 0;
                     col2Y += itemHeight + itemSpacing + expandedHeight;
                   } catch (error) {
-                    console.error('Error rendering intermediate:', intermediate, error);
+                    console.error('Error rendering item:', item, error);
                   }
                 });
+                
+                maxY = Math.max(maxY, Math.max(col1Y, col2Y));
+                maxX = Math.max(maxX, col2X + paneWidth);
+                
+                // Connect items - all go from raw to column 2 (stacked)
+                // Use col2X for both col2X and col3X since all items are in one column
+                connectTracedItems(svg, tracedItem, connectedIntermediates, connectedFinals, col1X, col2X, col2X, paneWidth, tracedIsConsumed, connections, isForwardTrace);
               }
-              
-              // Column 3: Finals
-              const col3X = validIntermediates.length > 0 ? col2X + paneWidth + paneSpacing : col2X;
-              let col3Y = startY;
-              
-              const validFinals = connectedFinals.filter(f => f && f.id);
-              if (validFinals.length > 0) {
-                validFinals.forEach(final => {
-                  try {
-                    renderSingleInventoryItem(svg, final, col3X, col3Y, paneWidth, 'final');
-                    final._flowchartX = col3X + paneWidth;
-                    final._flowchartY = col3Y + itemHeight / 2;
-                    renderedFinalIds.add(final.id);
-                    const expandedHeight = expandedItems.has(final.id) ? (final._expandedHeight || 0) : 0;
-                    col3Y += itemHeight + itemSpacing + expandedHeight;
-                  } catch (error) {
-                    console.error('Error rendering final:', final, error);
-                  }
-                });
-              }
-              
-              maxY = Math.max(maxY, Math.max(col1Y, Math.max(col2Y, col3Y)));
-              maxX = Math.max(maxX, col3X + paneWidth);
-              
-              // Connect items
-              connectTracedItems(svg, tracedItem, connectedIntermediates, connectedFinals, col1X, col2X, col3X, paneWidth, tracedIsConsumed, connections, isForwardTrace);
             } else {
               // Backward trace: raw materials/intermediates -> traced item
               // Column 1: Raw materials
@@ -1657,30 +1724,55 @@
           
           if (isForwardTrace) {
             // Forward trace: raw -> intermediates -> finals
-            if (toItem.inventory_type === 'work_in_progress') {
-              // Raw material -> Intermediate (or Intermediate -> Intermediate)
-              toX = col2X;
-              toY = toItem._flowchartY;
-              color = isConsumed && fromItem.id === tracedItem.id ? '#9ca3af' : '#3b82f6';
-              dashArray = isConsumed && fromItem.id === tracedItem.id ? '2,2' : '4,4';
-              opacity = isConsumed && fromItem.id === tracedItem.id ? 0.4 : 0.7;
-            } else if (toItem.inventory_type === 'final_product') {
-              // Raw material -> Final (direct) or Intermediate -> Final
-              toX = col3X;
-              toY = toItem._flowchartY;
-              if (fromItem.id === tracedItem.id) {
-                // Direct from raw material
+            // Check if this is a stacked layout (col2X === col3X means all items in one column)
+            const isStackedLayout = col2X === col3X;
+            
+            if (fromItem.id === tracedItem.id) {
+              // Connection FROM raw material
+              if (isStackedLayout) {
+                // Stacked layout: all items in column 2
+                toX = col2X;
+                toY = toItem._flowchartY;
                 color = isConsumed ? '#9ca3af' : '#3b82f6';
                 dashArray = isConsumed ? '2,2' : '4,4';
                 opacity = isConsumed ? 0.4 : 0.7;
               } else {
-                // From intermediate
+                // Horizontal flow layout
+                if (toItem.inventory_type === 'work_in_progress') {
+                  toX = col2X;
+                  toY = toItem._flowchartY;
+                  color = isConsumed ? '#9ca3af' : '#3b82f6';
+                  dashArray = isConsumed ? '2,2' : '4,4';
+                  opacity = isConsumed ? 0.4 : 0.7;
+                } else if (toItem.inventory_type === 'final_product') {
+                  toX = col3X;
+                  toY = toItem._flowchartY;
+                  color = isConsumed ? '#9ca3af' : '#3b82f6';
+                  dashArray = isConsumed ? '2,2' : '4,4';
+                  opacity = isConsumed ? 0.4 : 0.7;
+                } else {
+                  return;
+                }
+              }
+            } else {
+              // Connection FROM intermediate to another item (horizontal flow)
+              if (toItem.inventory_type === 'work_in_progress') {
+                // Intermediate -> Intermediate
+                toX = col2X;
+                toY = toItem._flowchartY;
+                color = '#f59e0b';
+                dashArray = '4,4';
+                opacity = 0.7;
+              } else if (toItem.inventory_type === 'final_product') {
+                // Intermediate -> Final
+                toX = col3X;
+                toY = toItem._flowchartY;
                 color = '#10b981';
                 dashArray = '4,4';
                 opacity = 0.7;
+              } else {
+                return;
               }
-            } else {
-              return; // Unknown type
             }
           } else {
             // Backward trace: raw materials/intermediates -> traced item
@@ -2744,6 +2836,125 @@
       
       // Update item's expanded height for connection calculations
       item._expandedHeight = wasExpanded ? 0 : expandedHeight;
+      
+      // Calculate height change
+      const heightChange = wasExpanded ? -expandedHeight : expandedHeight;
+      
+      // Push down (or pull up) all items below this one
+      pushItemsBelow(svg, y, heightChange, itemId);
+      
+      // Update connection lines to follow moved items
+      updateConnectionLines(svg);
+      
+      // Update SVG and container dimensions to accommodate expanded content
+      updateSvgDimensions(svg, svgContainer);
+    }
+    
+    // Push items below a certain Y position by a height delta
+    function pushItemsBelow(svg, itemY, heightChange, excludeItemId) {
+      if (!svg || heightChange === 0) return;
+      
+      // Find all item groups and their positions
+      const allItemGroups = svg.querySelectorAll('g[data-inventory-id]');
+      
+      allItemGroups.forEach(group => {
+        const groupItemId = group.getAttribute('data-inventory-id');
+        if (groupItemId === excludeItemId) return; // Skip the item we're expanding
+        
+        // Get the item box to find its Y position
+        const itemBox = group.querySelector('rect[data-item-box]');
+        if (!itemBox) return;
+        
+        const boxY = parseFloat(itemBox.getAttribute('y')) || 0;
+        
+        // Only move items that are below the expanded item
+        if (boxY > itemY) {
+          // Get current transform or default to 0
+          const currentTransform = group.style.transform || '';
+          const currentTranslateY = parseFloat(currentTransform.match(/translateY\(([-\d.]+)px\)/)?.[1] || '0');
+          const newTranslateY = currentTranslateY + heightChange;
+          
+          // Apply smooth transition
+          group.style.transition = 'transform 0.2s ease';
+          group.style.transform = `translateY(${newTranslateY}px)`;
+          
+          // Update the item's _flowchartY for connection drawing
+          const item = allInventory.find(inv => inv && inv.id === groupItemId);
+          if (item && item._flowchartY) {
+            item._flowchartY += heightChange;
+          }
+        }
+      });
+    }
+    
+    // Update connection lines after items have moved
+    function updateConnectionLines(svg) {
+      if (!svg) return;
+      
+      const lines = svg.querySelectorAll('line.flowchart-connection-line');
+      lines.forEach(line => {
+        const fromId = line.getAttribute('data-from-inventory');
+        const toId = line.getAttribute('data-to-inventory');
+        
+        // Find source and target items
+        const fromItem = allInventory.find(inv => inv && inv.id === fromId);
+        const toItem = allInventory.find(inv => inv && inv.id === toId);
+        
+        if (fromItem && fromItem._flowchartY) {
+          line.style.transition = 'y1 0.2s ease, y2 0.2s ease';
+          line.setAttribute('y1', fromItem._flowchartY);
+        }
+        if (toItem && toItem._flowchartY) {
+          line.setAttribute('y2', toItem._flowchartY);
+        }
+      });
+    }
+    
+    // Update SVG dimensions after expansion/collapse
+    function updateSvgDimensions(svg, svgContainer) {
+      if (!svg || !svgContainer) return;
+      
+      // Find all item boxes and calculate the maximum Y extent
+      const itemBoxes = svg.querySelectorAll('rect[data-item-box]');
+      let maxY = 0;
+      
+      itemBoxes.forEach(box => {
+        const boxY = parseFloat(box.getAttribute('y')) || 0;
+        const boxHeight = parseFloat(box.getAttribute('height')) || 90;
+        const bottomY = boxY + boxHeight;
+        if (bottomY > maxY) maxY = bottomY;
+      });
+      
+      // Also check for any other content that might be below
+      const allRects = svg.querySelectorAll('rect');
+      allRects.forEach(rect => {
+        const rectY = parseFloat(rect.getAttribute('y')) || 0;
+        const rectHeight = parseFloat(rect.getAttribute('height')) || 0;
+        const bottomY = rectY + rectHeight;
+        if (bottomY > maxY) maxY = bottomY;
+      });
+      
+      // Add padding
+      const newSvgHeight = maxY + 100;
+      
+      // Get current viewBox
+      const viewBox = svg.getAttribute('viewBox');
+      if (viewBox) {
+        const parts = viewBox.split(' ');
+        if (parts.length === 4) {
+          const currentWidth = parseFloat(parts[2]);
+          svg.setAttribute('viewBox', `0 0 ${currentWidth} ${newSvgHeight}`);
+          svg.setAttribute('height', newSvgHeight);
+        }
+      }
+      
+      // Update container height with smooth transition
+      const minHeight = 200;
+      const maxHeight = window.innerHeight * 0.85;
+      const dynamicHeight = Math.max(minHeight, Math.min(newSvgHeight + 20, maxHeight));
+      
+      svgContainer.style.transition = 'height 0.2s ease';
+      svgContainer.style.height = `${dynamicHeight}px`;
     }
     
     // Render inventory pane (raw materials, intermediate, or final products)
@@ -5054,8 +5265,8 @@
           });
         }
         
-        // Display results (will be sorted alphabetically in displaySearchResults)
-        displaySearchResults(filtered, searchResults, searchInput);
+        // Display results with query for metadata filtering
+        displaySearchResults(filtered, searchResults, searchInput, query);
       }
       
       // Show all items when input is focused
@@ -5088,76 +5299,172 @@
       });
     }
     
-    // Display search results
-    function displaySearchResults(items, container, searchInput) {
+    // Display search results with categories
+    function displaySearchResults(items, container, searchInput, query = '') {
       container.innerHTML = '';
       
-      if (items.length === 0) {
+      // Filter metadata based on query
+      let filteredMetadata = [];
+      if (allExecutionMetadata && allExecutionMetadata.length > 0) {
+        if (query.length === 0) {
+          filteredMetadata = allExecutionMetadata;
+        } else {
+          filteredMetadata = allExecutionMetadata.filter(meta => {
+            const keyMatch = meta.key.toLowerCase().includes(query);
+            const valueMatch = meta.value.toLowerCase().includes(query);
+            const displayMatch = meta.display_key.toLowerCase().includes(query);
+            return keyMatch || valueMatch || displayMatch;
+          });
+        }
+      }
+      
+      const hasInventory = items.length > 0;
+      const hasMetadata = filteredMetadata.length > 0;
+      
+      if (!hasInventory && !hasMetadata) {
         container.innerHTML = '<div style="padding: 16px; text-align: center; color: #6b7280; font-size: 14px;">No items found</div>';
         container.style.display = 'block';
         return;
       }
       
-      // Count unique item names
-      const uniqueItemNames = new Set(items.map(item => item.name).filter(Boolean));
-      const uniqueCount = uniqueItemNames.size;
-      
-      // If there are many results, show a scroll indicator
-      if (uniqueCount > 10) {
-        const scrollHint = document.createElement('div');
-        scrollHint.style.cssText = 'padding: 8px 12px; text-align: center; font-size: 11px; color: #9ca3af; background: #f9fafb; border-bottom: 1px solid #e5e7eb;';
-        scrollHint.textContent = `${uniqueCount} items found - scroll to see more`;
-        container.appendChild(scrollHint);
+      // === INVENTORY ITEMS CATEGORY ===
+      if (hasInventory) {
+        // Category header
+        const inventoryHeader = document.createElement('div');
+        inventoryHeader.style.cssText = 'padding: 10px 16px; font-size: 12px; font-weight: 600; color: #374151; background: #f3f4f6; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px;';
+        inventoryHeader.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          </svg>
+          Inventory Items
+        `;
+        container.appendChild(inventoryHeader);
+        
+        // Group inventory by type
+        const rawMaterials = items.filter(i => i.inventory_type === 'raw_material');
+        const intermediates = items.filter(i => i.inventory_type === 'work_in_progress');
+        const finals = items.filter(i => i.inventory_type === 'final_product');
+        
+        // Render each category
+        const categories = [
+          { items: rawMaterials, label: 'Raw Materials', typeClass: 'raw', typeLabel: 'Raw' },
+          { items: intermediates, label: 'Intermediate Products', typeClass: 'intermediate', typeLabel: 'Intermediate' },
+          { items: finals, label: 'Final Products', typeClass: 'final', typeLabel: 'Final' }
+        ];
+        
+        categories.forEach(cat => {
+          if (cat.items.length === 0) return;
+          
+          // Sub-category header
+          const subHeader = document.createElement('div');
+          subHeader.style.cssText = 'padding: 6px 16px 6px 24px; font-size: 10px; font-weight: 500; color: #6b7280; background: #fafafa; border-bottom: 1px solid #f3f4f6; text-transform: uppercase; letter-spacing: 0.5px;';
+          subHeader.textContent = `${cat.label} (${cat.items.length})`;
+          container.appendChild(subHeader);
+          
+          // Group by name
+          const groupedByName = {};
+          cat.items.forEach(item => {
+            if (!item.name) return;
+            if (!groupedByName[item.name]) groupedByName[item.name] = [];
+            groupedByName[item.name].push(item);
+          });
+          
+          Object.keys(groupedByName).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())).forEach(itemName => {
+            const itemGroup = groupedByName[itemName];
+            const countText = itemGroup.length > 1 ? ` (${itemGroup.length})` : '';
+            
+            const resultItem = document.createElement('div');
+            resultItem.className = 'inventory-search-result-item';
+            resultItem.innerHTML = `
+              <div class="item-info">
+                <div class="item-name">${escapeHtml(itemName)}${countText}</div>
+              </div>
+              <span class="item-type-badge ${cat.typeClass}">${cat.typeLabel}</span>
+            `;
+            
+            resultItem.addEventListener('click', function() {
+              showInventoryEntryModal(itemName, itemGroup);
+              container.style.display = 'none';
+              if (searchInput) searchInput.value = '';
+            });
+            
+            container.appendChild(resultItem);
+          });
+        });
       }
       
-      // Group by name to show unique items
-      const groupedByName = {};
-      items.forEach(item => {
-        if (!item.name) return;
-        if (!groupedByName[item.name]) {
-          groupedByName[item.name] = [];
-        }
-        groupedByName[item.name].push(item);
-      });
-      
-      // Sort item names alphabetically
-      const sortedItemNames = Object.keys(groupedByName).sort((a, b) => {
-        return a.toLowerCase().localeCompare(b.toLowerCase());
-      });
-      
-      sortedItemNames.forEach(itemName => {
-        const itemGroup = groupedByName[itemName];
-        const firstItem = itemGroup[0];
-        
-        const resultItem = document.createElement('div');
-        resultItem.className = 'inventory-search-result-item';
-        
-        const typeLabel = firstItem.inventory_type === 'raw_material' ? 'Raw' : 
-                         firstItem.inventory_type === 'work_in_progress' ? 'Intermediate' : 'Final';
-        const typeClass = firstItem.inventory_type === 'raw_material' ? 'raw' : 
-                         firstItem.inventory_type === 'work_in_progress' ? 'intermediate' : 'final';
-        
-        const uniqueCount = itemGroup.length;
-        const countText = uniqueCount > 1 ? ` (${uniqueCount} unique entries)` : '';
-        
-        resultItem.innerHTML = `
-          <div class="item-info">
-            <div class="item-name">${escapeHtml(itemName)}${countText}</div>
-          </div>
-          <span class="item-type-badge ${typeClass}">${typeLabel}</span>
+      // === EXECUTION METADATA CATEGORY ===
+      if (hasMetadata) {
+        // Category header
+        const metadataHeader = document.createElement('div');
+        metadataHeader.style.cssText = 'padding: 10px 16px; font-size: 12px; font-weight: 600; color: #374151; background: #f3f4f6; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px; margin-top: ' + (hasInventory ? '8px' : '0') + ';';
+        metadataHeader.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          Execution Metadata
         `;
+        container.appendChild(metadataHeader);
         
-        resultItem.addEventListener('click', function() {
-          // Show modal with all unique entries for this item name
-          showInventoryEntryModal(itemName, itemGroup);
-          if (container) container.style.display = 'none';
-          if (searchInput) searchInput.value = '';
+        // Group metadata by key
+        const groupedByKey = {};
+        filteredMetadata.forEach(meta => {
+          if (!groupedByKey[meta.key]) groupedByKey[meta.key] = [];
+          groupedByKey[meta.key].push(meta);
         });
         
-        container.appendChild(resultItem);
-      });
+        Object.keys(groupedByKey).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())).forEach(key => {
+          const metaGroup = groupedByKey[key];
+          const displayKey = metaGroup[0].display_key || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          
+          // Sub-category header
+          const subHeader = document.createElement('div');
+          subHeader.style.cssText = 'padding: 6px 16px 6px 24px; font-size: 10px; font-weight: 500; color: #6b7280; background: #fafafa; border-bottom: 1px solid #f3f4f6; text-transform: uppercase; letter-spacing: 0.5px;';
+          subHeader.textContent = `${displayKey} (${metaGroup.length} values)`;
+          container.appendChild(subHeader);
+          
+          metaGroup.forEach(meta => {
+            const resultItem = document.createElement('div');
+            resultItem.className = 'inventory-search-result-item';
+            resultItem.innerHTML = `
+              <div class="item-info">
+                <div class="item-name">${escapeHtml(meta.value)}</div>
+                <div style="font-size: 10px; color: #9ca3af;">${meta.execution_count} execution${meta.execution_count > 1 ? 's' : ''}</div>
+              </div>
+              <span class="item-type-badge" style="background: #dbeafe; color: #1e40af;">Metadata</span>
+            `;
+            
+            resultItem.addEventListener('click', function() {
+              // Trace by metadata - find linked inventory items
+              traceByMetadata(meta);
+              container.style.display = 'none';
+              if (searchInput) searchInput.value = '';
+            });
+            
+            container.appendChild(resultItem);
+          });
+        });
+      }
       
       container.style.display = 'block';
+    }
+    
+    // Trace inventory items by execution metadata
+    async function traceByMetadata(metadata) {
+      if (!metadata.inventory_item_ids || metadata.inventory_item_ids.length === 0) {
+        alert(`No inventory items linked to "${metadata.display_key}: ${metadata.value}"`);
+        return;
+      }
+      
+      // Use the first linked inventory item to trace
+      const firstItemId = metadata.inventory_item_ids[0];
+      tracedRawMaterialId = firstItemId;
+      
+      // Re-render the flowchart with this trace
+      await renderProcessFlowcharts(allProcesses);
     }
     
     // Show modal with unique inventory entries
