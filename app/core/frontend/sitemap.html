@@ -1108,6 +1108,7 @@
     let allInventory = [];
     let allExecutions = [];
     let allExecutionMetadata = [];
+    let allOutOfStockRawMaterials = [];
     let processDetailsForMapping = [];
     let currentInventoryFilter = 'all';
     
@@ -1204,18 +1205,20 @@
     // Load all data needed for sitemap
     async function loadProcesses() {
       try {
-        // Load processes, inventory, executions, and metadata in parallel
-        const [processesData, inventoryData, executionsData, metadataData] = await Promise.all([
+        // Load processes, inventory, executions, metadata, and out-of-stock items in parallel
+        const [processesData, inventoryData, executionsData, metadataData, outOfStockData] = await Promise.all([
           CoreAPI.getProcesses(),
           CoreAPI.getInventory(),
           CoreAPI.getExecutions(),
-          CoreAPI.getExecutionMetadata()
+          CoreAPI.getExecutionMetadata(),
+          CoreAPI.getOutOfStockRawMaterials()
         ]);
         
         allProcesses = processesData.processes || [];
         allInventory = inventoryData.inventory_items || [];
         allExecutions = executionsData.executions || [];
         allExecutionMetadata = metadataData.metadata || [];
+        allOutOfStockRawMaterials = outOfStockData.inventory_items || [];
         
         // Filter out any invalid executions before loading details
         const validExecutions = allExecutions.filter(exec => exec && exec.id);
@@ -1367,8 +1370,11 @@
       // No column headers - just map left to right
       // If tracing, add trace mode indicator at top
       if (tracedRawMaterialId) {
-        // Find the traced item (could be raw, intermediate, or final)
-        const tracedItem = allInventory.find(item => item && item.id === tracedRawMaterialId);
+        // Find the traced item (could be raw, intermediate, or final) - also check out-of-stock items
+        let tracedItem = allInventory.find(item => item && item.id === tracedRawMaterialId);
+        if (!tracedItem && allOutOfStockRawMaterials) {
+          tracedItem = allOutOfStockRawMaterials.find(item => item && item.id === tracedRawMaterialId);
+        }
         if (tracedItem) {
           const traceIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           traceIndicator.setAttribute('x', 50);
@@ -1396,7 +1402,11 @@
       // If tracing, render the traced item and its flow
       if (tracedRawMaterialId) {
         // Find the traced item (could be raw, intermediate, or final)
-        const tracedItem = allInventory.find(item => item && item.id === tracedRawMaterialId);
+        // Also search in out-of-stock items for recall traceability
+        let tracedItem = allInventory.find(item => item && item.id === tracedRawMaterialId);
+        if (!tracedItem && allOutOfStockRawMaterials) {
+          tracedItem = allOutOfStockRawMaterials.find(item => item && item.id === tracedRawMaterialId);
+        }
         
         if (!tracedItem) {
           const errorText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1991,18 +2001,6 @@
       qtyText.textContent = `${formatQuantity(rawMaterial.quantity || '0')} ${rawMaterial.unit || ''}`;
       svg.appendChild(qtyText);
       
-      // Consumed label
-      if (isConsumed) {
-        const consumedLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        consumedLabel.setAttribute('x', x + width - 90);
-        consumedLabel.setAttribute('y', y + 20);
-        consumedLabel.setAttribute('font-size', '9');
-        consumedLabel.setAttribute('font-weight', '600');
-        consumedLabel.setAttribute('fill', '#9ca3af');
-        consumedLabel.setAttribute('text-anchor', 'end');
-        consumedLabel.textContent = '(Consumed)';
-        svg.appendChild(consumedLabel);
-      }
     }
     
     // Render a single inventory item (used for lane-based layout)
@@ -2180,18 +2178,6 @@
       nameText.textContent = displayName;
       itemGroup.appendChild(nameText);
       
-      // Add "Consumed" label for consumed raw materials
-      if (isConsumed && type === 'raw') {
-        const consumedLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        consumedLabel.setAttribute('x', x + width - 35);
-        consumedLabel.setAttribute('y', y + 20);
-        consumedLabel.setAttribute('font-size', '9');
-        consumedLabel.setAttribute('font-weight', '600');
-        consumedLabel.setAttribute('fill', '#9ca3af');
-        consumedLabel.setAttribute('text-anchor', 'end');
-        consumedLabel.textContent = '(Consumed)';
-        itemGroup.appendChild(consumedLabel);
-      }
       
       // Batch number (for raw materials)
       if (item.supplier_batch_number) {
@@ -2240,10 +2226,10 @@
         }
       }
       
-      // "Click to expand/collapse" hint text next to arrow
+      // "Click to expand/collapse" hint text next to arrow (aligned with button at y + 6)
       const hintText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      hintText.setAttribute('x', x + width - 45);
-      hintText.setAttribute('y', y + 32);
+      hintText.setAttribute('x', x + width - 30);
+      hintText.setAttribute('y', y + 18);
       hintText.setAttribute('font-size', '8');
       hintText.setAttribute('fill', '#9ca3af');
       hintText.setAttribute('text-anchor', 'end');
@@ -2779,8 +2765,11 @@
       const hintText = svg.querySelector(`text[data-hint="${itemId}"]`);
       const expandedGroup = svg.querySelector(`g[data-expanded-group="${itemId}"]`);
       
-      // Get the item from inventory
-      const item = allInventory.find(inv => inv && inv.id === itemId);
+      // Get the item from inventory (also check out-of-stock items)
+      let item = allInventory.find(inv => inv && inv.id === itemId);
+      if (!item && allOutOfStockRawMaterials) {
+        item = allOutOfStockRawMaterials.find(inv => inv && inv.id === itemId);
+      }
       if (!item) return;
       
       const itemHeight = 90;
@@ -2878,8 +2867,11 @@
           group.style.transition = 'transform 0.2s ease';
           group.style.transform = `translateY(${newTranslateY}px)`;
           
-          // Update the item's _flowchartY for connection drawing
-          const item = allInventory.find(inv => inv && inv.id === groupItemId);
+          // Update the item's _flowchartY for connection drawing (also check out-of-stock items)
+          let item = allInventory.find(inv => inv && inv.id === groupItemId);
+          if (!item && allOutOfStockRawMaterials) {
+            item = allOutOfStockRawMaterials.find(inv => inv && inv.id === groupItemId);
+          }
           if (item && item._flowchartY) {
             item._flowchartY += heightChange;
           }
@@ -2896,9 +2888,15 @@
         const fromId = line.getAttribute('data-from-inventory');
         const toId = line.getAttribute('data-to-inventory');
         
-        // Find source and target items
-        const fromItem = allInventory.find(inv => inv && inv.id === fromId);
-        const toItem = allInventory.find(inv => inv && inv.id === toId);
+        // Find source and target items (also check out-of-stock items)
+        let fromItem = allInventory.find(inv => inv && inv.id === fromId);
+        if (!fromItem && allOutOfStockRawMaterials) {
+          fromItem = allOutOfStockRawMaterials.find(inv => inv && inv.id === fromId);
+        }
+        let toItem = allInventory.find(inv => inv && inv.id === toId);
+        if (!toItem && allOutOfStockRawMaterials) {
+          toItem = allOutOfStockRawMaterials.find(inv => inv && inv.id === toId);
+        }
         
         if (fromItem && fromItem._flowchartY) {
           line.style.transition = 'y1 0.2s ease, y2 0.2s ease';
@@ -3023,18 +3021,6 @@
         nameText.textContent = (item.name || 'Unnamed').length > 25 ? (item.name || 'Unnamed').substring(0, 25) + '...' : (item.name || 'Unnamed');
         svg.appendChild(nameText);
         
-        // Add "Consumed" label for consumed raw materials
-        if (isConsumed && type === 'raw') {
-          const consumedLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          consumedLabel.setAttribute('x', x + width - 10);
-          consumedLabel.setAttribute('y', currentY + 20);
-          consumedLabel.setAttribute('font-size', '9');
-          consumedLabel.setAttribute('font-weight', '600');
-          consumedLabel.setAttribute('fill', '#9ca3af');
-          consumedLabel.setAttribute('text-anchor', 'end');
-          consumedLabel.textContent = '(Consumed)';
-          svg.appendChild(consumedLabel);
-        }
         
         // Batch number (for raw materials)
         if (item.supplier_batch_number) {
@@ -5239,9 +5225,10 @@
       
       // Update inventory list when data loads
       function updateSearchInventory() {
-        if (allInventory && allInventory.length > 0) {
-          allInventoryForSearch = allInventory;
-        }
+        // Combine in-stock inventory with out-of-stock raw materials for search
+        const inStockItems = (allInventory || []).map(item => ({ ...item, is_out_of_stock: false }));
+        const outOfStockItems = (allOutOfStockRawMaterials || []).map(item => ({ ...item, is_out_of_stock: true }));
+        allInventoryForSearch = [...inStockItems, ...outOfStockItems];
       }
       
       // Initial update
@@ -5249,6 +5236,9 @@
       
       // Function to perform search and display results
       function performSearch(query) {
+        // Re-update search inventory in case out-of-stock items were loaded after initial
+        updateSearchInventory();
+        
         let filtered = [];
         
         if (query.length === 0) {
@@ -5371,13 +5361,20 @@
           
           Object.keys(groupedByName).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())).forEach(itemName => {
             const itemGroup = groupedByName[itemName];
-            const countText = itemGroup.length > 1 ? ` (${itemGroup.length})` : '';
+            // Count only in-stock items for the summary number
+            const inStockCount = itemGroup.filter(item => !item.is_out_of_stock).length;
+            const outOfStockCount = itemGroup.filter(item => item.is_out_of_stock).length;
+            // Only show count if there are multiple in-stock items
+            const countText = inStockCount > 1 ? ` (${inStockCount})` : '';
+            // Show indicator if there are out-of-stock items
+            const hasOutOfStock = outOfStockCount > 0;
             
             const resultItem = document.createElement('div');
             resultItem.className = 'inventory-search-result-item';
             resultItem.innerHTML = `
               <div class="item-info">
                 <div class="item-name">${escapeHtml(itemName)}${countText}</div>
+                ${hasOutOfStock ? '<div style="font-size: 9px; color: #9ca3af; margin-top: 2px;">+ used batches available for tracing</div>' : ''}
               </div>
               <span class="item-type-badge ${cat.typeClass}">${cat.typeLabel}</span>
             `;
@@ -5478,20 +5475,35 @@
       modalTitle.textContent = `Select Entry: ${itemName}`;
       modalBody.innerHTML = '';
       
-      // Group entries by uniqueness (different metadata, batch numbers, dates)
-      // For now, show all entries - user can see differences
-      entries.forEach((entry, index) => {
+      // Separate in-stock and out-of-stock entries
+      const inStockEntries = entries.filter(e => !e.is_out_of_stock);
+      const outOfStockEntries = entries.filter(e => e.is_out_of_stock);
+      
+      // Sort out-of-stock by newest purchase date first
+      outOfStockEntries.sort((a, b) => {
+        const dateA = a.purchase_date ? new Date(a.purchase_date) : new Date(0);
+        const dateB = b.purchase_date ? new Date(b.purchase_date) : new Date(0);
+        return dateB - dateA; // Newest first
+      });
+      
+      // Helper function to render an entry
+      function renderEntry(entry, index, isOutOfStock) {
         const entryDiv = document.createElement('div');
         entryDiv.className = 'inventory-entry-item';
+        if (isOutOfStock) {
+          entryDiv.style.opacity = '0.85';
+          entryDiv.style.borderLeft = '3px solid #9ca3af';
+        }
         
         const qty = parseFloat(entry.quantity || '0');
-        const isConsumed = qty === 0;
         
         entryDiv.innerHTML = `
           <div class="inventory-entry-item-header">
             <div>
               <div class="inventory-entry-item-title">
-                Entry ${index + 1}${isConsumed ? ' (Consumed)' : ''}
+                ${isOutOfStock 
+                  ? '<span style="display: inline-block; padding: 2px 8px; background: #fef3c7; color: #92400e; border-radius: 4px; font-size: 10px; font-weight: 500;">Out of stock - ARCHIVED</span>' 
+                  : 'Batch Details'}
               </div>
             </div>
             <span class="item-type-badge ${entry.inventory_type === 'raw_material' ? 'raw' : entry.inventory_type === 'work_in_progress' ? 'intermediate' : 'final'}">
@@ -5545,8 +5557,58 @@
           </button>
         `;
         
-        // Add trace button handler
-        const traceBtn = entryDiv.querySelector('.inventory-entry-trace-btn');
+        return entryDiv;
+      }
+      
+      // Render in-stock entries first
+      if (inStockEntries.length > 0) {
+        const inStockHeader = document.createElement('div');
+        inStockHeader.style.cssText = 'padding: 8px 12px; background: #ecfdf5; border-bottom: 1px solid #d1fae5; font-size: 11px; font-weight: 600; color: #047857; display: flex; align-items: center; gap: 6px;';
+        inStockHeader.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          In Stock (${inStockEntries.length})
+        `;
+        modalBody.appendChild(inStockHeader);
+        
+        inStockEntries.forEach((entry, index) => {
+          const entryDiv = renderEntry(entry, index, false);
+          modalBody.appendChild(entryDiv);
+          
+          // Add trace button handler
+          const traceBtn = entryDiv.querySelector('.inventory-entry-trace-btn');
+          addTraceButtonHandler(traceBtn, entry, modal);
+        });
+      }
+      
+      // Render out-of-stock entries
+      if (outOfStockEntries.length > 0) {
+        const outOfStockHeader = document.createElement('div');
+        outOfStockHeader.style.cssText = 'padding: 8px 12px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; font-size: 11px; font-weight: 600; color: #6b7280; display: flex; align-items: center; gap: 6px; margin-top: ' + (inStockEntries.length > 0 ? '12px' : '0') + ';';
+        outOfStockHeader.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+          Used & Out of Stock (${outOfStockEntries.length})
+          <span style="font-weight: 400; color: #9ca3af;">- for recall traceability</span>
+        `;
+        modalBody.appendChild(outOfStockHeader);
+        
+        outOfStockEntries.forEach((entry, index) => {
+          const entryDiv = renderEntry(entry, index, true);
+          modalBody.appendChild(entryDiv);
+          
+          // Add trace button handler
+          const traceBtn = entryDiv.querySelector('.inventory-entry-trace-btn');
+          addTraceButtonHandler(traceBtn, entry, modal);
+        });
+      }
+      
+      // Helper to add trace button handler
+      function addTraceButtonHandler(traceBtn, entry, modal) {
         traceBtn.addEventListener('click', async function() {
           // Close modal
           closeInventoryEntryModal();
@@ -5556,9 +5618,7 @@
           tracedRawMaterialId = entry.id;
           await renderProcessFlowcharts(allProcesses);
         });
-        
-        modalBody.appendChild(entryDiv);
-      });
+      }
       
       modal.classList.add('active');
     }

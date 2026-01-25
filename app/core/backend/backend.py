@@ -1311,6 +1311,70 @@ def list_inventory():
     return jsonify({"inventory_items": result}), 200
 
 
+@core_bp.route("/api/core/inventory/out-of-stock", methods=["GET"])
+@requires_auth
+def list_out_of_stock_raw_materials():
+    """List raw materials with zero quantity for recall/traceability purposes.
+
+    Returns raw materials that have been fully consumed (quantity = 0) but may still
+    need to be traced for supplier recall scenarios.
+    """
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        return jsonify({"inventory_items": []}), 200
+
+    org_id = UUID(g.org_id)
+
+    from app.core.db.models.inventory_item import InventoryItem
+
+    # Query raw materials with exactly zero quantity
+    # Note: We use exact zero comparison, not near-zero, as some customer processes
+    # may require very precise measurements where small quantities are still valid stock
+    items = (
+        db_session.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id)
+        .filter(InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
+        .order_by(InventoryItem.purchase_date.desc().nullslast(), InventoryItem.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for item in items:
+        # Only include items with exactly zero quantity
+        try:
+            qty_str = str(item.quantity).strip() if item.quantity else "0"
+            quantity_decimal = Decimal(qty_str)
+            # Only include items with exactly zero quantity
+            if quantity_decimal != Decimal("0"):
+                continue  # Skip items with any stock remaining
+        except (InvalidOperation, ValueError, TypeError):
+            continue
+
+        result.append(
+            {
+                "id": str(item.id),
+                "name": item.name,
+                "quantity": item.quantity,
+                "unit": item.unit,
+                "inventory_type": item.inventory_type,
+                "supplier": item.supplier,
+                "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+                "supplier_batch_number": item.supplier_batch_number,
+                "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+                "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
+                "source_execution_step_id": str(item.source_execution_step_id)
+                if item.source_execution_step_id
+                else None,
+                "source_step_name": item.source_step_name,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "extra_data": item.extra_data if item.extra_data else {},
+                "is_out_of_stock": True,
+            }
+        )
+
+    return jsonify({"inventory_items": result}), 200
+
+
 @core_bp.route("/api/core/inventory", methods=["POST"])
 @requires_auth
 def create_inventory_item():

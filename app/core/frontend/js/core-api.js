@@ -121,6 +121,10 @@ const CoreAPI = {
         return this.request(`/inventory${query}`);
     },
     
+    async getOutOfStockRawMaterials() {
+        return this.request('/inventory/out-of-stock');
+    },
+    
     async createInventoryItem(data) {
         return this.request('/inventory', {
             method: 'POST',
