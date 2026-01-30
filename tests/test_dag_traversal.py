@@ -68,7 +68,8 @@ def demo_data(db, ensure_demo_user):
 
 @pytest.fixture
 def synthetic_org(db):
-    """Minimal org for synthetic DAG tests; no demo/seed data. Cleared at teardown."""
+    """Minimal org for synthetic DAG tests; no demo/seed data. Cleared at teardown (data + org row)."""
+    from app.core.db.models.organisation import Organisation
     from app.core.db.repositories.organisation_repo import OrganisationRepository
 
     org_repo = OrganisationRepository(db)
@@ -77,6 +78,8 @@ def synthetic_org(db):
         yield org.id
     finally:
         clear_org_synthetic_data(db, org.id)
+        db.query(Organisation).filter(Organisation.id == org.id).delete()
+        db.commit()
 
 
 class TestValidateItemUuid:
