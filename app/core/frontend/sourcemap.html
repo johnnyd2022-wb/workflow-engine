@@ -1632,7 +1632,6 @@
             if (!exec || !exec.id) return null;
             return await CoreAPI.getExecution(exec.id);
           } catch (error) {
-            console.warn('Failed to load execution details for:', exec.id, error);
             return null;
           }
         });
@@ -1653,7 +1652,6 @@
         
         await renderProcessFlowcharts(processDetails);
       } catch (error) {
-        console.error('Failed to load data:', error);
         const container = document.getElementById('process-flowchart-container');
         if (container) {
           container.innerHTML = `
@@ -1950,15 +1948,6 @@
               connections = traceData.connections || [];
             }
             
-            console.log('Backend trace results:', {
-              rawMaterial: tracedItem.name,
-              rawMaterialId: tracedItem.id,
-              intermediates: connectedIntermediates.length,
-              intermediatesDetails: connectedIntermediates.map(i => ({ id: i.id, name: i.name })),
-              finals: connectedFinals.length,
-              connections: connections.length
-            });
-            
             // Dynamic column positioning - stack from top
             const itemHeight = 90;
             const itemSpacing = 10;
@@ -2023,7 +2012,6 @@
                       const expandedHeight = expandedItems.has(intermediate.id) ? (intermediate._expandedHeight || 0) : 0;
                       col2Y += itemHeight + itemSpacing + expandedHeight;
                     } catch (error) {
-                      console.error('Error rendering intermediate:', intermediate, error);
                     }
                   });
                 }
@@ -2042,7 +2030,6 @@
                       const expandedHeight = expandedItems.has(final.id) ? (final._expandedHeight || 0) : 0;
                       col3Y += itemHeight + itemSpacing + expandedHeight;
                     } catch (error) {
-                      console.error('Error rendering final:', final, error);
                     }
                   });
                 }
@@ -2097,7 +2084,6 @@
                     const expandedHeight = expandedItems.has(item.id) ? (item._expandedHeight || 0) : 0;
                     col2Y += itemHeight + itemSpacing + expandedHeight;
                   } catch (error) {
-                    console.error('Error rendering item:', item, error);
                   }
                 });
                 
@@ -2131,9 +2117,7 @@
                     raw._flowchartY = col1Y + itemHeight / 2;
                     const expandedHeight = expandedItems.has(raw.id) ? (raw._expandedHeight || 0) : 0;
                     col1Y += itemHeight + itemSpacing + expandedHeight;
-                  } catch (error) {
-                    console.error('Error rendering raw material:', raw, error);
-                  }
+                  } catch (error) {}
                 });
               }
               
@@ -2159,9 +2143,7 @@
                     intermediate._flowchartY = col2Y + itemHeight / 2;
                     const expandedHeight = expandedItems.has(intermediate.id) ? (intermediate._expandedHeight || 0) : 0;
                     col2Y += itemHeight + itemSpacing + expandedHeight;
-                  } catch (error) {
-                    console.error('Error rendering intermediate:', intermediate, error);
-                  }
+                  } catch (error) {}
                 });
               }
               
@@ -2198,7 +2180,6 @@
               : [...(connectedRawMaterials || []), ...(connectedIntermediates || []), tracedItem];
             sourceMapTableData = { items: (allItems || []).filter(Boolean), connections: connections || [] };
           } catch (error) {
-            console.error('Error in trace rendering:', error);
             const errorText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             errorText.setAttribute('x', maxX / 2);
             errorText.setAttribute('y', maxY / 2);
@@ -2397,10 +2378,7 @@
     
     // Render raw material with trace button
     function renderRawMaterialWithTrace(svg, rawMaterial, x, y, width, isTraced, isConsumed) {
-      if (!rawMaterial || !rawMaterial.id) {
-        console.warn('renderRawMaterialWithTrace called with invalid item:', rawMaterial);
-        return;
-      }
+      if (!rawMaterial || !rawMaterial.id) return;
       
       const itemHeight = 90;
       const fillColor = isConsumed ? '#f3f4f6' : '#dbeafe';
@@ -2516,21 +2494,9 @@
     // Render a single inventory item (used for lane-based layout)
     function renderSingleInventoryItem(svg, item, x, y, width, type, stepData = null) {
       // Comprehensive validation - check item exists and has required properties
-      if (!item) {
-        console.warn('renderSingleInventoryItem called with null/undefined item');
-        return;
-      }
-      
-      if (typeof item.id === 'undefined' || item.id === null) {
-        console.warn('renderSingleInventoryItem called with item missing id:', item);
-        return;
-      }
-      
-      // Validate coordinates
-      if (typeof x !== 'number' || isNaN(x) || typeof y !== 'number' || isNaN(y) || typeof width !== 'number' || isNaN(width)) {
-        console.warn('renderSingleInventoryItem called with invalid coordinates:', { x, y, width, item: item.name || item.id });
-        return;
-      }
+      if (!item) return;
+      if (typeof item.id === 'undefined' || item.id === null) return;
+      if (typeof x !== 'number' || isNaN(x) || typeof y !== 'number' || isNaN(y) || typeof width !== 'number' || isNaN(width)) return;
       
       const itemId = item.id;
       const isExpanded = expandedItems.has(itemId);
@@ -2638,7 +2604,6 @@
       // Click on card to expand/collapse (like core2.html)
       itemBox.addEventListener('click', async function(e) {
         e.stopPropagation();
-        console.log('Card clicked for:', itemId);
         await toggleItemExpansion(itemId, svg, x, y, width, type, stepData);
       });
       
@@ -4712,21 +4677,16 @@
       // The intermediateProducts array doesn't have coordinates, but flowMap.executionSteps does
       const intermediateProductsWithCoords = new Map();
       if (flowMap && flowMap.executionSteps) {
-        console.log('FlowMap has', flowMap.executionSteps.size, 'execution steps');
         flowMap.executionSteps.forEach((stepData, stepId) => {
-          console.log('FlowMap step ID:', stepId, 'has', stepData.intermediateProducts ? stepData.intermediateProducts.length : 0, 'intermediates');
           if (stepData.intermediateProducts && Array.isArray(stepData.intermediateProducts)) {
             stepData.intermediateProducts.forEach(intermediate => {
               if (intermediate._flowchartX) {
                 intermediateProductsWithCoords.set(intermediate.id, intermediate);
-                console.log('  Intermediate with coords:', intermediate.name, 'ID:', intermediate.id, 'Coords:', intermediate._flowchartX, intermediate._flowchartY);
               }
             });
           }
         });
       }
-      
-      console.log('Intermediate products with coordinates:', intermediateProductsWithCoords.size);
       
       // Connect raw materials to intermediate products (via execution steps, abstracted)
       // For consumed intermediates, connect from raw material to furthest step's intermediate product
@@ -4760,19 +4720,13 @@
           // Find intermediate products directly produced by this step - use flowMap for coordinates
           const stepData = flowMap && flowMap.executionSteps ? flowMap.executionSteps.get(step.id) : null;
           
-          if (!stepData) {
-            console.log('No stepData found for step:', step.id);
-            return;
-          }
+          if (!stepData) return;
           
           const directIntermediates = stepData.intermediateProducts || [];
-          console.log(`Step ${step.id} has ${directIntermediates.length} direct intermediates`);
           
           directIntermediates.forEach(intermediate => {
-            console.log('Checking intermediate:', intermediate.name, 'ID:', intermediate.id, 'Coords:', intermediate._flowchartX, intermediate._flowchartY);
             if (intermediate._flowchartX && !connectedTargets.has(`intermediate-${intermediate.id}`)) {
               connectedTargets.add(`intermediate-${intermediate.id}`);
-              console.log('Creating connection from raw', rawItem.name, 'to intermediate', intermediate.name);
               
               const line = createConnectionLine(
                 rawItem._flowchartX, rawItem._flowchartY,
@@ -4789,10 +4743,6 @@
               }
               svg.insertBefore(line, svg.firstChild);
               connectionLines.push(line);
-              
-              // Batch numbers are already shown in the raw material boxes
-            } else {
-              console.log('Skipping intermediate - no coords or already connected:', intermediate.name, 'has coords:', !!intermediate._flowchartX, 'already connected:', connectedTargets.has(`intermediate-${intermediate.id}`));
             }
           });
           
@@ -4847,7 +4797,6 @@
               };
               
               const eventualProducts = traceToProducts(step.id);
-              console.log(`Step ${step.id} traces to ${eventualProducts.length} eventual products`);
               
               eventualProducts.forEach(({ type, item }) => {
                 const key = `${type}-${item.id}`;
@@ -4870,10 +4819,6 @@
                   }
                   svg.insertBefore(line, svg.firstChild);
                   connectionLines.push(line);
-                  
-                  // Batch numbers are already shown in the raw material boxes
-                  
-                  console.log(`Connected raw ${rawItem.name} to ${type} ${item.name}`);
                 }
               });
             }
