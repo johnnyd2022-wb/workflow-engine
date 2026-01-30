@@ -1,132 +1,84 @@
-Cursor Prompt: DAGTracer Refactor & Optimization
-Objective
+Inventory DAG Traversal – Improvement Tasks
+1. Recursion / Memory Safety
 
-Refactor and optimize the DAGTracer system to ensure:
+Issue: _forward and _backward are recursive and may hit recursion limits on very large DAGs.
 
-Fully accurate, auditable, and trusted inventory traceability.
+Action:
 
-Elimination of all unnecessary database queries (no N+1 queries).
+Refactor traversal to be iterative using a stack or queue.
 
-Simplification of traversal logic while preserving API outputs.
+Ensure behavior is identical (nodes and edges collected correctly).
 
-No hard depth limits.
+2. Edge Accuracy After Node Filtering
 
-Removal of ambiguous fallback mechanisms (e.g., name-based matching).
+Issue: edges_final filters edges after node filtering. Using include_quantity_filter=True may drop nodes, leaving orphaned edges or inaccurate connections.
 
-Instructions
-1. Traversal Engine
+Action:
 
-Keep the single traversal engine: traverse(start_nodes, direction, stop_conditions, filters).
+Add logging or warnings when edges are removed due to filtered nodes.
 
-Direction-agnostic; supports multi-root traversal.
+Review as_trace_forward_response and as_trace_backward_response to ensure step connections remain valid and do not create "shortcut" edges.
 
-No MAX_DAG_DEPTH hard limit; termination only via graph structure or stop conditions.
+3. find_impacted_by_expired_raw Efficiency
 
-All execution steps and inventory items must be bulk-loaded at the start of traversal to eliminate N+1 queries.
+Issue: Currently re-queries InventoryItem and ExecutionStep even after traversal.
 
-Maintain per-request enrichment cache (_enrichment_cache) to avoid repeated enrichment queries.
+Action:
 
-2. Remove Ambiguity / Name-Based Fallback
+Refactor to use nodes already collected in TraversalResult where possible.
 
-Remove ALLOW_NAME_MATCH_FALLBACK entirely.
+Minimize additional DB queries for impacted items.
 
-Do not allow string-based name matching anywhere in traversal.
+4. Date Normalization
 
-All connections must rely on:
+Issue: _normalize_date only handles ISO strings, date/datetime. Non-ISO formats may fail silently.
 
-InventoryItem.id (UUID)
+Action:
 
-ExecutionStep.id / Execution.id
+Consider using dateutil.parser.parse for robust parsing of multiple date formats.
 
-Traversal must always be deterministic and auditable based on execution IDs.
+Ensure all comparisons (production_date > expiry_date) are correct.
 
-3. Eliminate N+1 Queries
+5. Quantity Filtering & Decimal Handling
 
-Cursor should check for and refactor any N+1 queries. Examples:
+Issue: Invalid/malformed quantities are silently skipped.
 
-Backward traversal per-node queries:
+Action:
 
-parent_item = session.query(InventoryItem).filter(...).first()
+Log items that fail Decimal() conversion.
 
+Optional: validate data at import to reduce runtime skips.
 
-Refactor to bulk-load all potentially reachable items before recursion.
+6. Step-Order Connections
 
-Use a dictionary lookup in-memory instead of querying per recursion.
+Issue: add_step_order_connections relies on step_number; missing steps may break visual ordering.
 
-Step-order connections:
+Action:
 
-Already refactored to bulk-load steps.
+Add logging for missing or duplicate step_numbers.
 
-Verify no remaining N+1s.
+Ensure all items produced by the same execution step are connected in order where relevant.
 
-Enrichment layer:
+7. Logging & Observability
 
-_enrich_items_bulk already bulk-loads ExecutionStep, Execution, Process.
+Issue: _log exists but is unused.
 
-Verify the cache is used and queries aren’t repeated.
+Action:
 
-Other potential N+1s:
+Log key traversal stats:
 
-Review any place where queries occur inside loops or recursive functions.
+Number of nodes visited
 
-Move bulk queries outside loops wherever possible.
+Number of edges collected
 
-4. Stop Conditions & Filters
+Number of nodes filtered out
 
-Traversal accepts stop_conditions and filters to terminate or prune nodes.
+Optionally log start and end nodes for each traversal.
 
-Examples:
+8. Type Annotations & Clarity
 
-stop_at_inventory_types("final_product") stops traversal at final products.
+Action:
 
-Must be composable and extendable without modifying traversal internals.
+Replace Any in _item_to_dict and _enrich_items_bulk with InventoryItem | dict.
 
-5. API & Result Handling
-
-Use TraversalResult for all outputs.
-
-Maintain legacy API dict shapes for:
-
-trace_forward
-
-trace_backward
-
-find_impacted_by_expired_raw
-
-Step-order edges remain visual only, added via add_step_order_connections.
-
-Ensure connections are always valid (from_id, to_id, execution_id).
-
-6. Find Impacted Items
-
-find_impacted_by_expired_raw:
-
-Trace forward from raw material.
-
-Only include items produced after raw material expiry.
-
-Do not use name-based matching.
-
-Bulk-load items and steps before filtering.
-
-7. Deliverables
-
-Cursor should:
-
-Refactor DAGTracer to remove ALLOW_NAME_MATCH_FALLBACK entirely.
-
-Eliminate all N+1 queries, especially:
-
-Backward traversal per-node queries.
-
-Any remaining loops querying InventoryItem or ExecutionStep.
-
-Maintain bulk-loading and caching for enrichment and connections.
-
-Keep all traversal output APIs compatible.
-
-Ensure traversal is deterministic and accurate, fully based on execution IDs.
-
-Review _enrich_items_bulk and add_step_order_connections for efficiency.
-
-Remove any reference to MAX_DAG_DEPTH.
+Specify session: Session (SQLAlchemy) instead of Any.
