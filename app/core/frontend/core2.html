@@ -62,6 +62,15 @@
           <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Manage and monitor all your operational workflows</p>
         </div>
         <div class="header-actions">
+          {% if show_reset_db %}
+          <button type="button" id="btn-reset-db" class="header-icon-btn" title="Reset DB (test env only)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            <span style="margin-left: 4px; font-size: 0.875rem;">Reset DB</span>
+          </button>
+          {% endif %}
           <button class="header-icon-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -302,17 +311,48 @@
       window.showNotification('error', 'Error', message);
     };
     
-    // Initialize account info component
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function() {
-        if (window.initAccountInfo) {
-          window.initAccountInfo('account-info-container');
-        }
-      });
-    } else {
+    // Initialize account info component and Reset DB button (test env only)
+    function initCore2Page() {
       if (window.initAccountInfo) {
         window.initAccountInfo('account-info-container');
       }
+      const btnResetDb = document.getElementById('btn-reset-db');
+      if (btnResetDb) {
+        btnResetDb.addEventListener('click', function() {
+          const modal = document.getElementById('reset-db-modal');
+          if (modal) modal.style.display = 'flex';
+        });
+      }
+    }
+    
+    window.closeResetDbModal = function() {
+      const modal = document.getElementById('reset-db-modal');
+      if (modal) modal.style.display = 'none';
+      const btn = document.getElementById('reset-db-confirm-btn');
+      if (btn) btn.disabled = false;
+    };
+    
+    window.confirmResetDb = async function() {
+      const btn = document.getElementById('reset-db-confirm-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const result = await CoreAPI.resetDemoDb();
+        closeResetDbModal();
+        if (result && result.success) {
+          window.showSuccess(result.message || 'Demo DB reset successfully.');
+          setTimeout(function() { window.location.reload(); }, 1500);
+        } else {
+          window.showError(result && result.message ? result.message : 'Reset failed.');
+        }
+      } catch (err) {
+        closeResetDbModal();
+        window.showError(err.message || 'Reset demo DB failed.');
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCore2Page);
+    } else {
+      initCore2Page();
     }
     
     // Update metrics for V2 Modern design
@@ -1749,6 +1789,34 @@
           <button type="submit" class="btn btn-primary">Update Process</button>
         </div>
       </form>
+    </div>
+  </div>
+  
+  <!-- Reset DB Confirmation Modal -->
+  <div class="modal-overlay" id="reset-db-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;" onclick="closeResetDbModal()">
+    <div class="card" style="max-width: 440px; width: 90%; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);" onclick="event.stopPropagation()">
+      <div style="display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px;">
+        <div style="flex-shrink: 0; width: 48px; height: 48px; border-radius: 12px; background: var(--bg-hover, rgba(0,0,0,0.05)); display: flex; align-items: center; justify-content: center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-secondary);">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+          </svg>
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <h2 style="font-size: 18px; font-weight: 600; color: var(--color-text-primary, #111827); margin: 0 0 8px 0;">Reset Demo Database</h2>
+          <p style="color: #111827; font-size: 14px; line-height: 1.5; margin: 0;">This will replace all processes, executions, and inventory for the demo user with fresh distillery sample data. This cannot be undone.</p>
+        </div>
+        <button type="button" onclick="closeResetDbModal()" style="padding: 6px; border: none; background: transparent; color: var(--text-tertiary, #9ca3af); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeResetDbModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="reset-db-confirm-btn" onclick="confirmResetDb()">Reset Database</button>
+      </div>
     </div>
   </div>
   

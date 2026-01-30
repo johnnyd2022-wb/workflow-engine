@@ -16,15 +16,9 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.security.permissions import requires_auth
-from app.core.utils.mock_data import (
-    get_mock_executions,
-    get_mock_inventory,
-    get_mock_metrics,
-    get_mock_process,
-    get_mock_processes,
-    is_demo_user,
-)
+from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
+from app.utils.config_loader import config
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -40,7 +34,9 @@ core_bp = Blueprint(
 @requires_auth
 def core():
     """Serve the core2.html frontend page"""
-    return render_template("core2.html", active_page="core")
+    user_email = getattr(g, "user_email", None)
+    show_reset_db = config.environment in ("test", "local") and user_email == DEMO_USER_EMAIL
+    return render_template("core2.html", active_page="core", show_reset_db=show_reset_db)
 
 
 @core_bp.route("/core/flows", methods=["GET"])
@@ -154,26 +150,6 @@ def serve_core_css(filename):
 @requires_auth
 def list_processes():
     """List all processes for the current organisation"""
-    # Check if demo user - return mock data
-    user_email = getattr(g, "user_email", None)
-    if is_demo_user(user_email):
-        mock_processes = get_mock_processes()
-        result = []
-        for process in mock_processes:
-            result.append(
-                {
-                    "id": process["id"],
-                    "name": process["name"],
-                    "description": process["description"],
-                    "category": process["category"],
-                    "step_count": len(process["steps"]),
-                    "active_executions": process["active_executions"],
-                    "completed_executions": process["completed_executions"],
-                    "created_at": process["created_at"],
-                }
-            )
-        return jsonify({"processes": result}), 200
-
     org_id = UUID(g.org_id)
     repo = ProcessRepository(db_session)
     processes = repo.list_processes(org_id)
@@ -345,41 +321,6 @@ def delete_process(process_id: str):
 @requires_auth
 def get_process(process_id: str):
     """Get a process with its steps"""
-    # Check if demo user - return mock data
-    user_email = getattr(g, "user_email", None)
-    if is_demo_user(user_email):
-        mock_process = get_mock_process(process_id)
-        if not mock_process:
-            return jsonify({"error": "Process not found"}), 404
-
-        steps = []
-        for step in mock_process["steps"]:
-            steps.append(
-                {
-                    "id": step["id"],
-                    "step_number": step["step_number"],
-                    "name": step["name"],
-                    "description": step["description"],
-                    "inputs": step["inputs"],
-                    "outputs": step["outputs"],
-                }
-            )
-
-        return (
-            jsonify(
-                {
-                    "id": mock_process["id"],
-                    "name": mock_process["name"],
-                    "description": mock_process["description"],
-                    "category": mock_process["category"],
-                    "is_draft": mock_process.get("is_draft", False),
-                    "steps": steps,
-                    "created_at": mock_process["created_at"],
-                }
-            ),
-            200,
-        )
-
     org_id = UUID(g.org_id)
     try:
         process_uuid = UUID(process_id)
@@ -584,27 +525,6 @@ def create_execution():
 @requires_auth
 def list_executions():
     """List executions, optionally filtered by process"""
-    # Check if demo user - return mock data
-    user_email = getattr(g, "user_email", None)
-    if is_demo_user(user_email):
-        process_id_str = request.args.get("process_id")
-        status_str = request.args.get("status")
-
-        mock_executions = get_mock_executions(process_id_str if process_id_str else None)
-
-        # Filter by status if provided
-        if status_str:
-            status_map = {
-                "in_progress": "in_progress",
-                "completed": "completed",
-                "IN_PROGRESS": "in_progress",
-                "COMPLETED": "completed",
-            }
-            target_status = status_map.get(status_str, status_str.lower())
-            mock_executions = [e for e in mock_executions if e["status"] == target_status]
-
-        return jsonify({"executions": mock_executions}), 200
-
     org_id = UUID(g.org_id)
     process_id_str = request.args.get("process_id")
     status_str = request.args.get("status")
@@ -1010,13 +930,6 @@ def complete_step(execution_id: str, execution_step_id: str):
 @requires_auth
 def list_inventory():
     """List inventory items, optionally filtered by type or process"""
-    # Check if demo user - return mock data
-    user_email = getattr(g, "user_email", None)
-    if is_demo_user(user_email):
-        inventory_type = request.args.get("type")
-        mock_items = get_mock_inventory(inventory_type=inventory_type)
-        return jsonify({"inventory_items": mock_items}), 200
-
     org_id = UUID(g.org_id)
     inventory_type = request.args.get("type")
     process_id_str = request.args.get("process_id")
@@ -1319,10 +1232,6 @@ def list_out_of_stock_raw_materials():
     Returns raw materials that have been fully consumed (quantity = 0) but may still
     need to be traced for supplier recall scenarios.
     """
-    user_email = getattr(g, "user_email", None)
-    if is_demo_user(user_email):
-        return jsonify({"inventory_items": []}), 200
-
     org_id = UUID(g.org_id)
 
     from app.core.db.models.inventory_item import InventoryItem
@@ -1387,17 +1296,13 @@ def list_check_needed_items():
     - impacted_items: Products made with expired raw (step completed after raw's expiry_date)
     - connections: Links between expired raw materials and impacted items
     """
-    import logging
     from datetime import date
 
     from app.core.backend.dagtraversal import find_impacted_by_expired_raw
     from app.core.db.models.inventory_item import InventoryItem
 
+    import logging
     _log = logging.getLogger(__name__)
-
-    user_email = getattr(g, "user_email", None)
-    if is_demo_user(user_email):
-        return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
 
     org_id = UUID(g.org_id)
     today = date.today()
@@ -1452,13 +1357,11 @@ def list_check_needed_items():
             impacted_item_ids.add(item_id)
             result_impacted.append(item)
         for conn in data["connections"]:
-            result_connections.append(
-                {
-                    "from_id": conn.get("from_id"),
-                    "to_id": conn.get("to_id"),
-                    "execution_id": conn.get("execution_id") or None,
-                }
-            )
+            result_connections.append({
+                "from_id": conn.get("from_id"),
+                "to_id": conn.get("to_id"),
+                "execution_id": conn.get("execution_id") or None,
+            })
 
     return jsonify(
         {
@@ -1467,6 +1370,31 @@ def list_check_needed_items():
             "connections": result_connections,
         }
     ), 200
+
+
+@core_bp.route("/api/core/reset-demo-db", methods=["POST"])
+@requires_auth
+def reset_demo_db_route():
+    """Reset and populate DB with demo data for demo@whistlebird.co.nz. Only available in test or local environment."""
+    if config.environment not in ("test", "local"):
+        return jsonify({"error": "Reset demo DB is only available in test or local environment", "success": False}), 403
+    from app.core.utils.resetdb import reset_demo_db
+
+    session = db_session()
+    try:
+        result = reset_demo_db(session)
+        if not result.get("success"):
+            return jsonify(result), 400
+        return jsonify(result), 200
+    except Exception as e:
+        import logging
+
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        logging.getLogger(__name__).exception("reset_demo_db failed: %s", e)
+        return jsonify({"success": False, "message": str(e), "error": "RESET_FAILED"}), 500
 
 
 @core_bp.route("/api/core/inventory", methods=["POST"])
@@ -1678,7 +1606,10 @@ def trace_raw_material(raw_material_id: str):
     # Only return connections where both from_id and to_id are inventory item IDs in the response.
     # This prevents the source map table from showing "TO <uuid>" when an ID is missing (e.g. execution_id).
     item_ids = {item["id"] for item in connected_items} | {raw_id_str}
-    connections = [c for c in connections if c.get("from_id") in item_ids and c.get("to_id") in item_ids]
+    connections = [
+        c for c in connections
+        if c.get("from_id") in item_ids and c.get("to_id") in item_ids
+    ]
 
     raw_material_data = {
         "id": str(raw_material.id),
@@ -1799,7 +1730,8 @@ def trace_inventory_backward(inventory_item_id: str):
     # Prevents the source map table from showing "TO <uuid>" when an ID is missing (e.g. execution_id).
     backward_item_ids = {item["id"] for item in all_result_items}
     connections = [
-        c for c in connections if c.get("from_id") in backward_item_ids and c.get("to_id") in backward_item_ids
+        c for c in connections
+        if c.get("from_id") in backward_item_ids and c.get("to_id") in backward_item_ids
     ]
 
     return jsonify(
@@ -1820,11 +1752,6 @@ def get_execution_metadata():
     Returns all unique key-value pairs from execution_data across all execution steps.
     """
     from app.core.db.models.inventory_item import InventoryItem
-
-    user_email = getattr(g, "user_email", None)
-    if is_demo_user(user_email):
-        # Return mock data for demo
-        return jsonify({"metadata": []}), 200
 
     org_id = UUID(g.org_id)
 
@@ -1899,12 +1826,6 @@ def get_execution_metadata():
 @requires_auth
 def get_metrics():
     """Get summary metrics for the dashboard"""
-    # Check if demo user - return mock data
-    user_email = getattr(g, "user_email", None)
-    if is_demo_user(user_email):
-        mock_metrics = get_mock_metrics()
-        return jsonify(mock_metrics), 200
-
     org_id = UUID(g.org_id)
 
     process_repo = ProcessRepository(db_session)

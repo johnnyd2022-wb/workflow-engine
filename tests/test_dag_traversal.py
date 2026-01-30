@@ -1,4 +1,7 @@
-"""Unit tests for DAGTracer: forward/backward traversal, cycle detection, connections, enrichment."""
+"""Unit tests for DAGTracer: forward/backward traversal, cycle detection, connections, enrichment.
+
+Uses real DB (same pattern as cleanup_test_data / test_login_2fa_flow). Populated via resetdb for demo user.
+"""
 
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -6,7 +9,46 @@ from uuid import uuid4
 import pytest
 
 from app.core.backend.dagtraversal import DAGTracer, validate_item_uuid
-from app.core.db.models.inventory_item import InventoryType
+from app.core.db import db_session
+from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.utils.resetdb import DEMO_USER_EMAIL, reset_demo_db
+
+
+@pytest.fixture
+def db():
+    """Real database session for integration tests (same pattern as cleanup_test_data / test_login_2fa_flow)."""
+    session = db_session()
+    try:
+        yield session
+    finally:
+        session.close()
+        db_session.remove()
+
+
+@pytest.fixture
+def ensure_demo_user(db):
+    """Ensure demo user demo@whistlebird.co.nz exists (create org + user if not). Used by demo_data."""
+    from app.core.db.repositories.organisation_repo import OrganisationRepository
+    from app.core.db.repositories.user_repo import UserRepository
+    from app.core.security.auth_service import AuthService
+
+    user_repo = UserRepository(db)
+    org_repo = OrganisationRepository(db)
+    user = user_repo.get_user_by_email(DEMO_USER_EMAIL)
+    if user:
+        return user
+    org = org_repo.create_org("Whistlebird Demo")
+    password_hash = AuthService.hash_password("Demo123!")
+    user_repo.create_user(org_id=org.id, email=DEMO_USER_EMAIL, password_hash=password_hash)
+    return user_repo.get_user_by_email(DEMO_USER_EMAIL)
+
+
+@pytest.fixture
+def demo_data(db, ensure_demo_user):
+    """Populate DB with distillery sample data for demo user (resetdb). Use for tests that need real graph data."""
+    result = reset_demo_db(db)
+    assert result.get("success"), result.get("message", "reset_demo_db failed")
+    return {"org_id": ensure_demo_user.org_id}
 
 
 class TestValidateItemUuid:
@@ -363,3 +405,82 @@ class TestDAGTracerTraverse:
         )
         assert result.nodes is not None
         assert result.metadata is not None
+
+
+class TestDAGTracerWithRealDB:
+    """Integration tests using real test DB session (same connection pattern as test_2fa_totp_optimized / cleanup_test_data)."""
+
+    def test_trace_forward_nonexistent_item_returns_empty(self, db):
+        """With real DB: traversing from a non-existent item ID returns empty nodes/edges."""
+        org_id = uuid4()
+        tracer = DAGTracer(org_id=org_id, session=db)
+        result = tracer.traverse(start_nodes=[uuid4()], direction="forward")
+        assert result.nodes == []
+        assert result.edges == []
+        assert result.direction == "forward"
+
+    def test_trace_backward_nonexistent_item_returns_empty(self, db):
+        """With real DB: traversing backward from a non-existent item ID returns empty nodes/edges."""
+        org_id = uuid4()
+        tracer = DAGTracer(org_id=org_id, session=db)
+        result = tracer.traverse(start_nodes=[uuid4()], direction="backward")
+        assert result.nodes == []
+        assert result.edges == []
+        assert result.direction == "backward"
+
+
+class TestDAGTracerWithDemoData:
+    """Integration tests using real DB populated by resetdb (distillery demo data for demo@whistlebird.co.nz)."""
+
+    def test_trace_forward_from_raw_returns_nodes_and_edges(self, db, demo_data):
+        """After reset_demo_db: trace forward from a raw material returns nodes and edges."""
+        org_id = demo_data["org_id"]
+        raw_items = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
+            .limit(1)
+            .all()
+        )
+        if not raw_items:
+            pytest.skip("No raw materials in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
+        result = tracer.traverse(start_nodes=[raw_items[0].id], direction="forward", root_set={raw_items[0].id})
+        assert result.direction == "forward"
+        assert len(result.nodes) >= 1
+        # May have edges if execution produced downstream items
+        assert result.metadata is not None
+
+    def test_trace_backward_from_final_returns_nodes(self, db, demo_data):
+        """After reset_demo_db: trace backward from a final product returns nodes."""
+        org_id = demo_data["org_id"]
+        final_items = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value)
+            .limit(1)
+            .all()
+        )
+        if not final_items:
+            pytest.skip("No final products in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
+        result = tracer.traverse(start_nodes=[final_items[0].id], direction="backward", root_set={final_items[0].id})
+        assert result.direction == "backward"
+        assert len(result.nodes) >= 1
+        assert result.metadata is not None
+
+    def test_demo_data_includes_expired_raw_for_check_needed(self, db, demo_data):
+        """After reset_demo_db: at least one raw material has expiry in the past (triggers check-needed)."""
+        from datetime import date
+
+        org_id = demo_data["org_id"]
+        today = date.today()
+        expired_raw = (
+            db.query(InventoryItem)
+            .filter(
+                InventoryItem.org_id == org_id,
+                InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value,
+                InventoryItem.expiry_date.isnot(None),
+                InventoryItem.expiry_date < today,
+            )
+            .all()
+        )
+        assert len(expired_raw) >= 1, "Demo data should include at least one expired raw material for check-needed"
