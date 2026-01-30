@@ -25,6 +25,30 @@ from app.core.db.repositories.user_repo import UserRepository
 DEMO_USER_EMAIL = "demo@whistlebird.co.nz"
 
 
+def clear_demo_db(db: Session) -> None:
+    """
+    Remove all demo user data (processes, executions, inventory) for demo@whistlebird.co.nz.
+    Use after tests that populate via reset_demo_db so data is removed at teardown.
+    """
+    from app.core.db.models.execution import Execution as ExecModel
+
+    user_repo = UserRepository(db)
+    user = user_repo.get_user_by_email(DEMO_USER_EMAIL)
+    if not user:
+        return
+    org_id = user.org_id
+    db.query(InventoryItem).filter(InventoryItem.org_id == org_id).delete()
+    exec_ids = [e.id for e in db.query(ExecModel.id).filter(ExecModel.org_id == org_id).all()]
+    if exec_ids:
+        db.query(ExecutionStep).filter(ExecutionStep.execution_id.in_(exec_ids)).delete(synchronize_session=False)
+    db.query(ExecModel).filter(ExecModel.org_id == org_id).delete()
+    process_ids = [p.id for p in db.query(Process.id).filter(Process.org_id == org_id).all()]
+    if process_ids:
+        db.query(Step).filter(Step.process_id.in_(process_ids)).delete(synchronize_session=False)
+    db.query(Process).filter(Process.org_id == org_id).delete()
+    db.commit()
+
+
 def reset_demo_db(db: Session) -> dict:
     """
     Reset and populate DB with distillery-themed sample data for demo@whistlebird.co.nz only.

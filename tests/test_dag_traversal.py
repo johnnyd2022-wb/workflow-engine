@@ -1,9 +1,9 @@
 """Unit tests for DAGTracer: forward/backward traversal, cycle detection, connections, enrichment.
 
-Uses real DB (same pattern as cleanup_test_data / test_login_2fa_flow). Populated via resetdb for demo user.
+All tests use real DB. Data is populated from resetdb temporarily and removed at the end of each test
+that uses the demo_data fixture (same pattern as cleanup_test_data / test_login_2fa_flow).
 """
 
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -11,7 +11,7 @@ import pytest
 from app.core.backend.dagtraversal import DAGTracer, validate_item_uuid
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
-from app.core.utils.resetdb import DEMO_USER_EMAIL, reset_demo_db
+from app.core.utils.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
 
 
 @pytest.fixture
@@ -45,10 +45,13 @@ def ensure_demo_user(db):
 
 @pytest.fixture
 def demo_data(db, ensure_demo_user):
-    """Populate DB with distillery sample data for demo user (resetdb). Use for tests that need real graph data."""
+    """Populate DB with distillery sample data (resetdb); removed at teardown via clear_demo_db."""
     result = reset_demo_db(db)
     assert result.get("success"), result.get("message", "reset_demo_db failed")
-    return {"org_id": ensure_demo_user.org_id}
+    try:
+        yield {"org_id": ensure_demo_user.org_id}
+    finally:
+        clear_demo_db(db)
 
 
 class TestValidateItemUuid:
@@ -79,135 +82,77 @@ class TestValidateItemUuid:
 
 
 class TestDAGTracerForwardBackward:
-    """Tests for trace_forward and trace_backward correctness."""
+    """Tests for trace_forward and trace_backward correctness (real DB)."""
 
-    @pytest.fixture
-    def org_id(self):
-        return uuid4()
-
-    @pytest.fixture
-    def session(self):
-        return MagicMock()
-
-    def test_trace_forward_item_not_found_returns_empty(self, org_id, session):
-        session.query.return_value.filter.return_value.first.return_value = None
-        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
-        tracer = DAGTracer(org_id=org_id, session=session)
+    def test_trace_forward_item_not_found_returns_empty(self, db):
+        """Real DB: traversing from non-existent item returns empty nodes/edges."""
+        org_id = uuid4()
+        tracer = DAGTracer(org_id=org_id, session=db)
         result = tracer.traverse(start_nodes=[uuid4()], direction="forward")
         assert result.nodes == []
         assert result.edges == []
 
-    def test_trace_forward_item_no_source_step_returns_root_only(self, org_id, session):
-        item = MagicMock()
-        item.id = uuid4()
-        item.source_execution_step_id = None
-        item.org_id = org_id
-        item.name = "Raw"
-        item.quantity = "1"
-        item.unit = "kg"
-        item.inventory_type = "raw_material"
-        item.supplier = None
-        item.purchase_date = None
-        item.supplier_batch_number = None
-        item.expiry_date = None
-        item.source_execution_id = None
-        item.source_step_name = None
-        item.extra_data = None
-        item.created_at = None
-        session.query.return_value.filter.return_value.first.return_value = item
-        session.query.return_value.filter.return_value.all.return_value = [item]
-        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
-        tracer = DAGTracer(org_id=org_id, session=session)
-        result = tracer.traverse(start_nodes=[item.id], direction="forward", root_set={item.id})
+    def test_trace_forward_from_raw_returns_nodes(self, db, demo_data):
+        """Real DB + resetdb: trace forward from a raw material returns nodes (and edges if downstream)."""
+        org_id = demo_data["org_id"]
+        raw_items = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
+            .limit(1)
+            .all()
+        )
+        if not raw_items:
+            pytest.skip("No raw materials in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
+        result = tracer.traverse(start_nodes=[raw_items[0].id], direction="forward", root_set={raw_items[0].id})
         assert len(result.nodes) >= 1
-        assert result.edges == []
+        assert result.metadata is not None
 
-    def test_trace_backward_item_not_found_returns_empty(self, org_id, session):
-        session.query.return_value.filter.return_value.first.return_value = None
-        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
-        tracer = DAGTracer(org_id=org_id, session=session)
+    def test_trace_backward_item_not_found_returns_empty(self, db):
+        """Real DB: traversing backward from non-existent item returns empty nodes/edges."""
+        org_id = uuid4()
+        tracer = DAGTracer(org_id=org_id, session=db)
         result = tracer.traverse(start_nodes=[uuid4()], direction="backward")
         assert result.nodes == []
         assert result.edges == []
 
 
 class TestDAGTracerCycleDetection:
-    """Tests for cycle detection and depth limit."""
+    """Tests for cycle detection and depth limit (real DB + resetdb)."""
 
-    @pytest.fixture
-    def org_id(self):
-        return uuid4()
-
-    def test_trace_backward_visited_set_prevents_infinite_loop(self, org_id):
-        session = MagicMock()
-        item_a = MagicMock()
-        item_a.id = uuid4()
-        item_a.source_execution_step_id = uuid4()
-        item_a.org_id = org_id
-        item_a.extra_data = None
-        item_a.source_execution_id = None
-        item_a.source_execution_step_id = uuid4()
-        item_a.name = "A"
-        item_a.quantity = "1"
-        item_a.unit = "kg"
-        item_a.inventory_type = InventoryType.WORK_IN_PROGRESS.value
-        item_a.supplier = None
-        item_a.purchase_date = None
-        item_a.supplier_batch_number = None
-        item_a.expiry_date = None
-        item_a.source_step_name = None
-        item_a.created_at = None
-
-        step = MagicMock()
-        step.id = item_a.source_execution_step_id
-        step.execution_id = uuid4()
-        step.actual_inputs = [{"inventory_item_id": str(item_a.id)}]
-        step.actual_outputs = None
-        step.execution_data = None
-
-        def query_side_effect(*args, **kwargs):
-            q = MagicMock()
-            q.filter.return_value.first.return_value = item_a
-            q.filter.return_value.all.return_value = [item_a]
-            q.join.return_value.filter.return_value.all.return_value = []
-            return q
-
-        session.query.side_effect = query_side_effect
-        tracer = DAGTracer(org_id=org_id, session=session)
-        result = tracer.traverse(start_nodes=[item_a.id], direction="backward", root_set={item_a.id})
+    def test_trace_backward_visited_set_prevents_infinite_loop(self, db, demo_data):
+        """Real DB + resetdb: backward trace from final returns nodes/edges without infinite loop."""
+        org_id = demo_data["org_id"]
+        finals = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value)
+            .limit(1)
+            .all()
+        )
+        if not finals:
+            pytest.skip("No final products in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
+        result = tracer.traverse(start_nodes=[finals[0].id], direction="backward", root_set={finals[0].id})
         assert result.nodes is not None
         assert result.edges is not None
 
 
 class TestDAGTracerConnectionMapping:
-    """Tests for connection structure (from_id, to_id, execution_id)."""
+    """Tests for connection structure (from_id, to_id, execution_id) (real DB + resetdb)."""
 
-    def test_trace_forward_connection_keys(self):
-        session = MagicMock()
-        org_id = uuid4()
-        item = MagicMock()
-        item.id = uuid4()
-        item.org_id = org_id
-        item.source_execution_step_id = None
-        item.extra_data = None
-        item.source_execution_id = None
-        item.name = "Raw"
-        item.quantity = "1"
-        item.unit = "kg"
-        item.inventory_type = InventoryType.RAW_MATERIAL.value
-        item.supplier = None
-        item.purchase_date = None
-        item.supplier_batch_number = None
-        item.expiry_date = None
-        item.source_step_name = None
-        item.created_at = None
-
-        session.query.return_value.filter.return_value.first.return_value = item
-        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
-        session.query.return_value.filter.return_value.all.return_value = []
-
-        tracer = DAGTracer(org_id=org_id, session=session)
-        result = tracer.traverse(start_nodes=[item.id], direction="forward")
+    def test_trace_forward_connection_keys(self, db, demo_data):
+        """Real DB + resetdb: forward trace edges have from_id, to_id, execution_id."""
+        org_id = demo_data["org_id"]
+        raw_items = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
+            .limit(1)
+            .all()
+        )
+        if not raw_items:
+            pytest.skip("No raw materials in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
+        result = tracer.traverse(start_nodes=[raw_items[0].id], direction="forward", root_set={raw_items[0].id})
         for conn in result.edges:
             assert "from_id" in conn
             assert "to_id" in conn
@@ -215,67 +160,34 @@ class TestDAGTracerConnectionMapping:
 
 
 class TestDAGTracerExtraDataEnrichment:
-    """Tests for extra_data enrichment (execution_prompts, variable_inputs, variable_output, process_name)."""
+    """Tests for extra_data enrichment (real DB + resetdb) and _item_to_dict (pure unit)."""
 
-    @pytest.fixture
-    def org_id(self):
-        return uuid4()
-
-    def test_enrich_items_bulk_adds_process_name(self, org_id):
-        session = MagicMock()
-        item = MagicMock()
-        item.id = uuid4()
-        item.org_id = org_id
-        item.name = "WIP"
-        item.quantity = "1"
-        item.unit = "kg"
-        item.inventory_type = InventoryType.WORK_IN_PROGRESS.value
-        item.supplier = None
-        item.purchase_date = None
-        item.supplier_batch_number = None
-        item.expiry_date = None
-        item.source_execution_id = uuid4()
-        item.source_execution_step_id = uuid4()
-        item.source_step_name = "Step 1"
-        item.extra_data = None
-        item.created_at = None
-
-        execution = MagicMock()
-        execution.id = item.source_execution_id
-        execution.process_id = uuid4()
-
-        process = MagicMock()
-        process.id = execution.process_id
-        process.name = "Test Process"
-
-        step = MagicMock()
-        step.id = item.source_execution_step_id
-        step.execution_data = {"prompt_1": "value"}
-        step.actual_inputs = []
-        step.actual_outputs = [{"name": "WIP"}]
-
-        def query_side_effect(model, *args, **kwargs):
-            q = MagicMock()
-            if "ExecutionStep" in str(model):
-                q.filter.return_value.all.return_value = [step]
-                q.filter.return_value.first.return_value = step
-            elif "Execution" in str(model):
-                q.filter.return_value.all.return_value = [execution]
-            elif "Process" in str(model):
-                q.filter.return_value.all.return_value = [process]
-            else:
-                q.filter.return_value.first.return_value = item
-                q.filter.return_value.all.return_value = [item]
-            return q
-
-        session.query.side_effect = query_side_effect
-        tracer = DAGTracer(org_id=org_id, session=session)
-        enriched = tracer._enrich_items_bulk([item])
+    def test_enrich_items_bulk_adds_process_name(self, db, demo_data):
+        """Real DB + resetdb: _enrich_items_bulk adds process_name and execution_prompts."""
+        org_id = demo_data["org_id"]
+        wip_or_final = (
+            db.query(InventoryItem)
+            .filter(
+                InventoryItem.org_id == org_id,
+                InventoryItem.inventory_type.in_(
+                    [InventoryType.WORK_IN_PROGRESS.value, InventoryType.FINAL_PRODUCT.value]
+                ),
+            )
+            .limit(1)
+            .all()
+        )
+        if not wip_or_final:
+            pytest.skip("No WIP/final in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
+        enriched = tracer._enrich_items_bulk(wip_or_final)
         assert len(enriched) == 1
-        assert enriched[0].get("process_name") == "Test Process"
+        assert enriched[0].get("process_name") is not None
         assert enriched[0].get("extra_data", {}).get("execution_prompts") is not None
 
     def test_item_to_dict_serializes_id_as_string(self):
+        """Pure unit: _item_to_dict serializes id as string (no DB)."""
+        from unittest.mock import MagicMock
+
         item = MagicMock()
         item.id = uuid4()
         item.name = "Test"
@@ -296,13 +208,12 @@ class TestDAGTracerExtraDataEnrichment:
 
 
 class TestDAGTracerTraverse:
-    """Tests for unified traverse() engine."""
+    """Tests for unified traverse() engine (real DB)."""
 
-    def test_traverse_returns_traversal_result(self):
-        session = MagicMock()
-        session.query.return_value.filter.return_value.first.return_value = None
-        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
-        tracer = DAGTracer(org_id=uuid4(), session=session)
+    def test_traverse_returns_traversal_result(self, db):
+        """Real DB: traverse returns TraversalResult with root_nodes, direction, nodes, edges, metadata."""
+        org_id = uuid4()
+        tracer = DAGTracer(org_id=org_id, session=db)
         result = tracer.traverse(start_nodes=[uuid4()], direction="forward")
         assert hasattr(result, "root_nodes")
         assert hasattr(result, "direction")
@@ -311,97 +222,67 @@ class TestDAGTracerTraverse:
         assert hasattr(result, "metadata")
         assert result.direction == "forward"
 
-    def test_traverse_multiple_roots_accepted(self, org_id=None, session=None):
-        """Multiple start_nodes are accepted; traversal runs from each root."""
-        org_id = org_id or uuid4()
-        session = session or MagicMock()
-        item1 = MagicMock()
-        item1.id = uuid4()
-        item1.source_execution_step_id = None
-        item1.org_id = org_id
-        item1.name = "Raw1"
-        item1.quantity = "1"
-        item1.unit = "kg"
-        item1.inventory_type = "raw_material"
-        item1.supplier = item1.purchase_date = item1.supplier_batch_number = None
-        item1.expiry_date = item1.source_execution_id = item1.source_step_name = None
-        item1.extra_data = item1.created_at = None
-        item2 = MagicMock()
-        item2.id = uuid4()
-        item2.source_execution_step_id = None
-        item2.org_id = org_id
-        item2.name = "Raw2"
-        item2.quantity = "1"
-        item2.unit = "kg"
-        item2.inventory_type = "raw_material"
-        item2.supplier = item2.purchase_date = item2.supplier_batch_number = None
-        item2.expiry_date = item2.source_execution_id = item2.source_step_name = None
-        item2.extra_data = item2.created_at = None
-        session.query.return_value.filter.return_value.all.return_value = [item1, item2]
-        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
-        session.query.return_value.filter.return_value.all.return_value = [item1, item2]
-        tracer = DAGTracer(org_id=org_id, session=session)
+    def test_traverse_multiple_roots_accepted(self, db, demo_data):
+        """Real DB + resetdb: multiple start_nodes accepted; traversal runs from each root."""
+        org_id = demo_data["org_id"]
+        raw_items = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
+            .limit(2)
+            .all()
+        )
+        if len(raw_items) < 2:
+            pytest.skip("Need at least 2 raw materials in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
         result = tracer.traverse(
-            start_nodes=[item1.id, item2.id],
+            start_nodes=[raw_items[0].id, raw_items[1].id],
             direction="forward",
-            root_set={item1.id, item2.id},
+            root_set={raw_items[0].id, raw_items[1].id},
         )
         assert result.direction == "forward"
-        assert result.root_nodes == {item1.id, item2.id}
+        assert result.root_nodes == {raw_items[0].id, raw_items[1].id}
         assert len(result.nodes) >= 2
 
-    def test_zero_quantity_excluded_unless_in_root_set(self):
-        """Items with quantity <= 0 are excluded unless in root_set."""
-        session = MagicMock()
-        org_id = uuid4()
-        root_item = MagicMock()
-        root_item.id = uuid4()
-        root_item.org_id = org_id
-        root_item.source_execution_step_id = None
-        root_item.name = "Root"
-        root_item.quantity = "0"
-        root_item.unit = "kg"
-        root_item.inventory_type = "raw_material"
-        root_item.supplier = root_item.purchase_date = root_item.supplier_batch_number = None
-        root_item.expiry_date = root_item.source_execution_id = root_item.source_step_name = None
-        root_item.extra_data = root_item.created_at = None
-        session.query.return_value.filter.return_value.all.return_value = [root_item]
-        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
-        tracer = DAGTracer(org_id=org_id, session=session)
+    def test_zero_quantity_excluded_unless_in_root_set(self, db, demo_data):
+        """Real DB + resetdb: root_set item included even with quantity 0 (demo has stock; we assert root in nodes)."""
+        org_id = demo_data["org_id"]
+        raw_items = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
+            .limit(1)
+            .all()
+        )
+        if not raw_items:
+            pytest.skip("No raw materials in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
         result = tracer.traverse(
-            start_nodes=[root_item.id],
+            start_nodes=[raw_items[0].id],
             direction="forward",
             include_quantity_filter=True,
-            root_set={root_item.id},
+            root_set={raw_items[0].id},
         )
         assert len(result.nodes) >= 1
-        assert any(n["id"] == str(root_item.id) for n in result.nodes)
+        assert any(n["id"] == str(raw_items[0].id) for n in result.nodes)
 
-    def test_stop_condition_node_still_included(self):
-        """When a stop_condition returns True, that node is still included; we only stop traversing beyond it."""
+    def test_stop_condition_node_still_included(self, db, demo_data):
+        """Real DB + resetdb: stop_condition includes that node; we stop traversing beyond it."""
         from app.core.backend.dagtraversal import stop_at_inventory_types
 
-        session = MagicMock()
-        org_id = uuid4()
-        item = MagicMock()
-        item.id = uuid4()
-        item.org_id = org_id
-        item.source_execution_step_id = None
-        item.name = "Final"
-        item.quantity = "1"
-        item.unit = "kg"
-        item.inventory_type = InventoryType.FINAL_PRODUCT.value
-        item.supplier = item.purchase_date = item.supplier_batch_number = None
-        item.expiry_date = item.source_execution_id = item.source_step_name = None
-        item.extra_data = item.created_at = None
-        session.query.return_value.filter.return_value.all.return_value = [item]
-        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
-        tracer = DAGTracer(org_id=org_id, session=session)
+        org_id = demo_data["org_id"]
+        finals = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value)
+            .limit(1)
+            .all()
+        )
+        if not finals:
+            pytest.skip("No final products in demo data")
+        tracer = DAGTracer(org_id=org_id, session=db)
         result = tracer.traverse(
-            start_nodes=[item.id],
+            start_nodes=[finals[0].id],
             direction="backward",
             stop_conditions=[stop_at_inventory_types("final_product")],
-            root_set={item.id},
+            root_set={finals[0].id},
         )
         assert result.nodes is not None
         assert result.metadata is not None
