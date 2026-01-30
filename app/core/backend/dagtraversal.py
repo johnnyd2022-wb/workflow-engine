@@ -8,15 +8,21 @@ and future use cases (site map, compliance, recall simulation).
 
 Connections are built by execution flow (execution_id on each connection).
 from_id and to_id are always inventory item UUIDs (never execution_id).
+
+Quantity filtering: items with quantity <= 0 (or invalid Decimal) are excluded unless in root_set;
+invalid quantities are logged. For strict validation (e.g. raise on invalid quantity), consider
+validation at import or an optional strict mode. High-volume warning logs (e.g. edge removal) can
+be rate-limited at log aggregation if needed.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 from uuid import UUID
@@ -38,23 +44,41 @@ _EXECUTION_PROMPTS_INTERNAL = {"completed_by_email", "completed_by_user_id", "co
 
 
 def _normalize_date(val: Any) -> date | None:
-    """Convert a value to a date for comparison. Handles datetime, date, ISO string; uses dateutil if available."""
+    """Convert a value to a date for comparison. Handles datetime, date, ISO string; uses dateutil if available.
+    Timezone-aware datetimes are normalized to UTC before taking .date() to avoid mixing local/UTC dates."""
     if val is None:
         return None
-    if hasattr(val, "date") and callable(getattr(val, "date")):
-        return val.date()
     if isinstance(val, date) and not isinstance(val, datetime):
         return val
+    if hasattr(val, "date") and callable(getattr(val, "date")):
+        if getattr(val, "tzinfo", None) is not None:
+            try:
+                return val.astimezone(timezone.utc).date()
+            except (ValueError, TypeError):
+                pass
+        return val.date()
     if isinstance(val, str):
         try:
             parsed = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            if getattr(parsed, "tzinfo", None) is not None:
+                try:
+                    return parsed.astimezone(timezone.utc).date()
+                except (ValueError, TypeError):
+                    pass
             return parsed.date()
         except (ValueError, TypeError):
             pass
         if dateutil_parser is not None:
             try:
                 parsed = dateutil_parser.parse(val)
-                return parsed.date() if hasattr(parsed, "date") else parsed
+                if hasattr(parsed, "date"):
+                    if getattr(parsed, "tzinfo", None) is not None:
+                        try:
+                            return parsed.astimezone(timezone.utc).date()
+                        except (ValueError, TypeError):
+                            pass
+                    return parsed.date()
+                return parsed
             except (ValueError, TypeError):
                 pass
     return None
@@ -67,12 +91,13 @@ def _normalize_date(val: Any) -> date | None:
 
 @dataclass
 class TraversalMetadata:
-    """Metadata about a traversal run (nodes visited, edge count, filtered, etc.)."""
+    """Metadata about a traversal run (nodes visited, edge count, filtered, duration, etc.)."""
 
     nodes_visited: int = 0
     edges_count: int = 0
     nodes_filtered_out: int = 0
     edges_removed_by_filter: int = 0
+    traversal_duration_seconds: float | None = None
 
 
 @dataclass
@@ -80,11 +105,16 @@ class TraversalResult:
     """
     Result of a DAG traversal. Holds nodes and edges; interpretation and presentation
     live here, not in API or services.
+
+    Node dict shape (each element of nodes): id, name, quantity, unit, inventory_type,
+    supplier, purchase_date, supplier_batch_number, expiry_date, source_execution_id,
+    source_execution_step_id, source_step_name (optional), process_name (optional),
+    created_at, extra_data (optional; may include execution_prompts, variable_inputs, variable_output).
     """
 
     root_nodes: set[UUID]
     direction: Literal["forward", "backward"]
-    nodes: list[dict[str, Any]]  # Enriched item dicts
+    nodes: list[dict[str, Any]]  # Enriched item dicts; shape above
     edges: list[dict[str, str]]  # {"from_id", "to_id", "execution_id"}
     metadata: TraversalMetadata = field(default_factory=TraversalMetadata)
     # Optional: ORM items used to build nodes (avoids re-query in find_impacted_by_expired_raw)
@@ -99,9 +129,12 @@ class TraversalResult:
         raw_material_id: UUID,
         raw_material_data: dict[str, Any],
     ) -> dict[str, Any]:
-        """Shape expected by /api/core/inventory/trace: raw_material, intermediates, finals, all_items, connections.
-        Adds display-only edges (raw->item by execution_id) for UI; all edges remain valid (from_id/to_id are
-        inventory item IDs). Step-order (visual) edges: use DAGTracer.add_step_order_connections if needed.
+        """Shape expected by /api/core/inventory/trace.
+
+        Returns: raw_material (dict), intermediates (list of item dicts), finals (list), all_items (list),
+        connections (list of {from_id, to_id, execution_id}). Item dicts include optional process_name,
+        extra_data, source_step_name. Adds display-only edges (raw->item by execution_id) for UI.
+        Step-order (visual) edges: use DAGTracer.add_step_order_connections if needed.
         """
         items = list(self.nodes)
         connections = list(self.edges)
@@ -133,8 +166,11 @@ class TraversalResult:
         traced_item_id: UUID,
         traced_item_data: dict[str, Any],
     ) -> dict[str, Any]:
-        """Shape expected by /api/core/inventory/trace-backward. Adds display-only edges (source->traced by
-        execution_id) for UI; connections remain valid (inventory item IDs). Step-order: DAGTracer.add_step_order_connections."""
+        """Shape expected by /api/core/inventory/trace-backward.
+
+        Returns: items (list of item dicts), connections (list of {from_id, to_id, execution_id}),
+        traced_item_data (dict). Item dicts include optional process_name, extra_data, source_step_name.
+        Adds display-only edges (source->traced by execution_id) for UI. Step-order: DAGTracer.add_step_order_connections."""
         items = list(self.nodes)
         connections = list(self.edges)
         traced_id_str = str(traced_item_id)
@@ -175,9 +211,7 @@ def stop_at_inventory_types(*inventory_types: str) -> StopCondition:
         item = context.get("item")
         if not item:
             return False
-        itype = getattr(item, "inventory_type", None) or (
-            item.get("inventory_type") if isinstance(item, dict) else None
-        )
+        itype = getattr(item, "inventory_type", None) or (item.get("inventory_type") if isinstance(item, dict) else None)
         return itype in inventory_types
 
     return _stop
@@ -238,6 +272,8 @@ class DAGTracer:
         root_set = root_set or set(start_nodes)
         if clear_enrichment_cache:
             self._enrichment_cache.clear()
+
+        t0 = time.perf_counter()
 
         # Resolve start nodes in one query
         start_set = set(start_nodes)
@@ -336,13 +372,11 @@ class DAGTracer:
                     for out_item in items_by_source_step_id.get(step.id, []):
                         child_id = out_item.id
                         item_orm_by_id[child_id] = out_item
-                        collected_edges.append(
-                            {
-                                "from_id": str(nid),
-                                "to_id": str(child_id),
-                                "execution_id": str(step.execution_id) if step.execution_id else "",
-                            }
-                        )
+                        collected_edges.append({
+                            "from_id": str(nid),
+                            "to_id": str(child_id),
+                            "execution_id": str(step.execution_id) if step.execution_id else "",
+                        })
                         collected_node_ids.add(child_id)
                         ctx = context_for(child_id)
                         if any(stop(child_id, ctx) for stop in stop_conditions):
@@ -426,7 +460,8 @@ class DAGTracer:
         node_id_strs = {item["id"] for item in node_dicts}
         edges_before = len(collected_edges)
         edges_final = [
-            c for c in collected_edges if c.get("from_id") in node_id_strs and c.get("to_id") in node_id_strs
+            c for c in collected_edges
+            if c.get("from_id") in node_id_strs and c.get("to_id") in node_id_strs
         ]
         edges_removed = edges_before - len(edges_final)
         if edges_removed > 0:
@@ -436,11 +471,31 @@ class DAGTracer:
                 edges_removed,
             )
 
+        duration_sec = time.perf_counter() - t0
         meta = TraversalMetadata(
             nodes_visited=len(collected_node_ids),
             edges_count=len(edges_final),
             nodes_filtered_out=nodes_filtered_out,
             edges_removed_by_filter=edges_removed,
+            traversal_duration_seconds=duration_sec,
+        )
+        self._log.debug(
+            "Traversal metrics: duration_sec=%.3f, nodes_visited=%s, nodes_returned=%s, "
+            "nodes_filtered_out=%s, edges_count=%s, edges_removed=%s",
+            duration_sec,
+            len(collected_node_ids),
+            len(node_dicts),
+            nodes_filtered_out,
+            len(edges_final),
+            edges_removed,
+            extra={
+                "traversal_duration_seconds": duration_sec,
+                "nodes_visited": len(collected_node_ids),
+                "nodes_returned": len(node_dicts),
+                "nodes_filtered_out": nodes_filtered_out,
+                "edges_count": len(edges_final),
+                "edges_removed": edges_removed,
+            },
         )
         self._log.info(
             "Traversal complete: direction=%s, nodes_visited=%s, nodes_returned=%s, nodes_filtered_out=%s, "
@@ -459,6 +514,7 @@ class DAGTracer:
                 "nodes_filtered_out": nodes_filtered_out,
                 "edges_count": len(edges_final),
                 "edges_removed": edges_removed,
+                "traversal_duration_seconds": duration_sec,
                 "start_nodes": [str(n) for n in start_nodes],
             },
         )
@@ -472,7 +528,7 @@ class DAGTracer:
             items_orm=items_orm,
         )
 
-    def find_impacted_by_expired_raw(self, raw_material: Any) -> dict[str, Any]:
+    def find_impacted_by_expired_raw(self, raw_material: InventoryItem) -> dict[str, Any]:
         """
         Items that trace forward from an expired raw and were made after it expired.
         Uses traverse(forward) then filters by production_date > expiry_date.
@@ -500,7 +556,9 @@ class DAGTracer:
                 except (ValueError, TypeError):
                     pass
         steps = (
-            self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids_orm)).all() if step_ids_orm else []
+            self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids_orm)).all()
+            if step_ids_orm
+            else []
         )
         step_by_id = {str(s.id): s for s in steps}
 
@@ -531,29 +589,21 @@ class DAGTracer:
                 continue
             completed_at_iso = step.completed_at.isoformat() if step.completed_at else None
             execution_id_str = str(step.execution_id) if step.execution_id else None
-            impacted_items.append(
-                {
-                    **{
-                        k: v
-                        for k, v in item.items()
-                        if k not in ("expired_raw_material_id", "expired_raw_material_name", "made_after_raw_expired")
-                    },
-                    "expired_raw_material_id": raw_id_str,
-                    "expired_raw_material_name": raw_material.name,
-                    "made_after_raw_expired": True,
-                    "completed_at": completed_at_iso,
-                    "execution_id": execution_id_str,
-                }
-            )
+            impacted_items.append({
+                **{k: v for k, v in item.items() if k not in ("expired_raw_material_id", "expired_raw_material_name", "made_after_raw_expired")},
+                "expired_raw_material_id": raw_id_str,
+                "expired_raw_material_name": raw_material.name,
+                "made_after_raw_expired": True,
+                "completed_at": completed_at_iso,
+                "execution_id": execution_id_str,
+            })
             conn = next((c for c in trace_connections if c.get("to_id") == item_id), {})
             eid = conn.get("execution_id") or item.get("source_execution_id") or execution_id_str
-            connections_out.append(
-                {
-                    "from_id": raw_id_str,
-                    "to_id": item_id,
-                    "execution_id": str(eid) if eid else "",
-                }
-            )
+            connections_out.append({
+                "from_id": raw_id_str,
+                "to_id": item_id,
+                "execution_id": str(eid) if eid else "",
+            })
 
         return {"impacted_items": impacted_items, "connections": connections_out}
 
@@ -652,7 +702,11 @@ class DAGTracer:
                     step_ids.add(UUID(sid))
                 except (ValueError, TypeError):
                     pass
-        steps = self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids)).all() if step_ids else []
+        steps = (
+            self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids)).all()
+            if step_ids
+            else []
+        )
         step_by_id = {str(s.id): s for s in steps}
 
         for eid, exec_items in by_exec.items():
@@ -711,13 +765,11 @@ class DAGTracer:
                         except (ValueError, TypeError):
                             continue
                     if used_earlier and (earlier_item["id"], later_item["id"]) not in conn_set:
-                        connections.append(
-                            {
-                                "from_id": earlier_item["id"],
-                                "to_id": later_item["id"],
-                                "execution_id": eid,
-                            }
-                        )
+                        connections.append({
+                            "from_id": earlier_item["id"],
+                            "to_id": later_item["id"],
+                            "execution_id": eid,
+                        })
                         conn_set.add((earlier_item["id"], later_item["id"]))
 
 
@@ -765,7 +817,7 @@ def trace_backward(
     return {"items": result.nodes, "connections": result.edges}
 
 
-def find_impacted_by_expired_raw(org_id: UUID, session: Session, raw_material: Any) -> dict[str, Any]:
+def find_impacted_by_expired_raw(org_id: UUID, session: Session, raw_material: InventoryItem) -> dict[str, Any]:
     """Find items made with an expired raw material (production after expiry)."""
     tracer = DAGTracer(org_id=org_id, session=session)
     return tracer.find_impacted_by_expired_raw(raw_material)
