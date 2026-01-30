@@ -22,7 +22,6 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 
-
 # ---------------------------------------------------------------------------
 # 1. Graph correctness invariant assertions
 # ---------------------------------------------------------------------------
@@ -113,7 +112,12 @@ def build_linear_dag(db: Session, org_id: UUID):
         source_execution_step_id=None,
     )
     execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
-    exec_steps = db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).order_by(ExecutionStep.step_number).all()
+    exec_steps = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.execution_id == execution.id)
+        .order_by(ExecutionStep.step_number)
+        .all()
+    )
     # Step 1: R1 -> W1
     exec_repo.complete_step(
         execution_step_id=exec_steps[0].id,
@@ -207,7 +211,12 @@ def build_branching_dag(db: Session, org_id: UUID):
         source_execution_step_id=None,
     )
     execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
-    exec_steps = db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).order_by(ExecutionStep.step_number).all()
+    exec_steps = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.execution_id == execution.id)
+        .order_by(ExecutionStep.step_number)
+        .all()
+    )
     exec_repo.complete_step(
         execution_step_id=exec_steps[0].id,
         org_id=org_id,
@@ -302,7 +311,12 @@ def build_large_linear_chain(db: Session, org_id: UUID, length: int = 30):
         source_execution_step_id=None,
     )
     execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
-    exec_steps = db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).order_by(ExecutionStep.step_number).all()
+    exec_steps = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.execution_id == execution.id)
+        .order_by(ExecutionStep.step_number)
+        .all()
+    )
     prev = r0
     all_ids = [r0.id]
     for i, exec_step in enumerate(exec_steps):
@@ -372,7 +386,12 @@ def build_id_only_lineage_dag(db: Session, org_id: UUID):
         outputs=[{"name": "Output", "quantity": 1, "unit": "kg"}],
     )
     execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
-    exec_steps = db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).order_by(ExecutionStep.step_number).all()
+    exec_steps = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.execution_id == execution.id)
+        .order_by(ExecutionStep.step_number)
+        .all()
+    )
     exec_repo.complete_step(
         execution_step_id=exec_steps[0].id,
         org_id=org_id,
