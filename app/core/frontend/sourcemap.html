@@ -1564,6 +1564,20 @@
       return div.innerHTML;
     }
     
+    // Get completed_at for sorting (item.completed_at or from execution step in allExecutions)
+    function getCompletedAtForItem(item) {
+      if (!item) return null;
+      if (item.completed_at) return item.completed_at;
+      const stepId = item.source_execution_step_id;
+      if (!stepId || !allExecutions || !Array.isArray(allExecutions)) return null;
+      for (const exec of allExecutions) {
+        if (!exec || !exec.execution_steps || !Array.isArray(exec.execution_steps)) continue;
+        const step = exec.execution_steps.find(es => es && es.id === stepId);
+        if (step && step.completed_at) return step.completed_at;
+      }
+      return null;
+    }
+    
     // Helper to get execution prompt data for an inventory item
     function getExecutionPromptData(inventoryItem) {
       if (!inventoryItem || !inventoryItem.source_execution_step_id) return null;
@@ -1802,9 +1816,33 @@
       
       // If check needed filter is active, show all expired items and impacted products
       if (showCheckNeededOnly && checkNeededData) {
-        const expiredRawMaterials = checkNeededData.expired_raw_materials || [];
-        const impactedItems = checkNeededData.impacted_items || [];
+        const expiredRawMaterials = (checkNeededData.expired_raw_materials || []).slice();
+        const impactedItems = (checkNeededData.impacted_items || []).slice();
         const connections = checkNeededData.connections || [];
+        
+        // Parse date for sorting (null/undefined -> far future so they sort last)
+        const parseSortDate = (str) => {
+          if (!str) return null;
+          try { return new Date(str).getTime(); } catch { return null; }
+        };
+        // Sort expired raw materials by expiry_date (oldest first) so visual left column is in time order
+        expiredRawMaterials.sort((a, b) => {
+          const ta = parseSortDate(a.expiry_date);
+          const tb = parseSortDate(b.expiry_date);
+          if (ta != null && tb != null) return ta - tb;
+          if (ta != null) return -1;
+          if (tb != null) return 1;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+        // Sort impacted items by completed_at (earliest first) so visual right column matches data table order
+        impactedItems.sort((a, b) => {
+          const ta = parseSortDate(getCompletedAtForItem(a));
+          const tb = parseSortDate(getCompletedAtForItem(b));
+          if (ta != null && tb != null) return ta - tb;
+          if (ta != null) return -1;
+          if (tb != null) return 1;
+          return (a.name || '').localeCompare(b.name || '');
+        });
         
         if (expiredRawMaterials.length === 0) {
           const noIssuesText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1817,7 +1855,17 @@
           noIssuesText.textContent = '✓ No expired raw materials with stock found';
           svg.appendChild(noIssuesText);
         } else {
-          sourceMapTableData = { items: [...expiredRawMaterials, ...impactedItems], connections: connections };
+          // Sort connections by position of "To" (impacted) item in visual order so data table rows match visual exactly
+          const toIndex = new Map(impactedItems.map((i, idx) => [String(i.id), idx]));
+          const sortedConnections = [...connections].sort((a, b) => {
+            const aIdx = toIndex.get(String(a.to_id)) ?? 9999;
+            const bIdx = toIndex.get(String(b.to_id)) ?? 9999;
+            if (aIdx !== bIdx) return aIdx - bIdx;
+            const aFrom = expiredRawMaterials.findIndex(r => String(r.id) === a.from_id);
+            const bFrom = expiredRawMaterials.findIndex(r => String(r.id) === b.from_id);
+            return (aFrom === -1 ? 9999 : aFrom) - (bFrom === -1 ? 9999 : bFrom);
+          });
+          sourceMapTableData = { items: [...expiredRawMaterials, ...impactedItems], connections: sortedConnections };
           // Render check needed flow: expired raw materials -> impacted items (auto-width per column)
           const minPaneWidth = 200;
           const col1Width = Math.max(minPaneWidth, ...expiredRawMaterials.map(r => getItemCardWidth(r)));

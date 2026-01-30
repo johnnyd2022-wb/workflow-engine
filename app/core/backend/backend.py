@@ -1380,20 +1380,24 @@ def list_out_of_stock_raw_materials():
 def list_check_needed_items():
     """List expired raw materials and products made with expired ingredients.
 
-    Uses DAGTracer to find impacted items (products that trace forward from expired raw materials).
+    Uses find_impacted_by_expired_raw (DAG traversal) to find impacted items (products
+    that trace forward from expired raw materials and were made after the raw expired).
     Returns:
     - expired_raw_materials: Raw materials with expiry_date < today and quantity > 0
-    - impacted_items: Intermediate and final products that used expired raw materials
+    - impacted_items: Products made with expired raw (step completed after raw's expiry_date)
     - connections: Links between expired raw materials and impacted items
     """
     from datetime import date
 
-    from app.core.backend.dagtraversal import DAGTracer
-    from app.core.db.models.execution import Execution
+    from app.core.backend.dagtraversal import find_impacted_by_expired_raw
     from app.core.db.models.inventory_item import InventoryItem
+
+    import logging
+    _log = logging.getLogger(__name__)
 
     user_email = getattr(g, "user_email", None)
     if is_demo_user(user_email):
+        _log.info("check-needed: demo user, returning empty")
         return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
 
     org_id = UUID(g.org_id)
@@ -1418,12 +1422,22 @@ def list_check_needed_items():
         except (InvalidOperation, ValueError, TypeError):
             pass
 
+    # Inline debug: always visible in terminal (logging may not be configured for this module).
+    print(
+        f"[check-needed] expired_raw_materials={len(expired_raw_materials)} "
+        f"expired_with_stock={len(expired_with_stock)}",
+        flush=True,
+    )
+    _log.info(
+        "check-needed: expired_raw_materials=%s expired_with_stock=%s",
+        len(expired_raw_materials),
+        len(expired_with_stock),
+    )
+
     result_expired = []
     result_impacted = []
     result_connections = []
     impacted_item_ids = set()
-
-    tracer = DAGTracer(org_id=org_id, session=db_session)
 
     for raw_material in expired_with_stock:
         result_expired.append(
@@ -1443,69 +1457,19 @@ def list_check_needed_items():
             }
         )
 
-        raw_material_id_str = str(raw_material.id)
-        trace_result = tracer.trace_forward(
-            raw_material.id,
-            include_quantity_filter=True,
-            root_item_id=raw_material.id,
-        )
-        trace_items = [i for i in trace_result["items"] if i["id"] != raw_material_id_str]
-        trace_connections = [c for c in trace_result["connections"] if c["from_id"] == raw_material_id_str]
-
-        exec_ids = {UUID(i["source_execution_id"]) for i in trace_items if i.get("source_execution_id")}
-        executions = db_session.query(Execution).filter(Execution.id.in_(exec_ids)).all() if exec_ids else []
-        exec_by_id = {str(e.id): e for e in executions}
-
-        for item in trace_items:
-            item_id = item["id"]
-            if item_id in impacted_item_ids:
+        data = find_impacted_by_expired_raw(org_id, db_session, raw_material)
+        for item in data["impacted_items"]:
+            item_id = item.get("id")
+            if not item_id or item_id in impacted_item_ids:
                 continue
-            execution = exec_by_id.get(item.get("source_execution_id") or "")
-            execution_date = None
-            if execution:
-                if execution.completed_at:
-                    execution_date = (
-                        execution.completed_at.date()
-                        if hasattr(execution.completed_at, "date")
-                        else execution.completed_at
-                    )
-                elif execution.started_at:
-                    execution_date = (
-                        execution.started_at.date() if hasattr(execution.started_at, "date") else execution.started_at
-                    )
-            is_made_with_expired = bool(
-                execution_date and raw_material.expiry_date and execution_date > raw_material.expiry_date
-            )
-
             impacted_item_ids.add(item_id)
-            result_impacted.append(
-                {
-                    "id": item_id,
-                    "name": item.get("name"),
-                    "quantity": item.get("quantity"),
-                    "unit": item.get("unit"),
-                    "inventory_type": item.get("inventory_type"),
-                    "source_execution_id": item.get("source_execution_id"),
-                    "source_execution_step_id": item.get("source_execution_step_id"),
-                    "source_step_name": item.get("source_step_name"),
-                    "created_at": item.get("created_at"),
-                    "extra_data": item.get("extra_data") or {},
-                    "expired_raw_material_id": raw_material_id_str,
-                    "expired_raw_material_name": raw_material.name,
-                    "is_made_with_expired": is_made_with_expired,
-                }
-            )
-            conn_for_item = next(
-                (c for c in trace_connections if c["to_id"] == item_id),
-                {"execution_id": item.get("source_execution_id")},
-            )
-            result_connections.append(
-                {
-                    "from_id": raw_material_id_str,
-                    "to_id": item_id,
-                    "execution_id": str(conn_for_item["execution_id"]) if conn_for_item.get("execution_id") else None,
-                }
-            )
+            result_impacted.append(item)
+        for conn in data["connections"]:
+            result_connections.append({
+                "from_id": conn.get("from_id"),
+                "to_id": conn.get("to_id"),
+                "execution_id": conn.get("execution_id") or None,
+            })
 
     return jsonify(
         {
@@ -1685,7 +1649,7 @@ def trace_raw_material(raw_material_id: str):
     Uses DAG traversal to find all inventory items that trace back to this raw material.
     Returns only items with quantity > 0, except for the raw material itself (if consumed).
     """
-    from app.core.backend.dagtraversal import DAGTracer, validate_item_uuid
+    from app.core.backend.dagtraversal import trace_forward, validate_item_uuid
     from app.core.db.models.inventory_item import InventoryItem
 
     org_id = UUID(g.org_id)
@@ -1701,8 +1665,9 @@ def trace_raw_material(raw_material_id: str):
     if not raw_material:
         return jsonify({"error": "Raw material not found"}), 404
 
-    tracer = DAGTracer(org_id=org_id, session=db_session)
-    result = tracer.trace_forward(
+    result = trace_forward(
+        org_id,
+        db_session,
         raw_material_uuid,
         include_quantity_filter=True,
         root_item_id=raw_material_uuid,
@@ -1710,7 +1675,7 @@ def trace_raw_material(raw_material_id: str):
     connected_items = result["items"]
     connections = result["connections"]
 
-    # Match original API: add direct connection from raw material to every connected item (for sourcemap arrows)
+    # Match original API: add direct connection from raw material to every connected item (execution_id as link)
     raw_id_str = str(raw_material_uuid)
     conn_pairs = {(c["from_id"], c["to_id"]) for c in connections}
     for item in connected_items:
@@ -1719,6 +1684,15 @@ def trace_raw_material(raw_material_id: str):
         exec_id = item.get("source_execution_id")
         if exec_id and (raw_id_str, item["id"]) not in conn_pairs:
             connections.append({"from_id": raw_id_str, "to_id": item["id"], "execution_id": exec_id})
+            conn_pairs.add((raw_id_str, item["id"]))
+
+    # Only return connections where both from_id and to_id are inventory item IDs in the response.
+    # This prevents the source map table from showing "TO <uuid>" when an ID is missing (e.g. execution_id).
+    item_ids = {item["id"] for item in connected_items} | {raw_id_str}
+    connections = [
+        c for c in connections
+        if c.get("from_id") in item_ids and c.get("to_id") in item_ids
+    ]
 
     raw_material_data = {
         "id": str(raw_material.id),
@@ -1764,7 +1738,7 @@ def trace_inventory_backward(inventory_item_id: str):
     Uses DAG traversal to find all inventory items that contributed to this item.
     Returns only items with quantity > 0, except for the traced item itself (if consumed).
     """
-    from app.core.backend.dagtraversal import DAGTracer, validate_item_uuid
+    from app.core.backend.dagtraversal import trace_backward, validate_item_uuid
     from app.core.db.models.inventory_item import InventoryItem
 
     org_id = UUID(g.org_id)
@@ -1778,8 +1752,9 @@ def trace_inventory_backward(inventory_item_id: str):
     if not traced_item:
         return jsonify({"error": "Inventory item not found"}), 404
 
-    tracer = DAGTracer(org_id=org_id, session=db_session)
-    result = tracer.trace_backward(
+    result = trace_backward(
+        org_id,
+        db_session,
         item_uuid,
         include_quantity_filter=True,
         traced_item_id=item_uuid,
@@ -1832,6 +1807,14 @@ def trace_inventory_backward(inventory_item_id: str):
     ]
     intermediates = [
         item for item in source_items_without_traced if item["inventory_type"] == InventoryType.WORK_IN_PROGRESS.value
+    ]
+
+    # Only return connections where both from_id and to_id are inventory item IDs in the response.
+    # Prevents the source map table from showing "TO <uuid>" when an ID is missing (e.g. execution_id).
+    backward_item_ids = {item["id"] for item in all_result_items}
+    connections = [
+        c for c in connections
+        if c.get("from_id") in backward_item_ids and c.get("to_id") in backward_item_ids
     ]
 
     return jsonify(

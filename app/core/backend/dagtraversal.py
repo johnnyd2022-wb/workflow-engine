@@ -5,9 +5,14 @@ Centralizes forward/backward DAG traversal, connection mapping, and extra_data
 enrichment for raw materials, intermediates, and final products. Used by
 /api/core/inventory/trace, /api/core/inventory/trace-backward, and optionally
 /api/core/inventory/check-needed.
+
+All traversal uses execution_id as the primary link: connections are built by
+execution flow (steps within an execution, execution_id on each connection).
+Connection from_id and to_id are always inventory item UUIDs (never execution_id).
 """
 
 import logging
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -24,14 +29,33 @@ MAX_DAG_DEPTH = 50
 _EXECUTION_PROMPTS_INTERNAL = {"completed_by_email", "completed_by_user_id", "completed_at"}
 
 
+def _normalize_date(val: Any) -> date | None:
+    """Convert a value to a date for comparison. Handles datetime (uses .date()), date, or ISO string."""
+    if val is None:
+        return None
+    if hasattr(val, "date") and callable(getattr(val, "date")):
+        return val.date()
+    if isinstance(val, date) and not isinstance(val, datetime):
+        return val
+    if isinstance(val, str):
+        try:
+            parsed = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            return parsed.date()
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
 class DAGTracer:
     """
     Reusable DAG tracer for inventory traceability.
 
     Traverses the graph of inventory items and execution steps (forward from a raw
     material to connected products, or backward from an item to source materials).
-    Builds direct connections (from_id → to_id → execution_id) and enriches items
-    with execution_prompts, variable_inputs, variable_output, and process_name.
+    Builds direct connections (from_id → to_id, with execution_id as the primary
+    link). from_id and to_id are always inventory item UUIDs; execution_id is
+    metadata for the flow. Enriches items with execution_prompts, variable_inputs,
+    variable_output, and process_name.
 
     Usage:
         tracer = DAGTracer(org_id=uuid, session=db_session)
@@ -186,7 +210,10 @@ class DAGTracer:
                     continue
             item_dicts.append(i)
 
-        # Intermediate-to-intermediate connections within same execution (step order)
+        # Add inter-item connections within same execution (execution_id as primary link):
+        # when multiple stages (intermediates/finals) share the same execution_id and
+        # a later step used an earlier item as input, add (earlier, later) so the
+        # visual can show additional columns for multi-stage chains.
         self._add_step_order_connections(item_dicts, connections)
 
         return {"items": item_dicts, "connections": connections}
@@ -344,6 +371,126 @@ class DAGTracer:
 
         return {"items": item_dicts, "connections": connections}
 
+    def find_impacted_by_expired_raw(self, raw_material: Any) -> dict[str, Any]:
+        """Find items that trace forward from an expired raw material and were made after it expired.
+
+        Used by /api/core/inventory/check-needed. Only returns items where the
+        step that produced the item completed after the raw material's expiry_date
+        (production_date > expiry_date). "Check needed" = made with expired raw.
+        Uses ExecutionStep.completed_at (step execution time only).
+
+        Args:
+            raw_material: ORM InventoryItem (expired raw material with expiry_date set).
+
+        Returns:
+            {"impacted_items": [{"id", "name", ... "expired_raw_material_id", "expired_raw_material_name", "is_made_with_expired": True}, ...],
+             "connections": [{"from_id", "to_id", "execution_id"}, ...]}
+        """
+        result = self.trace_forward(
+            raw_material.id,
+            include_quantity_filter=True,
+            root_item_id=raw_material.id,
+        )
+        trace_items = [i for i in result["items"] if i["id"] != str(raw_material.id)]
+        trace_connections = [c for c in result["connections"] if c.get("from_id") == str(raw_material.id)]
+
+        expiry_date = _normalize_date(raw_material.expiry_date)
+        # Inline debug: visible in terminal when this path is hit.
+        print(
+            f"[check-needed find_impacted] raw_id={raw_material.id} expiry_date={expiry_date} trace_items={len(trace_items)}",
+            flush=True,
+        )
+        if not expiry_date:
+            return {"impacted_items": [], "connections": []}
+
+        # Resolve production date from ExecutionStep.completed_at using ORM items (same as original code path).
+        trace_item_ids = []
+        for i in trace_items:
+            try:
+                trace_item_ids.append(UUID(i["id"]))
+            except (ValueError, TypeError):
+                continue
+        items_orm = (
+            self.session.query(InventoryItem)
+            .filter(InventoryItem.id.in_(trace_item_ids), InventoryItem.org_id == self.org_id)
+            .all()
+            if trace_item_ids
+            else []
+        )
+        item_orm_by_id = {str(it.id): it for it in items_orm}
+        step_ids_orm = {it.source_execution_step_id for it in items_orm if it.source_execution_step_id}
+        steps = (
+            self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids_orm)).all()
+            if step_ids_orm
+            else []
+        )
+        step_by_id = {str(s.id): s for s in steps}
+
+        impacted_items: list[dict[str, Any]] = []
+        connections_out: list[dict[str, str]] = []
+
+        for item in trace_items:
+            item_id = item.get("id")
+            if not item_id:
+                continue
+            item_orm = item_orm_by_id.get(str(item_id))
+            if not item_orm:
+                print(f"  [check-needed] skip item {item_id}: ORM not found", flush=True)
+                continue
+            if not item_orm.source_execution_step_id:
+                print(f"  [check-needed] skip item {item_id}: no source_execution_step_id", flush=True)
+                continue
+            step = step_by_id.get(str(item_orm.source_execution_step_id))
+            if not step:
+                print(f"  [check-needed] skip item {item_id}: step not found", flush=True)
+                continue
+            # Only consider items whose producing step directly used this raw (not via an intermediate).
+            raw_id_str = str(raw_material.id)
+            step_used_this_raw = False
+            for inp in (step.actual_inputs or []):
+                inp_id = inp.get("inventory_item_id")
+                if inp_id is not None and str(inp_id) == raw_id_str:
+                    step_used_this_raw = True
+                    break
+            if not step_used_this_raw:
+                print(f"  [check-needed] skip item {item_id}: step did not use this raw directly", flush=True)
+                continue
+            production_date = _normalize_date(step.completed_at) if step.completed_at else None
+            if not production_date:
+                print(f"  [check-needed] skip item {item_id}: step.completed_at={step.completed_at!r} -> no production_date", flush=True)
+                continue
+            # Include only when step completed AFTER raw expired (production_date > expiry_date).
+            if production_date <= expiry_date:
+                print(f"  [check-needed] skip item {item_id}: production_date={production_date} <= expiry_date={expiry_date}", flush=True)
+                continue
+            print(f"  [check-needed] include item {item_id}: production_date={production_date} > expiry_date={expiry_date}", flush=True)
+            completed_at_iso = step.completed_at.isoformat() if step.completed_at else None
+            impacted_items.append(
+                {
+                    **{k: v for k, v in item.items() if k not in ("expired_raw_material_id", "expired_raw_material_name", "is_made_with_expired")},
+                    "expired_raw_material_id": str(raw_material.id),
+                    "expired_raw_material_name": raw_material.name,
+                    "is_made_with_expired": True,
+                    "completed_at": completed_at_iso,
+                }
+            )
+            item_id_str = str(item_id)
+            conn = next(
+                (c for c in trace_connections if c.get("to_id") == item_id_str),
+                {"execution_id": item.get("source_execution_id")},
+            )
+            eid = conn.get("execution_id") or item.get("source_execution_id")
+            connections_out.append(
+                {
+                    "from_id": str(raw_material.id),
+                    "to_id": item_id_str,
+                    "execution_id": str(eid) if eid else "",
+                }
+            )
+
+        print(f"[check-needed find_impacted] raw {raw_material.id}: impacted={len(impacted_items)} of {len(trace_items)} trace_items", flush=True)
+        return {"impacted_items": impacted_items, "connections": connections_out}
+
     def _enrich_items_bulk(self, items: list[Any]) -> list[dict[str, Any]]:
         """Enrich a list of ORM items with extra_data (execution_prompts, variable_inputs, variable_output) and process_name."""
         if not items:
@@ -447,20 +594,74 @@ class DAGTracer:
                     continue
                 for earlier in step_info[:i]:
                     earlier_item = earlier["item"]
-                    if any(
-                        str(inp.get("inventory_item_id")) == earlier_item["id"]
-                        for inp in later_step.actual_inputs
-                        if inp.get("inventory_item_id")
-                    ):
-                        if (earlier_item["id"], later_item["id"]) not in conn_set:
-                            connections.append(
-                                {
-                                    "from_id": earlier_item["id"],
-                                    "to_id": later_item["id"],
-                                    "execution_id": eid,
-                                }
-                            )
-                            conn_set.add((earlier_item["id"], later_item["id"]))
+                    try:
+                        earlier_id_uuid = UUID(str(earlier_item.get("id") or ""))
+                    except (ValueError, TypeError):
+                        continue
+                    # Only add connection when later step actually used this earlier item (strict UUID match)
+                    used_earlier = False
+                    for inp in later_step.actual_inputs or []:
+                        inp_id = inp.get("inventory_item_id")
+                        if inp_id is None:
+                            continue
+                        try:
+                            if UUID(str(inp_id)) == earlier_id_uuid:
+                                used_earlier = True
+                                break
+                        except (ValueError, TypeError):
+                            continue
+                    if used_earlier and (earlier_item["id"], later_item["id"]) not in conn_set:
+                        connections.append(
+                            {
+                                "from_id": earlier_item["id"],
+                                "to_id": later_item["id"],
+                                "execution_id": eid,
+                            }
+                        )
+                        conn_set.add((earlier_item["id"], later_item["id"]))
+
+
+# ---------------------------------------------------------------------------
+# Module-level API: create tracer and delegate (for routes and extensibility)
+# ---------------------------------------------------------------------------
+
+
+def trace_forward(
+    org_id: UUID,
+    session: Any,
+    item_id: UUID,
+    include_quantity_filter: bool = True,
+    root_item_id: UUID | None = None,
+) -> dict[str, Any]:
+    """Trace forward from an inventory item. Creates a DAGTracer and returns trace_forward result."""
+    tracer = DAGTracer(org_id=org_id, session=session)
+    return tracer.trace_forward(
+        item_id,
+        include_quantity_filter=include_quantity_filter,
+        root_item_id=root_item_id,
+    )
+
+
+def trace_backward(
+    org_id: UUID,
+    session: Any,
+    item_id: UUID,
+    include_quantity_filter: bool = True,
+    traced_item_id: UUID | None = None,
+) -> dict[str, Any]:
+    """Trace backward from an inventory item. Creates a DAGTracer and returns trace_backward result."""
+    tracer = DAGTracer(org_id=org_id, session=session)
+    return tracer.trace_backward(
+        item_id,
+        include_quantity_filter=include_quantity_filter,
+        traced_item_id=traced_item_id,
+    )
+
+
+def find_impacted_by_expired_raw(org_id: UUID, session: Any, raw_material: Any) -> dict[str, Any]:
+    """Find items made with an expired raw material (production after expiry). Creates a DAGTracer and returns result."""
+    tracer = DAGTracer(org_id=org_id, session=session)
+    return tracer.find_impacted_by_expired_raw(raw_material)
 
 
 # ---------------------------------------------------------------------------
