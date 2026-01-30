@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.backend.dagtraversal import MAX_DAG_DEPTH, DAGTracer, validate_item_uuid
+from app.core.backend.dagtraversal import DAGTracer, validate_item_uuid
 from app.core.db.models.inventory_item import InventoryType
 
 
@@ -49,29 +49,44 @@ class TestDAGTracerForwardBackward:
 
     def test_trace_forward_item_not_found_returns_empty(self, org_id, session):
         session.query.return_value.filter.return_value.first.return_value = None
+        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
         tracer = DAGTracer(org_id=org_id, session=session)
-        result = tracer.trace_forward(uuid4())
-        assert result["items"] == []
-        assert result["connections"] == []
+        result = tracer.traverse(start_nodes=[uuid4()], direction="forward")
+        assert result.nodes == []
+        assert result.edges == []
 
-    def test_trace_forward_item_no_source_step_returns_empty(self, org_id, session):
+    def test_trace_forward_item_no_source_step_returns_root_only(self, org_id, session):
         item = MagicMock()
         item.id = uuid4()
         item.source_execution_step_id = None
         item.org_id = org_id
+        item.name = "Raw"
+        item.quantity = "1"
+        item.unit = "kg"
+        item.inventory_type = "raw_material"
+        item.supplier = None
+        item.purchase_date = None
+        item.supplier_batch_number = None
+        item.expiry_date = None
+        item.source_execution_id = None
+        item.source_step_name = None
+        item.extra_data = None
+        item.created_at = None
         session.query.return_value.filter.return_value.first.return_value = item
+        session.query.return_value.filter.return_value.all.return_value = [item]
         session.query.return_value.join.return_value.filter.return_value.all.return_value = []
         tracer = DAGTracer(org_id=org_id, session=session)
-        result = tracer.trace_forward(item.id)
-        assert result["items"] != []
-        assert result["connections"] == []
+        result = tracer.traverse(start_nodes=[item.id], direction="forward", root_set={item.id})
+        assert len(result.nodes) >= 1
+        assert result.edges == []
 
     def test_trace_backward_item_not_found_returns_empty(self, org_id, session):
         session.query.return_value.filter.return_value.first.return_value = None
+        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
         tracer = DAGTracer(org_id=org_id, session=session)
-        result = tracer.trace_backward(uuid4())
-        assert result["items"] == []
-        assert result["connections"] == []
+        result = tracer.traverse(start_nodes=[uuid4()], direction="backward")
+        assert result.nodes == []
+        assert result.edges == []
 
 
 class TestDAGTracerCycleDetection:
@@ -117,9 +132,9 @@ class TestDAGTracerCycleDetection:
 
         session.query.side_effect = query_side_effect
         tracer = DAGTracer(org_id=org_id, session=session)
-        result = tracer.trace_backward(item_a.id)
-        assert result["items"] is not None
-        assert result["connections"] is not None
+        result = tracer.traverse(start_nodes=[item_a.id], direction="backward", root_set={item_a.id})
+        assert result.nodes is not None
+        assert result.edges is not None
 
 
 class TestDAGTracerConnectionMapping:
@@ -150,8 +165,8 @@ class TestDAGTracerConnectionMapping:
         session.query.return_value.filter.return_value.all.return_value = []
 
         tracer = DAGTracer(org_id=org_id, session=session)
-        result = tracer.trace_forward(item.id)
-        for conn in result["connections"]:
+        result = tracer.traverse(start_nodes=[item.id], direction="forward")
+        for conn in result.edges:
             assert "from_id" in conn
             assert "to_id" in conn
             assert "execution_id" in conn
@@ -238,8 +253,18 @@ class TestDAGTracerExtraDataEnrichment:
         assert isinstance(result["id"], str)
 
 
-class TestDAGTracerConstants:
-    """Tests for configurable constants."""
+class TestDAGTracerTraverse:
+    """Tests for unified traverse() engine."""
 
-    def test_max_dag_depth_defined(self):
-        assert MAX_DAG_DEPTH == 50
+    def test_traverse_returns_traversal_result(self):
+        session = MagicMock()
+        session.query.return_value.filter.return_value.first.return_value = None
+        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
+        tracer = DAGTracer(org_id=uuid4(), session=session)
+        result = tracer.traverse(start_nodes=[uuid4()], direction="forward")
+        assert hasattr(result, "root_nodes")
+        assert hasattr(result, "direction")
+        assert hasattr(result, "nodes")
+        assert hasattr(result, "edges")
+        assert hasattr(result, "metadata")
+        assert result.direction == "forward"
