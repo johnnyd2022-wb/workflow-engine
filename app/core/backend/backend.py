@@ -1397,7 +1397,6 @@ def list_check_needed_items():
 
     user_email = getattr(g, "user_email", None)
     if is_demo_user(user_email):
-        _log.info("check-needed: demo user, returning empty")
         return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
 
     org_id = UUID(g.org_id)
@@ -1421,12 +1420,6 @@ def list_check_needed_items():
                 expired_with_stock.append(item)
         except (InvalidOperation, ValueError, TypeError):
             pass
-
-    _log.info(
-        "check-needed: expired_raw_materials=%s expired_with_stock=%s",
-        len(expired_raw_materials),
-        len(expired_with_stock),
-    )
 
     result_expired = []
     result_impacted = []
