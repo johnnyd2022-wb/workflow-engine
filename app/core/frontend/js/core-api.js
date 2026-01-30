@@ -21,7 +21,7 @@ const CoreAPI = {
             const data = await response.json();
             
             if (!response.ok) {
-                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                throw new Error(data.message || data.error || `HTTP error! status: ${response.status}`);
             }
             
             return data;
@@ -165,6 +165,13 @@ const CoreAPI = {
     // Metrics
     async getMetrics() {
         return this.request('/metrics');
+    },
+
+    // Reset demo DB (test environment only)
+    async resetDemoDb() {
+        return this.request('/reset-demo-db', {
+            method: 'POST',
+        });
     },
 };
 

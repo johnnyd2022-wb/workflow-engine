@@ -1546,15 +1546,17 @@
       return null;
     }
     
-    // Compute visual card width to fit content (name, batch, etc.) - matches table card auto-resize
+    // Compute visual card width to fit content (name, batch, etc.) - matches trace and check-needed view
+    // Min 320px so name, batch, quantity, expand hint fit without overlap (same as trace paneWidth)
     function getItemCardWidth(item) {
-      if (!item) return 200;
+      if (!item) return 320;
       const pad = 24;
-      const nameW = (item.name || '').length * 6.5;
+      const displayName = (item.name || item.expired_raw_material_name || '').trim();
+      const nameW = displayName.length * 6.5;
       const batchW = 50 + ((item.supplier_batch_number || '').length * 6);
       const supplierW = (item.supplier || '').length * 6.5;
       const contentW = Math.max(nameW, batchW, supplierW, 100);
-      return Math.min(420, Math.max(200, Math.round(pad + contentW + pad)));
+      return Math.min(420, Math.max(320, Math.round(pad + contentW + pad)));
     }
     
     // Escape HTML helper
@@ -1866,48 +1868,49 @@
             return (aFrom === -1 ? 9999 : aFrom) - (bFrom === -1 ? 9999 : bFrom);
           });
           sourceMapTableData = { items: [...expiredRawMaterials, ...impactedItems], connections: sortedConnections };
-          // Render check needed flow: expired raw materials -> impacted items (auto-width per column)
-          const minPaneWidth = 200;
-          const col1Width = Math.max(minPaneWidth, ...expiredRawMaterials.map(r => getItemCardWidth(r)));
-          const col2Width = Math.max(minPaneWidth, ...impactedItems.map(i => getItemCardWidth(i)));
+          // Render check needed flow: same min width (paneWidth) as trace view so cards don't clip text
+          const col1MaxWidth = Math.max(paneWidth, ...expiredRawMaterials.map(r => getItemCardWidth(r)));
+          const col2MaxWidth = Math.max(paneWidth, ...impactedItems.map(i => getItemCardWidth(i)));
           const paneGap = 120;
           const itemSpacing = 15;
           const col1X = 50;
-          const col2X = col1X + col1Width + paneGap;
+          const col2X = col1X + col1MaxWidth + paneGap;
           
           let startY = 50;
           
-          // Render expired raw materials
+          // Render expired raw materials (each card sized to content, min paneWidth like trace)
           expiredRawMaterials.forEach((rawMaterial, index) => {
             const itemY = startY + (index * (90 + itemSpacing));
-            rawMaterial._flowchartX = col1X + col1Width;
+            const cardWidth = Math.max(paneWidth, getItemCardWidth(rawMaterial));
+            rawMaterial._flowchartX = col1X + cardWidth;
             rawMaterial._flowchartY = itemY + 45;
             
-            renderSingleInventoryItem(svg, rawMaterial, col1X, itemY, col1Width, 'raw', null);
+            renderSingleInventoryItem(svg, rawMaterial, col1X, itemY, cardWidth, 'raw', null);
             maxY = Math.max(maxY, itemY + 90);
           });
           
-          // Render impacted items (intermediates and finals)
+          // Render impacted items (each card sized to content, min paneWidth like trace)
           impactedItems.forEach((item, index) => {
             const itemY = startY + (index * (90 + itemSpacing));
-            item._flowchartX = col2X + col2Width;
+            const cardWidth = Math.max(paneWidth, getItemCardWidth(item));
+            item._flowchartX = col2X + cardWidth;
             item._flowchartY = itemY + 45;
             
             const itemType = item.inventory_type === 'work_in_progress' ? 'wip' : 'final';
-            renderSingleInventoryItem(svg, item, col2X, itemY, col2Width, itemType, null);
+            renderSingleInventoryItem(svg, item, col2X, itemY, cardWidth, itemType, null);
             maxY = Math.max(maxY, itemY + 90);
           });
           
-          maxX = col2X + col2Width + 50;
+          maxX = col2X + col2MaxWidth + 50;
           
-          // Draw connections
+          // Draw connections (from right edge of each source card, to left edge of each target card)
           connections.forEach(conn => {
             const fromItem = expiredRawMaterials.find(r => r.id === conn.from_id);
             const toItem = impactedItems.find(i => i.id === conn.to_id);
             
-            if (fromItem && toItem && fromItem._flowchartY && toItem._flowchartY) {
+            if (fromItem && toItem && fromItem._flowchartY != null && toItem._flowchartY != null) {
               const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-              line.setAttribute('x1', col1X + col1Width);
+              line.setAttribute('x1', fromItem._flowchartX);
               line.setAttribute('y1', fromItem._flowchartY);
               line.setAttribute('x2', col2X);
               line.setAttribute('y2', toItem._flowchartY);
@@ -2052,10 +2055,10 @@
                         }
                       }
                     }
-                    
+                    const cardW = Math.max(paneWidth, getItemCardWidth(intermediate));
                     try {
-                      renderSingleInventoryItem(svg, intermediate, col2X, col2Y, col2WidthUsed, 'wip', stepData);
-                      intermediate._flowchartX = col2X + col2WidthUsed;
+                      renderSingleInventoryItem(svg, intermediate, col2X, col2Y, cardW, 'wip', stepData);
+                      intermediate._flowchartX = col2X + cardW;
                       intermediate._flowchartY = col2Y + itemHeight / 2;
                       const expandedHeight = expandedItems.has(intermediate.id) ? (intermediate._expandedHeight || 0) : 0;
                       col2Y += itemHeight + itemSpacing + expandedHeight;
@@ -2064,15 +2067,16 @@
                   });
                 }
                 
-                // Column 3: Finals
+                // Column 3: Finals (per-card width for autoscale like check-needed view)
                 const col3X = validIntermediates.length > 0 ? col2X + col2WidthUsed + paneSpacing : col2X;
                 let col3Y = startY;
                 
                 if (validFinals.length > 0) {
                   validFinals.forEach(final => {
+                    const cardW = Math.max(paneWidth, getItemCardWidth(final));
                     try {
-                      renderSingleInventoryItem(svg, final, col3X, col3Y, col3WidthUsed, 'final');
-                      final._flowchartX = col3X + col3WidthUsed;
+                      renderSingleInventoryItem(svg, final, col3X, col3Y, cardW, 'final');
+                      final._flowchartX = col3X + cardW;
                       final._flowchartY = col3Y + itemHeight / 2;
                       renderedFinalIds.add(final.id);
                       const expandedHeight = expandedItems.has(final.id) ? (final._expandedHeight || 0) : 0;
@@ -2121,10 +2125,10 @@
                       }
                     }
                   }
-                  
+                  const cardW = Math.max(paneWidth, getItemCardWidth(item));
                   try {
-                    renderSingleInventoryItem(svg, item, col2X, col2Y, col2WidthStacked, itemType, stepData);
-                    item._flowchartX = col2X + col2WidthStacked;
+                    renderSingleInventoryItem(svg, item, col2X, col2Y, cardW, itemType, stepData);
+                    item._flowchartX = col2X + cardW;
                     item._flowchartY = col2Y + itemHeight / 2;
                     if (item.inventory_type === 'final_product') {
                       renderedFinalIds.add(item.id);
@@ -2156,12 +2160,13 @@
               let col2Y = startY;
               let col3Y = startY;
               
-              // Column 1: Raw materials
+              // Column 1: Raw materials (per-card width for autoscale)
               if (validRawMaterials.length > 0) {
                 validRawMaterials.forEach(raw => {
+                  const cardW = Math.max(paneWidth, getItemCardWidth(raw));
                   try {
-                    renderSingleInventoryItem(svg, raw, col1X, col1Y, col1WidthBw, 'raw');
-                    raw._flowchartX = col1X + col1WidthBw;
+                    renderSingleInventoryItem(svg, raw, col1X, col1Y, cardW, 'raw');
+                    raw._flowchartX = col1X + cardW;
                     raw._flowchartY = col1Y + itemHeight / 2;
                     const expandedHeight = expandedItems.has(raw.id) ? (raw._expandedHeight || 0) : 0;
                     col1Y += itemHeight + itemSpacing + expandedHeight;
@@ -2169,7 +2174,7 @@
                 });
               }
               
-              // Column 2: Intermediates (if any)
+              // Column 2: Intermediates (per-card width for autoscale)
               if (validIntermediatesBw.length > 0) {
                 validIntermediatesBw.forEach(intermediate => {
                   let stepData = null;
@@ -2184,10 +2189,10 @@
                       }
                     }
                   }
-                  
+                  const cardW = Math.max(paneWidth, getItemCardWidth(intermediate));
                   try {
-                    renderSingleInventoryItem(svg, intermediate, col2X, col2Y, col2WidthBw, 'wip', stepData);
-                    intermediate._flowchartX = col2X + col2WidthBw;
+                    renderSingleInventoryItem(svg, intermediate, col2X, col2Y, cardW, 'wip', stepData);
+                    intermediate._flowchartX = col2X + cardW;
                     intermediate._flowchartY = col2Y + itemHeight / 2;
                     const expandedHeight = expandedItems.has(intermediate.id) ? (intermediate._expandedHeight || 0) : 0;
                     col2Y += itemHeight + itemSpacing + expandedHeight;
@@ -2715,14 +2720,15 @@
       expandButtonGroup.appendChild(arrowGroup);
       itemGroup.appendChild(expandButtonGroup);
       
-      // Item name
+      // Item name (use expired_raw_material_name for check-needed impacted items if name missing)
+      const rawName = (item.name || item.expired_raw_material_name || 'Unnamed').trim();
       const nameText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       nameText.setAttribute('x', x + 10);
       nameText.setAttribute('y', y + 20);
       nameText.setAttribute('font-size', '11');
       nameText.setAttribute('font-weight', '600');
       nameText.setAttribute('fill', isConsumed ? '#6b7280' : '#111827');
-      const displayName = (item.name || 'Unnamed').length > 20 ? (item.name || 'Unnamed').substring(0, 20) + '...' : (item.name || 'Unnamed');
+      const displayName = rawName.length > 20 ? rawName.substring(0, 20) + '...' : rawName;
       nameText.textContent = displayName;
       itemGroup.appendChild(nameText);
       
