@@ -51,6 +51,13 @@ def flows():
     return render_template("flows2.html", active_page="core", process_id=process_id)
 
 
+@core_bp.route("/core/sourcemap", methods=["GET"])
+@requires_auth
+def sourcemap():
+    """Serve the sourcemap.html frontend page"""
+    return render_template("sourcemap.html", active_page="core")
+
+
 @core_bp.route("/static/js/<filename>")
 @limiter.limit("10000 per minute")  # Very high limit to effectively exempt from rate limiting
 @requires_auth
@@ -1304,6 +1311,242 @@ def list_inventory():
     return jsonify({"inventory_items": result}), 200
 
 
+@core_bp.route("/api/core/inventory/out-of-stock", methods=["GET"])
+@requires_auth
+def list_out_of_stock_raw_materials():
+    """List raw materials with zero quantity for recall/traceability purposes.
+
+    Returns raw materials that have been fully consumed (quantity = 0) but may still
+    need to be traced for supplier recall scenarios.
+    """
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        return jsonify({"inventory_items": []}), 200
+
+    org_id = UUID(g.org_id)
+
+    from app.core.db.models.inventory_item import InventoryItem
+
+    # Query raw materials with exactly zero quantity
+    # Note: We use exact zero comparison, not near-zero, as some customer processes
+    # may require very precise measurements where small quantities are still valid stock
+    items = (
+        db_session.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id)
+        .filter(InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
+        .order_by(InventoryItem.purchase_date.desc().nullslast(), InventoryItem.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for item in items:
+        # Only include items with exactly zero quantity
+        try:
+            qty_str = str(item.quantity).strip() if item.quantity else "0"
+            quantity_decimal = Decimal(qty_str)
+            # Only include items with exactly zero quantity
+            if quantity_decimal != Decimal("0"):
+                continue  # Skip items with any stock remaining
+        except (InvalidOperation, ValueError, TypeError):
+            continue
+
+        result.append(
+            {
+                "id": str(item.id),
+                "name": item.name,
+                "quantity": item.quantity,
+                "unit": item.unit,
+                "inventory_type": item.inventory_type,
+                "supplier": item.supplier,
+                "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+                "supplier_batch_number": item.supplier_batch_number,
+                "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+                "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
+                "source_execution_step_id": str(item.source_execution_step_id)
+                if item.source_execution_step_id
+                else None,
+                "source_step_name": item.source_step_name,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "extra_data": item.extra_data if item.extra_data else {},
+                "is_out_of_stock": True,
+            }
+        )
+
+    return jsonify({"inventory_items": result}), 200
+
+
+@core_bp.route("/api/core/inventory/check-needed", methods=["GET"])
+@requires_auth
+def list_check_needed_items():
+    """List expired raw materials and products made with expired ingredients.
+
+    Returns:
+    - expired_raw_materials: Raw materials with expiry_date < today and quantity > 0
+    - impacted_items: Intermediate and final products that used expired raw materials
+    - connections: Links between expired raw materials and impacted items
+    """
+    from datetime import date
+
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
+
+    org_id = UUID(g.org_id)
+    today = date.today()
+
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
+
+    # Find expired raw materials with stock remaining
+    expired_raw_materials = (
+        db_session.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id)
+        .filter(InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
+        .filter(InventoryItem.expiry_date.isnot(None))
+        .filter(InventoryItem.expiry_date < today)
+        .all()
+    )
+
+    # Filter to only include items with quantity > 0
+    expired_with_stock = []
+    for item in expired_raw_materials:
+        try:
+            qty_str = str(item.quantity).strip() if item.quantity else "0"
+            quantity_decimal = Decimal(qty_str)
+            if quantity_decimal > Decimal("0"):
+                expired_with_stock.append(item)
+        except (InvalidOperation, ValueError, TypeError):
+            pass
+
+    result_expired = []
+    result_impacted = []
+    result_connections = []
+    impacted_item_ids = set()
+
+    for raw_material in expired_with_stock:
+        # Add expired raw material to result
+        result_expired.append(
+            {
+                "id": str(raw_material.id),
+                "name": raw_material.name,
+                "quantity": raw_material.quantity,
+                "unit": raw_material.unit,
+                "inventory_type": raw_material.inventory_type,
+                "supplier": raw_material.supplier,
+                "purchase_date": raw_material.purchase_date.isoformat() if raw_material.purchase_date else None,
+                "supplier_batch_number": raw_material.supplier_batch_number,
+                "expiry_date": raw_material.expiry_date.isoformat() if raw_material.expiry_date else None,
+                "created_at": raw_material.created_at.isoformat() if raw_material.created_at else None,
+                "extra_data": raw_material.extra_data if raw_material.extra_data else {},
+                "is_expired": True,
+            }
+        )
+
+        # Find all execution steps that used this raw material
+        # Join with Execution to filter by org_id since ExecutionStep doesn't have org_id
+        raw_material_id_str = str(raw_material.id)
+        execution_steps = (
+            db_session.query(ExecutionStep)
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .filter(Execution.org_id == org_id)
+            .all()
+        )
+
+        for step in execution_steps:
+            if not step.actual_inputs:
+                continue
+
+            # Check if this step used the expired raw material
+            used_expired = any(
+                input_data.get("inventory_item_id") and str(input_data.get("inventory_item_id")) == raw_material_id_str
+                for input_data in step.actual_inputs
+            )
+
+            if not used_expired:
+                continue
+
+            # Get the execution to check execution date
+            execution = db_session.query(Execution).filter(Execution.id == step.execution_id).first()
+            if not execution:
+                continue
+
+            # Find products produced by this step (check outputs or source_execution_step_id)
+            produced_items = (
+                db_session.query(InventoryItem)
+                .filter(InventoryItem.org_id == org_id)
+                .filter(InventoryItem.source_execution_step_id == step.id)
+                .all()
+            )
+
+            for produced_item in produced_items:
+                # Check if execution happened after raw material expired
+                execution_date = None
+                if execution.completed_at:
+                    execution_date = (
+                        execution.completed_at.date()
+                        if hasattr(execution.completed_at, "date")
+                        else execution.completed_at
+                    )
+                elif execution.started_at:
+                    execution_date = (
+                        execution.started_at.date() if hasattr(execution.started_at, "date") else execution.started_at
+                    )
+
+                # Mark as impacted if execution was after expiry date
+                is_made_with_expired = False
+                if execution_date and raw_material.expiry_date:
+                    if execution_date > raw_material.expiry_date:
+                        is_made_with_expired = True
+
+                # Also mark as impacted if the raw material is currently expired and item has stock
+                try:
+                    item_qty = Decimal(str(produced_item.quantity).strip() if produced_item.quantity else "0")
+                    has_stock = item_qty > Decimal("0")
+                except (InvalidOperation, ValueError, TypeError):
+                    has_stock = False
+
+                if has_stock and produced_item.id not in impacted_item_ids:
+                    impacted_item_ids.add(produced_item.id)
+                    result_impacted.append(
+                        {
+                            "id": str(produced_item.id),
+                            "name": produced_item.name,
+                            "quantity": produced_item.quantity,
+                            "unit": produced_item.unit,
+                            "inventory_type": produced_item.inventory_type,
+                            "source_execution_id": str(produced_item.source_execution_id)
+                            if produced_item.source_execution_id
+                            else None,
+                            "source_execution_step_id": str(produced_item.source_execution_step_id)
+                            if produced_item.source_execution_step_id
+                            else None,
+                            "source_step_name": produced_item.source_step_name,
+                            "created_at": produced_item.created_at.isoformat() if produced_item.created_at else None,
+                            "extra_data": produced_item.extra_data if produced_item.extra_data else {},
+                            "expired_raw_material_id": raw_material_id_str,
+                            "expired_raw_material_name": raw_material.name,
+                            "is_made_with_expired": is_made_with_expired,
+                        }
+                    )
+
+                    result_connections.append(
+                        {
+                            "from_id": raw_material_id_str,
+                            "to_id": str(produced_item.id),
+                            "execution_id": str(step.execution_id) if step.execution_id else None,
+                        }
+                    )
+
+    return jsonify(
+        {
+            "expired_raw_materials": result_expired,
+            "impacted_items": result_impacted,
+            "connections": result_connections,
+        }
+    ), 200
+
+
 @core_bp.route("/api/core/inventory", methods=["POST"])
 @requires_auth
 def create_inventory_item():
@@ -1463,6 +1706,783 @@ def delete_inventory_item(item_id):
         logger = logging.getLogger(__name__)
         logger.exception("Error deleting inventory item")
         return jsonify({"error": "Failed to delete inventory item"}), 500
+
+
+@core_bp.route("/api/core/inventory/trace/<raw_material_id>", methods=["GET"])
+@requires_auth
+def trace_raw_material(raw_material_id: str):
+    """Trace forward from a raw material to find all connected intermediates and final products
+
+    Uses DAG traversal to find all inventory items that trace back to this raw material.
+    Returns only items with quantity > 0, except for the raw material itself (if consumed).
+    """
+    org_id = UUID(g.org_id)
+    try:
+        raw_material_uuid = UUID(raw_material_id)
+    except ValueError:
+        return jsonify({"error": "Invalid raw material ID"}), 400
+
+    # Import models
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.process import Process
+
+    # Get the raw material
+    raw_material = (
+        db_session.query(InventoryItem)
+        .filter(InventoryItem.id == raw_material_uuid, InventoryItem.org_id == org_id)
+        .first()
+    )
+
+    if not raw_material:
+        return jsonify({"error": "Raw material not found"}), 404
+
+    # Helper function to trace forward from an inventory item
+    def trace_forward(inventory_item_id, visited_step_ids=None, depth=0):
+        """Recursively trace forward through execution steps to find connected inventory items
+
+        Args:
+            inventory_item_id: UUID of inventory item to trace from
+            visited_step_ids: Set of visited execution step IDs to prevent cycles
+            depth: Current recursion depth (for safety limits)
+
+        Returns:
+            Set of inventory item IDs that are connected
+        """
+        max_dag_depth = 50
+        if depth > max_dag_depth:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"DAG forward traversal depth limit ({max_dag_depth}) reached")
+            return set()
+
+        if visited_step_ids is None:
+            visited_step_ids = set()
+
+        connected_items = set()
+
+        # Find all execution steps that use this inventory item as input
+        # Filter by org_id through the execution relationship
+        from app.core.db.models.execution import Execution
+
+        all_execution_steps = (
+            db_session.query(ExecutionStep)
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .filter(Execution.org_id == org_id)
+            .all()
+        )
+        steps_using_item = []
+
+        for step in all_execution_steps:
+            if step.id in visited_step_ids:
+                continue
+            if not step.actual_inputs:
+                continue
+
+            # Check if this step uses the inventory item
+            uses_item = False
+            for input_data in step.actual_inputs:
+                input_item_id = input_data.get("inventory_item_id")
+                if input_item_id and str(input_item_id) == str(inventory_item_id):
+                    uses_item = True
+                    break
+                # Also check by name (for backward compatibility)
+                input_name = input_data.get("name")
+                if input_name:
+                    # Convert inventory_item_id to UUID if it's a string
+                    item_id_uuid = UUID(inventory_item_id) if isinstance(inventory_item_id, str) else inventory_item_id
+                    item = (
+                        db_session.query(InventoryItem)
+                        .filter(InventoryItem.id == item_id_uuid)
+                        .filter(InventoryItem.org_id == org_id)
+                        .first()
+                    )
+                    if item and input_name.lower() == item.name.lower():
+                        uses_item = True
+                        break
+
+            if uses_item:
+                steps_using_item.append(step)
+                visited_step_ids.add(step.id)
+
+        # For each step that uses this item, find all inventory items it produces
+        for step in steps_using_item:
+            # Find all inventory items produced by this step
+            # Don't filter by quantity here - we want to trace through all items
+            # Filtering happens later when building the response
+            produced_items = (
+                db_session.query(InventoryItem)
+                .filter(InventoryItem.source_execution_step_id == step.id, InventoryItem.org_id == org_id)
+                .all()
+            )
+
+            for produced_item in produced_items:
+                connected_items.add(produced_item.id)
+                # Recursively trace forward from this produced item
+                next_items = trace_forward(produced_item.id, visited_step_ids, depth + 1)
+                connected_items.update(next_items)
+
+        return connected_items
+
+    # Trace forward from the raw material
+    connected_item_ids = trace_forward(raw_material_uuid)
+
+    # Helper function to trace backwards from an inventory item to find raw materials
+    # This ensures we get direct connections based on execution_id
+    def trace_backward(inventory_item_id, visited_item_ids=None, depth=0):
+        """Recursively trace backwards through execution steps to find raw materials
+
+        Args:
+            inventory_item_id: UUID of inventory item to trace from
+            visited_item_ids: Set of visited inventory item IDs to prevent cycles
+            depth: Current recursion depth (for safety limits)
+
+        Returns:
+            Set of raw material IDs that this item traces back to
+        """
+        max_dag_depth = 50
+        if depth > max_dag_depth:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"DAG backward traversal depth limit ({max_dag_depth}) reached")
+            return set()
+
+        if visited_item_ids is None:
+            visited_item_ids = set()
+
+        # Convert to string for set comparison
+        item_id_str = str(inventory_item_id)
+        if item_id_str in visited_item_ids:
+            return set()  # Cycle detected
+        visited_item_ids.add(item_id_str)
+
+        raw_material_ids = set()
+
+        # Get the inventory item - convert to UUID if needed
+        item_id_uuid = UUID(inventory_item_id) if isinstance(inventory_item_id, str) else inventory_item_id
+        item = (
+            db_session.query(InventoryItem)
+            .filter(InventoryItem.id == item_id_uuid)
+            .filter(InventoryItem.org_id == org_id)
+            .first()
+        )
+
+        if not item or not item.source_execution_step_id:
+            return raw_material_ids
+
+        # If this is a raw material, return it
+        if item.inventory_type == InventoryType.RAW_MATERIAL.value:
+            raw_material_ids.add(item.id)
+            return raw_material_ids
+
+        # Get the execution step that produced this item
+        execution_step = (
+            db_session.query(ExecutionStep).filter(ExecutionStep.id == item.source_execution_step_id).first()
+        )
+
+        if not execution_step or not execution_step.actual_inputs:
+            return raw_material_ids
+
+        # Check each input to see if it's a raw material or needs further tracing
+        for input_data in execution_step.actual_inputs:
+            input_item_id = input_data.get("inventory_item_id")
+            if not input_item_id:
+                continue
+
+            # Get the input inventory item - convert to UUID if needed
+            input_item_id_uuid = UUID(input_item_id) if isinstance(input_item_id, str) else input_item_id
+            input_item = (
+                db_session.query(InventoryItem)
+                .filter(InventoryItem.id == input_item_id_uuid)
+                .filter(InventoryItem.org_id == org_id)
+                .first()
+            )
+
+            if not input_item:
+                continue
+
+            # If it's a raw material, add it
+            if input_item.inventory_type == InventoryType.RAW_MATERIAL.value:
+                raw_material_ids.add(input_item.id)
+            else:
+                # Recursively trace backwards from this intermediate
+                prev_raw_materials = trace_backward(input_item.id, visited_item_ids, depth + 1)
+                raw_material_ids.update(prev_raw_materials)
+
+        return raw_material_ids
+
+    # Build connection map: for each connected item, find which raw materials it traces back to
+    # Only include connections where the raw material matches our traced raw material
+    connections = []  # List of {from_id, to_id, execution_id} tuples
+
+    # Get all connected inventory items
+    connected_items = []
+    if connected_item_ids:
+        items = (
+            db_session.query(InventoryItem)
+            .filter(InventoryItem.id.in_(connected_item_ids), InventoryItem.org_id == org_id)
+            .all()
+        )
+
+        for item in items:
+            # Filter: only include items with quantity > 0, OR the raw material itself (for traceability)
+            try:
+                qty_str = str(item.quantity).strip() if item.quantity else "0"
+                quantity_decimal = Decimal(qty_str)
+                # Include if quantity > 0, or if it's the raw material itself (for consumed traceability)
+                if quantity_decimal > 0 or item.id == raw_material_uuid:
+                    # Build extra_data similar to list_inventory
+                    extra_data = item.extra_data if item.extra_data else {}
+
+                    # Get execution prompts from execution step if not in extra_data
+                    if not extra_data.get("execution_prompts") and item.source_execution_step_id:
+                        try:
+                            execution_step = (
+                                db_session.query(ExecutionStep)
+                                .filter(ExecutionStep.id == item.source_execution_step_id)
+                                .first()
+                            )
+                            if execution_step and execution_step.execution_data:
+                                execution_prompts = {}
+                                internal_fields = {"completed_by_email", "completed_by_user_id", "completed_at"}
+                                for key, value in execution_step.execution_data.items():
+                                    if key not in internal_fields and value is not None and value != "":
+                                        execution_prompts[key] = value
+                                if execution_prompts:
+                                    extra_data["execution_prompts"] = execution_prompts
+
+                                # Include variable inputs and outputs
+                                if not extra_data.get("variable_inputs") and execution_step.actual_inputs:
+                                    extra_data["variable_inputs"] = execution_step.actual_inputs
+                                if not extra_data.get("variable_output") and execution_step.actual_outputs:
+                                    output_name = item.name
+                                    matching_output = next(
+                                        (o for o in execution_step.actual_outputs if o.get("name") == output_name), None
+                                    )
+                                    if matching_output:
+                                        extra_data["variable_output"] = matching_output
+                        except Exception:
+                            pass
+
+                    # Get process name
+                    process_name = None
+                    if item.source_execution_id:
+                        try:
+                            execution = (
+                                db_session.query(Execution).filter(Execution.id == item.source_execution_id).first()
+                            )
+                            if execution and execution.process_id:
+                                process = db_session.query(Process).filter(Process.id == execution.process_id).first()
+                                if process:
+                                    process_name = process.name
+                        except Exception:
+                            pass
+
+                    # Trace backwards to verify this item connects to our raw material
+                    traced_raw_materials = trace_backward(item.id)
+
+                    # Only include if it traces back to our raw material
+                    if raw_material_uuid in traced_raw_materials:
+                        # Add connection: raw material -> this item (based on execution_id)
+                        if item.source_execution_id:
+                            connections.append(
+                                {
+                                    "from_id": str(raw_material_uuid),
+                                    "to_id": str(item.id),
+                                    "execution_id": str(item.source_execution_id),
+                                }
+                            )
+
+                        connected_items.append(
+                            {
+                                "id": str(item.id),
+                                "name": item.name,
+                                "quantity": item.quantity,
+                                "unit": item.unit,
+                                "inventory_type": item.inventory_type,
+                                "supplier": item.supplier,
+                                "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+                                "supplier_batch_number": item.supplier_batch_number,
+                                "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+                                "source_execution_id": str(item.source_execution_id)
+                                if item.source_execution_id
+                                else None,
+                                "source_execution_step_id": str(item.source_execution_step_id)
+                                if item.source_execution_step_id
+                                else None,
+                                "source_step_name": item.source_step_name,
+                                "process_name": process_name,
+                                "created_at": item.created_at.isoformat() if item.created_at else None,
+                                "extra_data": extra_data,
+                            }
+                        )
+            except (InvalidOperation, ValueError, TypeError):
+                continue
+
+    # Build intermediate-to-output connections using execution_id as the core tracing mechanism
+    # Items in the same execution with sequential steps are connected through the execution flow
+    #
+    # Strategy: Group all connected items by execution_id, then within each execution,
+    # connect items based on step sequence and actual_inputs verification
+    non_raw_items = [item for item in connected_items if item["inventory_type"] != InventoryType.RAW_MATERIAL.value]
+
+    # Group items by execution_id
+    items_by_execution = {}
+    for item in non_raw_items:
+        exec_id = item.get("source_execution_id")
+        if exec_id:
+            if exec_id not in items_by_execution:
+                items_by_execution[exec_id] = []
+            items_by_execution[exec_id].append(item)
+
+    # For each execution, build connections based on step sequence
+    for exec_id, items in items_by_execution.items():
+        if len(items) < 2:
+            continue  # Need at least 2 items to have a connection
+
+        # Get step numbers for all items in this execution
+        step_info = {}
+        for item in items:
+            step_id = item.get("source_execution_step_id")
+            if step_id:
+                step = db_session.query(ExecutionStep).filter(ExecutionStep.id == UUID(step_id)).first()
+                if step:
+                    step_info[item["id"]] = {
+                        "item": item,
+                        "step": step,
+                        "step_number": step.step_number,
+                    }
+
+        # Sort items by step number
+        sorted_items = sorted(step_info.values(), key=lambda x: x["step_number"])
+
+        # Connect items based on actual_inputs - the step that produces an output
+        # should reference its inputs via inventory_item_id
+        for i, later_info in enumerate(sorted_items):
+            later_step = later_info["step"]
+            later_item = later_info["item"]
+
+            if not later_step.actual_inputs:
+                continue
+
+            # Check which earlier items were used as inputs to this step
+            for earlier_info in sorted_items[:i]:
+                earlier_item = earlier_info["item"]
+
+                # Verify the later step actually used this earlier item as input
+                uses_earlier = any(
+                    input_data.get("inventory_item_id")
+                    and str(input_data.get("inventory_item_id")) == earlier_item["id"]
+                    for input_data in later_step.actual_inputs
+                )
+
+                if uses_earlier:
+                    # Add connection if not already exists
+                    if not any(
+                        c["from_id"] == earlier_item["id"] and c["to_id"] == later_item["id"] for c in connections
+                    ):
+                        connections.append(
+                            {
+                                "from_id": earlier_item["id"],
+                                "to_id": later_item["id"],
+                                "execution_id": exec_id,
+                            }
+                        )
+
+    # Always include the raw material itself (even if consumed) for traceability
+    raw_material_data = {
+        "id": str(raw_material.id),
+        "name": raw_material.name,
+        "quantity": raw_material.quantity,
+        "unit": raw_material.unit,
+        "inventory_type": raw_material.inventory_type,
+        "supplier": raw_material.supplier,
+        "purchase_date": raw_material.purchase_date.isoformat() if raw_material.purchase_date else None,
+        "supplier_batch_number": raw_material.supplier_batch_number,
+        "expiry_date": raw_material.expiry_date.isoformat() if raw_material.expiry_date else None,
+        "source_execution_id": str(raw_material.source_execution_id) if raw_material.source_execution_id else None,
+        "source_execution_step_id": str(raw_material.source_execution_step_id)
+        if raw_material.source_execution_step_id
+        else None,
+        "source_step_name": raw_material.source_step_name,
+        "process_name": None,
+        "created_at": raw_material.created_at.isoformat() if raw_material.created_at else None,
+        "extra_data": raw_material.extra_data if raw_material.extra_data else {},
+    }
+
+    # Check if raw material is already in connected_items
+    if not any(item["id"] == str(raw_material.id) for item in connected_items):
+        connected_items.insert(0, raw_material_data)
+
+    # Separate into intermediates and finals
+    intermediates = [item for item in connected_items if item["inventory_type"] == InventoryType.WORK_IN_PROGRESS.value]
+    finals = [item for item in connected_items if item["inventory_type"] == InventoryType.FINAL_PRODUCT.value]
+
+    return jsonify(
+        {
+            "raw_material": raw_material_data,
+            "intermediates": intermediates,
+            "finals": finals,
+            "all_items": connected_items,
+            "connections": connections,  # Direct connections based on execution_id
+        }
+    ), 200
+
+
+@core_bp.route("/api/core/inventory/trace-backward/<inventory_item_id>", methods=["GET"])
+@requires_auth
+def trace_inventory_backward(inventory_item_id: str):
+    """Trace backward from any inventory item (raw, intermediate, or final) to find all source items
+
+    Uses DAG traversal to find all inventory items that contributed to this item.
+    Returns only items with quantity > 0, except for the traced item itself (if consumed).
+    """
+    org_id = UUID(g.org_id)
+    try:
+        item_uuid = UUID(inventory_item_id)
+    except ValueError:
+        return jsonify({"error": "Invalid inventory item ID"}), 400
+
+    # Import models
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.process import Process
+
+    # Get the inventory item
+    traced_item = (
+        db_session.query(InventoryItem).filter(InventoryItem.id == item_uuid, InventoryItem.org_id == org_id).first()
+    )
+
+    if not traced_item:
+        return jsonify({"error": "Inventory item not found"}), 404
+
+    # Helper function to trace backward from an inventory item
+    def trace_backward(inventory_item_id, visited_item_ids=None, depth=0):
+        """Recursively trace backwards through execution steps to find source items
+
+        Args:
+            inventory_item_id: UUID of inventory item to trace from
+            visited_item_ids: Set of visited inventory item IDs to prevent cycles
+            depth: Current recursion depth (for safety limits)
+
+        Returns:
+            Set of source inventory item IDs (raw materials and intermediates)
+        """
+        max_dag_depth = 50
+        if depth > max_dag_depth:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"DAG backward traversal depth limit ({max_dag_depth}) reached")
+            return set()
+
+        if visited_item_ids is None:
+            visited_item_ids = set()
+
+        # Convert to string for set comparison
+        item_id_str = str(inventory_item_id)
+        if item_id_str in visited_item_ids:
+            return set()  # Cycle detected
+        visited_item_ids.add(item_id_str)
+
+        source_item_ids = set()
+
+        # Get the inventory item - convert to UUID if needed
+        item_id_uuid = UUID(inventory_item_id) if isinstance(inventory_item_id, str) else inventory_item_id
+        item = (
+            db_session.query(InventoryItem)
+            .filter(InventoryItem.id == item_id_uuid)
+            .filter(InventoryItem.org_id == org_id)
+            .first()
+        )
+
+        if not item or not item.source_execution_step_id:
+            return source_item_ids
+
+        # Get the execution step that produced this item
+        execution_step = (
+            db_session.query(ExecutionStep).filter(ExecutionStep.id == item.source_execution_step_id).first()
+        )
+
+        if not execution_step or not execution_step.actual_inputs:
+            return source_item_ids
+
+        # Check each input to find source items
+        for input_data in execution_step.actual_inputs:
+            input_item_id = input_data.get("inventory_item_id")
+            if not input_item_id:
+                continue
+
+            # Get the input inventory item - convert to UUID if needed
+            input_item_id_uuid = UUID(input_item_id) if isinstance(input_item_id, str) else input_item_id
+            input_item = (
+                db_session.query(InventoryItem)
+                .filter(InventoryItem.id == input_item_id_uuid)
+                .filter(InventoryItem.org_id == org_id)
+                .first()
+            )
+
+            if not input_item:
+                continue
+
+            # Add this source item
+            source_item_ids.add(input_item.id)
+            # Recursively trace backwards from this source item
+            prev_source_items = trace_backward(input_item.id, visited_item_ids, depth + 1)
+            source_item_ids.update(prev_source_items)
+
+        return source_item_ids
+
+    # Trace backward from the item
+    source_item_ids = trace_backward(item_uuid)
+
+    # Build connection map: for each source item, create connection to traced item
+    connections = []  # List of {from_id, to_id, execution_id} tuples
+
+    # Get all source inventory items
+    source_items = []
+    if source_item_ids:
+        items = (
+            db_session.query(InventoryItem)
+            .filter(InventoryItem.id.in_(source_item_ids), InventoryItem.org_id == org_id)
+            .all()
+        )
+
+        for item in items:
+            # Filter: only include items with quantity > 0, OR the traced item itself (for traceability)
+            try:
+                qty_str = str(item.quantity).strip() if item.quantity else "0"
+                quantity_decimal = Decimal(qty_str)
+                # Include if quantity > 0, or if it's the traced item itself (for consumed traceability)
+                if quantity_decimal > 0 or item.id == item_uuid:
+                    # Build extra_data similar to list_inventory
+                    extra_data = item.extra_data if item.extra_data else {}
+
+                    # Get execution prompts from execution step if not in extra_data
+                    if not extra_data.get("execution_prompts") and item.source_execution_step_id:
+                        try:
+                            execution_step = (
+                                db_session.query(ExecutionStep)
+                                .filter(ExecutionStep.id == item.source_execution_step_id)
+                                .first()
+                            )
+                            if execution_step and execution_step.execution_data:
+                                execution_prompts = {}
+                                internal_fields = {"completed_by_email", "completed_by_user_id", "completed_at"}
+                                for key, value in execution_step.execution_data.items():
+                                    if key not in internal_fields and value is not None and value != "":
+                                        execution_prompts[key] = value
+                                if execution_prompts:
+                                    extra_data["execution_prompts"] = execution_prompts
+
+                                # Include variable inputs and outputs
+                                if not extra_data.get("variable_inputs") and execution_step.actual_inputs:
+                                    extra_data["variable_inputs"] = execution_step.actual_inputs
+                                if not extra_data.get("variable_output") and execution_step.actual_outputs:
+                                    output_name = item.name
+                                    matching_output = next(
+                                        (o for o in execution_step.actual_outputs if o.get("name") == output_name), None
+                                    )
+                                    if matching_output:
+                                        extra_data["variable_output"] = matching_output
+                        except Exception:
+                            pass
+
+                    # Get process name
+                    process_name = None
+                    if item.source_execution_id:
+                        try:
+                            execution = (
+                                db_session.query(Execution).filter(Execution.id == item.source_execution_id).first()
+                            )
+                            if execution and execution.process_id:
+                                process = db_session.query(Process).filter(Process.id == execution.process_id).first()
+                                if process:
+                                    process_name = process.name
+                        except Exception:
+                            pass
+
+                    # Add connection: source item -> traced item (based on execution_id)
+                    # Use the traced item's execution_id if available
+                    if traced_item.source_execution_id:
+                        connections.append(
+                            {
+                                "from_id": str(item.id),
+                                "to_id": str(traced_item.id),
+                                "execution_id": str(traced_item.source_execution_id),
+                            }
+                        )
+
+                    source_items.append(
+                        {
+                            "id": str(item.id),
+                            "name": item.name,
+                            "quantity": item.quantity,
+                            "unit": item.unit,
+                            "inventory_type": item.inventory_type,
+                            "supplier": item.supplier,
+                            "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+                            "supplier_batch_number": item.supplier_batch_number,
+                            "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+                            "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
+                            "source_execution_step_id": str(item.source_execution_step_id)
+                            if item.source_execution_step_id
+                            else None,
+                            "source_step_name": item.source_step_name,
+                            "process_name": process_name,
+                            "created_at": item.created_at.isoformat() if item.created_at else None,
+                            "extra_data": extra_data,
+                        }
+                    )
+            except (InvalidOperation, ValueError, TypeError):
+                continue
+
+    # Always include the traced item itself (even if consumed) for traceability
+    traced_item_extra_data = traced_item.extra_data if traced_item.extra_data else {}
+    if not traced_item_extra_data.get("execution_prompts") and traced_item.source_execution_step_id:
+        try:
+            execution_step = (
+                db_session.query(ExecutionStep).filter(ExecutionStep.id == traced_item.source_execution_step_id).first()
+            )
+            if execution_step and execution_step.execution_data:
+                execution_prompts = {}
+                internal_fields = {"completed_by_email", "completed_by_user_id", "completed_at"}
+                for key, value in execution_step.execution_data.items():
+                    if key not in internal_fields and value is not None and value != "":
+                        execution_prompts[key] = value
+                if execution_prompts:
+                    traced_item_extra_data["execution_prompts"] = execution_prompts
+        except Exception:
+            pass
+
+    traced_item_data = {
+        "id": str(traced_item.id),
+        "name": traced_item.name,
+        "quantity": traced_item.quantity,
+        "unit": traced_item.unit,
+        "inventory_type": traced_item.inventory_type,
+        "supplier": traced_item.supplier,
+        "purchase_date": traced_item.purchase_date.isoformat() if traced_item.purchase_date else None,
+        "supplier_batch_number": traced_item.supplier_batch_number,
+        "expiry_date": traced_item.expiry_date.isoformat() if traced_item.expiry_date else None,
+        "source_execution_id": str(traced_item.source_execution_id) if traced_item.source_execution_id else None,
+        "source_execution_step_id": str(traced_item.source_execution_step_id)
+        if traced_item.source_execution_step_id
+        else None,
+        "source_step_name": traced_item.source_step_name,
+        "process_name": None,
+        "created_at": traced_item.created_at.isoformat() if traced_item.created_at else None,
+        "extra_data": traced_item_extra_data,
+    }
+
+    # Check if traced item is already in source_items
+    # Exclude the traced item from source_items if it's already there (to avoid duplicates)
+    # The traced item will be returned separately in the response
+    source_items_without_traced = [item for item in source_items if item["id"] != str(traced_item.id)]
+
+    # Separate into raw materials and intermediates (excluding the traced item itself)
+    raw_materials = [
+        item for item in source_items_without_traced if item["inventory_type"] == InventoryType.RAW_MATERIAL.value
+    ]
+    intermediates = [
+        item for item in source_items_without_traced if item["inventory_type"] == InventoryType.WORK_IN_PROGRESS.value
+    ]
+
+    return jsonify(
+        {
+            "traced_item": traced_item_data,
+            "raw_materials": raw_materials,
+            "intermediates": intermediates,
+            "all_items": source_items_without_traced,  # Exclude traced item to avoid duplicates
+            "connections": connections,  # Direct connections based on execution_id
+        }
+    ), 200
+
+
+@core_bp.route("/api/core/execution-metadata", methods=["GET"])
+@requires_auth
+def get_execution_metadata():
+    """Get unique execution metadata values for search/tracing.
+    Returns all unique key-value pairs from execution_data across all execution steps.
+    """
+    from app.core.db.models.inventory_item import InventoryItem
+
+    user_email = getattr(g, "user_email", None)
+    if is_demo_user(user_email):
+        # Return mock data for demo
+        return jsonify({"metadata": []}), 200
+
+    org_id = UUID(g.org_id)
+
+    # Get all executions for this org
+    execution_repo = ExecutionRepository(db_session)
+    executions = execution_repo.list_executions(org_id)
+
+    # Collect unique metadata key-value pairs
+    metadata_map = {}  # key -> set of values
+    metadata_items = []  # List of {key, value, execution_ids, inventory_item_ids}
+
+    # Fields to exclude from metadata display
+    exclude_fields = {"completed_by_email", "completed_by_user_id", "execution_errors"}
+
+    for execution in executions:
+        if not execution.execution_steps:
+            continue
+        for step in execution.execution_steps:
+            if not step.execution_data:
+                continue
+            for key, value in step.execution_data.items():
+                if key in exclude_fields:
+                    continue
+                if value is None or value == "":
+                    continue
+                # Convert value to string for consistency
+                str_value = str(value)
+                # Create a unique key for this metadata pair
+                pair_key = f"{key}::{str_value}"
+                if pair_key not in metadata_map:
+                    metadata_map[pair_key] = {
+                        "key": key,
+                        "value": str_value,
+                        "execution_ids": set(),
+                        "execution_step_ids": set(),
+                    }
+                metadata_map[pair_key]["execution_ids"].add(str(execution.id))
+                metadata_map[pair_key]["execution_step_ids"].add(str(step.id))
+
+    # Convert to list format
+    for pair_key, data in metadata_map.items():
+        # Find inventory items linked to these execution steps
+        inventory_item_ids = []
+        for step_id in data["execution_step_ids"]:
+            items = (
+                db_session.query(InventoryItem)
+                .filter(InventoryItem.org_id == org_id)
+                .filter(InventoryItem.source_execution_step_id == UUID(step_id))
+                .all()
+            )
+            for item in items:
+                inventory_item_ids.append(str(item.id))
+
+        metadata_items.append(
+            {
+                "key": data["key"],
+                "value": data["value"],
+                "display_key": data["key"].replace("_", " ").title(),
+                "execution_count": len(data["execution_ids"]),
+                "execution_ids": list(data["execution_ids"]),
+                "inventory_item_ids": inventory_item_ids,
+            }
+        )
+
+    # Sort by key then value
+    metadata_items.sort(key=lambda x: (x["key"].lower(), x["value"].lower()))
+
+    return jsonify({"metadata": metadata_items}), 200
 
 
 @core_bp.route("/api/core/metrics", methods=["GET"])

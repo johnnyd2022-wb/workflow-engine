@@ -121,6 +121,14 @@ const CoreAPI = {
         return this.request(`/inventory${query}`);
     },
     
+    async getOutOfStockRawMaterials() {
+        return this.request('/inventory/out-of-stock');
+    },
+    
+    async getCheckNeededItems() {
+        return this.request('/inventory/check-needed');
+    },
+    
     async createInventoryItem(data) {
         return this.request('/inventory', {
             method: 'POST',
@@ -139,6 +147,19 @@ const CoreAPI = {
         return this.request(`/inventory/${itemId}`, {
             method: 'DELETE',
         });
+    },
+    
+    async traceRawMaterial(rawMaterialId) {
+        return this.request(`/inventory/trace/${rawMaterialId}`);
+    },
+    
+    async traceInventoryBackward(inventoryItemId) {
+        return this.request(`/inventory/trace-backward/${inventoryItemId}`);
+    },
+    
+    // Execution Metadata
+    async getExecutionMetadata() {
+        return this.request('/execution-metadata');
     },
     
     // Metrics
