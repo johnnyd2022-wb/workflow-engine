@@ -284,7 +284,6 @@ def reset_demo_db(db: Session) -> dict:
     }
 
     for i, exec_step in enumerate(execution_steps):
-        step_spec = steps_spec[i]
         run_spec = actual_run[i]
         step = created_steps[i]
         actual_inputs = []
