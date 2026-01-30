@@ -12,8 +12,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.db.models.execution import Execution, ExecutionStatus
-from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.process import Process, ProcessCategory
 from app.core.db.models.step import Step
@@ -104,7 +103,10 @@ def reset_demo_db(db: Session) -> dict:
             "step_number": 1,
             "name": "Mashing",
             "description": "Mash malted barley with hot water to extract sugars",
-            "inputs": [{"name": "Malted Barley", "quantity": 500, "unit": "kg"}, {"name": "Water", "quantity": 2000, "unit": "L"}],
+            "inputs": [
+                {"name": "Malted Barley", "quantity": 500, "unit": "kg"},
+                {"name": "Water", "quantity": 2000, "unit": "L"},
+            ],
             "outputs": [{"name": "Mash", "quantity": 2400, "unit": "L"}],
             "execution_prompts": [{"label": "Mash temperature (°C)", "type": "number", "required": True}],
         },
@@ -112,7 +114,10 @@ def reset_demo_db(db: Session) -> dict:
             "step_number": 2,
             "name": "Fermentation",
             "description": "Ferment mash with yeast to produce wash",
-            "inputs": [{"name": "Mash", "quantity": 2400, "unit": "L"}, {"name": "Yeast", "quantity": 10, "unit": "kg"}],
+            "inputs": [
+                {"name": "Mash", "quantity": 2400, "unit": "L"},
+                {"name": "Yeast", "quantity": 10, "unit": "kg"},
+            ],
             "outputs": [{"name": "Wash", "quantity": 2300, "unit": "L"}],
             "execution_prompts": [{"label": "Fermentation days", "type": "number", "required": True}],
         },
@@ -128,9 +133,15 @@ def reset_demo_db(db: Session) -> dict:
             "step_number": 4,
             "name": "Maturation",
             "description": "Mature spirit in oak casks",
-            "inputs": [{"name": "New-Make Spirit", "quantity": 350, "unit": "L"}, {"name": "Oak Cask", "quantity": 1, "unit": "units"}],
+            "inputs": [
+                {"name": "New-Make Spirit", "quantity": 350, "unit": "L"},
+                {"name": "Oak Cask", "quantity": 1, "unit": "units"},
+            ],
             "outputs": [{"name": "Matured Spirit", "quantity": 320, "unit": "L"}],
-            "execution_prompts": [{"label": "Cask type", "type": "text", "required": True}, {"label": "Years matured", "type": "number", "required": True}],
+            "execution_prompts": [
+                {"label": "Cask type", "type": "text", "required": True},
+                {"label": "Years matured", "type": "number", "required": True},
+            ],
         },
         {
             "step_number": 5,
@@ -227,17 +238,41 @@ def reset_demo_db(db: Session) -> dict:
     # Step 0: 500 barley, 2000 water -> 2400 Mash. Step 1: 1200 Mash, 5 yeast -> 1150 Wash (1200 Mash left).
     # Step 2: 1150 Wash -> 175 New-Make. Step 3: 175 New-Make, 1 oak -> 160 Matured. Step 4: 160 Matured -> 200 bottles.
     actual_run = [
-        {"inputs": [{"name": "Malted Barley", "quantity": 500, "unit": "kg"}, {"name": "Water", "quantity": 2000, "unit": "L"}], "outputs": [{"name": "Mash", "quantity": 2400, "unit": "L"}]},
-        {"inputs": [{"name": "Mash", "quantity": 1200, "unit": "L"}, {"name": "Yeast", "quantity": 5, "unit": "kg"}], "outputs": [{"name": "Wash", "quantity": 1150, "unit": "L"}]},
-        {"inputs": [{"name": "Wash", "quantity": 1150, "unit": "L"}], "outputs": [{"name": "New-Make Spirit", "quantity": 175, "unit": "L"}]},
-        {"inputs": [{"name": "New-Make Spirit", "quantity": 175, "unit": "L"}, {"name": "Oak Cask", "quantity": 1, "unit": "units"}], "outputs": [{"name": "Matured Spirit", "quantity": 160, "unit": "L"}]},
-        {"inputs": [{"name": "Matured Spirit", "quantity": 160, "unit": "L"}], "outputs": [{"name": "Bottled Whisky", "quantity": 200, "unit": "bottles"}]},
+        {
+            "inputs": [
+                {"name": "Malted Barley", "quantity": 500, "unit": "kg"},
+                {"name": "Water", "quantity": 2000, "unit": "L"},
+            ],
+            "outputs": [{"name": "Mash", "quantity": 2400, "unit": "L"}],
+        },
+        {
+            "inputs": [{"name": "Mash", "quantity": 1200, "unit": "L"}, {"name": "Yeast", "quantity": 5, "unit": "kg"}],
+            "outputs": [{"name": "Wash", "quantity": 1150, "unit": "L"}],
+        },
+        {
+            "inputs": [{"name": "Wash", "quantity": 1150, "unit": "L"}],
+            "outputs": [{"name": "New-Make Spirit", "quantity": 175, "unit": "L"}],
+        },
+        {
+            "inputs": [
+                {"name": "New-Make Spirit", "quantity": 175, "unit": "L"},
+                {"name": "Oak Cask", "quantity": 1, "unit": "units"},
+            ],
+            "outputs": [{"name": "Matured Spirit", "quantity": 160, "unit": "L"}],
+        },
+        {
+            "inputs": [{"name": "Matured Spirit", "quantity": 160, "unit": "L"}],
+            "outputs": [{"name": "Bottled Whisky", "quantity": 200, "unit": "bottles"}],
+        },
     ]
 
     # Create execution and complete each step, creating WIP/final inventory and linking
     execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
     execution_steps = (
-        db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).order_by(ExecutionStep.step_number).all()
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.execution_id == execution.id)
+        .order_by(ExecutionStep.step_number)
+        .all()
     )
 
     # Track created output items by name for use as inputs in next steps
@@ -257,13 +292,17 @@ def reset_demo_db(db: Session) -> dict:
             iname = inp.get("name")
             item = output_items_by_name.get(iname)
             if item:
-                actual_inputs.append({
-                    "name": iname,
-                    "quantity": inp.get("quantity"),
-                    "unit": inp.get("unit"),
-                    "inventory_item_id": str(item.id),
-                })
-        actual_outputs = [{"name": o["name"], "quantity": o["quantity"], "unit": o["unit"]} for o in run_spec.get("outputs", [])]
+                actual_inputs.append(
+                    {
+                        "name": iname,
+                        "quantity": inp.get("quantity"),
+                        "unit": inp.get("unit"),
+                        "inventory_item_id": str(item.id),
+                    }
+                )
+        actual_outputs = [
+            {"name": o["name"], "quantity": o["quantity"], "unit": o["unit"]} for o in run_spec.get("outputs", [])
+        ]
         execution_data = {"Mash temperature (°C)": 64} if i == 0 else {}
         if i == 1:
             execution_data["Fermentation days"] = 5
