@@ -524,11 +524,35 @@
         // Load inventory
         await loadInventory();
         
+        // Show welcome modal when arriving from core2 "Create process" (define steps prompt)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('welcome') === '1' && processId) {
+          const welcomeModal = document.getElementById('welcome-define-steps-modal');
+          if (welcomeModal) {
+            welcomeModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+          }
+        }
+        
       } catch (error) {
         console.error('Failed to load process data:', error);
         document.getElementById('process-name').textContent = 'Error loading process';
         document.getElementById('process-description').textContent = error.message || 'Failed to load process details';
         showNotification('error', 'Failed to Load Process', error.message || 'Failed to load process details');
+      }
+    }
+    
+    function closeWelcomeDefineStepsModal() {
+      const welcomeModal = document.getElementById('welcome-define-steps-modal');
+      if (welcomeModal) {
+        welcomeModal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('welcome') === '1') {
+        urlParams.delete('welcome');
+        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+        window.history.replaceState({}, '', newUrl);
       }
     }
     
@@ -3192,6 +3216,22 @@
         document.getElementById('process-name').textContent = 'No Process Selected';
         document.getElementById('process-description').textContent = 'Please select a process from the Process Hub';
       }
+      // Welcome modal: Define steps now / I'll do this later
+      const welcomeDefineNowBtn = document.getElementById('welcome-define-now-btn');
+      const welcomeDefineLaterBtn = document.getElementById('welcome-define-later-btn');
+      if (welcomeDefineNowBtn) {
+        welcomeDefineNowBtn.addEventListener('click', function() {
+          closeWelcomeDefineStepsModal();
+          if (typeof window.openCreateProcessModal === 'function') {
+            window.openCreateProcessModal();
+          }
+        });
+      }
+      if (welcomeDefineLaterBtn) {
+        welcomeDefineLaterBtn.addEventListener('click', function() {
+          closeWelcomeDefineStepsModal();
+        });
+      }
     });
   </script>
   
@@ -3295,6 +3335,41 @@
   
   <!-- Create Process Guided Flow Modal -->
   {% include 'shared/create-process-modal.html' %}
+  
+  <!-- Welcome: Define steps / inputs / outputs (shown after creating process from core2) -->
+  <style>
+    #welcome-define-steps-modal .welcome-card { max-width: 520px; width: 100%; padding: 20px; }
+    @media (min-width: 600px) { #welcome-define-steps-modal .welcome-card { padding: 24px; } }
+    @media (min-width: 1024px) { #welcome-define-steps-modal .welcome-card { padding: 28px; max-width: 560px; } }
+  </style>
+  <div class="modal-overlay" id="welcome-define-steps-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card welcome-card">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(59, 130, 246, 0.2)); display: flex; align-items: center; justify-content: center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success, #10b981);">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <h2 style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Process created</h2>
+        <p style="font-size: 0.95rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">You now have full visibility over this workflow. Define steps and materials to unlock traceability and real-time value.</p>
+      </div>
+      <div style="margin-bottom: 24px;">
+        <p style="font-size: 0.9375rem; font-weight: 500; color: var(--text-primary); margin: 0 0 12px 0;">Would you like to define your process steps, inputs, outputs, and execution metadata?</p>
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">This gives you:</p>
+        <ul style="font-size: 0.875rem; color: var(--text-secondary); margin: 0; padding-left: 20px; line-height: 1.7;">
+          <li><strong>Traceability</strong> — End-to-end visibility from raw materials to finished product</li>
+          <li><strong>Live inventory</strong> — Stock levels update automatically when you run executions</li>
+          <li><strong>Real-time checks</strong> — See what’s in progress and what’s completed</li>
+          <li><strong>Notifications</strong> — Get alerts (e.g. expired materials, low stock) when you connect them</li>
+        </ul>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary" id="welcome-define-later-btn">I'll do this later</button>
+        <button type="button" class="btn btn-primary" id="welcome-define-now-btn">Define steps now</button>
+      </div>
+    </div>
+  </div>
   
   <!-- Notification Toast (auto-dismissing) -->
   <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 10000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
