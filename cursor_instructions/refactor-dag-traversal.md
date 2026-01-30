@@ -1,360 +1,132 @@
-Cursor Prompt
+Cursor Prompt: DAGTracer Refactor & Optimization
+Objective
 
-You are refactoring the DAG traversal layer of this platform to move from ad-hoc forward/backward tracing functions to a single, scalable traversal engine that supports multiple use cases (traceability, recall simulation, site map visualization, compliance overlays).
+Refactor and optimize the DAGTracer system to ensure:
 
-This refactor must improve clarity of responsibility, extensibility, and long-term maintainability, without introducing unnecessary abstraction.
+Fully accurate, auditable, and trusted inventory traceability.
 
-1. Core Architectural Goal (Highest Priority)
+Elimination of all unnecessary database queries (no N+1 queries).
 
-Replace existing directional traversal functions (e.g. forward trace, backward trace) with one unified traversal engine:
+Simplification of traversal logic while preserving API outputs.
 
-tracer.traverse(
-    start_nodes=[...],
-    direction="forward" | "backward",
-    stop_conditions=[...],
-    filters=[...],              # optional
-)
+No hard depth limits.
 
+Removal of ambiguous fallback mechanisms (e.g., name-based matching).
 
-This engine must be:
+Instructions
+1. Traversal Engine
 
-Direction-agnostic
+Keep the single traversal engine: traverse(start_nodes, direction, stop_conditions, filters).
 
-Capable of multi-root traversal
+Direction-agnostic; supports multi-root traversal.
 
-Free of hardcoded depth limits
+No MAX_DAG_DEPTH hard limit; termination only via graph structure or stop conditions.
 
-Reusable across all DAG-based use cases
+All execution steps and inventory items must be bulk-loaded at the start of traversal to eliminate N+1 queries.
 
-This unlocks:
+Maintain per-request enrichment cache (_enrichment_cache) to avoid repeated enrichment queries.
 
-Recall / blast radius simulations
+2. Remove Ambiguity / Name-Based Fallback
 
-What-if scenarios
+Remove ALLOW_NAME_MATCH_FALLBACK entirely.
 
-Site map visualization
+Do not allow string-based name matching anywhere in traversal.
 
-Compliance overlays
+All connections must rely on:
 
-Future graph queries without rewriting traversal logic
+InventoryItem.id (UUID)
 
-2. Remove MAX_DAG_DEPTH (Explicit Requirement)
+ExecutionStep.id / Execution.id
 
-Remove all hard limits on DAG depth (e.g. MAX_DAG_DEPTH).
+Traversal must always be deterministic and auditable based on execution IDs.
 
-Traversal depth must instead be constrained by:
+3. Eliminate N+1 Queries
 
-Natural graph termination (no outgoing edges)
+Cursor should check for and refactor any N+1 queries. Examples:
 
-Explicit stop conditions (e.g. stop at sales, stop at inventory items)
+Backward traversal per-node queries:
 
-SQLAlchemy query efficiency and batching
-
-If any protection is needed, it must be:
-
-Query-based (e.g. pagination, visited-node tracking)
-
-Not an arbitrary numeric cap
-
-3. Introduce Traversal Result Objects (Critical Design Fix)
-
-Traversal must not return raw dicts, sets, or ad-hoc structures.
-
-Instead, introduce a TraversalResult object that represents the meaning of a traversal, not just the mechanics.
-
-Example (conceptual, not prescriptive):
-
-class TraversalResult:
-    root_nodes: set[UUID]
-    direction: Literal["forward", "backward"]
-    nodes: set[Node]
-    edges: set[Edge]
-    executions: set[Execution]
-    metadata: TraversalMetadata
+parent_item = session.query(InventoryItem).filter(...).first()
 
 
-This object should:
+Refactor to bulk-load all potentially reachable items before recursion.
 
-Encapsulate traversal output
+Use a dictionary lookup in-memory instead of querying per recursion.
 
-Own post-processing logic
+Step-order connections:
 
-Expose semantic helpers, e.g.:
+Already refactored to bulk-load steps.
 
-impacted_inventory_items()
+Verify no remaining N+1s.
 
-affected_sales()
+Enrichment layer:
 
-as_site_map_graph()
+_enrich_items_bulk already bulk-loads ExecutionStep, Execution, Process.
 
-as_recall_view()
+Verify the cache is used and queries aren’t repeated.
 
-Important:
-Traversal logic lives in the tracer.
-Interpretation and shaping live in the result object.
+Other potential N+1s:
 
-4. Refactor Existing Code to Use the New Engine
+Review any place where queries occur inside loops or recursive functions.
 
-Update all existing code paths that currently:
+Move bulk queries outside loops wherever possible.
 
-Call forward/backward traversal functions
+4. Stop Conditions & Filters
 
-Perform post-processing in API routes or services
-
-Duplicate graph logic across endpoints
-
-They must now:
-
-Call tracer.traverse(...)
-
-Receive a TraversalResult
-
-Use result methods instead of re-implementing logic
-
-API layers should:
-
-Assemble parameters
-
-Choose presentation/view methods
-
-Never re-traverse or reshape raw graph data
-
-5. Stop Conditions (First-Class Concept)
-
-Introduce stop conditions as composable traversal rules, not inline checks.
+Traversal accepts stop_conditions and filters to terminate or prune nodes.
 
 Examples:
 
-Stop at inventory items
+stop_at_inventory_types("final_product") stops traversal at final products.
 
-Stop at sales
+Must be composable and extendable without modifying traversal internals.
 
-Stop when execution is consumed
+5. API & Result Handling
 
-Stop when compliance boundary is reached
+Use TraversalResult for all outputs.
 
-These should be:
+Maintain legacy API dict shapes for:
 
-Passed into traverse(...)
+trace_forward
 
-Testable independently
+trace_backward
 
-Reusable across use cases (site map, recall, compliance)
+find_impacted_by_expired_raw
 
-6. Preserve and Centralize Invariants
+Step-order edges remain visual only, added via add_step_order_connections.
 
-The traversal engine must enforce:
+Ensure connections are always valid (from_id, to_id, execution_id).
 
-No infinite loops (visited node tracking)
+6. Find Impacted Items
 
-Direction-correct edge traversal
+find_impacted_by_expired_raw:
 
-Consistent node identity handling
+Trace forward from raw material.
 
-Deterministic results for the same inputs
+Only include items produced after raw material expiry.
 
-These invariants must live inside the tracer, not callers.
+Do not use name-based matching.
 
-7. Design Intent (Do Not Over-Abstract)
+Bulk-load items and steps before filtering.
 
-Do NOT:
+7. Deliverables
 
-Introduce separate ForwardTracer / BackwardTracer classes
+Cursor should:
 
-Build a generic graph DSL
+Refactor DAGTracer to remove ALLOW_NAME_MATCH_FALLBACK entirely.
 
-Add speculative features not needed for current DAG use cases
+Eliminate all N+1 queries, especially:
 
-DO:
+Backward traversal per-node queries.
 
-Keep one tracer
+Any remaining loops querying InventoryItem or ExecutionStep.
 
-Keep traversal configuration explicit
+Maintain bulk-loading and caching for enrichment and connections.
 
-Make intent readable to non-graph experts
+Keep all traversal output APIs compatible.
 
-8. Validation Checklist (Cursor Must Ensure)
+Ensure traversal is deterministic and accurate, fully based on execution IDs.
 
-After refactor:
+Review _enrich_items_bulk and add_step_order_connections for efficiency.
 
-There is only one traversal engine
-
-No hardcoded depth limits exist
-
-Traversal returns TraversalResult objects
-
-API code is thinner and clearer
-
-Adding a new traversal use case does not require new traversal logic
-
-9. Deliverables
-
-Refactored traversal engine (traverse)
-
-TraversalResult (or equivalent) abstraction
-
-Updated call sites using the new approach
-
-Removal of MAX_DAG_DEPTH
-
-No regression in existing behavior
-
-This refactor prioritizes correctness, clarity, and scalability over premature optimization.
-
-If any trade-offs are required, prefer:
-
-clarity of responsibility > minor performance gains
-
-3. Bulk Loading to Fix Query Explosion (High Priority)
-
-Problem in current _forward():
-
-steps = (
-    self.session.query(ExecutionStep)
-    .join(Execution, ExecutionStep.execution_id == Execution.id)
-    .filter(Execution.org_id == self.org_id)
-    .all()
-)
-
-
-This fetches all execution steps on every recursion, causing O(N²) complexity.
-
-Fix:
-
-Bulk-load all relevant ExecutionSteps once at the start
-
-Build indices in memory:
-
-steps_by_input_item_id: dict[UUID, list[ExecutionStep]]
-steps_by_input_name: dict[str, list[ExecutionStep]]
-
-
-_forward() becomes pure in-memory traversal
-
-4. Depth Limit Handling
-
-Remove hard MAX_DAG_DEPTH = 50 from traversal
-
-If a soft safety valve is desired:
-
-Rename to MAX_DAG_DEPTH_SOFT
-
-Make configurable per org or per call
-
-Log once per traversal, not per node
-
-Stop traversal gracefully if exceeded
-
-5. Eliminate Name-Based Matching
-
-Current code is doing:
-
-if inp.get("name"):
-    inv = self.session.query(InventoryItem)... 
-    if inv and inp["name"].lower() == inv.name.lower():
-
-
-This is risky: silent ambiguity, string dependency, regulator risk
-
-Fix:
-
-Treat as a migration fallback only
-
-Add feature flag ALLOW_NAME_MATCH_FALLBACK = False
-
-Log whenever used
-
-Plan to migrate all data to inventory_item_id
-
-6. Backward Filtering Optimization (Medium Priority)
-
-Current _trace_backward_ids_only during forward traversal is computationally heavy
-
-Replace:
-
-for cid in connected_ids:
-    sources = self._trace_backward_ids_only(cid)
-    if root in sources:
-        filtered_ids.add(cid)
-
-
-With:
-
-Only traverse forward from root
-
-Eliminate backward filtering entirely
-
-DAG is directional and rooted — ancestry verification is unnecessary
-
-7. Fix N+1 Queries in _add_step_order_connections
-
-Current implementation queries per step in a nested loop
-
-Fix: bulk load all step IDs once, index in memory, and reference objects directly
-
-8. Maintain Correct Semantics in find_impacted_by_expired_raw
-
-Logic is correct and clean
-
-Minor improvements:
-
-Rename is_made_with_expired → made_after_raw_expired
-
-Consider returning execution_id explicitly
-
-9. Remove Graph Fixups from API Layer
-
-API currently compensates for UI expectations (visual-only edges)
-
-Fix:
-
-Keep DAGTracer output strictly factual
-
-Move “visual-only inferred edges” into graph presentation layer
-
-Enables recall simulation, compliance overlays, and what-if scenarios
-
-10. Cache Enrichment Layer
-
-_enrich_items_bulk is deterministic but called multiple times
-
-Add per-request cache:
-
-self._enrichment_cache[item_id] = enriched_dict
-
-
-Improves Site Map traversal performance
-
-11. Refactor All Existing Usage
-
-Update all code paths to call tracer.traverse(...) and use TraversalResult
-
-Remove ad-hoc traversal logic and direct DB queries scattered in services or API
-
-Ensure deterministic, pure traversal with no repeated queries
-
-12. Validation Checklist
-
-After refactor:
-
-Only one traversal engine exists
-
-MAX_DAG_DEPTH is removed or configurable as a soft limit
-
-Bulk queries are at the start; recursion is pure in-memory
-
-Name-based fallback is off by default
-
-Backward filtering is eliminated
-
-N+1 queries removed
-
-DAGTracer output is factual
-
-API / UI presentation handled separately
-
-Enrichment layer is cached per request
-
-TraversalResult exposes semantic helpers for downstream use cases
-
-This ensures the DAG traversal is performant, correct, and future-proof while keeping regulatory and recall workflows safe.
+Remove any reference to MAX_DAG_DEPTH.

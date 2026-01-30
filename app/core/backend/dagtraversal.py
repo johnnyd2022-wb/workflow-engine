@@ -25,9 +25,6 @@ from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.process import Process
 
-# Name-based input matching is ambiguous; off by default. Log when used if enabled.
-ALLOW_NAME_MATCH_FALLBACK = False
-
 # Internal fields to exclude from execution_prompts
 _EXECUTION_PROMPTS_INTERNAL = {"completed_by_email", "completed_by_user_id", "completed_at"}
 
@@ -208,16 +205,14 @@ class DAGTracer:
         root_set = root_set or set(start_nodes)
         self._enrichment_cache.clear()
 
-        # Resolve start nodes and ensure they exist
-        node_ids: set[UUID] = set()
-        for n in start_nodes:
-            item = (
-                self.session.query(InventoryItem)
-                .filter(InventoryItem.id == n, InventoryItem.org_id == self.org_id)
-                .first()
-            )
-            if item:
-                node_ids.add(n)
+        # Resolve start nodes in one query
+        start_set = set(start_nodes)
+        start_items = (
+            self.session.query(InventoryItem)
+            .filter(InventoryItem.id.in_(start_set), InventoryItem.org_id == self.org_id)
+            .all()
+        )
+        node_ids: set[UUID] = {i.id for i in start_items}
         if not node_ids:
             return TraversalResult(
                 root_nodes=set(start_nodes),
@@ -236,7 +231,6 @@ class DAGTracer:
         )
         steps_by_id = {s.id: s for s in steps}
         steps_by_input_item_id: dict[UUID, list[ExecutionStep]] = {}
-        steps_by_input_name: dict[str, list[ExecutionStep]] = {}
         for step in steps:
             if not step.actual_inputs:
                 continue
@@ -248,10 +242,6 @@ class DAGTracer:
                         steps_by_input_item_id.setdefault(uid, []).append(step)
                     except (ValueError, TypeError):
                         pass
-                if ALLOW_NAME_MATCH_FALLBACK and inp.get("name"):
-                    key = (inp.get("name") or "").lower()
-                    if key:
-                        steps_by_input_name.setdefault(key, []).append(step)
 
         # Items produced by these steps (for forward: step -> output item)
         step_ids = {s.id for s in steps}
@@ -267,6 +257,21 @@ class DAGTracer:
         for inv in produced_items:
             if inv.source_execution_step_id:
                 items_by_source_step_id.setdefault(inv.source_execution_step_id, []).append(inv)
+
+        # For backward: bulk-load all potentially reachable items (inputs/outputs of steps, start nodes)
+        input_item_ids = set(steps_by_input_item_id.keys())
+        output_item_ids = {i.id for i in produced_items}
+        all_backward_ids = node_ids | output_item_ids | input_item_ids
+        items_by_id: dict[UUID, Any] = {}
+        if direction == "backward" and all_backward_ids:
+            items_backward = (
+                self.session.query(InventoryItem)
+                .filter(InventoryItem.id.in_(all_backward_ids), InventoryItem.org_id == self.org_id)
+                .all()
+            )
+            items_by_id = {i.id: i for i in items_backward}
+
+        start_items_by_id = {i.id: i for i in start_items}
 
         visited_node_ids: set[UUID] = set()
         visited_step_ids: set[UUID] = set()
@@ -300,43 +305,13 @@ class DAGTracer:
                     if any(stop(child_id, ctx) for stop in stop_conditions):
                         continue
                     _forward(child_id)
-            if ALLOW_NAME_MATCH_FALLBACK:
-                inv = (
-                    self.session.query(InventoryItem)
-                    .filter(InventoryItem.id == nid, InventoryItem.org_id == self.org_id)
-                    .first()
-                )
-                if inv and inv.name:
-                    key = (inv.name or "").lower()
-                    for step in steps_by_input_name.get(key, []):
-                        if step.id in visited_step_ids:
-                            continue
-                        visited_step_ids.add(step.id)
-                        for out_item in items_by_source_step_id.get(step.id, []):
-                            child_id = out_item.id
-                            item_orm_by_id[child_id] = out_item
-                            collected_edges.append({
-                                "from_id": str(nid),
-                                "to_id": str(child_id),
-                                "execution_id": str(step.execution_id) if step.execution_id else "",
-                            })
-                            collected_node_ids.add(child_id)
-                            ctx = context_for(child_id)
-                            if any(stop(child_id, ctx) for stop in stop_conditions):
-                                continue
-                            _forward(child_id)
-                self._log.warning("Name-based match used for node %s (ALLOW_NAME_MATCH_FALLBACK=True)", nid)
 
         def _backward(nid: UUID) -> None:
             if nid in visited_node_ids:
                 return
             visited_node_ids.add(nid)
             collected_node_ids.add(nid)
-            item = (
-                self.session.query(InventoryItem)
-                .filter(InventoryItem.id == nid, InventoryItem.org_id == self.org_id)
-                .first()
-            )
+            item = items_by_id.get(nid)
             if not item or not item.source_execution_step_id:
                 return
             item_orm_by_id[nid] = item
@@ -352,11 +327,7 @@ class DAGTracer:
                     uid = UUID(str(inp_id))
                 except (ValueError, TypeError):
                     continue
-                parent_item = (
-                    self.session.query(InventoryItem)
-                    .filter(InventoryItem.id == uid, InventoryItem.org_id == self.org_id)
-                    .first()
-                )
+                parent_item = items_by_id.get(uid)
                 if not parent_item:
                     continue
                 item_orm_by_id[uid] = parent_item
@@ -369,23 +340,11 @@ class DAGTracer:
 
         if direction == "forward":
             for nid in node_ids:
-                item = (
-                    self.session.query(InventoryItem)
-                    .filter(InventoryItem.id == nid, InventoryItem.org_id == self.org_id)
-                    .first()
-                )
-                if item:
-                    item_orm_by_id[nid] = item
+                item_orm_by_id[nid] = start_items_by_id.get(nid)
                 _forward(nid)
         else:
             for nid in node_ids:
-                item = (
-                    self.session.query(InventoryItem)
-                    .filter(InventoryItem.id == nid, InventoryItem.org_id == self.org_id)
-                    .first()
-                )
-                if item:
-                    item_orm_by_id[nid] = item
+                item_orm_by_id[nid] = items_by_id.get(nid)
                 _backward(nid)
 
         # Load all collected items and enrich
