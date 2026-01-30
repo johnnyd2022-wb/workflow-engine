@@ -13,6 +13,7 @@ from_id and to_id are always inventory item UUIDs (never execution_id).
 from __future__ import annotations
 
 import logging
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -162,18 +163,19 @@ class TraversalResult:
 # ---------------------------------------------------------------------------
 
 StopCondition = Callable[[UUID, dict[str, Any]], bool]
+# Stop conditions: when a condition returns True for a node, that node is still included in the result;
+# we do not traverse beyond it (no further edges from that node). To exclude the node entirely, use filters.
 
 
 def stop_at_inventory_types(*inventory_types: str) -> StopCondition:
-    """Stop traversal when node has one of the given inventory_type values."""
+    """Stop traversal when node has one of the given inventory_type values. The node itself is still
+    included in the result; we only stop following edges from that node."""
 
     def _stop(node_id: UUID, context: dict[str, Any]) -> bool:
         item = context.get("item")
         if not item:
             return False
-        itype = getattr(item, "inventory_type", None) or (
-            item.get("inventory_type") if isinstance(item, dict) else None
-        )
+        itype = getattr(item, "inventory_type", None) or (item.get("inventory_type") if isinstance(item, dict) else None)
         return itype in inventory_types
 
     return _stop
@@ -204,6 +206,8 @@ class DAGTracer:
         filters: list[Callable[[dict], bool]] | None = None,
         include_quantity_filter: bool = True,
         root_set: set[UUID] | None = None,
+        traversal_order: Literal["dfs", "bfs"] = "dfs",
+        clear_enrichment_cache: bool = True,
     ) -> TraversalResult:
         """
         Single entry point for DAG traversal. Bulk-loads steps and items once;
@@ -213,10 +217,16 @@ class DAGTracer:
         Args:
             start_nodes: Starting inventory item UUIDs (multi-root supported).
             direction: "forward" (to downstream) or "backward" (to upstream).
-            stop_conditions: Optional list of callables (node_id, context) -> bool; if True, do not follow edges from that node.
-            filters: Optional list of callables (item_dict) -> bool; applied when building final node list.
-            include_quantity_filter: If True, exclude items with quantity <= 0 except those in root_set.
-            root_set: Items always included even if quantity 0. Defaults to set(start_nodes).
+            stop_conditions: Optional list of callables (node_id, context) -> bool. When True for a node, that node
+            is still included in the result; we do not traverse beyond it (no further edges from that node).
+        filters: Optional list of callables (item_dict) -> bool; applied when building final node list.
+        include_quantity_filter: If True, exclude items with quantity <= 0 except those in root_set. Filtering
+            removes nodes and any edges whose endpoints are not both in the final set (see edge filtering below).
+        root_set: Items always included even if quantity 0. Defaults to set(start_nodes).
+        traversal_order: "dfs" (depth-first, stack) or "bfs" (breadth-first, queue). BFS can be useful when
+            level-order or distance-from-root matters for UI or simulation.
+        clear_enrichment_cache: If True (default), clear the per-request enrichment cache before traversal.
+            Set False when performing repeated traversals with the same tracer to reuse cached enrichment.
 
         Returns:
             TraversalResult with root_nodes, direction, nodes, edges, metadata.
@@ -224,7 +234,8 @@ class DAGTracer:
         stop_conditions = stop_conditions or []
         filters = filters or []
         root_set = root_set or set(start_nodes)
-        self._enrichment_cache.clear()
+        if clear_enrichment_cache:
+            self._enrichment_cache.clear()
 
         # Resolve start nodes in one query
         start_set = set(start_nodes)
@@ -274,7 +285,7 @@ class DAGTracer:
             )
             .all()
         )
-        items_by_source_step_id: dict[UUID, list[Any]] = {}
+        items_by_source_step_id: dict[UUID, list[InventoryItem]] = {}
         for inv in produced_items:
             if inv.source_execution_step_id:
                 items_by_source_step_id.setdefault(inv.source_execution_step_id, []).append(inv)
@@ -304,13 +315,14 @@ class DAGTracer:
 
         item_orm_by_id: dict[UUID, Any] = {}
 
-        # Iterative traversal (stack) to avoid recursion limits on large DAGs
+        # Iterative traversal (deque: DFS=pop, BFS=popleft) to avoid recursion limits on large DAGs
+        use_bfs = traversal_order == "bfs"
         if direction == "forward":
             for nid in node_ids:
                 item_orm_by_id[nid] = start_items_by_id.get(nid)
-            stack = list(node_ids)
-            while stack:
-                nid = stack.pop()
+            worklist: deque[UUID] = deque(node_ids)
+            while worklist:
+                nid = worklist.popleft() if use_bfs else worklist.pop()
                 if nid in visited_node_ids:
                     continue
                 visited_node_ids.add(nid)
@@ -322,24 +334,22 @@ class DAGTracer:
                     for out_item in items_by_source_step_id.get(step.id, []):
                         child_id = out_item.id
                         item_orm_by_id[child_id] = out_item
-                        collected_edges.append(
-                            {
-                                "from_id": str(nid),
-                                "to_id": str(child_id),
-                                "execution_id": str(step.execution_id) if step.execution_id else "",
-                            }
-                        )
+                        collected_edges.append({
+                            "from_id": str(nid),
+                            "to_id": str(child_id),
+                            "execution_id": str(step.execution_id) if step.execution_id else "",
+                        })
                         collected_node_ids.add(child_id)
                         ctx = context_for(child_id)
                         if any(stop(child_id, ctx) for stop in stop_conditions):
                             continue
-                        stack.append(child_id)
+                        worklist.append(child_id)
         else:
             for nid in node_ids:
                 item_orm_by_id[nid] = items_by_id.get(nid)
-            stack = list(node_ids)
-            while stack:
-                nid = stack.pop()
+            worklist = deque(node_ids)
+            while worklist:
+                nid = worklist.popleft() if use_bfs else worklist.pop()
                 if nid in visited_node_ids:
                     continue
                 visited_node_ids.add(nid)
@@ -370,7 +380,7 @@ class DAGTracer:
                     ctx = {"node_id": uid, "item": parent_item}
                     if any(stop(uid, ctx) for stop in stop_conditions):
                         continue
-                    stack.append(uid)
+                    worklist.append(uid)
 
         # Load all collected items and enrich
         all_ids = collected_node_ids
@@ -405,12 +415,15 @@ class DAGTracer:
                 continue
             node_dicts.append(i)
 
-        # Keep only edges whose endpoints are in final node set
-        node_id_strs = {str(uid) for uid in all_ids}
-        node_id_strs |= {item["id"] for item in node_dicts}
+        # Keep only edges whose endpoints are in the final returned node set. When nodes are filtered out
+        # (e.g. quantity <= 0 or custom filters), edges touching those nodes are removed so the result
+        # graph is consistent (no dangling edges). Stakeholders should be aware that quantity filtering
+        # can remove both nodes and edges.
+        node_id_strs = {item["id"] for item in node_dicts}
         edges_before = len(collected_edges)
         edges_final = [
-            c for c in collected_edges if c.get("from_id") in node_id_strs and c.get("to_id") in node_id_strs
+            c for c in collected_edges
+            if c.get("from_id") in node_id_strs and c.get("to_id") in node_id_strs
         ]
         edges_removed = edges_before - len(edges_final)
         if edges_removed > 0:
@@ -436,6 +449,15 @@ class DAGTracer:
             len(edges_final),
             edges_removed,
             [str(n) for n in start_nodes],
+            extra={
+                "direction": direction,
+                "nodes_visited": len(collected_node_ids),
+                "nodes_returned": len(node_dicts),
+                "nodes_filtered_out": nodes_filtered_out,
+                "edges_count": len(edges_final),
+                "edges_removed": edges_removed,
+                "start_nodes": [str(n) for n in start_nodes],
+            },
         )
 
         return TraversalResult(
@@ -475,7 +497,9 @@ class DAGTracer:
                 except (ValueError, TypeError):
                     pass
         steps = (
-            self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids_orm)).all() if step_ids_orm else []
+            self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids_orm)).all()
+            if step_ids_orm
+            else []
         )
         step_by_id = {str(s.id): s for s in steps}
 
@@ -506,34 +530,27 @@ class DAGTracer:
                 continue
             completed_at_iso = step.completed_at.isoformat() if step.completed_at else None
             execution_id_str = str(step.execution_id) if step.execution_id else None
-            impacted_items.append(
-                {
-                    **{
-                        k: v
-                        for k, v in item.items()
-                        if k not in ("expired_raw_material_id", "expired_raw_material_name", "made_after_raw_expired")
-                    },
-                    "expired_raw_material_id": raw_id_str,
-                    "expired_raw_material_name": raw_material.name,
-                    "made_after_raw_expired": True,
-                    "completed_at": completed_at_iso,
-                    "execution_id": execution_id_str,
-                }
-            )
+            impacted_items.append({
+                **{k: v for k, v in item.items() if k not in ("expired_raw_material_id", "expired_raw_material_name", "made_after_raw_expired")},
+                "expired_raw_material_id": raw_id_str,
+                "expired_raw_material_name": raw_material.name,
+                "made_after_raw_expired": True,
+                "completed_at": completed_at_iso,
+                "execution_id": execution_id_str,
+            })
             conn = next((c for c in trace_connections if c.get("to_id") == item_id), {})
             eid = conn.get("execution_id") or item.get("source_execution_id") or execution_id_str
-            connections_out.append(
-                {
-                    "from_id": raw_id_str,
-                    "to_id": item_id,
-                    "execution_id": str(eid) if eid else "",
-                }
-            )
+            connections_out.append({
+                "from_id": raw_id_str,
+                "to_id": item_id,
+                "execution_id": str(eid) if eid else "",
+            })
 
         return {"impacted_items": impacted_items, "connections": connections_out}
 
     def _enrich_items_bulk(self, items: list[InventoryItem]) -> list[dict[str, Any]]:
-        """Enrich ORM items with extra_data and process_name; uses per-request cache."""
+        """Enrich ORM items with extra_data and process_name; uses per-request cache. For very large
+        DAGs, generator-based enrichment could be considered for memory efficiency."""
         if not items:
             return []
         step_ids = {i.source_execution_step_id for i in items if i.source_execution_step_id}
@@ -626,7 +643,11 @@ class DAGTracer:
                     step_ids.add(UUID(sid))
                 except (ValueError, TypeError):
                     pass
-        steps = self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids)).all() if step_ids else []
+        steps = (
+            self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids)).all()
+            if step_ids
+            else []
+        )
         step_by_id = {str(s.id): s for s in steps}
 
         for eid, exec_items in by_exec.items():
@@ -685,13 +706,11 @@ class DAGTracer:
                         except (ValueError, TypeError):
                             continue
                     if used_earlier and (earlier_item["id"], later_item["id"]) not in conn_set:
-                        connections.append(
-                            {
-                                "from_id": earlier_item["id"],
-                                "to_id": later_item["id"],
-                                "execution_id": eid,
-                            }
-                        )
+                        connections.append({
+                            "from_id": earlier_item["id"],
+                            "to_id": later_item["id"],
+                            "execution_id": eid,
+                        })
                         conn_set.add((earlier_item["id"], later_item["id"]))
 
 
