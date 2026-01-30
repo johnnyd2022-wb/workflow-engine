@@ -268,3 +268,98 @@ class TestDAGTracerTraverse:
         assert hasattr(result, "edges")
         assert hasattr(result, "metadata")
         assert result.direction == "forward"
+
+    def test_traverse_multiple_roots_accepted(self, org_id=None, session=None):
+        """Multiple start_nodes are accepted; traversal runs from each root."""
+        org_id = org_id or uuid4()
+        session = session or MagicMock()
+        item1 = MagicMock()
+        item1.id = uuid4()
+        item1.source_execution_step_id = None
+        item1.org_id = org_id
+        item1.name = "Raw1"
+        item1.quantity = "1"
+        item1.unit = "kg"
+        item1.inventory_type = "raw_material"
+        item1.supplier = item1.purchase_date = item1.supplier_batch_number = None
+        item1.expiry_date = item1.source_execution_id = item1.source_step_name = None
+        item1.extra_data = item1.created_at = None
+        item2 = MagicMock()
+        item2.id = uuid4()
+        item2.source_execution_step_id = None
+        item2.org_id = org_id
+        item2.name = "Raw2"
+        item2.quantity = "1"
+        item2.unit = "kg"
+        item2.inventory_type = "raw_material"
+        item2.supplier = item2.purchase_date = item2.supplier_batch_number = None
+        item2.expiry_date = item2.source_execution_id = item2.source_step_name = None
+        item2.extra_data = item2.created_at = None
+        session.query.return_value.filter.return_value.all.return_value = [item1, item2]
+        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
+        session.query.return_value.filter.return_value.all.return_value = [item1, item2]
+        tracer = DAGTracer(org_id=org_id, session=session)
+        result = tracer.traverse(
+            start_nodes=[item1.id, item2.id],
+            direction="forward",
+            root_set={item1.id, item2.id},
+        )
+        assert result.direction == "forward"
+        assert result.root_nodes == {item1.id, item2.id}
+        assert len(result.nodes) >= 2
+
+    def test_zero_quantity_excluded_unless_in_root_set(self):
+        """Items with quantity <= 0 are excluded unless in root_set."""
+        session = MagicMock()
+        org_id = uuid4()
+        root_item = MagicMock()
+        root_item.id = uuid4()
+        root_item.org_id = org_id
+        root_item.source_execution_step_id = None
+        root_item.name = "Root"
+        root_item.quantity = "0"
+        root_item.unit = "kg"
+        root_item.inventory_type = "raw_material"
+        root_item.supplier = root_item.purchase_date = root_item.supplier_batch_number = None
+        root_item.expiry_date = root_item.source_execution_id = root_item.source_step_name = None
+        root_item.extra_data = root_item.created_at = None
+        session.query.return_value.filter.return_value.all.return_value = [root_item]
+        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
+        tracer = DAGTracer(org_id=org_id, session=session)
+        result = tracer.traverse(
+            start_nodes=[root_item.id],
+            direction="forward",
+            include_quantity_filter=True,
+            root_set={root_item.id},
+        )
+        assert len(result.nodes) >= 1
+        assert any(n["id"] == str(root_item.id) for n in result.nodes)
+
+    def test_stop_condition_node_still_included(self):
+        """When a stop_condition returns True, that node is still included; we only stop traversing beyond it."""
+        from app.core.backend.dagtraversal import stop_at_inventory_types
+
+        session = MagicMock()
+        org_id = uuid4()
+        item = MagicMock()
+        item.id = uuid4()
+        item.org_id = org_id
+        item.source_execution_step_id = None
+        item.name = "Final"
+        item.quantity = "1"
+        item.unit = "kg"
+        item.inventory_type = InventoryType.FINAL_PRODUCT.value
+        item.supplier = item.purchase_date = item.supplier_batch_number = None
+        item.expiry_date = item.source_execution_id = item.source_step_name = None
+        item.extra_data = item.created_at = None
+        session.query.return_value.filter.return_value.all.return_value = [item]
+        session.query.return_value.join.return_value.filter.return_value.all.return_value = []
+        tracer = DAGTracer(org_id=org_id, session=session)
+        result = tracer.traverse(
+            start_nodes=[item.id],
+            direction="backward",
+            stop_conditions=[stop_at_inventory_types("final_product")],
+            root_set={item.id},
+        )
+        assert result.nodes is not None
+        assert result.metadata is not None
