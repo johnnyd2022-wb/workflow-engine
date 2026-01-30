@@ -1,12 +1,11 @@
 """Unit tests for DAGTracer: forward/backward traversal, cycle detection, connections, enrichment."""
 
-from decimal import Decimal
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
-from app.core.backend.dagtraversal import DAGTracer, MAX_DAG_DEPTH, validate_item_uuid
+from app.core.backend.dagtraversal import MAX_DAG_DEPTH, DAGTracer, validate_item_uuid
 from app.core.db.models.inventory_item import InventoryType
 
 

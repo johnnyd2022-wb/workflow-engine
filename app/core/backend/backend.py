@@ -1450,19 +1450,10 @@ def list_check_needed_items():
             root_item_id=raw_material.id,
         )
         trace_items = [i for i in trace_result["items"] if i["id"] != raw_material_id_str]
-        trace_connections = [
-            c for c in trace_result["connections"]
-            if c["from_id"] == raw_material_id_str
-        ]
+        trace_connections = [c for c in trace_result["connections"] if c["from_id"] == raw_material_id_str]
 
-        exec_ids = {
-            UUID(i["source_execution_id"])
-            for i in trace_items
-            if i.get("source_execution_id")
-        }
-        executions = (
-            db_session.query(Execution).filter(Execution.id.in_(exec_ids)).all() if exec_ids else []
-        )
+        exec_ids = {UUID(i["source_execution_id"]) for i in trace_items if i.get("source_execution_id")}
+        executions = db_session.query(Execution).filter(Execution.id.in_(exec_ids)).all() if exec_ids else []
         exec_by_id = {str(e.id): e for e in executions}
 
         for item in trace_items:
@@ -1480,9 +1471,7 @@ def list_check_needed_items():
                     )
                 elif execution.started_at:
                     execution_date = (
-                        execution.started_at.date()
-                        if hasattr(execution.started_at, "date")
-                        else execution.started_at
+                        execution.started_at.date() if hasattr(execution.started_at, "date") else execution.started_at
                     )
             is_made_with_expired = bool(
                 execution_date and raw_material.expiry_date and execution_date > raw_material.expiry_date

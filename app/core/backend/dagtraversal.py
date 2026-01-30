@@ -9,7 +9,7 @@ enrichment for raw materials, intermediates, and final products. Used by
 
 import logging
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 from uuid import UUID
 
 from app.core.db.models.execution import Execution
@@ -53,9 +53,9 @@ class DAGTracer:
         self,
         item_id: UUID,
         include_quantity_filter: bool = True,
-        root_item_id: Optional[UUID] = None,
+        root_item_id: UUID | None = None,
         log_deep_traversal: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Traverse forward from an inventory item to all connected items (intermediates and finals).
 
@@ -84,9 +84,9 @@ class DAGTracer:
         if not item:
             return {"items": [], "connections": []}
 
-        visited_step_ids: Set[UUID] = set()
-        connections: List[Dict[str, str]] = []
-        connected_ids: Set[UUID] = set()
+        visited_step_ids: set[UUID] = set()
+        connections: list[dict[str, str]] = []
+        connected_ids: set[UUID] = set()
 
         def _forward(node_id: UUID, depth: int) -> None:
             if depth > MAX_DAG_DEPTH:
@@ -154,7 +154,7 @@ class DAGTracer:
         _forward(item_id, 0)
 
         # Filter to items that trace back to root (only include downstream items that actually connect to this root)
-        filtered_ids: Set[UUID] = set()
+        filtered_ids: set[UUID] = set()
         for cid in connected_ids:
             sources = self._trace_backward_ids_only(cid, set())
             if root in sources:
@@ -162,10 +162,7 @@ class DAGTracer:
         connected_ids = filtered_ids
         # Keep only connections where both endpoints are root or in connected_ids
         kept = connected_ids | {item_id}
-        connections = [
-            c for c in connections
-            if UUID(c["from_id"]) in kept and UUID(c["to_id"]) in kept
-        ]
+        connections = [c for c in connections if UUID(c["from_id"]) in kept and UUID(c["to_id"]) in kept]
 
         # Build item list: root + connected, with quantity filter and enrichment
         all_ids = connected_ids | {item_id}
@@ -197,9 +194,9 @@ class DAGTracer:
     def _trace_backward_ids_only(
         self,
         item_id: UUID,
-        visited_item_ids: Set[str],
+        visited_item_ids: set[str],
         depth: int = 0,
-    ) -> Set[UUID]:
+    ) -> set[UUID]:
         """Return set of all item IDs that can be reached by tracing backward from item_id (for filtering)."""
         if depth > MAX_DAG_DEPTH:
             return set()
@@ -218,11 +215,7 @@ class DAGTracer:
             return result
         if not item or not item.source_execution_step_id:
             return result
-        step = (
-            self.session.query(ExecutionStep)
-            .filter(ExecutionStep.id == item.source_execution_step_id)
-            .first()
-        )
+        step = self.session.query(ExecutionStep).filter(ExecutionStep.id == item.source_execution_step_id).first()
         if not step or not step.actual_inputs:
             return result
         for inp in step.actual_inputs:
@@ -247,9 +240,9 @@ class DAGTracer:
         self,
         item_id: UUID,
         include_quantity_filter: bool = True,
-        traced_item_id: Optional[UUID] = None,
+        traced_item_id: UUID | None = None,
         log_deep_traversal: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Traverse backward from an inventory item to all source items (raw materials and intermediates).
 
@@ -277,9 +270,9 @@ class DAGTracer:
         if not item:
             return {"items": [], "connections": []}
 
-        visited: Set[str] = set()
-        connections: List[Dict[str, str]] = []
-        source_ids: Set[UUID] = set()
+        visited: set[str] = set()
+        connections: list[dict[str, str]] = []
+        source_ids: set[UUID] = set()
 
         def _backward(node_id: UUID, depth: int) -> None:
             if depth > MAX_DAG_DEPTH:
@@ -304,11 +297,7 @@ class DAGTracer:
                 return
             if not node or not node.source_execution_step_id:
                 return
-            step = (
-                self.session.query(ExecutionStep)
-                .filter(ExecutionStep.id == node.source_execution_step_id)
-                .first()
-            )
+            step = self.session.query(ExecutionStep).filter(ExecutionStep.id == node.source_execution_step_id).first()
             if not step or not step.actual_inputs:
                 return
             exec_id_str = str(step.execution_id) if step.execution_id else ""
@@ -328,9 +317,7 @@ class DAGTracer:
                 if not inv:
                     continue
                 source_ids.add(inv.id)
-                connections.append(
-                    {"from_id": str(inv.id), "to_id": str(node_id), "execution_id": exec_id_str}
-                )
+                connections.append({"from_id": str(inv.id), "to_id": str(node_id), "execution_id": exec_id_str})
                 _backward(inv.id, depth + 1)
 
         _backward(item_id, 0)
@@ -357,30 +344,18 @@ class DAGTracer:
 
         return {"items": item_dicts, "connections": connections}
 
-    def _enrich_items_bulk(self, items: List[Any]) -> List[Dict[str, Any]]:
+    def _enrich_items_bulk(self, items: list[Any]) -> list[dict[str, Any]]:
         """Enrich a list of ORM items with extra_data (execution_prompts, variable_inputs, variable_output) and process_name."""
         if not items:
             return []
         step_ids = {i.source_execution_step_id for i in items if i.source_execution_step_id}
         exec_ids = {i.source_execution_id for i in items if i.source_execution_id}
-        steps = (
-            self.session.query(ExecutionStep)
-            .filter(ExecutionStep.id.in_(step_ids))
-            .all() if step_ids else []
-        )
+        steps = self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids)).all() if step_ids else []
         steps_by_id = {s.id: s for s in steps}
-        executions = (
-            self.session.query(Execution)
-            .filter(Execution.id.in_(exec_ids))
-            .all() if exec_ids else []
-        )
+        executions = self.session.query(Execution).filter(Execution.id.in_(exec_ids)).all() if exec_ids else []
         exec_by_id = {e.id: e for e in executions}
         process_ids = {e.process_id for e in executions if e.process_id}
-        processes = (
-            self.session.query(Process)
-            .filter(Process.id.in_(process_ids))
-            .all() if process_ids else []
-        )
+        processes = self.session.query(Process).filter(Process.id.in_(process_ids)).all() if process_ids else []
         process_by_id = {p.id: p for p in processes}
 
         result = []
@@ -389,7 +364,8 @@ class DAGTracer:
             step = steps_by_id.get(item.source_execution_step_id) if item.source_execution_step_id else None
             if step and not extra.get("execution_prompts") and step.execution_data:
                 prompts = {
-                    k: v for k, v in step.execution_data.items()
+                    k: v
+                    for k, v in step.execution_data.items()
                     if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
                 }
                 if prompts:
@@ -413,9 +389,9 @@ class DAGTracer:
     @staticmethod
     def _item_to_dict(
         item: Any,
-        extra_data: Dict[str, Any],
-        process_name: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        extra_data: dict[str, Any],
+        process_name: str | None = None,
+    ) -> dict[str, Any]:
         return {
             "id": str(item.id),
             "name": item.name,
@@ -427,9 +403,7 @@ class DAGTracer:
             "supplier_batch_number": item.supplier_batch_number,
             "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
             "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
-            "source_execution_step_id": str(item.source_execution_step_id)
-            if item.source_execution_step_id
-            else None,
+            "source_execution_step_id": str(item.source_execution_step_id) if item.source_execution_step_id else None,
             "source_step_name": item.source_step_name,
             "process_name": process_name,
             "created_at": item.created_at.isoformat() if item.created_at else None,
@@ -438,14 +412,14 @@ class DAGTracer:
 
     def _add_step_order_connections(
         self,
-        item_dicts: List[Dict],
-        connections: List[Dict[str, str]],
+        item_dicts: list[dict],
+        connections: list[dict[str, str]],
     ) -> None:
         """Append connections between items in the same execution based on step order and actual_inputs."""
         from app.core.db.models.inventory_item import InventoryType
 
         non_raw = [d for d in item_dicts if d.get("inventory_type") != InventoryType.RAW_MATERIAL.value]
-        by_exec: Dict[str, List[Dict]] = {}
+        by_exec: dict[str, list[dict]] = {}
         for d in non_raw:
             eid = d.get("source_execution_id")
             if eid:
@@ -509,7 +483,7 @@ class DAGTracer:
 # ---------------------------------------------------------------------------
 
 
-def validate_item_uuid(value: Any) -> Tuple[Optional[UUID], Optional[str]]:
+def validate_item_uuid(value: Any) -> tuple[UUID | None, str | None]:
     """
     Validate and parse an inventory item UUID from string or UUID.
 
