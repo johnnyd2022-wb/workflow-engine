@@ -1387,12 +1387,12 @@ def list_check_needed_items():
     - impacted_items: Products made with expired raw (step completed after raw's expiry_date)
     - connections: Links between expired raw materials and impacted items
     """
-    import logging
     from datetime import date
 
     from app.core.backend.dagtraversal import find_impacted_by_expired_raw
     from app.core.db.models.inventory_item import InventoryItem
 
+    import logging
     _log = logging.getLogger(__name__)
 
     user_email = getattr(g, "user_email", None)
@@ -1422,12 +1422,6 @@ def list_check_needed_items():
         except (InvalidOperation, ValueError, TypeError):
             pass
 
-    # Inline debug: always visible in terminal (logging may not be configured for this module).
-    print(
-        f"[check-needed] expired_raw_materials={len(expired_raw_materials)} "
-        f"expired_with_stock={len(expired_with_stock)}",
-        flush=True,
-    )
     _log.info(
         "check-needed: expired_raw_materials=%s expired_with_stock=%s",
         len(expired_raw_materials),
@@ -1465,13 +1459,11 @@ def list_check_needed_items():
             impacted_item_ids.add(item_id)
             result_impacted.append(item)
         for conn in data["connections"]:
-            result_connections.append(
-                {
-                    "from_id": conn.get("from_id"),
-                    "to_id": conn.get("to_id"),
-                    "execution_id": conn.get("execution_id") or None,
-                }
-            )
+            result_connections.append({
+                "from_id": conn.get("from_id"),
+                "to_id": conn.get("to_id"),
+                "execution_id": conn.get("execution_id") or None,
+            })
 
     return jsonify(
         {
@@ -1691,7 +1683,10 @@ def trace_raw_material(raw_material_id: str):
     # Only return connections where both from_id and to_id are inventory item IDs in the response.
     # This prevents the source map table from showing "TO <uuid>" when an ID is missing (e.g. execution_id).
     item_ids = {item["id"] for item in connected_items} | {raw_id_str}
-    connections = [c for c in connections if c.get("from_id") in item_ids and c.get("to_id") in item_ids]
+    connections = [
+        c for c in connections
+        if c.get("from_id") in item_ids and c.get("to_id") in item_ids
+    ]
 
     raw_material_data = {
         "id": str(raw_material.id),
@@ -1812,7 +1807,8 @@ def trace_inventory_backward(inventory_item_id: str):
     # Prevents the source map table from showing "TO <uuid>" when an ID is missing (e.g. execution_id).
     backward_item_ids = {item["id"] for item in all_result_items}
     connections = [
-        c for c in connections if c.get("from_id") in backward_item_ids and c.get("to_id") in backward_item_ids
+        c for c in connections
+        if c.get("from_id") in backward_item_ids and c.get("to_id") in backward_item_ids
     ]
 
     return jsonify(

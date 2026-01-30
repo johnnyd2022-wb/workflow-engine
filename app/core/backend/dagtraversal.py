@@ -395,11 +395,6 @@ class DAGTracer:
         trace_connections = [c for c in result["connections"] if c.get("from_id") == str(raw_material.id)]
 
         expiry_date = _normalize_date(raw_material.expiry_date)
-        # Inline debug: visible in terminal when this path is hit.
-        print(
-            f"[check-needed find_impacted] raw_id={raw_material.id} expiry_date={expiry_date} trace_items={len(trace_items)}",
-            flush=True,
-        )
         if not expiry_date:
             return {"impacted_items": [], "connections": []}
 
@@ -433,14 +428,11 @@ class DAGTracer:
                 continue
             item_orm = item_orm_by_id.get(str(item_id))
             if not item_orm:
-                print(f"  [check-needed] skip item {item_id}: ORM not found", flush=True)
                 continue
             if not item_orm.source_execution_step_id:
-                print(f"  [check-needed] skip item {item_id}: no source_execution_step_id", flush=True)
                 continue
             step = step_by_id.get(str(item_orm.source_execution_step_id))
             if not step:
-                print(f"  [check-needed] skip item {item_id}: step not found", flush=True)
                 continue
             # Only consider items whose producing step directly used this raw (not via an intermediate).
             raw_id_str = str(raw_material.id)
@@ -451,26 +443,13 @@ class DAGTracer:
                     step_used_this_raw = True
                     break
             if not step_used_this_raw:
-                print(f"  [check-needed] skip item {item_id}: step did not use this raw directly", flush=True)
                 continue
             production_date = _normalize_date(step.completed_at) if step.completed_at else None
             if not production_date:
-                print(
-                    f"  [check-needed] skip item {item_id}: step.completed_at={step.completed_at!r} -> no production_date",
-                    flush=True,
-                )
                 continue
             # Include only when step completed AFTER raw expired (production_date > expiry_date).
             if production_date <= expiry_date:
-                print(
-                    f"  [check-needed] skip item {item_id}: production_date={production_date} <= expiry_date={expiry_date}",
-                    flush=True,
-                )
                 continue
-            print(
-                f"  [check-needed] include item {item_id}: production_date={production_date} > expiry_date={expiry_date}",
-                flush=True,
-            )
             completed_at_iso = step.completed_at.isoformat() if step.completed_at else None
             impacted_items.append(
                 {
@@ -499,10 +478,6 @@ class DAGTracer:
                 }
             )
 
-        print(
-            f"[check-needed find_impacted] raw {raw_material.id}: impacted={len(impacted_items)} of {len(trace_items)} trace_items",
-            flush=True,
-        )
         return {"impacted_items": impacted_items, "connections": connections_out}
 
     def _enrich_items_bulk(self, items: list[Any]) -> list[dict[str, Any]]:
