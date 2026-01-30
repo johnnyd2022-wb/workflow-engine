@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="SupplyChain V2 - Site Map & Traceability">
-  <title>Site Map - Process Hub</title>
+  <meta name="description" content="SupplyChain V2 - Source Map & Traceability">
+  <title>Source Map - Process Hub</title>
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    .sitemap-container {
+    .sourcemap-container {
       display: flex;
       flex-direction: column;
       gap: 32px;
     }
     
-    .sitemap-section {
+    .sourcemap-section {
       background: var(--bg-card, #ffffff);
       border-radius: var(--radius-lg, 12px);
       border: 1px solid var(--border-default, #e5e7eb);
@@ -24,7 +24,7 @@
       box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
     }
     
-    .sitemap-section-header {
+    .sourcemap-section-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -33,7 +33,7 @@
       border-bottom: 2px solid var(--border-light, #f3f4f6);
     }
     
-    .sitemap-section-title {
+    .sourcemap-section-title {
       font-size: 20px;
       font-weight: 600;
       color: var(--text-primary, #111827);
@@ -42,7 +42,7 @@
       gap: 12px;
     }
     
-    .sitemap-section-title svg {
+    .sourcemap-section-title svg {
       color: var(--primary, #3b82f6);
     }
     
@@ -268,7 +268,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      z-index: 100;
+      z-index: 10;
     }
     
     .flowchart-zoom-btn {
@@ -290,19 +290,6 @@
       border-color: var(--primary, #3b82f6);
     }
     
-    .flowchart-legend {
-      position: absolute;
-      bottom: 16px;
-      left: 16px;
-      background: white;
-      border: 1px solid var(--border-default, #e5e7eb);
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 11px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      z-index: 100;
-    }
-    
     .flowchart-legend-item {
       display: flex;
       align-items: center;
@@ -315,6 +302,48 @@
       height: 16px;
       border-radius: 4px;
       border: 1px solid var(--border-default, #e5e7eb);
+    }
+    
+    /* Key box above visual view – horizontal bar (Show Check Needed + legend items) */
+    .sourcemap-visual-key-box {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px 20px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      background: white;
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: var(--radius-md, 8px);
+      font-size: 13px;
+    }
+    .sourcemap-visual-key-box .flowchart-legend-item {
+      margin-bottom: 0;
+    }
+    .sourcemap-visual-key-box .legend-check-needed {
+      margin-bottom: 0;
+      gap: 8px;
+      font-size: inherit;
+      font-weight: inherit;
+      color: #dc2626;
+    }
+    .sourcemap-visual-key-box .legend-check-needed-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border-width: 1px;
+    }
+    .sourcemap-check-needed-hint {
+      display: none;
+      width: 100%;
+      margin-top: 4px;
+      padding-top: 8px;
+      border-top: 1px solid #fecaca;
+      font-size: 12px;
+      color: #991b1b;
+    }
+    .sourcemap-check-needed-hint.visible {
+      display: block;
     }
     
     .flowchart-element {
@@ -644,12 +673,13 @@
     }
     
     .legend-check-needed-dot {
-      width: 12px;
-      height: 12px;
+      width: 16px;
+      height: 16px;
       background: #fecaca;
-      border: 2px solid #ef4444;
-      border-radius: 3px;
+      border: 1px solid #ef4444;
+      border-radius: 4px;
       box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+      flex-shrink: 0;
     }
     
     .empty-state {
@@ -900,6 +930,172 @@
     .inventory-entry-trace-btn.active {
       background: #1e40af;
     }
+    
+    /* Source map table pane - card-in-row layout */
+    .sourcemap-data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .sourcemap-data-table th,
+    .sourcemap-data-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-light, #f3f4f6);
+      vertical-align: top;
+    }
+    .sourcemap-data-table th {
+      background: var(--bg-secondary, #f9fafb);
+      font-weight: 600;
+      color: var(--text-primary, #111827);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .sourcemap-data-table tbody tr:hover {
+      background: rgba(59, 130, 246, 0.04);
+    }
+    .sourcemap-data-table .type-raw { color: #1e40af; font-weight: 500; }
+    .sourcemap-data-table .type-wip { color: #92400e; font-weight: 500; }
+    .sourcemap-data-table .type-final { color: #065f46; font-weight: 500; }
+    /* Row card - one per cell, contains all item metadata; expands with content */
+    .sourcemap-row-card {
+      background: #f9fafb;
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: 8px;
+      padding: 12px 14px;
+      min-width: 200px;
+      width: max-content;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .sourcemap-row-card-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-primary, #111827);
+      margin-bottom: 6px;
+      line-height: 1.3;
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+    .sourcemap-row-card-type {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+    .sourcemap-row-card-type.type-raw { background: #dbeafe; color: #1e40af; }
+    .sourcemap-row-card-type.type-wip { background: #ffedd5; color: #92400e; }
+    .sourcemap-row-card-type.type-final { background: #d1fae5; color: #065f46; }
+    .sourcemap-row-card-grid {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px 20px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .sourcemap-row-card-grid .label {
+      color: #6b7280;
+      white-space: nowrap;
+    }
+    .sourcemap-row-card-grid .value {
+      color: #111827;
+      font-weight: 500;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      min-width: 0;
+    }
+    .sourcemap-row-card-meta {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 11px;
+      color: #4b5563;
+      line-height: 1.4;
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+    .sourcemap-row-card-arrow {
+      text-align: center;
+      color: #9ca3af;
+      font-size: 18px;
+      padding: 0 8px;
+      vertical-align: middle;
+    }
+    /* Check needed (expiry) highlight on table cards - matches visual view */
+    .sourcemap-row-card.check-needed-glow {
+      border-color: #fca5a5;
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+      animation: check-needed-pulse-card 2s ease-in-out infinite;
+    }
+    @keyframes check-needed-pulse-card {
+      0%, 100% { border-color: #fca5a5; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25); }
+      50% { border-color: #ef4444; box-shadow: 0 0 12px 4px rgba(239, 68, 68, 0.45); }
+    }
+    .sourcemap-row-card-check-reason {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #fecaca;
+      font-size: 12px;
+      font-weight: 500;
+      color: #dc2626;
+      line-height: 1.4;
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+    .sourcemap-row-card-check-reason .sourcemap-locate-link {
+      display: block;
+      margin-top: 8px;
+    }
+    .sourcemap-locate-link {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #2563eb;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .sourcemap-locate-link:hover {
+      text-decoration: underline;
+      color: #1d4ed8;
+    }
+    .sourcemap-failed-checks-banner {
+      margin-bottom: 12px;
+      padding: 12px 16px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .sourcemap-failed-checks-banner-title {
+      font-weight: 600;
+      color: #991b1b;
+      margin-bottom: 8px;
+    }
+    .sourcemap-failed-checks-banner-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .sourcemap-failed-checks-banner-links a {
+      color: #2563eb;
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .sourcemap-failed-checks-banner-links a:hover {
+      text-decoration: underline;
+    }
+    .sourcemap-locate-highlight {
+      animation: sourcemap-locate-flash 1.5s ease-out 2;
+    }
+    @keyframes sourcemap-locate-flash {
+      0%, 100% { filter: none; }
+      50% { filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.8)); }
+    }
   </style>
 </head>
 <body>
@@ -912,37 +1108,37 @@
       <!-- Header -->
       <header class="main-header">
         <div>
-          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">Site Map & Traceability</h1>
+          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">Source Map & Traceability</h1>
           <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Visual overview of all processes and inventory traceability</p>
-        </div>
-        <div class="header-actions">
-          <a href="/core" class="btn btn-secondary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"/>
-              <polyline points="12 19 5 12 12 5"/>
-            </svg>
-            Back to Core
-          </a>
         </div>
       </header>
       
       <!-- Page Content -->
       <main class="page-content">
         <div class="max-content">
-          <div class="sitemap-container">
+          <div class="sourcemap-container">
             <!-- Process Flowchart Section -->
-            <section class="sitemap-section">
-              <div class="sitemap-section-header">
-                <div class="sitemap-section-title">
+            <section class="sourcemap-section">
+              <div class="sourcemap-section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div class="sourcemap-section-title">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 3h8v8H3z"/>
                     <path d="M14 3h7v7h-7z"/>
                     <path d="M14 14h7v7h-7z"/>
                     <path d="M3 14h8v8H3z"/>
                   </svg>
-                  Process Flowcharts
+                  Source Map Visual View
                 </div>
-                <div id="process-count-badge" class="badge" style="background: var(--primary, #3b82f6); color: white;">0 processes</div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div id="process-count-badge" class="badge" style="background: var(--primary, #3b82f6); color: white;">0 processes</div>
+                  <a href="/core" class="btn btn-secondary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="19" y1="12" x2="5" y2="12"/>
+                      <polyline points="12 19 5 12 12 5"/>
+                    </svg>
+                    Back to Core
+                  </a>
+                </div>
               </div>
               
               <!-- Search Interface for Raw Material Tracing -->
@@ -986,29 +1182,39 @@
                 </div>
               </div>
               
-              <!-- Quick Filters and Legend -->
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-                <div style="display: flex; gap: 12px; align-items: center;">
-                  <button id="check-needed-filter" class="quick-filter-toggle" onclick="toggleCheckNeededFilter()">
-                    <span class="toggle-indicator">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                    </span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                      <line x1="12" y1="9" x2="12" y2="13"/>
-                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+              <!-- Key above visual view: Show Check Needed + legend (Process, Raw, WIP, Final, Check needed) -->
+              <div class="sourcemap-visual-key-box">
+                <button id="check-needed-filter" class="quick-filter-toggle" onclick="toggleCheckNeededFilter()">
+                  <span class="toggle-indicator">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                      <polyline points="20 6 9 17 4 12"/>
                     </svg>
-                    Show Check Needed
-                  </button>
+                  </span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  Show Check Needed
+                </button>
+                <div class="flowchart-legend-item">
+                  <div class="flowchart-legend-color" style="background: #dbeafe; border-color: #3b82f6;"></div>
+                  <span>Raw Material</span>
                 </div>
-                
-                <div style="display: flex; gap: 16px; align-items: center;">
-                  <div class="legend-check-needed" title="Expired ingredients, compliance issues, or other items requiring attention">
-                    <span class="legend-check-needed-dot"></span>
-                    <span>Check needed</span>
-                  </div>
+                <div class="flowchart-legend-item">
+                  <div class="flowchart-legend-color" style="background: #fef3c7; border-color: #f59e0b;"></div>
+                  <span>Work in Progress</span>
+                </div>
+                <div class="flowchart-legend-item">
+                  <div class="flowchart-legend-color" style="background: #d1fae5; border-color: #10b981;"></div>
+                  <span>Final Product</span>
+                </div>
+                <div class="legend-check-needed" title="Expired ingredients, compliance issues, or other items requiring attention">
+                  <span class="legend-check-needed-dot"></span>
+                  <span>Check Needed</span>
+                </div>
+                <div id="check-needed-hint" class="sourcemap-check-needed-hint" role="status">
+                  Unselect "Show Check Needed" to return to your trace.
                 </div>
               </div>
               
@@ -1046,23 +1252,31 @@
                     </svg>
                   </button>
                 </div>
-                <div class="flowchart-legend">
-                  <div class="flowchart-legend-item">
-                    <div class="flowchart-legend-color" style="background: white; border-color: #3b82f6;"></div>
-                    <span>Process</span>
+              </div>
+              
+              <!-- Items with failed checks in this flow (for the visual view above) -->
+              <div id="sourcemap-failed-checks-banner" class="sourcemap-failed-checks-banner" style="display: none; margin-bottom: 12px;">
+                <div class="sourcemap-failed-checks-banner-title">Items with failed checks in this flow</div>
+                <div class="sourcemap-failed-checks-banner-links" id="sourcemap-failed-checks-links"></div>
+              </div>
+              <div class="sourcemap-table-pane" style="margin-top: 24px;">
+                <div class="sourcemap-section-header" style="margin-bottom: 12px;">
+                  <div class="sourcemap-section-title" style="font-size: 16px;">
+                    <span>Source Map Data</span>
                   </div>
-                  <div class="flowchart-legend-item">
-                    <div class="flowchart-legend-color" style="background: #dbeafe; border-color: #3b82f6;"></div>
-                    <span>Raw Material</span>
-                  </div>
-                  <div class="flowchart-legend-item">
-                    <div class="flowchart-legend-color" style="background: #fef3c7; border-color: #f59e0b;"></div>
-                    <span>Work in Progress</span>
-                  </div>
-                  <div class="flowchart-legend-item">
-                    <div class="flowchart-legend-color" style="background: #d1fae5; border-color: #10b981;"></div>
-                    <span>Final Product</span>
-                  </div>
+                </div>
+                <div id="sourcemap-table-container" style="overflow-x: auto; border: 1px solid var(--border-default, #e5e7eb); border-radius: 8px; background: white;">
+                  <table id="sourcemap-data-table" class="sourcemap-data-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead id="sourcemap-table-head">
+                      <!-- Filled by JS -->
+                    </thead>
+                    <tbody id="sourcemap-table-body">
+                      <!-- Filled by JS -->
+                    </tbody>
+                  </table>
+                </div>
+                <div id="sourcemap-table-empty" style="padding: 24px; text-align: center; color: var(--text-secondary, #6b7280); font-size: 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: 8px; background: #f9fafb; margin-top: 0;">
+                  Search and trace an item above, or turn on "Show Check Needed", to see data here.
                 </div>
               </div>
             </section>
@@ -1120,6 +1334,193 @@
     // Track traced raw material (null = show all, otherwise show only that raw material's flow)
     let tracedRawMaterialId = null;
     
+    // Update the source map table pane with same data as the visual view
+    function updateSourceMapTable(items, connections) {
+      const tableContainer = document.getElementById('sourcemap-table-container');
+      const table = document.getElementById('sourcemap-data-table');
+      const thead = document.getElementById('sourcemap-table-head');
+      const tbody = document.getElementById('sourcemap-table-body');
+      const emptyEl = document.getElementById('sourcemap-table-empty');
+      if (!tableContainer || !table || !thead || !tbody || !emptyEl) return;
+      
+      const hasData = (items && items.length > 0) || (connections && connections.length > 0);
+      table.style.display = hasData ? '' : 'none';
+      emptyEl.style.display = hasData ? 'none' : 'block';
+      
+      if (!hasData) return;
+      
+      const itemsMap = new Map();
+      (items || []).forEach(item => {
+        if (item && item.id) itemsMap.set(item.id, item);
+      });
+      
+      const typeLabel = (t) => {
+        if (!t) return '';
+        if (t === 'raw_material') return 'Raw Material';
+        if (t === 'work_in_progress') return 'Work in Progress';
+        if (t === 'final_product') return 'Final Product';
+        return t;
+      };
+      
+      const typeClass = (t) => {
+        if (t === 'raw_material') return 'type-raw';
+        if (t === 'work_in_progress') return 'type-wip';
+        if (t === 'final_product') return 'type-final';
+        return '';
+      };
+      
+      const formatDate = (dateStr) => {
+        if (!dateStr) return '—';
+        try { return new Date(dateStr).toLocaleDateString(); } catch { return String(dateStr); }
+      };
+      
+      // Build one row card HTML for an item (all metadata inside card)
+      function buildItemCardHtml(it) {
+        if (!it || !it.name) return '<div class="sourcemap-row-card"><span style="color:#9ca3af;">—</span></div>';
+        const name = it.name || '—';
+        const type = typeLabel(it.inventory_type);
+        const typeC = typeClass(it.inventory_type);
+        const rows = [];
+        if (it.quantity != null && it.quantity !== '') rows.push({ label: 'Quantity', value: formatQuantity(it.quantity) });
+        if ((it.unit || '').trim()) rows.push({ label: 'Unit', value: (it.unit || '').trim() });
+        if ((it.supplier_batch_number || '').trim()) rows.push({ label: 'Batch', value: (it.supplier_batch_number || '').trim() });
+        if ((it.supplier || '').trim()) rows.push({ label: 'Supplier', value: (it.supplier || '').trim() });
+        if (it.purchase_date) rows.push({ label: 'Purchase', value: formatDate(it.purchase_date) });
+        if (it.expiry_date) rows.push({ label: 'Expiry', value: formatDate(it.expiry_date) });
+        if ((it.process_name || '').trim()) rows.push({ label: 'Source Process', value: (it.process_name || '').trim() });
+        const promptData = getExecutionPromptData(it);
+        const metaHtml = promptData && Object.keys(promptData).length > 0
+          ? Object.entries(promptData).map(([k, v]) => escapeHtml(k + ': ' + v)).join('<br/>')
+          : '';
+        const gridHtml = rows.length > 0
+          ? rows.map(r => '<span class="label">' + escapeHtml(r.label) + '</span><span class="value">' + escapeHtml(String(r.value)) + '</span>').join('')
+          : '';
+        const metaBlock = metaHtml ? '<div class="sourcemap-row-card-meta">' + metaHtml + '</div>' : '';
+        // Same expiry/check-needed highlight as visual view
+        const needsCheck = it.id && typeof isCheckNeededItem === 'function' && isCheckNeededItem(it.id);
+        const checkReasonText = needsCheck && typeof getCheckReason === 'function' ? getCheckReason(it.id) : '';
+        const cardClass = 'sourcemap-row-card' + (needsCheck ? ' check-needed-glow' : '');
+        const titleAttr = checkReasonText ? ' title="Check reason: ' + escapeHtml(checkReasonText) + '"' : '';
+        const causeId = it.id && typeof getCheckFailureCauseId === 'function' ? getCheckFailureCauseId(it.id) : null;
+        const locateId = (causeId != null ? causeId : it.id) ? String(causeId != null ? causeId : it.id) : '';
+        const checkReasonBlock = checkReasonText
+          ? '<div class="sourcemap-row-card-check-reason">Check reason: ' + escapeHtml(checkReasonText) +
+            (locateId ? '<a href="#" class="sourcemap-locate-link" data-locate-id="' + escapeHtml(locateId) + '" title="Locate cause in map">Locate in map</a>' : '') +
+            '</div>'
+          : '';
+        return '<div class="' + cardClass + '"' + titleAttr + '>' +
+          '<div class="sourcemap-row-card-title">' + escapeHtml(name) + '</div>' +
+          '<span class="sourcemap-row-card-type ' + typeC + '">' + escapeHtml(type) + '</span>' +
+          (gridHtml ? '<div class="sourcemap-row-card-grid">' + gridHtml + '</div>' : '') +
+          metaBlock +
+          checkReasonBlock +
+          '</div>';
+      }
+      
+      if (connections && connections.length > 0) {
+        thead.innerHTML = '<tr><th>From</th><th></th><th>To</th></tr>';
+        tbody.innerHTML = '';
+        connections.forEach(conn => {
+          const fromItem = itemsMap.get(conn.from_id) || (conn.from_id && { name: String(conn.from_id), inventory_type: '' });
+          const toItem = itemsMap.get(conn.to_id) || (conn.to_id && { name: String(conn.to_id), inventory_type: '' });
+          const fromCard = buildItemCardHtml(fromItem);
+          const toCard = buildItemCardHtml(toItem);
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td>' + fromCard + '</td><td class="sourcemap-row-card-arrow">→</td><td>' + toCard + '</td>';
+          tbody.appendChild(tr);
+        });
+      } else if (items && items.length > 0) {
+        thead.innerHTML = '<tr><th>Item</th></tr>';
+        tbody.innerHTML = '';
+        items.forEach(item => {
+          if (!item) return;
+          const cardHtml = buildItemCardHtml(item);
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td>' + cardHtml + '</td>';
+          tbody.appendChild(tr);
+        });
+      }
+      
+      // Banner: causes of failed checks in this flow (link to the cause – e.g. expired item – in the map)
+      const causeIdsToShow = new Map();
+      if (typeof isCheckNeededItem === 'function' && typeof getCheckFailureCauseId === 'function') {
+        function addCause(id) {
+          if (!id || !isCheckNeededItem(id)) return;
+          const causeId = getCheckFailureCauseId(id) || id;
+          if (causeIdsToShow.has(causeId)) return;
+          const causeName = (checkNeededData.expired_raw_materials || []).find(rm => rm.id === causeId);
+          const impactedWithCause = (checkNeededData.impacted_items || []).find(i => i.id === causeId || (i.expired_raw_material_id === causeId));
+          const name = (causeName && causeName.name) || (impactedWithCause && impactedWithCause.expired_raw_material_name) || (itemsMap.get(causeId) && itemsMap.get(causeId).name) || String(causeId);
+          causeIdsToShow.set(causeId, name);
+        }
+        (items || []).forEach(item => { if (item && item.id) addCause(item.id); });
+        (connections || []).forEach(conn => { if (conn.from_id) addCause(conn.from_id); if (conn.to_id) addCause(conn.to_id); });
+      }
+      const bannerEl = document.getElementById('sourcemap-failed-checks-banner');
+      const linksEl = document.getElementById('sourcemap-failed-checks-links');
+      if (bannerEl && linksEl) {
+        if (!hasData || causeIdsToShow.size === 0) {
+          bannerEl.style.display = 'none';
+        } else {
+          bannerEl.style.display = 'block';
+          const linkParts = [];
+          causeIdsToShow.forEach(function(name, causeId) {
+            linkParts.push('<a href="#" class="sourcemap-locate-link" data-locate-id="' + escapeHtml(String(causeId)) + '" title="Locate cause in map">' + escapeHtml(name) + '</a>');
+          });
+          linksEl.innerHTML = linkParts.join('');
+        }
+      }
+    }
+    
+    // Scroll to and briefly highlight an item in the visual source map (for "Locate in map" links – targets the cause, e.g. expired raw)
+    function locateInSourceMap(itemId, didExpandView) {
+      if (itemId == null || itemId === '') return;
+      const id = String(itemId);
+      const container = document.getElementById('process-flowchart-container');
+      if (!container) return;
+      const candidates = container.querySelectorAll('[data-inventory-id]');
+      const el = Array.from(candidates).find(function(n) { return n.getAttribute('data-inventory-id') === id; });
+      if (!el) {
+        if (!didExpandView && typeof renderProcessFlowcharts === 'function') {
+          showCheckNeededOnly = true;
+          const filterBtn = document.getElementById('check-needed-filter');
+          if (filterBtn) {
+            filterBtn.classList.add('active');
+            const checkIcon = filterBtn.querySelector('.toggle-indicator svg');
+            if (checkIcon) checkIcon.style.display = 'block';
+          }
+          const hint = document.getElementById('check-needed-hint');
+          if (hint) hint.classList.add('visible');
+          renderProcessFlowcharts(allProcesses);
+          setTimeout(function() { locateInSourceMap(itemId, true); }, 600);
+        }
+        return;
+      }
+      el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      const rect = el.querySelector('rect[data-item-box]') || el;
+      if (rect && rect.classList) {
+        rect.classList.remove('sourcemap-locate-highlight');
+        rect.offsetHeight;
+        rect.classList.add('sourcemap-locate-highlight');
+        setTimeout(function() { rect.classList.remove('sourcemap-locate-highlight'); }, 3200);
+      }
+      if (!expandedItems.has(id)) {
+        setTimeout(function() {
+          const expandBtns = container.querySelectorAll('.flowchart-expand-btn[data-inventory-id]');
+          const expandBtn = Array.from(expandBtns).find(function(n) { return n.getAttribute('data-inventory-id') === id; });
+          if (expandBtn) expandBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        }, 450);
+      }
+    }
+    
+    document.addEventListener('click', function(e) {
+      const link = e.target && e.target.closest && e.target.closest('.sourcemap-locate-link');
+      if (link) {
+        e.preventDefault();
+        locateInSourceMap(link.getAttribute('data-locate-id'));
+      }
+    });
+    
     // Get step data for an inventory item
     function getStepDataForItem(item) {
       if (!item || !item.source_execution_step_id) return null;
@@ -1143,6 +1544,17 @@
         }
       }
       return null;
+    }
+    
+    // Compute visual card width to fit content (name, batch, etc.) - matches table card auto-resize
+    function getItemCardWidth(item) {
+      if (!item) return 200;
+      const pad = 24;
+      const nameW = (item.name || '').length * 6.5;
+      const batchW = 50 + ((item.supplier_batch_number || '').length * 6);
+      const supplierW = (item.supplier || '').length * 6.5;
+      const contentW = Math.max(nameW, batchW, supplierW, 100);
+      return Math.min(420, Math.max(200, Math.round(pad + contentW + pad)));
     }
     
     // Escape HTML helper
@@ -1191,7 +1603,7 @@
       return null;
     }
     
-    // Load all data needed for sitemap
+    // Load all data needed for source map
     async function loadProcesses() {
       try {
         // Load processes, inventory, executions, metadata, out-of-stock, and check-needed items in parallel
@@ -1283,6 +1695,7 @@
             <p>No processes or executions defined yet. Create your first process to see it here.</p>
           </div>
         `;
+        updateSourceMapTable([], []);
         return;
       }
       
@@ -1292,6 +1705,10 @@
     
     // Create visual flowchart diagram - left to right flow
     async function createVisualFlowchart(container, processes) {
+      expandedItems.clear();
+      // Table data for the source map table pane (same data as visual)
+      let sourceMapTableData = { items: [], connections: [] };
+      
       // Clear container but keep zoom controls and legend
       const existingControls = container.querySelector('.flowchart-zoom-controls');
       const existingLegend = container.querySelector('.flowchart-legend');
@@ -1402,37 +1819,40 @@
           noIssuesText.textContent = '✓ No expired raw materials with stock found';
           svg.appendChild(noIssuesText);
         } else {
-          // Render check needed flow: expired raw materials -> impacted items
-          const paneWidth = 200;
+          sourceMapTableData = { items: [...expiredRawMaterials, ...impactedItems], connections: connections };
+          // Render check needed flow: expired raw materials -> impacted items (auto-width per column)
+          const minPaneWidth = 200;
+          const col1Width = Math.max(minPaneWidth, ...expiredRawMaterials.map(r => getItemCardWidth(r)));
+          const col2Width = Math.max(minPaneWidth, ...impactedItems.map(i => getItemCardWidth(i)));
           const paneGap = 120;
           const itemSpacing = 15;
           const col1X = 50;
-          const col2X = col1X + paneWidth + paneGap;
+          const col2X = col1X + col1Width + paneGap;
           
           let startY = 50;
           
           // Render expired raw materials
           expiredRawMaterials.forEach((rawMaterial, index) => {
             const itemY = startY + (index * (90 + itemSpacing));
-            rawMaterial._flowchartX = col1X + paneWidth;
+            rawMaterial._flowchartX = col1X + col1Width;
             rawMaterial._flowchartY = itemY + 45;
             
-            renderSingleInventoryItem(svg, rawMaterial, col1X, itemY, paneWidth, 'raw', null);
+            renderSingleInventoryItem(svg, rawMaterial, col1X, itemY, col1Width, 'raw', null);
             maxY = Math.max(maxY, itemY + 90);
           });
           
           // Render impacted items (intermediates and finals)
           impactedItems.forEach((item, index) => {
             const itemY = startY + (index * (90 + itemSpacing));
-            item._flowchartX = col2X;
+            item._flowchartX = col2X + col2Width;
             item._flowchartY = itemY + 45;
             
             const itemType = item.inventory_type === 'work_in_progress' ? 'wip' : 'final';
-            renderSingleInventoryItem(svg, item, col2X, itemY, paneWidth, itemType, null);
+            renderSingleInventoryItem(svg, item, col2X, itemY, col2Width, itemType, null);
             maxY = Math.max(maxY, itemY + 90);
           });
           
-          maxX = col2X + paneWidth + 50;
+          maxX = col2X + col2Width + 50;
           
           // Draw connections
           connections.forEach(conn => {
@@ -1441,7 +1861,7 @@
             
             if (fromItem && toItem && fromItem._flowchartY && toItem._flowchartY) {
               const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-              line.setAttribute('x1', col1X + paneWidth);
+              line.setAttribute('x1', col1X + col1Width);
               line.setAttribute('y1', fromItem._flowchartY);
               line.setAttribute('x2', col2X);
               line.setAttribute('y2', toItem._flowchartY);
@@ -1558,12 +1978,19 @@
               const validIntermediates = connectedIntermediates.filter(i => i && i.id);
               const validFinals = connectedFinals.filter(f => f && f.id);
               
+              // Column widths from content (auto-resize like table cards)
+              const col1Width = Math.max(paneWidth, getItemCardWidth(tracedItem));
+              const col2Width = Math.max(paneWidth, ...validIntermediates.map(i => getItemCardWidth(i)), ...validFinals.filter(() => false).map(() => 0));
+              const col3Width = Math.max(paneWidth, ...validFinals.map(f => getItemCardWidth(f)));
+              const col2WidthUsed = Math.max(paneWidth, ...validIntermediates.map(i => getItemCardWidth(i)));
+              const col3WidthUsed = Math.max(paneWidth, ...validFinals.map(f => getItemCardWidth(f)));
+              
               // Column 1: Traced raw material (always on the left)
               const col1X = 50;
               let col1Y = startY;
               
-              renderSingleInventoryItem(svg, tracedItem, col1X, col1Y, paneWidth, 'raw');
-              tracedItem._flowchartX = col1X + paneWidth;
+              renderSingleInventoryItem(svg, tracedItem, col1X, col1Y, col1Width, 'raw');
+              tracedItem._flowchartX = col1X + col1Width;
               tracedItem._flowchartY = col1Y + itemHeight / 2;
               const tracedExpandedHeight = expandedItems.has(tracedItem.id) ? (tracedItem._expandedHeight || 0) : 0;
               col1Y += itemHeight + itemSpacing + tracedExpandedHeight;
@@ -1571,7 +1998,7 @@
               if (hasInterItemConnections) {
                 // HORIZONTAL FLOW LAYOUT: There are connections between items (same execution flow)
                 // Use 3-column layout: raw -> intermediates -> finals
-                const col2X = col1X + paneWidth + paneSpacing;
+                const col2X = col1X + col1Width + paneSpacing;
                 let col2Y = startY;
                 
                 if (validIntermediates.length > 0) {
@@ -1590,8 +2017,8 @@
                     }
                     
                     try {
-                      renderSingleInventoryItem(svg, intermediate, col2X, col2Y, paneWidth, 'wip', stepData);
-                      intermediate._flowchartX = col2X + paneWidth;
+                      renderSingleInventoryItem(svg, intermediate, col2X, col2Y, col2WidthUsed, 'wip', stepData);
+                      intermediate._flowchartX = col2X + col2WidthUsed;
                       intermediate._flowchartY = col2Y + itemHeight / 2;
                       const expandedHeight = expandedItems.has(intermediate.id) ? (intermediate._expandedHeight || 0) : 0;
                       col2Y += itemHeight + itemSpacing + expandedHeight;
@@ -1602,14 +2029,14 @@
                 }
                 
                 // Column 3: Finals
-                const col3X = validIntermediates.length > 0 ? col2X + paneWidth + paneSpacing : col2X;
+                const col3X = validIntermediates.length > 0 ? col2X + col2WidthUsed + paneSpacing : col2X;
                 let col3Y = startY;
                 
                 if (validFinals.length > 0) {
                   validFinals.forEach(final => {
                     try {
-                      renderSingleInventoryItem(svg, final, col3X, col3Y, paneWidth, 'final');
-                      final._flowchartX = col3X + paneWidth;
+                      renderSingleInventoryItem(svg, final, col3X, col3Y, col3WidthUsed, 'final');
+                      final._flowchartX = col3X + col3WidthUsed;
                       final._flowchartY = col3Y + itemHeight / 2;
                       renderedFinalIds.add(final.id);
                       const expandedHeight = expandedItems.has(final.id) ? (final._expandedHeight || 0) : 0;
@@ -1621,7 +2048,7 @@
                 }
                 
                 maxY = Math.max(maxY, Math.max(col1Y, Math.max(col2Y, col3Y)));
-                maxX = Math.max(maxX, col3X + paneWidth);
+                maxX = Math.max(maxX, col3X + col3WidthUsed);
                 
                 // Connect items with horizontal flow
                 connectTracedItems(svg, tracedItem, connectedIntermediates, connectedFinals, col1X, col2X, col3X, paneWidth, tracedIsConsumed, connections, isForwardTrace);
@@ -1629,7 +2056,8 @@
               } else {
                 // STACKED LAYOUT: No inter-item connections (items from different executions)
                 // Stack all items in a single column (column 2) since they're independent
-                const col2X = col1X + paneWidth + paneSpacing;
+                const col2WidthStacked = Math.max(paneWidth, ...validIntermediates.map(i => getItemCardWidth(i)), ...validFinals.map(f => getItemCardWidth(f)));
+                const col2X = col1X + col1Width + paneSpacing;
                 let col2Y = startY;
                 
                 // Combine and sort all items by type, then by name
@@ -1660,8 +2088,8 @@
                   }
                   
                   try {
-                    renderSingleInventoryItem(svg, item, col2X, col2Y, paneWidth, itemType, stepData);
-                    item._flowchartX = col2X + paneWidth;
+                    renderSingleInventoryItem(svg, item, col2X, col2Y, col2WidthStacked, itemType, stepData);
+                    item._flowchartX = col2X + col2WidthStacked;
                     item._flowchartY = col2Y + itemHeight / 2;
                     if (item.inventory_type === 'final_product') {
                       renderedFinalIds.add(item.id);
@@ -1674,24 +2102,32 @@
                 });
                 
                 maxY = Math.max(maxY, Math.max(col1Y, col2Y));
-                maxX = Math.max(maxX, col2X + paneWidth);
+                maxX = Math.max(maxX, col2X + col2WidthStacked);
                 
                 // Connect items - all go from raw to column 2 (stacked)
                 // Use col2X for both col2X and col3X since all items are in one column
                 connectTracedItems(svg, tracedItem, connectedIntermediates, connectedFinals, col1X, col2X, col2X, paneWidth, tracedIsConsumed, connections, isForwardTrace);
               }
             } else {
-              // Backward trace: raw materials/intermediates -> traced item
-              // Column 1: Raw materials
+              // Backward trace: raw materials/intermediates -> traced item (auto-width per column)
               const col1X = 50;
-              let col1Y = startY;
-              
               const validRawMaterials = connectedRawMaterials.filter(r => r && r.id);
+              const validIntermediatesBw = connectedIntermediates.filter(i => i && i.id && i.id !== tracedItem.id);
+              const col1WidthBw = Math.max(paneWidth, ...validRawMaterials.map(r => getItemCardWidth(r)));
+              const col2WidthBw = Math.max(paneWidth, ...validIntermediatesBw.map(i => getItemCardWidth(i)));
+              const col3WidthBw = Math.max(paneWidth, getItemCardWidth(tracedItem));
+              const col2X = validRawMaterials.length > 0 ? col1X + col1WidthBw + paneSpacing : col1X;
+              const col3X = validIntermediatesBw.length > 0 ? col2X + col2WidthBw + paneSpacing : (validRawMaterials.length > 0 ? col2X : col1X);
+              let col1Y = startY;
+              let col2Y = startY;
+              let col3Y = startY;
+              
+              // Column 1: Raw materials
               if (validRawMaterials.length > 0) {
                 validRawMaterials.forEach(raw => {
                   try {
-                    renderSingleInventoryItem(svg, raw, col1X, col1Y, paneWidth, 'raw');
-                    raw._flowchartX = col1X + paneWidth;
+                    renderSingleInventoryItem(svg, raw, col1X, col1Y, col1WidthBw, 'raw');
+                    raw._flowchartX = col1X + col1WidthBw;
                     raw._flowchartY = col1Y + itemHeight / 2;
                     const expandedHeight = expandedItems.has(raw.id) ? (raw._expandedHeight || 0) : 0;
                     col1Y += itemHeight + itemSpacing + expandedHeight;
@@ -1702,13 +2138,8 @@
               }
               
               // Column 2: Intermediates (if any)
-              // Exclude the traced item itself from intermediates to avoid duplicate rendering
-              const col2X = validRawMaterials.length > 0 ? col1X + paneWidth + paneSpacing : col1X;
-              let col2Y = startY;
-              
-              const validIntermediates = connectedIntermediates.filter(i => i && i.id && i.id !== tracedItem.id);
-              if (validIntermediates.length > 0) {
-                validIntermediates.forEach(intermediate => {
+              if (validIntermediatesBw.length > 0) {
+                validIntermediatesBw.forEach(intermediate => {
                   let stepData = null;
                   if (intermediate.source_execution_step_id) {
                     for (const exec of allExecutions) {
@@ -1723,8 +2154,8 @@
                   }
                   
                   try {
-                    renderSingleInventoryItem(svg, intermediate, col2X, col2Y, paneWidth, 'wip', stepData);
-                    intermediate._flowchartX = col2X + paneWidth;
+                    renderSingleInventoryItem(svg, intermediate, col2X, col2Y, col2WidthBw, 'wip', stepData);
+                    intermediate._flowchartX = col2X + col2WidthBw;
                     intermediate._flowchartY = col2Y + itemHeight / 2;
                     const expandedHeight = expandedItems.has(intermediate.id) ? (intermediate._expandedHeight || 0) : 0;
                     col2Y += itemHeight + itemSpacing + expandedHeight;
@@ -1735,9 +2166,6 @@
               }
               
               // Column 3: Traced item (final or intermediate)
-              const col3X = validIntermediates.length > 0 ? col2X + paneWidth + paneSpacing : (validRawMaterials.length > 0 ? col2X : col1X);
-              let col3Y = startY;
-              
               const tracedItemType = tracedItem.inventory_type === 'work_in_progress' ? 'wip' : 'final';
               let stepData = null;
               if (tracedItem.source_execution_step_id) {
@@ -1752,19 +2180,23 @@
                 }
               }
               
-              renderSingleInventoryItem(svg, tracedItem, col3X, col3Y, paneWidth, tracedItemType, stepData);
-              tracedItem._flowchartX = col3X + paneWidth;
+              renderSingleInventoryItem(svg, tracedItem, col3X, col3Y, col3WidthBw, tracedItemType, stepData);
+              tracedItem._flowchartX = col3X + col3WidthBw;
               tracedItem._flowchartY = col3Y + itemHeight / 2;
               const tracedExpandedHeight = expandedItems.has(tracedItem.id) ? (tracedItem._expandedHeight || 0) : 0;
               col3Y += itemHeight + itemSpacing + tracedExpandedHeight;
               
               maxY = Math.max(maxY, Math.max(col1Y, Math.max(col2Y, col3Y)));
-              maxX = Math.max(maxX, col3X + paneWidth);
+              maxX = Math.max(maxX, col3X + col3WidthBw);
               
               // Connect items (backward: sources -> traced item)
               connectTracedItems(svg, tracedItem, connectedIntermediates, [], col1X, col2X, col3X, paneWidth, tracedIsConsumed, connections, isForwardTrace, connectedRawMaterials);
             }
             
+            const allItems = isForwardTrace
+              ? [tracedItem, ...(connectedIntermediates || []), ...(connectedFinals || [])]
+              : [...(connectedRawMaterials || []), ...(connectedIntermediates || []), tracedItem];
+            sourceMapTableData = { items: (allItems || []).filter(Boolean), connections: connections || [] };
           } catch (error) {
             console.error('Error in trace rendering:', error);
             const errorText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1936,6 +2368,9 @@
       
       // Add pan and zoom handlers
       setupFlowchartInteractions(svg, svgContainer);
+      
+      // Update the source map table pane with same data as the visual
+      updateSourceMapTable(sourceMapTableData.items, sourceMapTableData.connections);
     }
     
     // Create pane header
@@ -2230,7 +2665,6 @@
       expandButtonGroup.addEventListener('click', async function(e) {
         e.stopPropagation();
         e.preventDefault();
-        console.log('Expand button clicked for:', itemId);
         await toggleItemExpansion(itemId, svg, x, y, width, type, stepData);
       });
       
@@ -2321,7 +2755,7 @@
           execText.setAttribute('y', y + (item.supplier_batch_number ? 82 : 62));
           execText.setAttribute('font-size', '9');
           execText.setAttribute('fill', '#6b7280');
-          execText.textContent = `Exec: ${process ? process.name.substring(0, 20) : 'Unknown'}`;
+          execText.textContent = `Process: ${process ? process.name.substring(0, 20) : 'Unknown'}`;
           itemGroup.appendChild(execText);
           promptYOffset = 12;
         }
@@ -2387,7 +2821,7 @@
       if (item.expiry_date && formatDate(item.expiry_date)) detailsToShow.push(1);
       
       if (detailsToShow.length > 0) {
-        height += Math.ceil(detailsToShow.length / 2) * 36 + 8;
+        height += Math.ceil(detailsToShow.length / 2) * 40 + 8;
       }
       
       // Execution prompts
@@ -2452,6 +2886,7 @@
         let col = 0;
         let rowY = currentY;
         
+        const rowGap = 40;
         detailsToShow.forEach((detail) => {
           const colX = col === 0 ? x + padding : x + padding + colWidth + padding;
           
@@ -2476,11 +2911,11 @@
           col++;
           if (col >= 2) {
             col = 0;
-            rowY += 36;
+            rowY += rowGap;
           }
         });
         
-        currentY = rowY + (col > 0 ? 36 : 0) + 8;
+        currentY = rowY + (col > 0 ? rowGap : 0) + 8;
       }
       
       // Execution metadata
@@ -2866,6 +3301,17 @@
       const hintText = svg.querySelector(`text[data-hint="${itemId}"]`);
       const expandedGroup = svg.querySelector(`g[data-expanded-group="${itemId}"]`);
       
+      // When expanding, move ALL groups with this itemId to end of SVG so expanded one draws on top (there can be duplicates)
+      if (!wasExpanded) {
+        const allWithId = svg.querySelectorAll('g[data-inventory-id="' + itemId + '"]');
+        if (allWithId.length > 0) {
+          for (let i = allWithId.length - 1; i >= 0; i--) {
+            const g = allWithId[i];
+            if (g.parentNode === svg) svg.appendChild(g);
+          }
+        }
+      }
+      
       // Get the item from inventory (also check out-of-stock items)
       let item = allInventory.find(inv => inv && inv.id === itemId);
       if (!item && allOutOfStockRawMaterials) {
@@ -2927,60 +3373,75 @@
       // Update item's expanded height for connection calculations
       item._expandedHeight = wasExpanded ? 0 : expandedHeight;
       
+      // Update this item's connection point to the new vertical center (so arrows stay on the card)
+      const newCardHeight = itemHeight + (wasExpanded ? 0 : expandedHeight);
+      item._flowchartY = y + newCardHeight / 2;
+      
       // Calculate height change
       const heightChange = wasExpanded ? -expandedHeight : expandedHeight;
       
       // Push down (or pull up) all items below this one
       pushItemsBelow(svg, y, heightChange, itemId);
       
-      // Update connection lines to follow moved items
+      // Update connection lines to follow moved items (including this item's new center)
       updateConnectionLines(svg);
       
       // Update SVG and container dimensions to accommodate expanded content
       updateSvgDimensions(svg, svgContainer);
     }
     
-    // Push items below a certain Y position by a height delta
+    // Push items below by a height delta so expanded content never overlaps other cards
     function pushItemsBelow(svg, itemY, heightChange, excludeItemId) {
       if (!svg || heightChange === 0) return;
-      
-      // Find all item groups and their positions
       const allItemGroups = svg.querySelectorAll('g[data-inventory-id]');
-      
       allItemGroups.forEach(group => {
         const groupItemId = group.getAttribute('data-inventory-id');
-        if (groupItemId === excludeItemId) return; // Skip the item we're expanding
-        
-        // Get the item box to find its Y position
-        const itemBox = group.querySelector('rect[data-item-box]');
-        if (!itemBox) return;
-        
-        const boxY = parseFloat(itemBox.getAttribute('y')) || 0;
-        
-        // Only move items that are below the expanded item
-        if (boxY > itemY) {
-          // Get current transform or default to 0
-          const currentTransform = group.style.transform || '';
-          const currentTranslateY = parseFloat(currentTransform.match(/translateY\(([-\d.]+)px\)/)?.[1] || '0');
-          const newTranslateY = currentTranslateY + heightChange;
-          
-          // Apply smooth transition
-          group.style.transition = 'transform 0.2s ease';
-          group.style.transform = `translateY(${newTranslateY}px)`;
-          
-          // Update the item's _flowchartY for connection drawing (also check out-of-stock items)
-          let item = allInventory.find(inv => inv && inv.id === groupItemId);
-          if (!item && allOutOfStockRawMaterials) {
-            item = allOutOfStockRawMaterials.find(inv => inv && inv.id === groupItemId);
-          }
-          if (item && item._flowchartY) {
-            item._flowchartY += heightChange;
-          }
-        }
+        if (groupItemId === excludeItemId) return;
+        const box = group.querySelector('rect[data-item-box]');
+        if (!box) return;
+        const boxY = parseFloat(box.getAttribute('y')) || 0;
+        if (boxY <= itemY) return;
+        const currentTransform = group.style.transform || '';
+        const currentTranslateY = parseFloat(currentTransform.match(/translateY\(([-\d.]+)px\)/)?.[1] || 0);
+        const newTranslateY = currentTranslateY + heightChange;
+        group.style.transition = 'transform 0.2s ease';
+        group.style.transform = `translateY(${newTranslateY}px)`;
+        let item = allInventory.find(inv => inv && inv.id === groupItemId);
+        if (!item && allOutOfStockRawMaterials) item = allOutOfStockRawMaterials.find(inv => inv && inv.id === groupItemId);
+        if (item && item._flowchartY != null) item._flowchartY += heightChange;
       });
     }
     
-    // Update connection lines after items have moved
+    // Get current visual position of an item card from the DOM (so arrows follow after expand/push)
+    function getItemCardPositionInSvg(svg, itemId) {
+      if (!svg || !itemId) return null;
+      const rect = svg.querySelector('rect[data-item-box="' + itemId + '"]');
+      if (!rect) return null;
+      const group = rect.closest ? rect.closest('g[data-inventory-id]') : (function() {
+        let p = rect.parentNode;
+        while (p && p !== svg) {
+          if (p.getAttribute && p.getAttribute('data-inventory-id')) return p;
+          p = p.parentNode;
+        }
+        return null;
+      })();
+      if (!group) return null;
+      const rectX = parseFloat(rect.getAttribute('x')) || 0;
+      const rectY = parseFloat(rect.getAttribute('y')) || 0;
+      const rectW = parseFloat(rect.getAttribute('width')) || 0;
+      const rectH = parseFloat(rect.getAttribute('height')) || 90;
+      const tx = (group.style.transform || '').match(/translateX\(([-\d.]+)px\)/);
+      const ty = (group.style.transform || '').match(/translateY\(([-\d.]+)px\)/);
+      const translateX = tx ? parseFloat(tx[1]) : 0;
+      const translateY = ty ? parseFloat(ty[1]) : 0;
+      return {
+        centerY: rectY + rectH / 2 + translateY,
+        leftX: rectX + translateX,
+        rightX: rectX + rectW + translateX
+      };
+    }
+    
+    // Update connection lines after items have moved (use DOM positions so arrows stay on cards)
     function updateConnectionLines(svg) {
       if (!svg) return;
       
@@ -2988,23 +3449,19 @@
       lines.forEach(line => {
         const fromId = line.getAttribute('data-from-inventory');
         const toId = line.getAttribute('data-to-inventory');
+        if (!fromId || !toId) return;
         
-        // Find source and target items (also check out-of-stock items)
-        let fromItem = allInventory.find(inv => inv && inv.id === fromId);
-        if (!fromItem && allOutOfStockRawMaterials) {
-          fromItem = allOutOfStockRawMaterials.find(inv => inv && inv.id === fromId);
-        }
-        let toItem = allInventory.find(inv => inv && inv.id === toId);
-        if (!toItem && allOutOfStockRawMaterials) {
-          toItem = allOutOfStockRawMaterials.find(inv => inv && inv.id === toId);
-        }
+        const fromPos = getItemCardPositionInSvg(svg, fromId);
+        const toPos = getItemCardPositionInSvg(svg, toId);
         
-        if (fromItem && fromItem._flowchartY) {
-          line.style.transition = 'y1 0.2s ease, y2 0.2s ease';
-          line.setAttribute('y1', fromItem._flowchartY);
+        if (fromPos) {
+          line.style.transition = 'x1 0.2s ease, y1 0.2s ease, x2 0.2s ease, y2 0.2s ease';
+          line.setAttribute('x1', fromPos.rightX);
+          line.setAttribute('y1', fromPos.centerY);
         }
-        if (toItem && toItem._flowchartY) {
-          line.setAttribute('y2', toItem._flowchartY);
+        if (toPos) {
+          line.setAttribute('x2', toPos.leftX);
+          line.setAttribute('y2', toPos.centerY);
         }
       });
     }
@@ -3164,7 +3621,7 @@
             execText.setAttribute('y', currentY + (item.supplier_batch_number ? 82 : 62));
             execText.setAttribute('font-size', '9');
             execText.setAttribute('fill', '#6b7280');
-            execText.textContent = `Exec: ${process ? process.name.substring(0, 20) : 'Unknown'}`;
+            execText.textContent = `Process: ${process ? process.name.substring(0, 20) : 'Unknown'}`;
             svg.appendChild(execText);
             promptYOffset = 12;
           }
@@ -5215,12 +5672,16 @@
       
       const filterBtn = document.getElementById('check-needed-filter');
       const checkIcon = filterBtn ? filterBtn.querySelector('.toggle-indicator svg') : null;
+      const hint = document.getElementById('check-needed-hint');
       
       if (filterBtn) {
         filterBtn.classList.toggle('active', showCheckNeededOnly);
       }
       if (checkIcon) {
         checkIcon.style.display = showCheckNeededOnly ? 'block' : 'none';
+      }
+      if (hint) {
+        hint.classList.toggle('visible', showCheckNeededOnly);
       }
       
       // Re-render flowchart with check needed filter
@@ -5244,24 +5705,40 @@
       return isImpacted;
     }
     
-    // Get the expired raw material name for an impacted item
-    function getExpiredSourceName(itemId) {
+    // Get check reason text for display (dynamic for current and future check types)
+    function getCheckReason(itemId) {
       if (!checkNeededData) return null;
       
-      // Check if it's an expired raw material itself
+      // Source item expired (raw material or intermediate/final with expiry – same logic for any expired source)
       const expiredRaw = (checkNeededData.expired_raw_materials || []).find(
         rm => rm.id === itemId
       );
-      if (expiredRaw) return expiredRaw.name + ' is expired';
+      if (expiredRaw) return (expiredRaw.name || 'Item') + ' expired';
       
-      // Check if it's an impacted item
+      // Impacted item: made using expired ingredient – name expired before execution of this process
       const impactedItem = (checkNeededData.impacted_items || []).find(
         item => item.id === itemId
       );
       if (impactedItem && impactedItem.expired_raw_material_name) {
-        return impactedItem.expired_raw_material_name + ' is expired';
+        return impactedItem.expired_raw_material_name + ' expired before execution of this process';
       }
       
+      return null;
+    }
+    
+    // Legacy alias for tooltip/callers that expect a full message
+    function getExpiredSourceName(itemId) {
+      const reason = getCheckReason(itemId);
+      return reason ? 'Check reason: ' + reason : null;
+    }
+    
+    // Id of the item to locate in map (the cause of the check failure – e.g. expired raw, not the impacted product)
+    function getCheckFailureCauseId(itemId) {
+      if (!checkNeededData || !itemId) return null;
+      const expiredRaw = (checkNeededData.expired_raw_materials || []).find(rm => rm.id === itemId);
+      if (expiredRaw) return String(itemId);
+      const impactedItem = (checkNeededData.impacted_items || []).find(item => item.id === itemId);
+      if (impactedItem && impactedItem.expired_raw_material_id) return String(impactedItem.expired_raw_material_id);
       return null;
     }
     

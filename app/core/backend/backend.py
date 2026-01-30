@@ -51,11 +51,11 @@ def flows():
     return render_template("flows2.html", active_page="core", process_id=process_id)
 
 
-@core_bp.route("/core/sitemap", methods=["GET"])
+@core_bp.route("/core/sourcemap", methods=["GET"])
 @requires_auth
-def sitemap():
-    """Serve the sitemap.html frontend page"""
-    return render_template("sitemap.html", active_page="core")
+def sourcemap():
+    """Serve the sourcemap.html frontend page"""
+    return render_template("sourcemap.html", active_page="core")
 
 
 @core_bp.route("/static/js/<filename>")
