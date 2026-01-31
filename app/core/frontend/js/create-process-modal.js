@@ -110,10 +110,25 @@
     }
   };
   
-  // Collect current inputs from form
+  // Get the list element for guided inputs by type (inventory/previous_output -> inventory list, new -> new list)
+  function getGuidedInputListElement(type) {
+    const id = (type === 'inventory' || type === 'previous_output') ? 'guided-inputs-list-inventory' : 'guided-inputs-list-new';
+    return document.getElementById(id);
+  }
+  
+  // All input rows from both tabs (inventory first, then new)
+  function getAllGuidedInputElements() {
+    const inv = document.getElementById('guided-inputs-list-inventory');
+    const newList = document.getElementById('guided-inputs-list-new');
+    const invDivs = inv ? Array.from(inv.querySelectorAll(':scope > div')) : [];
+    const newDivs = newList ? Array.from(newList.querySelectorAll(':scope > div')) : [];
+    return [...invDivs, ...newDivs];
+  }
+  
+  // Collect current inputs from form (from both tabs)
   function collectCurrentInputs() {
     const inputs = [];
-    const inputElements = document.querySelectorAll('#guided-inputs-list > div');
+    const inputElements = getAllGuidedInputElements();
     inputElements.forEach(inputEl => {
       const nameInput = inputEl.querySelector('.guided-input-name');
       let name = '';
@@ -332,8 +347,9 @@
               const inputType = input.requires_inventory_selection ? 'inventory' : 'new';
               await window.addGuidedInput(inputType);
               
-              // Get the most recently added input container
-              const inputContainers = document.querySelectorAll('#guided-inputs-list > div');
+              // Get the most recently added input container (from the correct tab list)
+              const listEl = getGuidedInputListElement(inputType);
+              const inputContainers = listEl ? listEl.querySelectorAll(':scope > div') : [];
               const lastInputContainer = inputContainers[inputContainers.length - 1];
               
               if (lastInputContainer && input.name) {
@@ -471,44 +487,33 @@
             }
           }
           
-          // Restore execution prompts
+          // Restore execution prompts (Batch number goes to dedicated dropdown, others get cards)
           if (mostRecentStep.execution_prompts && mostRecentStep.execution_prompts.length > 0) {
+            const batchNumberModeEl = document.getElementById('guided-prompt-batch-number-mode');
+            if (batchNumberModeEl) batchNumberModeEl.value = 'dont_ask';
             for (const prompt of mostRecentStep.execution_prompts) {
-              window.addGuidedPrompt();
-              
-              // Get the most recently added prompt container
-              const promptContainers = document.querySelectorAll('#guided-prompts-list > div');
-              const lastPromptContainer = promptContainers[promptContainers.length - 1];
-              
-              if (lastPromptContainer) {
-                // Set label
-                const labelInput = lastPromptContainer.querySelector('.guided-prompt-label');
-                if (labelInput) {
-                  labelInput.value = prompt.label || '';
-                  labelInput.dispatchEvent(new Event('input'));
-                  labelInput.dispatchEvent(new Event('blur'));
-                }
-                
-                // Set type
-                const typeSelect = lastPromptContainer.querySelector('.guided-prompt-type');
-                if (typeSelect && prompt.type) {
-                  typeSelect.value = prompt.type;
-                }
-                
-                // Set unit
-                const unitSelect = lastPromptContainer.querySelector('.guided-prompt-unit');
-                if (unitSelect && prompt.unit) {
-                  unitSelect.value = prompt.unit;
-                }
-                
-                // Set required
-                const requiredSelect = lastPromptContainer.querySelector('.guided-prompt-required');
-                if (requiredSelect) {
-                  requiredSelect.value = prompt.required !== false ? 'true' : 'false';
-                }
-                
-                // Update label display in header
-                const updateLabelDisplay = () => {
+              const isBatchNumber = (prompt.label || '').toLowerCase() === 'batch number';
+              if (isBatchNumber && batchNumberModeEl) {
+                batchNumberModeEl.value = prompt.required !== false ? 'required' : 'optional';
+                continue;
+              }
+              if (!isBatchNumber) {
+                window.addGuidedPrompt();
+                const promptContainers = document.querySelectorAll('#guided-prompts-list > div');
+                const lastPromptContainer = promptContainers[promptContainers.length - 1];
+                if (lastPromptContainer) {
+                  const labelInput = lastPromptContainer.querySelector('.guided-prompt-label');
+                  if (labelInput) {
+                    labelInput.value = prompt.label || '';
+                    labelInput.dispatchEvent(new Event('input'));
+                    labelInput.dispatchEvent(new Event('blur'));
+                  }
+                  const typeSelect = lastPromptContainer.querySelector('.guided-prompt-type');
+                  if (typeSelect && prompt.type) typeSelect.value = prompt.type;
+                  const unitSelect = lastPromptContainer.querySelector('.guided-prompt-unit');
+                  if (unitSelect && prompt.unit) unitSelect.value = prompt.unit;
+                  const requiredSelect = lastPromptContainer.querySelector('.guided-prompt-required');
+                  if (requiredSelect) requiredSelect.value = prompt.required !== false ? 'true' : 'false';
                   const labelDisplay = lastPromptContainer.querySelector('.guided-prompt-label-display');
                   const titleSpan = lastPromptContainer.querySelector('.guided-prompt-title');
                   if (labelDisplay && titleSpan && prompt.label) {
@@ -516,8 +521,7 @@
                     labelDisplay.style.display = 'inline';
                     titleSpan.style.display = 'none';
                   }
-                };
-                updateLabelDisplay();
+                }
               }
             }
           }
@@ -674,9 +678,14 @@
   function resetForm(keepSteps = false) {
     document.getElementById('guided-step-name').value = '';
     document.getElementById('guided-step-description').value = '';
-    document.getElementById('guided-inputs-list').innerHTML = '';
+    const invList = document.getElementById('guided-inputs-list-inventory');
+    const newList = document.getElementById('guided-inputs-list-new');
+    if (invList) invList.innerHTML = '';
+    if (newList) newList.innerHTML = '';
     document.getElementById('guided-outputs-list').innerHTML = '';
     document.getElementById('guided-prompts-list').innerHTML = '';
+    const batchNumberMode = document.getElementById('guided-prompt-batch-number-mode');
+    if (batchNumberMode) batchNumberMode.value = 'optional';
     guidedInputs = [];
     guidedOutputs = [];
     guidedPrompts = [];
@@ -760,6 +769,43 @@
         console.warn(`Step div not found: create-process-step-${i}`);
       }
     }
+    
+    // On outputs step (3): if no outputs yet, add one so the first output is ready and expanded
+    if (currentStep === 3) {
+      const outputsList = document.getElementById('guided-outputs-list');
+      if (outputsList && outputsList.children.length === 0 && typeof window.addGuidedOutput === 'function') {
+        window.addGuidedOutput();
+      }
+    }
+  }
+  
+  // Validate inventory inputs (quantity & unit required, quantity must be > 0)
+  function validateInventoryInputs() {
+    const invList = document.getElementById('guided-inputs-list-inventory');
+    if (!invList) return { valid: true };
+    const rows = invList.querySelectorAll(':scope > div');
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const quantityInput = row.querySelector('.guided-input-quantity[data-inventory-required]');
+      const unitSelect = row.querySelector('.guided-input-unit[data-inventory-required]');
+      if (!quantityInput && !unitSelect) continue; // e.g. "no items" message row
+      const quantityStr = quantityInput ? (quantityInput.value || '').trim() : '';
+      const unit = unitSelect ? (unitSelect.value || '').trim() : '';
+      if (quantityStr === '' || unit === '') {
+        return {
+          valid: false,
+          message: 'Please fill Quantity and Unit for all inventory items. Both are required.'
+        };
+      }
+      const quantityNum = parseFloat(quantityStr);
+      if (isNaN(quantityNum) || quantityNum <= 0) {
+        return {
+          valid: false,
+          message: 'Quantity must be greater than 0 for all inventory items.'
+        };
+      }
+    }
+    return { valid: true };
   }
   
   // Navigate to next step
@@ -768,12 +814,25 @@
       // Validate step 1
       const stepName = document.getElementById('guided-step-name').value.trim();
       if (!stepName) {
-        alert('Please enter a step name');
+        if (window.showNotification) {
+          window.showNotification('error', 'Step name required', 'Please enter a step name.');
+        } else {
+          alert('Please enter a step name');
+        }
         return;
       }
     }
-    // Step 2 and 3 don't require validation (inputs/outputs are optional)
-    // Step 4 (execution prompts) is also optional
+    if (currentStep === 2) {
+      const result = validateInventoryInputs();
+      if (!result.valid) {
+        if (window.showNotification) {
+          window.showNotification('error', 'Inventory inputs required', result.message);
+        } else {
+          alert(result.message);
+        }
+        return;
+      }
+    }
     
     if (currentStep < totalSteps) {
       currentStep++;
@@ -1190,7 +1249,7 @@
   
   // Collapse all inputs except the specified one
   function collapseAllInputs(exceptId = null) {
-    const allInputs = document.querySelectorAll('#guided-inputs-list > div');
+    const allInputs = getAllGuidedInputElements();
     allInputs.forEach(inputEl => {
       if (inputEl.id !== exceptId) {
         const contentArea = inputEl.querySelector('.guided-input-content');
@@ -1395,7 +1454,8 @@
           messageDiv.textContent = 'No previous step outputs available. Create a step with outputs first.';
           contentArea.appendChild(messageDiv);
           inputContainer.appendChild(contentArea);
-          document.getElementById('guided-inputs-list').appendChild(inputContainer);
+          const listEl = getGuidedInputListElement(type);
+          if (listEl) listEl.appendChild(inputContainer);
           return;
         }
         
@@ -1433,7 +1493,8 @@
           messageDiv.textContent = 'No inventory items available. Please add inventory items first.';
           contentArea.appendChild(messageDiv);
           inputContainer.appendChild(contentArea);
-          document.getElementById('guided-inputs-list').appendChild(inputContainer);
+          const listEl = getGuidedInputListElement(type);
+          if (listEl) listEl.appendChild(inputContainer);
           return;
         }
       }
@@ -1493,32 +1554,41 @@
         nameInput.addEventListener('blur', updateNameDisplay);
       }
       
-      // Quantity field
+      // Quantity field (required for inventory items)
       const quantityField = document.createElement('div');
       quantityField.style.marginBottom = '12px';
       const quantityLabel = document.createElement('label');
       quantityLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-      quantityLabel.textContent = 'Quantity';
+      quantityLabel.innerHTML = 'Quantity <span style="color: var(--error, #ef4444);">*</span>';
       quantityField.appendChild(quantityLabel);
       const quantityInput = document.createElement('input');
       quantityInput.type = 'number';
       quantityInput.className = 'guided-input-quantity';
-      quantityInput.placeholder = '0';
+      quantityInput.placeholder = 'e.g. 1';
       quantityInput.step = '0.01';
+      quantityInput.min = '0.01';
+      quantityInput.required = true;
+      quantityInput.setAttribute('data-inventory-required', 'true');
       quantityInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
       quantityField.appendChild(quantityInput);
       contentArea.appendChild(quantityField);
       
-      // Unit dropdown
+      // Unit dropdown (required for inventory items)
       const unitField = document.createElement('div');
       unitField.style.marginBottom = '12px';
       const unitLabel = document.createElement('label');
       unitLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-      unitLabel.textContent = 'Unit';
+      unitLabel.innerHTML = 'Unit <span style="color: var(--error, #ef4444);">*</span>';
       unitField.appendChild(unitLabel);
       const unitSelect = document.createElement('select');
       unitSelect.className = 'guided-input-unit form-select';
+      unitSelect.required = true;
+      unitSelect.setAttribute('data-inventory-required', 'true');
       unitSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+      const emptyUnitOption = document.createElement('option');
+      emptyUnitOption.value = '';
+      emptyUnitOption.textContent = 'Select unit';
+      unitSelect.appendChild(emptyUnitOption);
       [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
         const option = document.createElement('option');
         option.value = unit;
@@ -1668,50 +1738,33 @@
     }
     
     inputContainer.appendChild(contentArea);
-    document.getElementById('guided-inputs-list').appendChild(inputContainer);
+    const listEl = getGuidedInputListElement(type);
+    if (listEl) listEl.appendChild(inputContainer);
     
     // Update button text after adding input
     updateInputButtonsText();
   };
   
-  // Update input button text based on number of inputs
+  // Update input button text based on number of inputs in each tab
   function updateInputButtonsText() {
-    const inputCount = document.querySelectorAll('#guided-inputs-list > div').length;
-    const inventoryBtn = document.getElementById('add-inventory-input-btn');
-    const newInputBtn = document.getElementById('add-new-input-btn');
-    const previousOutputBtn = document.getElementById('add-previous-output-input-btn');
+    const invList = document.getElementById('guided-inputs-list-inventory');
+    const newList = document.getElementById('guided-inputs-list-new');
+    const inventoryCount = invList ? invList.querySelectorAll(':scope > div').length : 0;
+    const newCount = newList ? newList.querySelectorAll(':scope > div').length : 0;
     
-    // Update inventory button
-    if (inventoryBtn) {
-      const mainText = inputCount > 0 ? '+ Add another input' : '+ Add input';
-      inventoryBtn.innerHTML = `
-        <span>${mainText}</span>
-        <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">from inventory</span>
-      `;
+    const inventoryBtnText = document.getElementById('add-another-inventory-text');
+    const newBtnText = document.getElementById('add-another-new-text');
+    if (inventoryBtnText) {
+      inventoryBtnText.textContent = inventoryCount > 0 ? '+ Add another' : '+ Add input';
     }
-    
-    // Update new input button
-    if (newInputBtn) {
-      const mainText = inputCount > 0 ? '+ Add another input' : '+ Add input';
-      newInputBtn.innerHTML = `
-        <span>${mainText}</span>
-        <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">not from inventory</span>
-      `;
-    }
-    
-    // Show/hide previous output button based on whether we have created steps
-    if (previousOutputBtn) {
-      if (createdSteps.length > 0) {
-        previousOutputBtn.style.display = 'flex';
-      } else {
-        previousOutputBtn.style.display = 'none';
-      }
+    if (newBtnText) {
+      newBtnText.textContent = newCount > 0 ? '+ Add another' : '+ Add input';
     }
   }
   
   // Update all inventory dropdowns to exclude selected items
   function updateInventoryDropdowns() {
-    const allInputs = document.querySelectorAll('#guided-inputs-list > div');
+    const allInputs = getAllGuidedInputElements();
     allInputs.forEach(inputEl => {
       const nameInput = inputEl.querySelector('.guided-input-name.searchable-dropdown-input');
       if (nameInput) {
@@ -2005,7 +2058,7 @@
     const labelInput = document.createElement('input');
     labelInput.type = 'text';
     labelInput.className = 'guided-prompt-label';
-    labelInput.placeholder = 'e.g., Batch number, Temperature';
+    labelInput.placeholder = 'e.g., Temperature, Operator name';
     labelInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
     labelInput.addEventListener('input', updateLabelDisplay);
     labelInput.addEventListener('blur', updateLabelDisplay);
@@ -2153,13 +2206,27 @@
     const stepDescription = document.getElementById('guided-step-description').value.trim();
     
     if (!stepName) {
-      alert('Please enter a step name');
+      if (window.showNotification) {
+        window.showNotification('error', 'Step name required', 'Please enter a step name.');
+      } else {
+        alert('Please enter a step name');
+      }
       return;
     }
     
-    // Collect inputs
+    const invResult = validateInventoryInputs();
+    if (!invResult.valid) {
+      if (window.showNotification) {
+        window.showNotification('error', 'Inventory inputs required', invResult.message);
+      } else {
+        alert(invResult.message);
+      }
+      return;
+    }
+    
+    // Collect inputs (from both tabs)
     const inputs = [];
-    const inputElements = document.querySelectorAll('#guided-inputs-list > div');
+    const inputElements = getAllGuidedInputElements();
     inputElements.forEach(inputEl => {
       // Get name - could be from searchable dropdown (input) or regular input
       const nameInput = inputEl.querySelector('.guided-input-name');
@@ -2249,6 +2316,22 @@
         });
       }
     });
+    // Dedicated Batch number: add or remove based on dropdown (required / optional / don't ask)
+    const batchNumberModeEl = document.getElementById('guided-prompt-batch-number-mode');
+    const batchNumberMode = batchNumberModeEl ? batchNumberModeEl.value : 'dont_ask';
+    // Remove any Batch number from the list (we'll add one from the dropdown if needed)
+    const filteredPrompts = executionPrompts.filter(p => (p.label || '').toLowerCase() !== 'batch number');
+    if (batchNumberMode === 'required' || batchNumberMode === 'optional') {
+      filteredPrompts.unshift({
+        label: 'Batch number',
+        type: 'text',
+        unit: null,
+        required: batchNumberMode === 'required'
+      });
+    }
+    // Use filtered list (with Batch number only if required/optional)
+    executionPrompts.length = 0;
+    executionPrompts.push(...filteredPrompts);
     
     // Get process ID from URL params (same way as flows2.html)
     const urlParams = new URLSearchParams(window.location.search);
@@ -2674,6 +2757,31 @@
         hideSaveDraftOrDiscardModal();
         // Keep create-process-modal open; user continues creating steps
       });
+    }
+    
+    // Define Inputs step 2: tab switching (Inventory items | Other materials)
+    const inputTabInventory = document.getElementById('input-tab-inventory');
+    const inputTabNew = document.getElementById('input-tab-new');
+    const panelInventory = document.getElementById('guided-inputs-panel-inventory');
+    const panelNew = document.getElementById('guided-inputs-panel-new');
+    function switchInputTab(tab) {
+      const isInventory = tab === 'inventory';
+      if (inputTabInventory) {
+        inputTabInventory.classList.toggle('active', isInventory);
+        inputTabInventory.setAttribute('aria-selected', isInventory ? 'true' : 'false');
+      }
+      if (inputTabNew) {
+        inputTabNew.classList.toggle('active', !isInventory);
+        inputTabNew.setAttribute('aria-selected', !isInventory ? 'true' : 'false');
+      }
+      if (panelInventory) panelInventory.style.display = isInventory ? 'block' : 'none';
+      if (panelNew) panelNew.style.display = isInventory ? 'none' : 'block';
+    }
+    if (inputTabInventory) {
+      inputTabInventory.addEventListener('click', function() { switchInputTab('inventory'); });
+    }
+    if (inputTabNew) {
+      inputTabNew.addEventListener('click', function() { switchInputTab('new'); });
     }
   });
 })();

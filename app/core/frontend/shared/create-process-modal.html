@@ -1,6 +1,13 @@
 <!-- Create Process Guided Flow Modal -->
 <div class="modal-overlay" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
   <div class="card" style="max-width: 700px; width: 90%; padding: 24px; max-height: 90vh; overflow-y: auto;">
+    <style>
+      .guided-inputs-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border-default, #e5e7eb); }
+      .guided-inputs-tab { flex: 1; padding: 12px 16px; border: none; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: background 0.2s, color 0.2s; }
+      .guided-inputs-tab:hover { background: var(--bg-hover, rgba(0,0,0,0.05)); color: var(--text-primary); }
+      .guided-inputs-tab.active { background: var(--bg-card, #fff); color: var(--primary, #3b82f6); border-bottom-color: var(--primary, #3b82f6); }
+      @media (min-width: 600px) { .guided-inputs-tab { padding: 14px 20px; font-size: 15px; } }
+    </style>
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
       <div>
         <h2 id="modal-title" style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">Create Process Step</h2>
@@ -86,37 +93,44 @@
         <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
           <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Define Inputs</h3>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-            Inputs are the physical materials you add to this step. These can be raw materials, ingredients, or outputs from previous steps.
+            Inputs are the physical materials you add to this step. Choose a tab below: add from items you already have in stock, or define inputs not in inventory.
           </p>
-          <div style="margin-top: 12px;">
-            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Add from inventory</p>
-            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
-              Select from existing inventory items. Use this when you have materials already in stock (e.g., raw materials from suppliers, outputs from previous steps). You'll define the quantity and unit here, and at execution time you'll choose which specific batch to consume from your inventory.
-            </p>
-            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">New Input</p>
-            <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-              Define a new input that will be manually entered at execution time. Use this for materials not yet in inventory or for variable quantities (e.g., water, specific ingredient amounts that change per batch). You can set a default quantity and unit, or choose to be prompted at execution.
-            </p>
-          </div>
         </div>
         
-        <div id="guided-inputs-container" style="margin-bottom: 20px;">
-          <div id="guided-inputs-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
-            <!-- Inputs will be added here dynamically -->
+        <!-- Tabs: Inventory items | Other materials -->
+        <div class="guided-inputs-tabs" style="margin-bottom: 16px;">
+          <button type="button" class="guided-inputs-tab active" data-input-tab="inventory" id="input-tab-inventory" aria-selected="true">
+            Inventory items
+          </button>
+          <button type="button" class="guided-inputs-tab" data-input-tab="new" id="input-tab-new" aria-selected="false">
+            Other materials
+          </button>
+        </div>
+        
+        <!-- Panel: Inventory items -->
+        <div id="guided-inputs-panel-inventory" class="guided-inputs-panel" style="display: block;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
+            Select from items you have in stock. Define quantity and unit; at execution you choose which batch to consume.
+          </p>
+          <div id="guided-inputs-list-inventory" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
+            <!-- Inventory-type inputs added here -->
           </div>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button type="button" id="add-inventory-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('inventory')" style="flex: 1;">
-              <span>+ Add input</span>
-              <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">from inventory</span>
-            </button>
-            <button type="button" id="add-new-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new')" style="flex: 1;">
-              <span>+ Add input</span>
-              <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">not from inventory</span>
-            </button>
-            <button type="button" id="add-previous-output-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('previous_output')" style="flex: 1; display: none;">
-              <span>+ Add output from previous step</span>
-            </button>
+          <button type="button" id="add-another-inventory-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('inventory')">
+            <span id="add-another-inventory-text">+ Add input</span>
+          </button>
+        </div>
+        
+        <!-- Panel: Other materials -->
+        <div id="guided-inputs-panel-new" class="guided-inputs-panel" style="display: none;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
+            Define other materials used during this step in your process that are not items you keep in your inventory (e.g. water, freshly foraged food). Set default quantity and unit or prompt at execution.
+          </p>
+          <div id="guided-inputs-list-new" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
+            <!-- New-type inputs added here -->
           </div>
+          <button type="button" id="add-another-new-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new')">
+            <span id="add-another-new-text">+ Add input</span>
+          </button>
         </div>
       </div>
       
@@ -183,16 +197,30 @@
         <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
           <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Execution Prompts</h3>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-            Execution prompts are custom fields that will be recorded when this step runs. Use these to capture important metadata like batch numbers, quality control measurements, or other execution-specific information.
+            Execution prompts are custom fields recorded when this step runs. Use the Batch number field below for traceability (recommended), and add other prompts for quality control, measurements, or execution-specific information.
           </p>
           <div style="margin-top: 12px;">
             <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-              <strong>Examples:</strong> Batch number (text), Temperature reading (number with unit "°C"), Production date (date), Quality grade (select with options). These values are stored with each execution and can be used for traceability and reporting.
+              <strong>Recommendation:</strong> Use the Batch number field below for traceability. For other prompts, you can add e.g. Temperature (number with unit "°C"), Quality grade (select), Operator name (text), Pressure or viscosity (number with unit). These values are stored with each execution and used for traceability and reporting.
             </p>
           </div>
         </div>
         
+        <!-- Dedicated Batch number field: Required / Optional / Don't ask during execution -->
+        <div id="guided-prompt-batch-number-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
+          <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Batch number</label>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;">
+            Recommended for traceability — recorded with each execution so you can trace materials and steps. Choose whether to require it, prompt optionally, or not ask during execution.
+          </p>
+          <select id="guided-prompt-batch-number-mode" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 14px; box-sizing: border-box;">
+            <option value="required">Required — must be entered to complete this step</option>
+            <option value="optional" selected>Optional — prompt during execution but not mandatory</option>
+            <option value="dont_ask">Don't ask during execution — this step does not require a batch number</option>
+          </select>
+        </div>
+        
         <div id="guided-prompts-container" style="margin-bottom: 20px;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 10px 0;">Other execution prompts (e.g. temperature, quality grade, operator name):</p>
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedPrompt()" style="flex: 1;">
               + Add Prompt
