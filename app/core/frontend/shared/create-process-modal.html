@@ -7,6 +7,26 @@
       .guided-inputs-tab:hover { background: var(--bg-hover, rgba(0,0,0,0.05)); color: var(--text-primary); }
       .guided-inputs-tab.active { background: var(--bg-card, #fff); color: var(--primary, #3b82f6); border-bottom-color: var(--primary, #3b82f6); }
       @media (min-width: 600px) { .guided-inputs-tab { padding: 14px 20px; font-size: 15px; } }
+      .guided-inventory-cards-stack { display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
+      .guided-inventory-section { display: flex; flex-direction: column; gap: 8px; }
+      .guided-inventory-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; padding: 4px 0; border-bottom: 1px solid var(--border-default, #e5e7eb); }
+      .guided-inventory-card { display: flex; flex-direction: column; align-items: stretch; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); background: var(--bg-card, #fff); color: var(--text-primary); font-size: 13px; text-align: left; width: 100%; min-height: 56px; box-sizing: border-box; overflow: hidden; }
+      .guided-inventory-card:hover { border-color: var(--primary, #3b82f6); }
+      .guided-inventory-card .card-header-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; }
+      .guided-inventory-card .card-header-row:hover { background: var(--bg-secondary, #f9fafb); }
+      .guided-inventory-card .card-header-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+      .guided-inventory-card .card-name { font-weight: 600; }
+      .guided-inventory-card .card-summary { font-size: 11px; color: var(--text-tertiary); }
+      .guided-inventory-card .card-expand-btn { flex-shrink: 0; padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-sm); }
+      .guided-inventory-card .card-expand-btn:hover { color: var(--primary, #3b82f6); background: var(--bg-secondary, #f3f4f6); }
+      .guided-inventory-card .card-expand-btn svg { transition: transform 0.2s; }
+      .guided-inventory-card.expanded .card-expand-btn svg { transform: rotate(180deg); }
+      .guided-inventory-card .card-add-btn { padding: 6px 12px; font-size: 12px; }
+      .guided-inventory-card .card-meta-block { padding: 0 14px 12px 14px; border-top: 1px solid var(--border-light, #eee); }
+      .guided-inventory-card .card-add-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-light, #eee); }
+      .guided-inventory-card .card-meta-block .meta-line { font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0; line-height: 1.5; }
+      .guided-inventory-card .card-meta-block .meta-line:first-child { margin-top: 10px; }
+      .guided-inventory-card .card-meta-block .meta-label { font-weight: 500; color: var(--text-primary); }
     </style>
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
       <div>
@@ -31,11 +51,14 @@
       </div>
     </div>
     
-    <!-- Existing steps list view (when editing a non-draft process: list steps with Edit + Add new step) -->
+    <!-- Existing steps list view (when editing a non-draft process: list steps with Edit + Add new step + Start new) -->
     <div id="existing-steps-list-view" style="display: none; margin-bottom: 24px;">
       <div style="margin-bottom: 20px;">
-        <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
           Edit an existing step or add a new one. Changes apply to future executions.
+        </p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+          To start a completely new process from scratch (replacing all current steps), click <strong>Start new</strong>.
         </p>
       </div>
       <div id="existing-steps-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
@@ -45,7 +68,10 @@
         <button type="button" class="btn btn-primary" onclick="window.addNewStepFromEditView()">
           + Add new step
         </button>
-        <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
+        <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" onclick="window.startNewFromEditView()">Start new</button>
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
+        </div>
       </div>
     </div>
     
@@ -65,11 +91,8 @@
       <div style="margin-bottom: 24px;">
         <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
           <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">What are process steps?</h3>
-          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-            Process steps allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
-          </p>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
-            <strong>Examples:</strong> In food manufacturing, you might have steps like "Mixing", "Fermentation", "Packaging". In pharmaceuticals, steps could be "Active Ingredient Mixing", "Tablet Pressing", "Quality Control". In cosmetics, steps might include "Emulsion Creation", "Filling", "Labeling".
+            Process steps allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
           </p>
         </div>
         
@@ -77,9 +100,9 @@
           <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
             Step Name <span style="color: var(--error, #ef4444);">*</span>
           </label>
-          <input type="text" id="guided-step-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Mixing, Fermentation, Tablet Pressing">
+          <input type="text" id="guided-step-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
           <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
-            Use the name you already call this process internally. This helps your team recognize the step immediately.
+            Use the name you already call this process internally. Example: Mixing, Fermentation, Tablet Pressing.
           </p>
         </div>
         
@@ -87,9 +110,9 @@
           <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
             Description
           </label>
-          <textarea id="guided-step-description" rows="3" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; resize: vertical;" placeholder="Brief summary of what this step involves..."></textarea>
+          <textarea id="guided-step-description" rows="3" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; resize: vertical;"></textarea>
           <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
-            Provide a high-level summary of what this process step involves. This helps others understand the step's purpose.
+            Provide a high-level summary of what this process step involves. Example: Brief summary of what this step involves.
           </p>
         </div>
       </div>
@@ -111,42 +134,53 @@
         <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
           <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Define Inputs</h3>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-            Inputs are the physical materials you add to this step. Choose a tab below: add from items you already have in stock, or define inputs not in inventory.
+            Inputs are the physical materials you add to this step. Add from items in stock below, or define other materials. Added inputs appear here (expand to edit).
           </p>
         </div>
         
-        <!-- Tabs: Inventory items | Other materials -->
+        <!-- Inputs added: above selection; collapsed by default -->
+        <div style="margin-bottom: 20px;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">Inputs added (expand to edit):</p>
+          <div id="guided-inputs-list-unified" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
+            <!-- All input cards shown here; visible from both tabs -->
+          </div>
+        </div>
+        
+        <!-- Tabs: Inventory items | Outputs from previous steps | Other materials -->
         <div class="guided-inputs-tabs" style="margin-bottom: 16px;">
           <button type="button" class="guided-inputs-tab active" data-input-tab="inventory" id="input-tab-inventory" aria-selected="true">
             Inventory items
+          </button>
+          <button type="button" class="guided-inputs-tab" data-input-tab="previous_output" id="input-tab-previous-output" aria-selected="false">
+            Outputs from previous steps
           </button>
           <button type="button" class="guided-inputs-tab" data-input-tab="new" id="input-tab-new" aria-selected="false">
             Other materials
           </button>
         </div>
         
-        <!-- Panel: Inventory items -->
+        <!-- Tab panel: Inventory = sectioned cards; Previous outputs = list; Other = description + Add button -->
         <div id="guided-inputs-panel-inventory" class="guided-inputs-panel" style="display: block;">
-          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
-            Select from items you have in stock. Define quantity and unit; at execution you choose which batch to consume.
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">
+            Select an item below; then set quantity, unit and execution type in the form that appears above.
           </p>
-          <div id="guided-inputs-list-inventory" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
-            <!-- Inventory-type inputs added here -->
+          <div id="guided-inventory-cards-container" class="guided-inventory-cards-stack">
+            <!-- Section headers + expandable cards; populated by JS -->
           </div>
-          <button type="button" id="add-another-inventory-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('inventory')">
-            <span id="add-another-inventory-text">+ Add input</span>
-          </button>
         </div>
-        
-        <!-- Panel: Other materials -->
+        <div id="guided-inputs-panel-previous-output" class="guided-inputs-panel" style="display: none;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">
+            Select an output from a previous step below; then set quantity and unit in the form that appears above.
+          </p>
+          <div id="guided-previous-outputs-container" class="guided-inventory-cards-stack">
+            <!-- List of previous step outputs; populated by JS -->
+          </div>
+        </div>
         <div id="guided-inputs-panel-new" class="guided-inputs-panel" style="display: none;">
           <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
-            Define other materials used during this step in your process that are not items you keep in your inventory (e.g. water, freshly foraged food). Set default quantity and unit or prompt at execution.
+            Define other materials used during this step that are not in your inventory (e.g. water, freshly foraged food). Set default quantity and unit or prompt at execution.
           </p>
-          <div id="guided-inputs-list-new" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
-            <!-- New-type inputs added here -->
-          </div>
-          <button type="button" id="add-another-new-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new')">
+          <button type="button" id="add-another-new-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new', false)">
             <span id="add-another-new-text">+ Add input</span>
           </button>
         </div>
@@ -176,11 +210,6 @@
             <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Example Workflow:</p>
             <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
               <strong>Step 1 "Mixing":</strong> Outputs "Mixed Base" → <strong>Step 2 "Fermentation":</strong> Uses "Mixed Base" as input, outputs "Fermented Product" → <strong>Step 3 "Packaging":</strong> Uses "Fermented Product" as input, outputs "Final Product"
-            </p>
-          </div>
-          <div style="margin-top: 12px;">
-            <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-              <strong>Industry Examples:</strong> In pharmaceuticals, a "Tablet Pressing" step might output "Compressed Tablets". In food manufacturing, "Baking" outputs "Baked Goods". In cosmetics, "Emulsion" outputs "Cream Base" that can be used in "Filling" steps.
             </p>
           </div>
         </div>

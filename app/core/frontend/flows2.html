@@ -541,6 +541,7 @@
         showNotification('error', 'Failed to Load Process', error.message || 'Failed to load process details');
       }
     }
+    window.loadProcessData = loadProcessData;
     
     function closeWelcomeDefineStepsModal() {
       const welcomeModal = document.getElementById('welcome-define-steps-modal');
@@ -1002,9 +1003,11 @@
       
       const currentStep = execution.current_step || {};
       const nextStep = execution.next_step || {};
-      const stepNumber = currentStep.step_number || 0;
-      // Use execution's total_steps (snapshot) if available, otherwise fall back to current process steps
-      const totalSteps = execution.total_steps || currentProcess?.steps?.length || 0;
+      // Use execution's total_steps (snapshot) from API so "X of Y" matches this execution
+      const totalSteps = execution.total_steps ?? currentProcess?.steps?.length ?? 0;
+      const rawStepNumber = currentStep.step_number || 0;
+      // Clamp to 1..totalSteps so we never show "13 of 3" (backend now sends 1-based position; this guards stale data)
+      const stepNumber = totalSteps > 0 ? Math.min(Math.max(1, rawStepNumber), totalSteps) : rawStepNumber;
       
       // Use the progress from the execution (calculated by backend based on completed steps)
       // The backend calculates: progress = (completed_steps / total_steps) * 100
@@ -1046,17 +1049,17 @@
       // Check if current step is terminal (last step) - don't show next step if it is
       const isTerminalStep = stepNumber === totalSteps && totalSteps > 0;
       
-      // Execute step button (only for active executions with a current step)
-      // Positioned on the same line as Current Step, aligned to the right
+      // Next step button (only for active executions) - shown in header next to Started/Started by
       let executeStepHtml = '';
       if (status === 'active' && currentStep.step_id) {
-        executeStepHtml = `<button class="btn btn-primary btn-sm" onclick="completeCurrentStep('${executionId}')" style="white-space: nowrap;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>Execute Step</button>`;
+        executeStepHtml = `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); completeCurrentStep('${executionId}')" style="white-space: nowrap;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>Next step</button>`;
       }
       
       // Fetch execution details once for both completed steps and next step
       // Do this for both active and completed executions
       let completedStepsHtml = '';
       let nextStepHtml = '';
+      let nextStepHeaderHtml = '';
       if (status === 'active' || status === 'completed') {
         try {
           const executionData = await CoreAPI.getExecution(executionId);
@@ -1250,20 +1253,20 @@
               const stepDetails = currentProcess?.steps?.find(s => s.id === nextReadyStep.step_id);
               
               if (stepDetails) {
-                nextStepHtml = `
-                  <div class="next-step-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
-                    <div class="next-step-header" style="display: flex; align-items: center; gap: 12px;">
-                      <div class="next-step-icon" style="flex-shrink: 0;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                      </div>
-                      <div class="next-step-info" style="flex: 1;">
-                        <div class="next-step-label" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Next Step</div>
-                        <div class="next-step-name" style="font-weight: 500; color: var(--text-primary); font-size: 14px;">${escapeHtml(stepDetails.name || 'Unknown')}</div>
-                        ${stepDetails.description ? `<div class="next-step-description" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(stepDetails.description)}</div>` : ''}
-                      </div>
+                const nextStepInner = `
+                  <div class="next-step-header" style="display: flex; align-items: center; gap: 12px;">
+                    <div class="next-step-icon" style="flex-shrink: 0;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    </div>
+                    <div class="next-step-info" style="flex: 1;">
+                      <div class="next-step-label" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Next Step</div>
+                      <div class="next-step-name" style="font-weight: 500; color: var(--text-primary); font-size: 14px;">${escapeHtml(stepDetails.name || 'Unknown')}</div>
+                      ${stepDetails.description ? `<div class="next-step-description" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(stepDetails.description)}</div>` : ''}
                     </div>
                   </div>
                 `;
+                nextStepHtml = `<div class="next-step-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">${nextStepInner}</div>`;
+                nextStepHeaderHtml = `<div class="next-step-section" style="margin-top: 8px; margin-bottom: 8px;">${nextStepInner}</div>`;
               }
             }
           }
@@ -1288,17 +1291,24 @@
       }
       
       card.innerHTML = `
-        <div class="execution-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);" onclick="toggleExecution(this)">
-          <div style="flex: 1;">
-            <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(executionDisplayName)}</div>
+        <div class="execution-header" style="display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);" onclick="toggleExecution(this)">
+          <div style="flex: 1; min-width: 0;">
             ${status === 'active' ? `
-              <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">Batch started: ${startDate}</div>
-              <div style="font-size: 13px; color: var(--text-secondary);">Started by: ${escapeHtml(user.username)}</div>
+              ${nextStepHeaderHtml || ''}
+              <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px; margin-top: ${nextStepHeaderHtml ? '8px' : '0'};">Started: ${startDate}</div>
+              <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Started by: ${escapeHtml(user.username)}</div>
+              ${executeStepHtml ? `<div onclick="event.stopPropagation();" style="margin-top: 8px;">${executeStepHtml}</div>` : ''}
+              <div class="execution-progress" style="margin-top: 12px;">
+                <div class="progress-bar" style="height: 8px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden;">
+                  <div class="progress-fill" style="height: 100%; background: ${progressColor}; width: ${progress}%; transition: width 0.3s, background 0.3s;"></div>
+                </div>
+              </div>
             ` : `
+              <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(executionDisplayName)}</div>
               <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">Completed: ${completedDate || startDate}</div>
             `}
           </div>
-          <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
             <span class="badge ${status === 'active' ? 'badge-accent' : 'badge-success'}" style="flex-shrink: 0;">${status === 'active' ? 'In Progress' : 'Completed'}</span>
             <div class="execution-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1308,20 +1318,15 @@
           </div>
         </div>
         <div class="execution-content" style="display: none; padding: 12px;">
+          ${status !== 'active' ? `
           <div class="execution-progress" style="margin-bottom: 12px;">
             <div class="progress-bar" style="height: 8px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden;">
               <div class="progress-fill" style="height: 100%; background: ${progressColor}; width: ${progress}%; transition: width 0.3s, background 0.3s;"></div>
             </div>
           </div>
+          ` : ''}
           <div class="execution-details" style="margin-bottom: 12px;">
             ${status === 'active' ? `
-              <div class="execution-detail" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
-                <div>
-                  <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Current Step</span>
-                  <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary); font-weight: 500; margin-left: 8px;">${stepNumber} of ${totalSteps}</span>
-                </div>
-                ${executeStepHtml}
-              </div>
               ${execution.batch_id ? `
                 <div class="execution-detail" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
                   <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Batch ID</span>
@@ -1337,7 +1342,6 @@
               ` : ''}
             `}
           </div>
-          ${status === 'active' ? nextStepHtml : ''}
           ${completedStepsHtml}
         </div>
       `;
@@ -1564,6 +1568,9 @@
       if (modal) {
         modal.style.display = 'none';
         document.body.style.overflow = '';
+        if (modalId === 'create-process-modal' && typeof loadProcessData === 'function') {
+          loadProcessData();
+        }
       }
     };
     

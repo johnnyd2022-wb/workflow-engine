@@ -550,14 +550,20 @@ def list_executions():
     for execution in executions:
         # Get current step info
         execution_steps = execution.execution_steps if execution.execution_steps else []
+        execution_steps_sorted = sorted(execution_steps, key=lambda es: es.step_number)
         current_step = None
-        ready_steps = [es for es in execution_steps if es.status.value == "ready"]
+        ready_steps = [es for es in execution_steps_sorted if es.status.value == "ready"]
         completed_steps = [es for es in execution_steps if es.status.value == "completed"]
 
         if ready_steps:
             next_step = ready_steps[0]
+            # Use 1-based position in execution (not raw step_number) so display is always "N of total"
+            try:
+                display_index = 1 + next(i for i, es in enumerate(execution_steps_sorted) if es.id == next_step.id)
+            except StopIteration:
+                display_index = next_step.step_number
             current_step = {
-                "step_number": next_step.step_number,
+                "step_number": display_index,
                 "step_id": str(next_step.step_id),
                 "name": next_step.step.name if next_step.step else None,
             }
@@ -576,6 +582,7 @@ def list_executions():
                 "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
                 "current_step": current_step,
                 "progress": progress,
+                "total_steps": total_steps,
             }
         )
 
