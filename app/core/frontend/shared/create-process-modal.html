@@ -8,7 +8,7 @@
           You can expand existing steps to edit them, or use this interactive editor to add additional steps.
         </p>
       </div>
-      <button class="modal-close" data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+      <button type="button" class="modal-close" data-create-step-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -39,9 +39,9 @@
     <div id="create-process-step-1" class="create-process-step" style="display: block;">
       <div style="margin-bottom: 24px;">
         <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
-          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">What are Custom Processes?</h3>
+          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">What are process steps?</h3>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-            Custom processes allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
+            Process steps allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
           </p>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
             <strong>Examples:</strong> In food manufacturing, you might have steps like "Mixing", "Fermentation", "Packaging". In pharmaceuticals, steps could be "Active Ingredient Mixing", "Tablet Pressing", "Quality Control". In cosmetics, steps might include "Emulsion Creation", "Filling", "Labeling".
@@ -74,7 +74,7 @@
           Save as draft
         </button>
         <div style="display: flex; gap: 12px;">
-          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
           <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
         </div>
       </div>
@@ -125,6 +125,7 @@
           Save as draft
         </button>
         <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
           <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
           <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
         </div>
@@ -169,6 +170,7 @@
           Save as draft
         </button>
         <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
           <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
           <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
         </div>
@@ -207,9 +209,7 @@
           Save as draft
         </button>
         <div style="display: flex; gap: 12px;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()" style="margin-right: auto;">
-            Save as draft
-          </button>
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
           <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
           <button type="button" class="btn btn-primary" onclick="window.createProcessFromGuidedFlow()">Create Step</button>
         </div>
@@ -298,4 +298,36 @@
       </div>
     </div>
   </div>
+  
 </div>
+  <!-- Save as draft or discard — sibling of create-process-modal so it shows on top when Cancel/X clicked -->
+  <div class="modal-overlay" id="save-draft-or-discard-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1003; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card" style="max-width: 480px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
+        <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--warning-bg, #fef3c7); display: flex; align-items: center; justify-content: center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--warning, #f59e0b);">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Save your progress?</h2>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;">
+            <strong>Continue creating steps</strong> — get value in front of you quickly. You can save as draft anytime.
+          </p>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;">
+            Or <strong>save as draft</strong> and all current step progress will be saved so you can continue later.
+          </p>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.55;">
+            Or <strong>discard</strong> and all progress will be lost — you will need to start again.
+          </p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary" id="save-draft-discard-btn">Discard</button>
+        <button type="button" class="btn btn-secondary" id="save-draft-save-btn">Save as draft</button>
+        <button type="button" class="btn btn-primary" id="save-draft-continue-btn">Continue creating steps</button>
+      </div>
+    </div>
+  </div>

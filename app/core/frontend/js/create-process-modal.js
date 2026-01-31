@@ -653,6 +653,23 @@
     }
   }
   
+  // Hide the "Save as draft or discard?" confirmation modal
+  function hideSaveDraftOrDiscardModal() {
+    const confirmModal = document.getElementById('save-draft-or-discard-modal');
+    if (confirmModal) {
+      confirmModal.style.display = 'none';
+    }
+  }
+  
+  // Show "Save as draft or discard?" when user clicks Cancel or X (instead of closing immediately)
+  function requestCloseCreateProcessModal() {
+    const confirmModal = document.getElementById('save-draft-or-discard-modal');
+    if (confirmModal) {
+      confirmModal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+  }
+  
   // Reset form (but keep created steps)
   function resetForm(keepSteps = false) {
     document.getElementById('guided-step-name').value = '';
@@ -2620,24 +2637,42 @@
     resetForm(false);
   };
   
-  // Close modal on overlay click or close button
+  // Close modal on overlay click or close button — show "Save as draft or discard?" first
+  // Use data-create-step-close so the global [data-modal-close] handler (e.g. on flows2) does not run and close the modal before our prompt appears
   document.addEventListener('DOMContentLoaded', function() {
     const modal = document.getElementById('create-process-modal');
     if (modal) {
-      // Close on overlay click - DISABLED to prevent accidental closes
-      // modal.addEventListener('click', function(e) {
-      //   if (e.target === modal) {
-      //     closeModal();
-      //   }
-      // });
-      
-      // Close on close button
-      const closeButtons = modal.querySelectorAll('[data-modal-close]');
+      const closeButtons = modal.querySelectorAll('[data-create-step-close]');
       closeButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          resetForm(false); // Reset everything when closing
-          closeModal();
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          requestCloseCreateProcessModal();
         });
+      });
+    }
+    
+    // Save as draft or discard confirmation modal buttons
+    const saveDraftSaveBtn = document.getElementById('save-draft-save-btn');
+    const saveDraftDiscardBtn = document.getElementById('save-draft-discard-btn');
+    const saveDraftContinueBtn = document.getElementById('save-draft-continue-btn');
+    if (saveDraftSaveBtn) {
+      saveDraftSaveBtn.addEventListener('click', function() {
+        hideSaveDraftOrDiscardModal();
+        window.saveDraft();
+      });
+    }
+    if (saveDraftDiscardBtn) {
+      saveDraftDiscardBtn.addEventListener('click', function() {
+        hideSaveDraftOrDiscardModal();
+        resetForm(false);
+        closeModal();
+      });
+    }
+    if (saveDraftContinueBtn) {
+      saveDraftContinueBtn.addEventListener('click', function() {
+        hideSaveDraftOrDiscardModal();
+        // Keep create-process-modal open; user continues creating steps
       });
     }
   });
