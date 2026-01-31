@@ -582,8 +582,8 @@
       // Sort steps by step_number
       const sortedSteps = [...steps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
       
-      sortedSteps.forEach(step => {
-        const stepCard = createStepCard(step);
+      sortedSteps.forEach((step, index) => {
+        const stepCard = createStepCard(step, index);
         container.appendChild(stepCard);
       });
       
@@ -600,8 +600,8 @@
       }
     }
     
-    // Create step card
-    function createStepCard(step) {
+    // Create step card (displayIndex is 0-based; badge shows displayIndex + 1 so first step always shows 1)
+    function createStepCard(step, displayIndex) {
       const card = document.createElement('div');
       card.className = 'step-card';
       card.setAttribute('data-step-id', step.id || `step-new-${Date.now()}`);
@@ -609,6 +609,7 @@
       const inputs = step.inputs || [];
       const outputs = step.outputs || [];
       const executionPrompts = step.execution_prompts || [];
+      const displayNumber = typeof displayIndex === 'number' ? displayIndex + 1 : (step.step_number || 1);
       
       card.innerHTML = `
         <div class="step-header">
@@ -619,7 +620,7 @@
               <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
           </div>
-          <div class="step-number">${step.step_number || ''}</div>
+          <div class="step-number">${displayNumber}</div>
           <div class="step-header-content" onclick="toggleStep(this)" style="flex: 1; display: flex; align-items: center; cursor: pointer;">
             <div class="step-info">
               <div class="step-name">${escapeHtml(step.name || 'Unnamed Step')}</div>

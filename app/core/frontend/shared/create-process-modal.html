@@ -31,8 +31,26 @@
       </div>
     </div>
     
+    <!-- Existing steps list view (when editing a non-draft process: list steps with Edit + Add new step) -->
+    <div id="existing-steps-list-view" style="display: none; margin-bottom: 24px;">
+      <div style="margin-bottom: 20px;">
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+          Edit an existing step or add a new one. Changes apply to future executions.
+        </p>
+      </div>
+      <div id="existing-steps-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+        <!-- Steps with Edit button will be added here by JS -->
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary" onclick="window.addNewStepFromEditView()">
+          + Add new step
+        </button>
+        <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
+      </div>
+    </div>
+    
     <!-- Step Indicator -->
-    <div style="display: flex; justify-content: center; margin-bottom: 24px; gap: 8px;">
+    <div id="create-process-step-indicators" style="display: flex; justify-content: center; margin-bottom: 24px; gap: 8px;">
       <div class="step-indicator active" data-step="1" style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;">1</div>
       <div style="width: 40px; height: 2px; background: var(--border-default, #e5e7eb); margin-top: 15px;"></div>
       <div class="step-indicator" data-step="2" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; border: 2px solid var(--border-default, #e5e7eb);">2</div>

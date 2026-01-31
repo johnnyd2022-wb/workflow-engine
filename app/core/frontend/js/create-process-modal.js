@@ -10,12 +10,151 @@
   let createdSteps = []; // Track steps created in this session
   let editingStepId = null; // Track which step is being edited (if resuming draft)
   let isRestoringDraft = false; // Flag to prevent step reset during draft restoration
+  let isEditingExistingProcess = false; // True when modal was opened for a non-draft process with steps (show list + Edit / Add new step)
   
   // Get draft key for current process
   function getDraftKey() {
     const urlParams = new URLSearchParams(window.location.search);
     const processId = urlParams.get('id');
     return `process-draft-${processId || 'new'}`;
+  }
+  
+  // Restore a step's data into the form (name, description, inputs, outputs, execution_prompts). Caller sets editingStepId.
+  async function restoreStepIntoForm(step) {
+    const stepNameInput = document.getElementById('guided-step-name');
+    const stepDescInput = document.getElementById('guided-step-description');
+    if (stepNameInput) stepNameInput.value = step.name || '';
+    if (stepDescInput) stepDescInput.value = step.description || '';
+    
+    if (step.inputs && step.inputs.length > 0) {
+      for (const input of step.inputs) {
+        const inputType = input.requires_inventory_selection ? 'inventory' : 'new';
+        await window.addGuidedInput(inputType);
+        const listEl = getGuidedInputListElement(inputType);
+        const inputContainers = listEl ? listEl.querySelectorAll(':scope > div') : [];
+        const lastInputContainer = inputContainers[inputContainers.length - 1];
+        if (lastInputContainer && input.name) {
+          const nameInput = lastInputContainer.querySelector('.guided-input-name');
+          if (nameInput) {
+            nameInput.value = input.name;
+            if (nameInput.classList.contains('searchable-dropdown-input')) {
+              selectedInventoryItems.add(input.name);
+              try {
+                const categorizedItems = await loadInventoryItems();
+                const allItems = [
+                  ...(categorizedItems.raw_material || []),
+                  ...(categorizedItems.work_in_progress || []),
+                  ...(categorizedItems.final_product || [])
+                ];
+                const matchingItem = allItems.find(item => item.name === input.name);
+                if (matchingItem) {
+                  const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
+                  if (unitSelect) unitSelect.value = input.unit || matchingItem.unit || '';
+                }
+              } catch (err) {
+                console.warn('Could not load inventory items for restoration:', err);
+              }
+              nameInput.dispatchEvent(new Event('input'));
+              nameInput.dispatchEvent(new Event('blur'));
+            } else {
+              nameInput.dispatchEvent(new Event('input'));
+              nameInput.dispatchEvent(new Event('blur'));
+            }
+          }
+          const quantityInput = lastInputContainer.querySelector('.guided-input-quantity');
+          if (quantityInput && input.quantity !== null && input.quantity !== undefined) {
+            quantityInput.value = input.quantity;
+          }
+          const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
+          if (unitSelect && input.unit && !unitSelect.value) {
+            unitSelect.value = input.unit;
+          }
+          const executionTypeSelect = lastInputContainer.querySelector('.guided-input-execution-type');
+          if (executionTypeSelect) {
+            if (input.requires_inventory_selection) executionTypeSelect.value = 'variable';
+            else if (input.is_variable === false) executionTypeSelect.value = 'static';
+            else executionTypeSelect.value = 'prompt';
+            executionTypeSelect.dispatchEvent(new Event('change'));
+          }
+          setTimeout(() => {
+            const nameDisplay = lastInputContainer.querySelector('.guided-input-name-display');
+            const titleSpan = lastInputContainer.querySelector('.guided-input-title');
+            if (nameDisplay && titleSpan && input.name) {
+              nameDisplay.textContent = input.name;
+              nameDisplay.style.display = 'inline';
+              titleSpan.style.display = 'none';
+            }
+          }, 100);
+        }
+      }
+    }
+    
+    if (step.outputs && step.outputs.length > 0) {
+      for (const output of step.outputs) {
+        await window.addGuidedOutput();
+        const outputContainers = document.querySelectorAll('#guided-outputs-list > div');
+        const lastOutputContainer = outputContainers[outputContainers.length - 1];
+        if (lastOutputContainer) {
+          const nameInput = lastOutputContainer.querySelector('.guided-output-name');
+          if (nameInput) {
+            nameInput.value = output.name || '';
+            nameInput.dispatchEvent(new Event('input'));
+            nameInput.dispatchEvent(new Event('blur'));
+          }
+          const quantityInput = lastOutputContainer.querySelector('.guided-output-quantity');
+          if (quantityInput && output.quantity !== null && output.quantity !== undefined) {
+            quantityInput.value = output.quantity;
+          }
+          const unitSelect = lastOutputContainer.querySelector('.guided-output-unit');
+          if (unitSelect && output.unit) unitSelect.value = output.unit;
+          const nameDisplay = lastOutputContainer.querySelector('.guided-output-name-display');
+          const titleSpan = lastOutputContainer.querySelector('.guided-output-title');
+          if (nameDisplay && titleSpan && output.name) {
+            nameDisplay.textContent = output.name;
+            nameDisplay.style.display = 'inline';
+            titleSpan.style.display = 'none';
+          }
+        }
+      }
+    }
+    
+    if (step.execution_prompts && step.execution_prompts.length > 0) {
+      const batchNumberModeEl = document.getElementById('guided-prompt-batch-number-mode');
+      if (batchNumberModeEl) batchNumberModeEl.value = 'dont_ask';
+      for (const prompt of step.execution_prompts) {
+        const isBatchNumber = (prompt.label || '').toLowerCase() === 'batch number';
+        if (isBatchNumber && batchNumberModeEl) {
+          batchNumberModeEl.value = prompt.required !== false ? 'required' : 'optional';
+          continue;
+        }
+        if (!isBatchNumber) {
+          window.addGuidedPrompt();
+          const promptContainers = document.querySelectorAll('#guided-prompts-list > div');
+          const lastPromptContainer = promptContainers[promptContainers.length - 1];
+          if (lastPromptContainer) {
+            const labelInput = lastPromptContainer.querySelector('.guided-prompt-label');
+            if (labelInput) {
+              labelInput.value = prompt.label || '';
+              labelInput.dispatchEvent(new Event('input'));
+              labelInput.dispatchEvent(new Event('blur'));
+            }
+            const typeSelect = lastPromptContainer.querySelector('.guided-prompt-type');
+            if (typeSelect && prompt.type) typeSelect.value = prompt.type;
+            const unitSelect = lastPromptContainer.querySelector('.guided-prompt-unit');
+            if (unitSelect && prompt.unit) unitSelect.value = prompt.unit;
+            const requiredSelect = lastPromptContainer.querySelector('.guided-prompt-required');
+            if (requiredSelect) requiredSelect.value = prompt.required !== false ? 'true' : 'false';
+            const labelDisplay = lastPromptContainer.querySelector('.guided-prompt-label-display');
+            const titleSpan = lastPromptContainer.querySelector('.guided-prompt-title');
+            if (labelDisplay && titleSpan && prompt.label) {
+              labelDisplay.textContent = prompt.label;
+              labelDisplay.style.display = 'inline';
+              titleSpan.style.display = 'none';
+            }
+          }
+        }
+      }
+    }
   }
   
   // Save draft to database
@@ -328,203 +467,10 @@
         }
         
         // Restore the most recent step's data into the form for editing
-        // This allows users to continue editing the step they were working on
         const mostRecentStep = allSteps[allSteps.length - 1];
         if (mostRecentStep) {
-          // Track that we're editing this step
           editingStepId = mostRecentStep.id;
-          
-          // Restore step name and description
-          const stepNameInput = document.getElementById('guided-step-name');
-          const stepDescInput = document.getElementById('guided-step-description');
-          if (stepNameInput) stepNameInput.value = mostRecentStep.name || '';
-          if (stepDescInput) stepDescInput.value = mostRecentStep.description || '';
-          
-          // Restore inputs
-          if (mostRecentStep.inputs && mostRecentStep.inputs.length > 0) {
-            for (const input of mostRecentStep.inputs) {
-              // Determine if it's inventory or new input based on requires_inventory_selection
-              const inputType = input.requires_inventory_selection ? 'inventory' : 'new';
-              await window.addGuidedInput(inputType);
-              
-              // Get the most recently added input container (from the correct tab list)
-              const listEl = getGuidedInputListElement(inputType);
-              const inputContainers = listEl ? listEl.querySelectorAll(':scope > div') : [];
-              const lastInputContainer = inputContainers[inputContainers.length - 1];
-              
-              if (lastInputContainer && input.name) {
-                // Set name
-                const nameInput = lastInputContainer.querySelector('.guided-input-name');
-                if (nameInput) {
-                  nameInput.value = input.name;
-                  
-                  // For inventory inputs, we need to mark the item as selected
-                  if (nameInput.classList.contains('searchable-dropdown-input')) {
-                    // Mark as selected so it doesn't appear in other dropdowns
-                    selectedInventoryItems.add(input.name);
-                    
-                    // For inventory inputs, we need to find the item in the categorized items
-                    // and trigger the onSelect callback to properly set up the dropdown
-                    try {
-                      const categorizedItems = await loadInventoryItems();
-                      const allItems = [
-                        ...(categorizedItems.raw_material || []),
-                        ...(categorizedItems.work_in_progress || []),
-                        ...(categorizedItems.final_product || [])
-                      ];
-                      const matchingItem = allItems.find(item => item.name === input.name);
-                      
-                      if (matchingItem) {
-                        // Find the dropdown container and trigger selection
-                        const dropdownContainer = nameInput.closest('.searchable-dropdown-container');
-                        if (dropdownContainer) {
-                          // The dropdown should have an onSelect callback - we need to call it
-                          // But since it's created dynamically, we'll just set the value and unit
-                          // The unit should be set from the matching item or from the input
-                          const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
-                          if (unitSelect) {
-                            // Use the input's unit if available, otherwise use the item's unit
-                            unitSelect.value = input.unit || matchingItem.unit || '';
-                          }
-                        }
-                      }
-                    } catch (err) {
-                      console.warn('Could not load inventory items for restoration:', err);
-                    }
-                    
-                    // Trigger update events
-                    nameInput.dispatchEvent(new Event('input'));
-                    nameInput.dispatchEvent(new Event('blur'));
-                  } else {
-                    // For new inputs, just trigger the update events
-                    nameInput.dispatchEvent(new Event('input'));
-                    nameInput.dispatchEvent(new Event('blur'));
-                  }
-                }
-                
-                // Set quantity
-                const quantityInput = lastInputContainer.querySelector('.guided-input-quantity');
-                if (quantityInput && input.quantity !== null && input.quantity !== undefined) {
-                  quantityInput.value = input.quantity;
-                }
-                
-                // Set unit (if not already set for inventory inputs)
-                const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
-                if (unitSelect && input.unit && !unitSelect.value) {
-                  unitSelect.value = input.unit;
-                }
-                
-                // Set execution type
-                const executionTypeSelect = lastInputContainer.querySelector('.guided-input-execution-type');
-                if (executionTypeSelect) {
-                  if (input.requires_inventory_selection) {
-                    executionTypeSelect.value = 'variable';
-                  } else if (input.is_variable === false) {
-                    executionTypeSelect.value = 'static';
-                  } else {
-                    executionTypeSelect.value = 'prompt';
-                  }
-                  // Trigger change event to update explanation
-                  executionTypeSelect.dispatchEvent(new Event('change'));
-                }
-                
-                // Update name display in header
-                setTimeout(() => {
-                  const nameDisplay = lastInputContainer.querySelector('.guided-input-name-display');
-                  const titleSpan = lastInputContainer.querySelector('.guided-input-title');
-                  if (nameDisplay && titleSpan && input.name) {
-                    nameDisplay.textContent = input.name;
-                    nameDisplay.style.display = 'inline';
-                    titleSpan.style.display = 'none';
-                  }
-                }, 100);
-              }
-            }
-          }
-          
-          // Restore outputs
-          if (mostRecentStep.outputs && mostRecentStep.outputs.length > 0) {
-            for (const output of mostRecentStep.outputs) {
-              await window.addGuidedOutput();
-              
-              // Get the most recently added output container
-              const outputContainers = document.querySelectorAll('#guided-outputs-list > div');
-              const lastOutputContainer = outputContainers[outputContainers.length - 1];
-              
-              if (lastOutputContainer) {
-                // Set name
-                const nameInput = lastOutputContainer.querySelector('.guided-output-name');
-                if (nameInput) {
-                  nameInput.value = output.name || '';
-                  nameInput.dispatchEvent(new Event('input'));
-                  nameInput.dispatchEvent(new Event('blur'));
-                }
-                
-                // Set quantity
-                const quantityInput = lastOutputContainer.querySelector('.guided-output-quantity');
-                if (quantityInput && output.quantity !== null && output.quantity !== undefined) {
-                  quantityInput.value = output.quantity;
-                }
-                
-                // Set unit
-                const unitSelect = lastOutputContainer.querySelector('.guided-output-unit');
-                if (unitSelect && output.unit) {
-                  unitSelect.value = output.unit;
-                }
-                
-                // Update name display in header
-                const updateNameDisplay = () => {
-                  const nameDisplay = lastOutputContainer.querySelector('.guided-output-name-display');
-                  const titleSpan = lastOutputContainer.querySelector('.guided-output-title');
-                  if (nameDisplay && titleSpan && output.name) {
-                    nameDisplay.textContent = output.name;
-                    nameDisplay.style.display = 'inline';
-                    titleSpan.style.display = 'none';
-                  }
-                };
-                updateNameDisplay();
-              }
-            }
-          }
-          
-          // Restore execution prompts (Batch number goes to dedicated dropdown, others get cards)
-          if (mostRecentStep.execution_prompts && mostRecentStep.execution_prompts.length > 0) {
-            const batchNumberModeEl = document.getElementById('guided-prompt-batch-number-mode');
-            if (batchNumberModeEl) batchNumberModeEl.value = 'dont_ask';
-            for (const prompt of mostRecentStep.execution_prompts) {
-              const isBatchNumber = (prompt.label || '').toLowerCase() === 'batch number';
-              if (isBatchNumber && batchNumberModeEl) {
-                batchNumberModeEl.value = prompt.required !== false ? 'required' : 'optional';
-                continue;
-              }
-              if (!isBatchNumber) {
-                window.addGuidedPrompt();
-                const promptContainers = document.querySelectorAll('#guided-prompts-list > div');
-                const lastPromptContainer = promptContainers[promptContainers.length - 1];
-                if (lastPromptContainer) {
-                  const labelInput = lastPromptContainer.querySelector('.guided-prompt-label');
-                  if (labelInput) {
-                    labelInput.value = prompt.label || '';
-                    labelInput.dispatchEvent(new Event('input'));
-                    labelInput.dispatchEvent(new Event('blur'));
-                  }
-                  const typeSelect = lastPromptContainer.querySelector('.guided-prompt-type');
-                  if (typeSelect && prompt.type) typeSelect.value = prompt.type;
-                  const unitSelect = lastPromptContainer.querySelector('.guided-prompt-unit');
-                  if (unitSelect && prompt.unit) unitSelect.value = prompt.unit;
-                  const requiredSelect = lastPromptContainer.querySelector('.guided-prompt-required');
-                  if (requiredSelect) requiredSelect.value = prompt.required !== false ? 'true' : 'false';
-                  const labelDisplay = lastPromptContainer.querySelector('.guided-prompt-label-display');
-                  const titleSpan = lastPromptContainer.querySelector('.guided-prompt-title');
-                  if (labelDisplay && titleSpan && prompt.label) {
-                    labelDisplay.textContent = prompt.label;
-                    labelDisplay.style.display = 'inline';
-                    titleSpan.style.display = 'none';
-                  }
-                }
-              }
-            }
-          }
+          await restoreStepIntoForm(mostRecentStep);
           
           // Navigate to the appropriate step based on what data exists
           // Determine which step to show based on what was filled in
@@ -616,6 +562,35 @@
       console.log('openCreateProcessModal: draftLoaded =', draftLoaded, 'isRestoringDraft =', isRestoringDraft);
       
       if (!draftLoaded) {
+        // Check if we're editing a non-draft process with existing steps — show steps list with Edit / Add new step
+        const urlParams = new URLSearchParams(window.location.search);
+        const processIdForEdit = urlParams.get('id');
+        if (processIdForEdit) {
+          try {
+            const processData = await CoreAPI.getProcess(processIdForEdit);
+            if (processData && !processData.is_draft && processData.steps && processData.steps.length > 0) {
+              // Load existing steps into createdSteps and show the "existing steps" view
+              createdSteps = processData.steps.map(step => ({
+                id: step.id,
+                step_number: step.step_number,
+                name: step.name,
+                description: step.description,
+                inputs: step.inputs || [],
+                outputs: step.outputs || [],
+                execution_prompts: step.execution_prompts || []
+              }));
+              isEditingExistingProcess = true;
+              showExistingStepsView();
+              const modalTitle = document.getElementById('modal-title');
+              const modalDescription = document.getElementById('modal-description');
+              if (modalTitle) modalTitle.textContent = 'Edit Process';
+              if (modalDescription) modalDescription.textContent = 'Edit an existing step or add a new one.';
+              return;
+            }
+          } catch (err) {
+            console.warn('Could not load process for edit view:', err);
+          }
+        }
         // Only reset if we're not restoring a draft
         if (!isRestoringDraft) {
           console.log('openCreateProcessModal: No draft loaded and not restoring, resetting to step 1');
@@ -654,6 +629,7 @@
     if (modal) {
       modal.style.display = 'none';
       document.body.style.overflow = 'auto';
+      isEditingExistingProcess = false;
     }
   }
   
@@ -711,6 +687,7 @@
     if (!keepSteps) {
       createdSteps = [];
       editingStepId = null;
+      isEditingExistingProcess = false;
       const summariesContainer = document.getElementById('step-summaries-container');
       if (summariesContainer) {
         summariesContainer.style.display = 'none';
@@ -722,9 +699,54 @@
     }
   }
   
+  // Show the "existing steps" view when editing a non-draft process (list steps with Edit + Add new step)
+  function showExistingStepsView() {
+    const existingView = document.getElementById('existing-steps-list-view');
+    const existingList = document.getElementById('existing-steps-list');
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (!existingView || !existingList) return;
+    // Hide step flow UI
+    if (indicators) indicators.style.display = 'none';
+    document.querySelectorAll('.create-process-step').forEach(el => { el.style.display = 'none'; });
+    const postCreationOptions = document.getElementById('post-creation-options');
+    if (postCreationOptions) postCreationOptions.style.display = 'none';
+    const summariesContainer = document.getElementById('step-summaries-container');
+    if (summariesContainer) summariesContainer.style.display = 'none';
+    // Populate list: step name + Edit button
+    existingList.innerHTML = '';
+    createdSteps.forEach((step) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md);';
+      const left = document.createElement('div');
+      left.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
+      const stepNum = document.createElement('span');
+      stepNum.style.cssText = 'width: 28px; height: 28px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex-shrink: 0;';
+      stepNum.textContent = step.step_number || '-';
+      const name = document.createElement('span');
+      name.style.cssText = 'font-size: 15px; font-weight: 600; color: var(--text-primary);';
+      name.textContent = step.name || 'Unnamed step';
+      left.appendChild(stepNum);
+      left.appendChild(name);
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn btn-secondary btn-sm';
+      editBtn.textContent = 'Edit';
+      editBtn.onclick = () => window.startEditingStep(step.id);
+      row.appendChild(left);
+      row.appendChild(editBtn);
+      existingList.appendChild(row);
+    });
+    existingView.style.display = 'block';
+  }
+  
   // Update step display
   function updateStepDisplay() {
     console.log('updateStepDisplay called, currentStep:', currentStep, 'isRestoringDraft:', isRestoringDraft);
+    // When showing the step flow, hide the existing-steps list view and show indicators
+    const existingView = document.getElementById('existing-steps-list-view');
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (existingView) existingView.style.display = 'none';
+    if (indicators) indicators.style.display = 'flex';
     
     // If we're restoring a draft and currentStep is 1, but we should be on a different step,
     // don't update (something else will set it correctly)
@@ -2342,28 +2364,31 @@
       return;
     }
     
-    // Calculate step number - use the maximum step_number from createdSteps or database steps + 1
+    // Calculate step number: when editing, preserve the step's current step_number; when creating, use max + 1
     let stepCount = 1;
+    const stepBeingEdited = editingStepId ? createdSteps.find(s => s.id === editingStepId) : null;
     
-    // First, check createdSteps (steps created in this session)
-    if (createdSteps.length > 0) {
-      const maxStepNumber = Math.max(...createdSteps.map(s => s.step_number || 0));
-      stepCount = maxStepNumber + 1;
-    }
-    
-    // Also check database steps to ensure we don't miss any
-    try {
-      const processData = await CoreAPI.getProcess(processId);
-      if (processData && processData.steps && processData.steps.length > 0) {
-        const maxDbStepNumber = Math.max(...processData.steps.map(s => s.step_number || 0));
-        // Use the higher of the two (createdSteps max or database max)
-        stepCount = Math.max(stepCount, maxDbStepNumber + 1);
+    if (stepBeingEdited) {
+      // Preserve existing step_number when updating a step (fixes single step showing "2")
+      stepCount = stepBeingEdited.step_number ?? 1;
+    } else {
+      // New step: use the maximum step_number from createdSteps or database steps + 1
+      if (createdSteps.length > 0) {
+        const maxStepNumber = Math.max(...createdSteps.map(s => s.step_number || 0));
+        stepCount = maxStepNumber + 1;
       }
-    } catch (err) {
-      console.warn('Could not fetch process data to determine step count, using createdSteps:', err);
+      try {
+        const processData = await CoreAPI.getProcess(processId);
+        if (processData && processData.steps && processData.steps.length > 0) {
+          const maxDbStepNumber = Math.max(...processData.steps.map(s => s.step_number || 0));
+          stepCount = Math.max(stepCount, maxDbStepNumber + 1);
+        }
+      } catch (err) {
+        console.warn('Could not fetch process data to determine step count, using createdSteps:', err);
+      }
     }
     
-    console.log('Calculated stepCount:', stepCount, 'from createdSteps:', createdSteps.length);
+    console.log('Calculated stepCount:', stepCount, 'from createdSteps:', createdSteps.length, 'editing:', !!editingStepId);
     
     try {
       // Create or update the step via API - same structure as existing saveStep function
@@ -2377,10 +2402,10 @@
       };
       
       let saved;
-      // If we're editing an existing step (resuming draft), update it instead of creating new
+      const wasEditingStepId = editingStepId;
+      // If we're editing an existing step (resuming draft or from edit-process view), update it instead of creating new
       if (editingStepId) {
         saved = await CoreAPI.updateStep(processId, editingStepId, stepData);
-        // Clear editingStepId after update
         editingStepId = null;
       } else {
         saved = await CoreAPI.createStep(processId, stepData);
@@ -2403,9 +2428,8 @@
         
         console.log('Created step with step_number:', savedStepNumber, 'step name:', stepName);
         
-        // If we were editing, the step was already in createdSteps (from loadDraft), so update it
-        // Otherwise, add the newly created step
-        if (editingStepId && saved.id === editingStepId) {
+        // If we were editing, the step was already in createdSteps, so update it
+        if (wasEditingStepId && saved.id === wasEditingStepId) {
           // Update existing step in createdSteps
           const stepIndex = createdSteps.findIndex(s => s.id === editingStepId);
           if (stepIndex !== -1) {
@@ -2423,21 +2447,43 @@
         // Update process to not be draft if it was (user is actively creating steps)
         await CoreAPI.updateProcess(processId, { is_draft: false });
         
-        // Show step summaries
-        if (createdSteps.length > 0) {
-          updateStepSummaries();
-        }
-        
-        // Update input buttons to show/hide previous output button
-        updateInputButtonsText();
-        
-        // Hide all step forms and show post-creation options
-        document.querySelectorAll('.create-process-step').forEach(step => {
-          step.style.display = 'none';
-        });
-        const postCreationOptions = document.getElementById('post-creation-options');
-        if (postCreationOptions) {
-          postCreationOptions.style.display = 'block';
+        // If we opened in "edit process" view (existing steps list), return to that view after save (edit or add new step)
+        if (isEditingExistingProcess) {
+          try {
+            const processData = await CoreAPI.getProcess(processId);
+            if (processData && processData.steps && processData.steps.length > 0) {
+              createdSteps = processData.steps.map(s => ({
+                id: s.id,
+                step_number: s.step_number,
+                name: s.name,
+                description: s.description,
+                inputs: s.inputs || [],
+                outputs: s.outputs || [],
+                execution_prompts: s.execution_prompts || []
+              }));
+              document.querySelectorAll('.create-process-step').forEach(el => { el.style.display = 'none'; });
+              const postCreationOptions = document.getElementById('post-creation-options');
+              if (postCreationOptions) postCreationOptions.style.display = 'none';
+              const indicators = document.getElementById('create-process-step-indicators');
+              if (indicators) indicators.style.display = 'none';
+              showExistingStepsView();
+            }
+          } catch (err) {
+            console.warn('Could not reload process steps after edit:', err);
+          }
+        } else {
+          // Show step summaries
+          if (createdSteps.length > 0) {
+            updateStepSummaries();
+          }
+          updateInputButtonsText();
+          document.querySelectorAll('.create-process-step').forEach(step => {
+            step.style.display = 'none';
+          });
+          const postCreationOptions = document.getElementById('post-creation-options');
+          if (postCreationOptions) {
+            postCreationOptions.style.display = 'block';
+          }
         }
         
         // Show success notification
@@ -2644,6 +2690,39 @@
       summaryCard.dataset.expanded = 'true';
     }
   }
+  
+  // Start editing an existing step (from the "existing steps" view when editing a non-draft process)
+  window.startEditingStep = async function(stepId) {
+    const step = createdSteps.find(s => s.id === stepId);
+    if (!step) return;
+    editingStepId = step.id;
+    resetForm(true);
+    await restoreStepIntoForm(step);
+    const existingView = document.getElementById('existing-steps-list-view');
+    if (existingView) existingView.style.display = 'none';
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (indicators) indicators.style.display = 'flex';
+    currentStep = 1;
+    updateStepDisplay();
+  };
+  
+  // Add new step from the "existing steps" view (when editing a non-draft process)
+  window.addNewStepFromEditView = function() {
+    editingStepId = null;
+    const existingView = document.getElementById('existing-steps-list-view');
+    if (existingView) existingView.style.display = 'none';
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (indicators) indicators.style.display = 'flex';
+    resetForm(true);
+    if (createdSteps.length > 0) {
+      updateStepSummaries();
+      const summariesContainer = document.getElementById('step-summaries-container');
+      if (summariesContainer) summariesContainer.style.display = 'block';
+    }
+    updateInputButtonsText();
+    currentStep = 1;
+    updateStepDisplay();
+  };
   
   // Add another step
   window.addAnotherStep = function() {
