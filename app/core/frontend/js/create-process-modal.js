@@ -7,15 +7,157 @@
   let guidedOutputs = [];
   let guidedPrompts = [];
   let selectedInventoryItems = new Set(); // Track selected inventory items to prevent duplicates
+  let selectedPreviousOutputs = new Set(); // Track selected previous step outputs (by displayName) to prevent duplicates
   let createdSteps = []; // Track steps created in this session
   let editingStepId = null; // Track which step is being edited (if resuming draft)
   let isRestoringDraft = false; // Flag to prevent step reset during draft restoration
+  let isEditingExistingProcess = false; // True when modal was opened for a non-draft process with steps (show list + Edit / Add new step)
+  let isStartNewOverwriteDraft = false; // True when user chose "Start New" on resume draft — save/finish should overwrite old draft steps
+  let startNewOldStepIds = []; // Step IDs that existed when user clicked Start New; we delete these on save draft or finish
   
   // Get draft key for current process
   function getDraftKey() {
     const urlParams = new URLSearchParams(window.location.search);
     const processId = urlParams.get('id');
     return `process-draft-${processId || 'new'}`;
+  }
+  
+  // Restore a step's data into the form (name, description, inputs, outputs, execution_prompts). Caller sets editingStepId.
+  async function restoreStepIntoForm(step) {
+    const stepNameInput = document.getElementById('guided-step-name');
+    const stepDescInput = document.getElementById('guided-step-description');
+    if (stepNameInput) stepNameInput.value = step.name || '';
+    if (stepDescInput) stepDescInput.value = step.description || '';
+    
+    if (step.inputs && step.inputs.length > 0) {
+      for (const input of step.inputs) {
+        const inputType = input.requires_inventory_selection ? 'inventory' : 'new';
+        await window.addGuidedInput(inputType, true); // start collapsed so user can expand from either tab
+        const listEl = getGuidedInputListElement(inputType);
+        const inputContainers = listEl ? listEl.querySelectorAll(':scope > div') : [];
+        const lastInputContainer = inputContainers[inputContainers.length - 1];
+        if (lastInputContainer && input.name) {
+          const nameInput = lastInputContainer.querySelector('.guided-input-name');
+          if (nameInput) {
+            nameInput.value = input.name;
+            if (nameInput.classList.contains('searchable-dropdown-input')) {
+              selectedInventoryItems.add(input.name);
+              try {
+                const categorizedItems = await loadInventoryItems();
+                const allItems = [
+                  ...(categorizedItems.raw_material || []),
+                  ...(categorizedItems.work_in_progress || []),
+                  ...(categorizedItems.final_product || [])
+                ];
+                const matchingItem = allItems.find(item => item.name === input.name);
+                if (matchingItem) {
+                  const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
+                  if (unitSelect) unitSelect.value = input.unit || matchingItem.unit || '';
+                }
+              } catch (err) {
+                console.warn('Could not load inventory items for restoration:', err);
+              }
+              nameInput.dispatchEvent(new Event('input'));
+              nameInput.dispatchEvent(new Event('blur'));
+            } else {
+              nameInput.dispatchEvent(new Event('input'));
+              nameInput.dispatchEvent(new Event('blur'));
+            }
+          }
+          const quantityInput = lastInputContainer.querySelector('.guided-input-quantity');
+          if (quantityInput && input.quantity !== null && input.quantity !== undefined) {
+            quantityInput.value = input.quantity;
+          }
+          const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
+          if (unitSelect && input.unit && !unitSelect.value) {
+            unitSelect.value = input.unit;
+          }
+          const executionTypeSelect = lastInputContainer.querySelector('.guided-input-execution-type');
+          if (executionTypeSelect) {
+            if (input.requires_inventory_selection) executionTypeSelect.value = 'variable';
+            else if (input.is_variable === false) executionTypeSelect.value = 'static';
+            else executionTypeSelect.value = 'prompt';
+            executionTypeSelect.dispatchEvent(new Event('change'));
+          }
+          setTimeout(() => {
+            const nameDisplay = lastInputContainer.querySelector('.guided-input-name-display');
+            const titleSpan = lastInputContainer.querySelector('.guided-input-title');
+            if (nameDisplay && titleSpan && input.name) {
+              nameDisplay.textContent = input.name;
+              nameDisplay.style.display = 'inline';
+              titleSpan.style.display = 'none';
+            }
+          }, 100);
+        }
+      }
+    }
+    
+    if (step.outputs && step.outputs.length > 0) {
+      for (const output of step.outputs) {
+        await window.addGuidedOutput();
+        const outputContainers = document.querySelectorAll('#guided-outputs-list > div');
+        const lastOutputContainer = outputContainers[outputContainers.length - 1];
+        if (lastOutputContainer) {
+          const nameInput = lastOutputContainer.querySelector('.guided-output-name');
+          if (nameInput) {
+            nameInput.value = output.name || '';
+            nameInput.dispatchEvent(new Event('input'));
+            nameInput.dispatchEvent(new Event('blur'));
+          }
+          const quantityInput = lastOutputContainer.querySelector('.guided-output-quantity');
+          if (quantityInput && output.quantity !== null && output.quantity !== undefined) {
+            quantityInput.value = output.quantity;
+          }
+          const unitSelect = lastOutputContainer.querySelector('.guided-output-unit');
+          if (unitSelect && output.unit) unitSelect.value = output.unit;
+          const nameDisplay = lastOutputContainer.querySelector('.guided-output-name-display');
+          const titleSpan = lastOutputContainer.querySelector('.guided-output-title');
+          if (nameDisplay && titleSpan && output.name) {
+            nameDisplay.textContent = output.name;
+            nameDisplay.style.display = 'inline';
+            titleSpan.style.display = 'none';
+          }
+        }
+      }
+    }
+    
+    if (step.execution_prompts && step.execution_prompts.length > 0) {
+      const batchNumberModeEl = document.getElementById('guided-prompt-batch-number-mode');
+      if (batchNumberModeEl) batchNumberModeEl.value = 'dont_ask';
+      for (const prompt of step.execution_prompts) {
+        const isBatchNumber = (prompt.label || '').toLowerCase() === 'batch number';
+        if (isBatchNumber && batchNumberModeEl) {
+          batchNumberModeEl.value = prompt.required !== false ? 'required' : 'optional';
+          continue;
+        }
+        if (!isBatchNumber) {
+          window.addGuidedPrompt();
+          const promptContainers = document.querySelectorAll('#guided-prompts-list > div');
+          const lastPromptContainer = promptContainers[promptContainers.length - 1];
+          if (lastPromptContainer) {
+            const labelInput = lastPromptContainer.querySelector('.guided-prompt-label');
+            if (labelInput) {
+              labelInput.value = prompt.label || '';
+              labelInput.dispatchEvent(new Event('input'));
+              labelInput.dispatchEvent(new Event('blur'));
+            }
+            const typeSelect = lastPromptContainer.querySelector('.guided-prompt-type');
+            if (typeSelect && prompt.type) typeSelect.value = prompt.type;
+            const unitSelect = lastPromptContainer.querySelector('.guided-prompt-unit');
+            if (unitSelect && prompt.unit) unitSelect.value = prompt.unit;
+            const requiredSelect = lastPromptContainer.querySelector('.guided-prompt-required');
+            if (requiredSelect) requiredSelect.value = prompt.required !== false ? 'true' : 'false';
+            const labelDisplay = lastPromptContainer.querySelector('.guided-prompt-label-display');
+            const titleSpan = lastPromptContainer.querySelector('.guided-prompt-title');
+            if (labelDisplay && titleSpan && prompt.label) {
+              labelDisplay.textContent = prompt.label;
+              labelDisplay.style.display = 'inline';
+              titleSpan.style.display = 'none';
+            }
+          }
+        }
+      }
+    }
   }
   
   // Save draft to database
@@ -48,6 +190,19 @@
         await CoreAPI.updateProcess(processId, { is_draft: true });
       }
       
+      // If user chose "Start New", overwrite old draft: remove existing steps before saving
+      if (isStartNewOverwriteDraft && startNewOldStepIds.length > 0) {
+        for (const stepId of startNewOldStepIds) {
+          try {
+            await CoreAPI.deleteStep(processId, stepId);
+          } catch (err) {
+            console.warn('Could not delete old draft step:', stepId, err);
+          }
+        }
+        startNewOldStepIds = [];
+        isStartNewOverwriteDraft = false;
+      }
+      
       // Collect current form data
       const inputs = collectCurrentInputs();
       const outputs = collectCurrentOutputs();
@@ -55,7 +210,7 @@
       
       // If we have a step name and form data, save the current step as a draft
       if (stepName && (inputs.length > 0 || outputs.length > 0 || prompts.length > 0)) {
-        // Calculate step number
+        // Calculate step number (after possible deletion of old steps)
         let stepCount = createdSteps.length + 1;
         try {
           const processData = await CoreAPI.getProcess(processId);
@@ -110,10 +265,21 @@
     }
   };
   
-  // Collect current inputs from form
+  // Single unified list: all inputs visible from both tabs; type stored on each card (data-input-type) for DB
+  function getGuidedInputListElement(type) {
+    return document.getElementById('guided-inputs-list-unified');
+  }
+  
+  // All input rows from the unified list (order preserved)
+  function getAllGuidedInputElements() {
+    const list = document.getElementById('guided-inputs-list-unified');
+    return list ? Array.from(list.querySelectorAll(':scope > div')) : [];
+  }
+  
+  // Collect current inputs from form (from both tabs); include requires_inventory_selection so draft restore puts them in the correct tab
   function collectCurrentInputs() {
     const inputs = [];
-    const inputElements = document.querySelectorAll('#guided-inputs-list > div');
+    const inputElements = getAllGuidedInputElements();
     inputElements.forEach(inputEl => {
       const nameInput = inputEl.querySelector('.guided-input-name');
       let name = '';
@@ -133,13 +299,18 @@
       
       const executionTypeSelect = inputEl.querySelector('.guided-input-execution-type');
       const executionType = executionTypeSelect ? executionTypeSelect.value : 'prompt';
+      const inputType = inputEl.dataset.inputType || (inputEl.getAttribute && inputEl.getAttribute('data-input-type')) || '';
+      const requiresInventorySelection = (inputType === 'inventory' || inputType === 'previous_output') ? true : (executionType === 'variable');
+      const isVariable = executionType === 'variable' || executionType === 'prompt';
       
       if (name && unit) {
         inputs.push({
           name: name,
           quantity: quantity ? parseFloat(quantity) : null,
           unit: unit,
-          executionType: executionType
+          executionType: executionType,
+          requires_inventory_selection: requiresInventorySelection,
+          is_variable: isVariable
         });
       }
     });
@@ -224,16 +395,15 @@
     }
   };
   
-  // Cancel resume draft
+  // Cancel resume draft (user chose "Start New" — we will overwrite old draft on save/finish)
   window.cancelResumeDraft = function() {
-    // Hide the modal
+    window._userChoseStartNew = true;
     const modal = document.getElementById('resume-draft-confirmation-modal');
     if (modal) {
       modal.style.display = 'none';
     }
     document.body.style.overflow = 'auto';
     
-    // Resolve the promise with false
     if (window._resumeDraftResolve) {
       window._resumeDraftResolve(false);
       window._resumeDraftResolve = null;
@@ -313,214 +483,12 @@
         }
         
         // Restore the most recent step's data into the form for editing
-        // This allows users to continue editing the step they were working on
         const mostRecentStep = allSteps[allSteps.length - 1];
         if (mostRecentStep) {
-          // Track that we're editing this step
+          // Clear form and lists first so we don't append to leftover DOM (fixes duplicate inputs/steps on resume)
+          resetForm(true);
           editingStepId = mostRecentStep.id;
-          
-          // Restore step name and description
-          const stepNameInput = document.getElementById('guided-step-name');
-          const stepDescInput = document.getElementById('guided-step-description');
-          if (stepNameInput) stepNameInput.value = mostRecentStep.name || '';
-          if (stepDescInput) stepDescInput.value = mostRecentStep.description || '';
-          
-          // Restore inputs
-          if (mostRecentStep.inputs && mostRecentStep.inputs.length > 0) {
-            for (const input of mostRecentStep.inputs) {
-              // Determine if it's inventory or new input based on requires_inventory_selection
-              const inputType = input.requires_inventory_selection ? 'inventory' : 'new';
-              await window.addGuidedInput(inputType);
-              
-              // Get the most recently added input container
-              const inputContainers = document.querySelectorAll('#guided-inputs-list > div');
-              const lastInputContainer = inputContainers[inputContainers.length - 1];
-              
-              if (lastInputContainer && input.name) {
-                // Set name
-                const nameInput = lastInputContainer.querySelector('.guided-input-name');
-                if (nameInput) {
-                  nameInput.value = input.name;
-                  
-                  // For inventory inputs, we need to mark the item as selected
-                  if (nameInput.classList.contains('searchable-dropdown-input')) {
-                    // Mark as selected so it doesn't appear in other dropdowns
-                    selectedInventoryItems.add(input.name);
-                    
-                    // For inventory inputs, we need to find the item in the categorized items
-                    // and trigger the onSelect callback to properly set up the dropdown
-                    try {
-                      const categorizedItems = await loadInventoryItems();
-                      const allItems = [
-                        ...(categorizedItems.raw_material || []),
-                        ...(categorizedItems.work_in_progress || []),
-                        ...(categorizedItems.final_product || [])
-                      ];
-                      const matchingItem = allItems.find(item => item.name === input.name);
-                      
-                      if (matchingItem) {
-                        // Find the dropdown container and trigger selection
-                        const dropdownContainer = nameInput.closest('.searchable-dropdown-container');
-                        if (dropdownContainer) {
-                          // The dropdown should have an onSelect callback - we need to call it
-                          // But since it's created dynamically, we'll just set the value and unit
-                          // The unit should be set from the matching item or from the input
-                          const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
-                          if (unitSelect) {
-                            // Use the input's unit if available, otherwise use the item's unit
-                            unitSelect.value = input.unit || matchingItem.unit || '';
-                          }
-                        }
-                      }
-                    } catch (err) {
-                      console.warn('Could not load inventory items for restoration:', err);
-                    }
-                    
-                    // Trigger update events
-                    nameInput.dispatchEvent(new Event('input'));
-                    nameInput.dispatchEvent(new Event('blur'));
-                  } else {
-                    // For new inputs, just trigger the update events
-                    nameInput.dispatchEvent(new Event('input'));
-                    nameInput.dispatchEvent(new Event('blur'));
-                  }
-                }
-                
-                // Set quantity
-                const quantityInput = lastInputContainer.querySelector('.guided-input-quantity');
-                if (quantityInput && input.quantity !== null && input.quantity !== undefined) {
-                  quantityInput.value = input.quantity;
-                }
-                
-                // Set unit (if not already set for inventory inputs)
-                const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
-                if (unitSelect && input.unit && !unitSelect.value) {
-                  unitSelect.value = input.unit;
-                }
-                
-                // Set execution type
-                const executionTypeSelect = lastInputContainer.querySelector('.guided-input-execution-type');
-                if (executionTypeSelect) {
-                  if (input.requires_inventory_selection) {
-                    executionTypeSelect.value = 'variable';
-                  } else if (input.is_variable === false) {
-                    executionTypeSelect.value = 'static';
-                  } else {
-                    executionTypeSelect.value = 'prompt';
-                  }
-                  // Trigger change event to update explanation
-                  executionTypeSelect.dispatchEvent(new Event('change'));
-                }
-                
-                // Update name display in header
-                setTimeout(() => {
-                  const nameDisplay = lastInputContainer.querySelector('.guided-input-name-display');
-                  const titleSpan = lastInputContainer.querySelector('.guided-input-title');
-                  if (nameDisplay && titleSpan && input.name) {
-                    nameDisplay.textContent = input.name;
-                    nameDisplay.style.display = 'inline';
-                    titleSpan.style.display = 'none';
-                  }
-                }, 100);
-              }
-            }
-          }
-          
-          // Restore outputs
-          if (mostRecentStep.outputs && mostRecentStep.outputs.length > 0) {
-            for (const output of mostRecentStep.outputs) {
-              await window.addGuidedOutput();
-              
-              // Get the most recently added output container
-              const outputContainers = document.querySelectorAll('#guided-outputs-list > div');
-              const lastOutputContainer = outputContainers[outputContainers.length - 1];
-              
-              if (lastOutputContainer) {
-                // Set name
-                const nameInput = lastOutputContainer.querySelector('.guided-output-name');
-                if (nameInput) {
-                  nameInput.value = output.name || '';
-                  nameInput.dispatchEvent(new Event('input'));
-                  nameInput.dispatchEvent(new Event('blur'));
-                }
-                
-                // Set quantity
-                const quantityInput = lastOutputContainer.querySelector('.guided-output-quantity');
-                if (quantityInput && output.quantity !== null && output.quantity !== undefined) {
-                  quantityInput.value = output.quantity;
-                }
-                
-                // Set unit
-                const unitSelect = lastOutputContainer.querySelector('.guided-output-unit');
-                if (unitSelect && output.unit) {
-                  unitSelect.value = output.unit;
-                }
-                
-                // Update name display in header
-                const updateNameDisplay = () => {
-                  const nameDisplay = lastOutputContainer.querySelector('.guided-output-name-display');
-                  const titleSpan = lastOutputContainer.querySelector('.guided-output-title');
-                  if (nameDisplay && titleSpan && output.name) {
-                    nameDisplay.textContent = output.name;
-                    nameDisplay.style.display = 'inline';
-                    titleSpan.style.display = 'none';
-                  }
-                };
-                updateNameDisplay();
-              }
-            }
-          }
-          
-          // Restore execution prompts
-          if (mostRecentStep.execution_prompts && mostRecentStep.execution_prompts.length > 0) {
-            for (const prompt of mostRecentStep.execution_prompts) {
-              window.addGuidedPrompt();
-              
-              // Get the most recently added prompt container
-              const promptContainers = document.querySelectorAll('#guided-prompts-list > div');
-              const lastPromptContainer = promptContainers[promptContainers.length - 1];
-              
-              if (lastPromptContainer) {
-                // Set label
-                const labelInput = lastPromptContainer.querySelector('.guided-prompt-label');
-                if (labelInput) {
-                  labelInput.value = prompt.label || '';
-                  labelInput.dispatchEvent(new Event('input'));
-                  labelInput.dispatchEvent(new Event('blur'));
-                }
-                
-                // Set type
-                const typeSelect = lastPromptContainer.querySelector('.guided-prompt-type');
-                if (typeSelect && prompt.type) {
-                  typeSelect.value = prompt.type;
-                }
-                
-                // Set unit
-                const unitSelect = lastPromptContainer.querySelector('.guided-prompt-unit');
-                if (unitSelect && prompt.unit) {
-                  unitSelect.value = prompt.unit;
-                }
-                
-                // Set required
-                const requiredSelect = lastPromptContainer.querySelector('.guided-prompt-required');
-                if (requiredSelect) {
-                  requiredSelect.value = prompt.required !== false ? 'true' : 'false';
-                }
-                
-                // Update label display in header
-                const updateLabelDisplay = () => {
-                  const labelDisplay = lastPromptContainer.querySelector('.guided-prompt-label-display');
-                  const titleSpan = lastPromptContainer.querySelector('.guided-prompt-title');
-                  if (labelDisplay && titleSpan && prompt.label) {
-                    labelDisplay.textContent = prompt.label;
-                    labelDisplay.style.display = 'inline';
-                    titleSpan.style.display = 'none';
-                  }
-                };
-                updateLabelDisplay();
-              }
-            }
-          }
+          await restoreStepIntoForm(mostRecentStep);
           
           // Navigate to the appropriate step based on what data exists
           // Determine which step to show based on what was filled in
@@ -612,6 +580,48 @@
       console.log('openCreateProcessModal: draftLoaded =', draftLoaded, 'isRestoringDraft =', isRestoringDraft);
       
       if (!draftLoaded) {
+        // Check if we're editing a non-draft process with existing steps — show steps list with Edit / Add new step
+        const urlParams = new URLSearchParams(window.location.search);
+        const processIdForEdit = urlParams.get('id');
+        if (processIdForEdit) {
+          try {
+            const processData = await CoreAPI.getProcess(processIdForEdit);
+            if (processData && !processData.is_draft && processData.steps && processData.steps.length > 0) {
+              // Load existing steps into createdSteps and show the "existing steps" view
+              createdSteps = processData.steps.map(step => ({
+                id: step.id,
+                step_number: step.step_number,
+                name: step.name,
+                description: step.description,
+                inputs: step.inputs || [],
+                outputs: step.outputs || [],
+                execution_prompts: step.execution_prompts || []
+              }));
+              isEditingExistingProcess = true;
+              showExistingStepsView();
+              const modalTitle = document.getElementById('modal-title');
+              const modalDescription = document.getElementById('modal-description');
+              if (modalTitle) modalTitle.textContent = 'Edit Process';
+              if (modalDescription) modalDescription.textContent = 'Edit an existing step or add a new one.';
+              return;
+            }
+          } catch (err) {
+            console.warn('Could not load process for edit view:', err);
+          }
+        }
+        // If user chose "Start New" on resume draft, remember existing step IDs so we overwrite them on save/finish
+        if (window._userChoseStartNew && processIdForEdit) {
+          try {
+            const processData = await CoreAPI.getProcess(processIdForEdit);
+            if (processData && processData.steps && processData.steps.length > 0) {
+              startNewOldStepIds = processData.steps.map(s => s.id);
+              isStartNewOverwriteDraft = true;
+            }
+          } catch (err) {
+            console.warn('Could not fetch process steps for Start New overwrite:', err);
+          }
+          window._userChoseStartNew = false;
+        }
         // Only reset if we're not restoring a draft
         if (!isRestoringDraft) {
           console.log('openCreateProcessModal: No draft loaded and not restoring, resetting to step 1');
@@ -644,12 +654,37 @@
     }
   };
   
-  // Close modal
+  // Close modal and refresh process steps in parent page so new/saved steps appear without reload
   function closeModal() {
     const modal = document.getElementById('create-process-modal');
     if (modal) {
       modal.style.display = 'none';
       document.body.style.overflow = 'auto';
+      isEditingExistingProcess = false;
+      isStartNewOverwriteDraft = false;
+      startNewOldStepIds = [];
+    }
+    if (typeof window.loadProcessData === 'function') {
+      window.loadProcessData();
+    } else if (typeof window.loadSteps === 'function') {
+      window.loadSteps();
+    }
+  }
+  
+  // Hide the "Save as draft or discard?" confirmation modal
+  function hideSaveDraftOrDiscardModal() {
+    const confirmModal = document.getElementById('save-draft-or-discard-modal');
+    if (confirmModal) {
+      confirmModal.style.display = 'none';
+    }
+  }
+  
+  // Show "Save as draft or discard?" when user clicks Cancel or X (instead of closing immediately)
+  function requestCloseCreateProcessModal() {
+    const confirmModal = document.getElementById('save-draft-or-discard-modal');
+    if (confirmModal) {
+      confirmModal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
     }
   }
   
@@ -657,9 +692,12 @@
   function resetForm(keepSteps = false) {
     document.getElementById('guided-step-name').value = '';
     document.getElementById('guided-step-description').value = '';
-    document.getElementById('guided-inputs-list').innerHTML = '';
+    const unifiedList = document.getElementById('guided-inputs-list-unified');
+    if (unifiedList) unifiedList.innerHTML = '';
     document.getElementById('guided-outputs-list').innerHTML = '';
     document.getElementById('guided-prompts-list').innerHTML = '';
+    const batchNumberMode = document.getElementById('guided-prompt-batch-number-mode');
+    if (batchNumberMode) batchNumberMode.value = 'optional';
     guidedInputs = [];
     guidedOutputs = [];
     guidedPrompts = [];
@@ -685,6 +723,7 @@
     if (!keepSteps) {
       createdSteps = [];
       editingStepId = null;
+      isEditingExistingProcess = false;
       const summariesContainer = document.getElementById('step-summaries-container');
       if (summariesContainer) {
         summariesContainer.style.display = 'none';
@@ -696,9 +735,56 @@
     }
   }
   
+  // Show the "existing steps" view when editing a non-draft process (list steps with Edit + Add new step)
+  function showExistingStepsView() {
+    const existingView = document.getElementById('existing-steps-list-view');
+    const existingList = document.getElementById('existing-steps-list');
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (!existingView || !existingList) return;
+    // Hide step flow UI
+    if (indicators) indicators.style.display = 'none';
+    document.querySelectorAll('.create-process-step').forEach(el => { el.style.display = 'none'; });
+    const postCreationOptions = document.getElementById('post-creation-options');
+    if (postCreationOptions) postCreationOptions.style.display = 'none';
+    const summariesContainer = document.getElementById('step-summaries-container');
+    if (summariesContainer) summariesContainer.style.display = 'none';
+    // Populate list: step name + Edit button. Use 1-based index for display (same fix as flows2) so single step shows "1" not stored step_number.
+    existingList.innerHTML = '';
+    const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+    sortedSteps.forEach((step, index) => {
+      const displayNumber = index + 1;
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md);';
+      const left = document.createElement('div');
+      left.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
+      const stepNum = document.createElement('span');
+      stepNum.style.cssText = 'width: 28px; height: 28px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex-shrink: 0;';
+      stepNum.textContent = displayNumber;
+      const name = document.createElement('span');
+      name.style.cssText = 'font-size: 15px; font-weight: 600; color: var(--text-primary);';
+      name.textContent = step.name || 'Unnamed step';
+      left.appendChild(stepNum);
+      left.appendChild(name);
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn btn-secondary btn-sm';
+      editBtn.textContent = 'Edit';
+      editBtn.onclick = () => window.startEditingStep(step.id);
+      row.appendChild(left);
+      row.appendChild(editBtn);
+      existingList.appendChild(row);
+    });
+    existingView.style.display = 'block';
+  }
+  
   // Update step display
   function updateStepDisplay() {
     console.log('updateStepDisplay called, currentStep:', currentStep, 'isRestoringDraft:', isRestoringDraft);
+    // When showing the step flow, hide the existing-steps list view and show indicators
+    const existingView = document.getElementById('existing-steps-list-view');
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (existingView) existingView.style.display = 'none';
+    if (indicators) indicators.style.display = 'flex';
     
     // If we're restoring a draft and currentStep is 1, but we should be on a different step,
     // don't update (something else will set it correctly)
@@ -743,6 +829,50 @@
         console.warn(`Step div not found: create-process-step-${i}`);
       }
     }
+    
+    // On inputs step (2): show "Outputs from previous steps" tab only if there is at least one previous step; populate lists
+    if (currentStep === 2) {
+      if (typeof window.updatePreviousOutputTabVisibility === 'function') window.updatePreviousOutputTabVisibility();
+      if (typeof window.renderInventoryItemCards === 'function') window.renderInventoryItemCards();
+      if (typeof window.renderPreviousOutputsList === 'function') window.renderPreviousOutputsList();
+    }
+    
+    // On outputs step (3): if no outputs yet, add one so the first output is ready and expanded
+    if (currentStep === 3) {
+      const outputsList = document.getElementById('guided-outputs-list');
+      if (outputsList && outputsList.children.length === 0 && typeof window.addGuidedOutput === 'function') {
+        window.addGuidedOutput();
+      }
+    }
+  }
+  
+  // Validate inventory inputs (quantity & unit required, quantity must be > 0)
+  function validateInventoryInputs() {
+    const list = document.getElementById('guided-inputs-list-unified');
+    if (!list) return { valid: true };
+    const rows = list.querySelectorAll(':scope > div[data-input-type="inventory"], :scope > div[data-input-type="previous_output"]');
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const quantityInput = row.querySelector('.guided-input-quantity');
+      const unitSelect = row.querySelector('.guided-input-unit');
+      if (!quantityInput && !unitSelect) continue;
+      const quantityStr = quantityInput ? (quantityInput.value || '').trim() : '';
+      const unit = unitSelect ? (unitSelect.value || '').trim() : '';
+      if (quantityStr === '' || unit === '') {
+        return {
+          valid: false,
+          message: 'Please fill Quantity and Unit for all inventory items. Both are required.'
+        };
+      }
+      const quantityNum = parseFloat(quantityStr);
+      if (isNaN(quantityNum) || quantityNum <= 0) {
+        return {
+          valid: false,
+          message: 'Quantity must be greater than 0 for all inventory items.'
+        };
+      }
+    }
+    return { valid: true };
   }
   
   // Navigate to next step
@@ -751,12 +881,25 @@
       // Validate step 1
       const stepName = document.getElementById('guided-step-name').value.trim();
       if (!stepName) {
-        alert('Please enter a step name');
+        if (window.showNotification) {
+          window.showNotification('error', 'Step name required', 'Please enter a step name.');
+        } else {
+          alert('Please enter a step name');
+        }
         return;
       }
     }
-    // Step 2 and 3 don't require validation (inputs/outputs are optional)
-    // Step 4 (execution prompts) is also optional
+    if (currentStep === 2) {
+      const result = validateInventoryInputs();
+      if (!result.valid) {
+        if (window.showNotification) {
+          window.showNotification('error', 'Inventory inputs required', result.message);
+        } else {
+          alert(result.message);
+        }
+        return;
+      }
+    }
     
     if (currentStep < totalSteps) {
       currentStep++;
@@ -883,10 +1026,11 @@
                              category === 'final_product' ? 'final_product' : 
                              'raw_material';
           
-          // Only add if we haven't seen this name in this category
+          // Only add if we haven't seen this name in this category; preserve full item (supplier, process_name, extra_data)
           if (!seenNamesByCategory[categoryKey].has(item.name)) {
             seenNamesByCategory[categoryKey].add(item.name);
             categorizedItems[categoryKey].push({
+              ...item,
               name: item.name,
               unit: item.unit || '',
               category: categoryKey
@@ -1173,7 +1317,7 @@
   
   // Collapse all inputs except the specified one
   function collapseAllInputs(exceptId = null) {
-    const allInputs = document.querySelectorAll('#guided-inputs-list > div');
+    const allInputs = getAllGuidedInputElements();
     allInputs.forEach(inputEl => {
       if (inputEl.id !== exceptId) {
         const contentArea = inputEl.querySelector('.guided-input-content');
@@ -1259,15 +1403,16 @@
     }
   }
   
-  // Add guided input
-  window.addGuidedInput = async function(type) {
+  // Add guided input (startCollapsed: when true, input row starts collapsed; preSelectedItem: when set, item is pre-selected and form shown for quantity/unit/execution type)
+  window.addGuidedInput = async function(type, startCollapsed, preSelectedItem) {
     // Collapse all existing inputs before adding a new one
     collapseAllInputs();
     
     const inputId = `guided-input-${Date.now()}`;
     const inputContainer = document.createElement('div');
     inputContainer.id = inputId;
-    inputContainer.dataset.expanded = 'true'; // New input starts expanded
+    inputContainer.dataset.inputType = type; // inventory | new | previous_output — for DB and collectCurrentInputs
+    inputContainer.dataset.expanded = startCollapsed ? 'false' : 'true';
     inputContainer.style.cssText = 'background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); margin-bottom: 12px; overflow: hidden;';
     
     // Create header with expand/collapse
@@ -1289,7 +1434,7 @@
     expandIcon.setAttribute('stroke-width', '2');
     expandIcon.setAttribute('stroke-linecap', 'round');
     expandIcon.setAttribute('stroke-linejoin', 'round');
-    expandIcon.style.cssText = 'transition: transform 0.2s; transform: rotate(180deg);';
+    expandIcon.style.cssText = 'transition: transform 0.2s; transform: ' + (startCollapsed ? 'rotate(0deg)' : 'rotate(180deg)') + ';';
     expandIcon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
     headerLeft.appendChild(expandIcon);
     
@@ -1316,7 +1461,7 @@
     const expandHint = document.createElement('span');
     expandHint.className = 'guided-input-expand-hint';
     expandHint.style.cssText = 'font-size: 11px; color: var(--text-tertiary, #9ca3af); margin-left: 8px; font-style: italic;';
-    expandHint.textContent = '(click to collapse)';
+    expandHint.textContent = startCollapsed ? '(click to expand)' : '(click to collapse)';
     headerLeft.appendChild(expandHint);
     
     // Function to update name display
@@ -1361,9 +1506,184 @@
     // Create content area
     const contentArea = document.createElement('div');
     contentArea.className = 'guided-input-content';
-    contentArea.style.cssText = 'padding: 12px; display: block;';
+    contentArea.style.cssText = 'padding: 12px; display: ' + (startCollapsed ? 'none' : 'block') + ';';
     
     if (type === 'inventory' || type === 'previous_output') {
+      // Pre-selected previous step output (from "Outputs from previous steps" tab): show quantity, unit only; no execution type
+      if (type === 'previous_output' && preSelectedItem && preSelectedItem.name) {
+        const displayName = preSelectedItem.displayName || ('Step ' + (preSelectedItem.step_number || '') + ': ' + preSelectedItem.name);
+        selectedPreviousOutputs.add(displayName);
+        inputContainer.dataset.previousOutputDisplayName = displayName;
+        nameDisplay.textContent = preSelectedItem.name;
+        nameDisplay.style.display = 'inline';
+        titleSpan.style.display = 'none';
+        const hiddenName = document.createElement('input');
+        hiddenName.type = 'hidden';
+        hiddenName.className = 'guided-input-name searchable-dropdown-input';
+        hiddenName.value = preSelectedItem.name;
+        contentArea.appendChild(hiddenName);
+        const quantityField = document.createElement('div');
+        quantityField.style.marginBottom = '12px';
+        const quantityLabel = document.createElement('label');
+        quantityLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
+        quantityLabel.innerHTML = 'Quantity <span style="color: var(--error, #ef4444);">*</span>';
+        quantityField.appendChild(quantityLabel);
+        const quantityInput = document.createElement('input');
+        quantityInput.type = 'number';
+        quantityInput.className = 'guided-input-quantity';
+        quantityInput.placeholder = 'e.g. 1';
+        quantityInput.step = '0.01';
+        quantityInput.min = '0.01';
+        quantityInput.required = true;
+        quantityInput.setAttribute('data-inventory-required', 'true');
+        quantityInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+        if (preSelectedItem.quantity != null && preSelectedItem.quantity !== '') quantityInput.value = preSelectedItem.quantity;
+        quantityField.appendChild(quantityInput);
+        contentArea.appendChild(quantityField);
+        const unitField = document.createElement('div');
+        unitField.style.marginBottom = '12px';
+        const unitLabel = document.createElement('label');
+        unitLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
+        unitLabel.innerHTML = 'Unit <span style="color: var(--error, #ef4444);">*</span>';
+        unitField.appendChild(unitLabel);
+        const unitSelect = document.createElement('select');
+        unitSelect.className = 'guided-input-unit form-select';
+        unitSelect.required = true;
+        unitSelect.setAttribute('data-inventory-required', 'true');
+        unitSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+        const emptyUnitOption = document.createElement('option');
+        emptyUnitOption.value = '';
+        emptyUnitOption.textContent = 'Select unit';
+        unitSelect.appendChild(emptyUnitOption);
+        [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
+          const option = document.createElement('option');
+          option.value = unit;
+          option.textContent = unit;
+          unitSelect.appendChild(option);
+        });
+        if (preSelectedItem.unit) unitSelect.value = preSelectedItem.unit;
+        unitField.appendChild(unitSelect);
+        contentArea.appendChild(unitField);
+        inputContainer.appendChild(contentArea);
+        const listEl = getGuidedInputListElement(type);
+        if (listEl) listEl.appendChild(inputContainer);
+        updateInputButtonsText();
+        if (typeof window.renderPreviousOutputsList === 'function') window.renderPreviousOutputsList();
+        return;
+      }
+      // Pre-selected item (e.g. from inventory cards): show quantity, unit, execution type only; no dropdown
+      if (type === 'inventory' && preSelectedItem && preSelectedItem.name) {
+        nameDisplay.textContent = preSelectedItem.name;
+        nameDisplay.style.display = 'inline';
+        titleSpan.style.display = 'none';
+        selectedInventoryItems.add(preSelectedItem.name);
+        
+        const hiddenName = document.createElement('input');
+        hiddenName.type = 'hidden';
+        hiddenName.className = 'guided-input-name searchable-dropdown-input';
+        hiddenName.value = preSelectedItem.name;
+        contentArea.appendChild(hiddenName);
+        
+        const quantityField = document.createElement('div');
+        quantityField.style.marginBottom = '12px';
+        const quantityLabel = document.createElement('label');
+        quantityLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
+        quantityLabel.innerHTML = 'Quantity <span style="color: var(--error, #ef4444);">*</span>';
+        quantityField.appendChild(quantityLabel);
+        const quantityInput = document.createElement('input');
+        quantityInput.type = 'number';
+        quantityInput.className = 'guided-input-quantity';
+        quantityInput.placeholder = 'e.g. 1';
+        quantityInput.step = '0.01';
+        quantityInput.min = '0.01';
+        quantityInput.required = true;
+        quantityInput.setAttribute('data-inventory-required', 'true');
+        quantityInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+        quantityField.appendChild(quantityInput);
+        contentArea.appendChild(quantityField);
+        
+        const unitField = document.createElement('div');
+        unitField.style.marginBottom = '12px';
+        const unitLabel = document.createElement('label');
+        unitLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
+        unitLabel.innerHTML = 'Unit <span style="color: var(--error, #ef4444);">*</span>';
+        unitField.appendChild(unitLabel);
+        const unitSelect = document.createElement('select');
+        unitSelect.className = 'guided-input-unit form-select';
+        unitSelect.required = true;
+        unitSelect.setAttribute('data-inventory-required', 'true');
+        unitSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+        const emptyUnitOption = document.createElement('option');
+        emptyUnitOption.value = '';
+        emptyUnitOption.textContent = 'Select unit';
+        unitSelect.appendChild(emptyUnitOption);
+        [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
+          const option = document.createElement('option');
+          option.value = unit;
+          option.textContent = unit;
+          unitSelect.appendChild(option);
+        });
+        if (preSelectedItem.unit) unitSelect.value = preSelectedItem.unit;
+        unitField.appendChild(unitSelect);
+        contentArea.appendChild(unitField);
+        
+        const typeField = document.createElement('div');
+        const isRawWithTraceability = (preSelectedItem.inventory_type === 'raw_material' || preSelectedItem.category === 'raw_material') && (preSelectedItem.supplier || preSelectedItem.supplier_batch_number);
+        if (isRawWithTraceability) {
+          const hiddenType = document.createElement('input');
+          hiddenType.type = 'hidden';
+          hiddenType.className = 'guided-input-execution-type';
+          hiddenType.value = 'variable';
+          typeField.appendChild(hiddenType);
+          const explanationDiv = document.createElement('div');
+          explanationDiv.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
+          explanationDiv.id = `guided-input-explanation-${inputId}`;
+          explanationDiv.textContent = 'You will select which batch or supplier to use when this step runs.';
+          typeField.appendChild(explanationDiv);
+        } else {
+          const typeLabel = document.createElement('label');
+          typeLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
+          typeLabel.textContent = 'Execution Type';
+          typeField.appendChild(typeLabel);
+          const typeSelect = document.createElement('select');
+          typeSelect.className = 'guided-input-execution-type form-select';
+          typeSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+          const variableOption = document.createElement('option');
+          variableOption.value = 'variable';
+          variableOption.textContent = 'Select inventory at execution';
+          typeSelect.appendChild(variableOption);
+          const staticOption = document.createElement('option');
+          staticOption.value = 'static';
+          staticOption.textContent = 'Use exact input every execution';
+          typeSelect.appendChild(staticOption);
+          const promptOption = document.createElement('option');
+          promptOption.value = 'prompt';
+          promptOption.textContent = 'Prompt at execution';
+          typeSelect.appendChild(promptOption);
+          typeField.appendChild(typeSelect);
+          const explanationDiv = document.createElement('div');
+          explanationDiv.style.cssText = 'margin-top: 8px; padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
+          explanationDiv.id = `guided-input-explanation-${inputId}`;
+          explanationDiv.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs.';
+          typeField.appendChild(explanationDiv);
+          typeSelect.addEventListener('change', function() {
+            const explanation = document.getElementById(`guided-input-explanation-${inputId}`);
+            if (explanation) {
+              explanation.innerHTML = this.value === 'variable'
+                ? '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs.'
+                : '<strong>Use this exact input every execution:</strong> The system will use the same quantity and unit for every execution without prompting.';
+            }
+          });
+        }
+        contentArea.appendChild(typeField);
+        
+        inputContainer.appendChild(contentArea);
+        const listEl = getGuidedInputListElement(type);
+        if (listEl) listEl.appendChild(inputContainer);
+        updateInputButtonsText();
+        return;
+      }
+      
       // For 'previous_output' type, only show previous outputs
       // For 'inventory' type, show inventory items (but not previous outputs)
       let allCategorizedItems;
@@ -1378,7 +1698,8 @@
           messageDiv.textContent = 'No previous step outputs available. Create a step with outputs first.';
           contentArea.appendChild(messageDiv);
           inputContainer.appendChild(contentArea);
-          document.getElementById('guided-inputs-list').appendChild(inputContainer);
+          const listEl = getGuidedInputListElement(type);
+          if (listEl) listEl.appendChild(inputContainer);
           return;
         }
         
@@ -1416,7 +1737,8 @@
           messageDiv.textContent = 'No inventory items available. Please add inventory items first.';
           contentArea.appendChild(messageDiv);
           inputContainer.appendChild(contentArea);
-          document.getElementById('guided-inputs-list').appendChild(inputContainer);
+          const listEl = getGuidedInputListElement(type);
+          if (listEl) listEl.appendChild(inputContainer);
           return;
         }
       }
@@ -1434,7 +1756,7 @@
         raw_material: (allCategorizedItems.raw_material || []).filter(item => !selectedInventoryItems.has(item.name)),
         work_in_progress: (allCategorizedItems.work_in_progress || []).filter(item => !selectedInventoryItems.has(item.name)),
         final_product: (allCategorizedItems.final_product || []).filter(item => !selectedInventoryItems.has(item.name)),
-        previous_outputs: (allCategorizedItems.previous_outputs || []).filter(item => !selectedInventoryItems.has(item.name))
+        previous_outputs: (allCategorizedItems.previous_outputs || []).filter(item => !selectedPreviousOutputs.has(item.displayName || item.name))
       };
       
       const nameDropdown = createInventorySearchableDropdown(
@@ -1453,7 +1775,13 @@
             }
           }
           // Mark this item as selected (use the actual name, not displayName)
-          selectedInventoryItems.add(item.name);
+          if (item.is_previous_output) {
+            const displayName = item.displayName || item.name;
+            selectedPreviousOutputs.add(displayName);
+            inputContainer.dataset.previousOutputDisplayName = displayName;
+          } else {
+            selectedInventoryItems.add(item.name);
+          }
           // Update the dropdown to exclude this item from other inputs
           updateInventoryDropdowns();
           // Update name display in header directly with the item name (not displayName)
@@ -1461,6 +1789,29 @@
             nameDisplay.textContent = item.name;
             nameDisplay.style.display = 'inline';
             titleSpan.style.display = 'none';
+          }
+          // Raw materials with supplier/batch: hide Execution type box, show only helper text
+          if (type === 'inventory') {
+            const typeSelect = inputContainer.querySelector('.guided-input-execution-type.form-select');
+            const isRawWithTraceability = (item.category === 'raw_material' || item.inventory_type === 'raw_material') && (item.supplier || item.supplier_batch_number);
+            if (typeSelect && isRawWithTraceability) {
+              const typeField = typeSelect.parentElement;
+              if (typeField) {
+                const label = typeField.querySelector('label');
+                if (label) label.style.display = 'none';
+                typeSelect.style.display = 'none';
+                const hiddenType = document.createElement('input');
+                hiddenType.type = 'hidden';
+                hiddenType.className = 'guided-input-execution-type';
+                hiddenType.value = 'variable';
+                typeField.appendChild(hiddenType);
+                const explanation = document.getElementById('guided-input-explanation-' + inputId);
+                if (explanation) {
+                  explanation.style.marginTop = '0';
+                  explanation.textContent = 'You will select which batch or supplier to use when this step runs.';
+                }
+              }
+            }
           }
         },
         inputContainer,
@@ -1476,32 +1827,41 @@
         nameInput.addEventListener('blur', updateNameDisplay);
       }
       
-      // Quantity field
+      // Quantity field (required for inventory items)
       const quantityField = document.createElement('div');
       quantityField.style.marginBottom = '12px';
       const quantityLabel = document.createElement('label');
       quantityLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-      quantityLabel.textContent = 'Quantity';
+      quantityLabel.innerHTML = 'Quantity <span style="color: var(--error, #ef4444);">*</span>';
       quantityField.appendChild(quantityLabel);
       const quantityInput = document.createElement('input');
       quantityInput.type = 'number';
       quantityInput.className = 'guided-input-quantity';
-      quantityInput.placeholder = '0';
+      quantityInput.placeholder = 'e.g. 1';
       quantityInput.step = '0.01';
+      quantityInput.min = '0.01';
+      quantityInput.required = true;
+      quantityInput.setAttribute('data-inventory-required', 'true');
       quantityInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
       quantityField.appendChild(quantityInput);
       contentArea.appendChild(quantityField);
       
-      // Unit dropdown
+      // Unit dropdown (required for inventory items)
       const unitField = document.createElement('div');
       unitField.style.marginBottom = '12px';
       const unitLabel = document.createElement('label');
       unitLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-      unitLabel.textContent = 'Unit';
+      unitLabel.innerHTML = 'Unit <span style="color: var(--error, #ef4444);">*</span>';
       unitField.appendChild(unitLabel);
       const unitSelect = document.createElement('select');
       unitSelect.className = 'guided-input-unit form-select';
+      unitSelect.required = true;
+      unitSelect.setAttribute('data-inventory-required', 'true');
       unitSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+      const emptyUnitOption = document.createElement('option');
+      emptyUnitOption.value = '';
+      emptyUnitOption.textContent = 'Select unit';
+      unitSelect.appendChild(emptyUnitOption);
       [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
         const option = document.createElement('option');
         option.value = unit;
@@ -1651,50 +2011,247 @@
     }
     
     inputContainer.appendChild(contentArea);
-    document.getElementById('guided-inputs-list').appendChild(inputContainer);
+    const listEl = getGuidedInputListElement(type);
+    if (listEl) listEl.appendChild(inputContainer);
     
     // Update button text after adding input
     updateInputButtonsText();
   };
   
-  // Update input button text based on number of inputs
+  // Update input button text based on number of inputs in unified list
   function updateInputButtonsText() {
-    const inputCount = document.querySelectorAll('#guided-inputs-list > div').length;
-    const inventoryBtn = document.getElementById('add-inventory-input-btn');
-    const newInputBtn = document.getElementById('add-new-input-btn');
-    const previousOutputBtn = document.getElementById('add-previous-output-input-btn');
+    const unifiedList = document.getElementById('guided-inputs-list-unified');
+    const totalCount = unifiedList ? unifiedList.querySelectorAll(':scope > div').length : 0;
+    const label = totalCount > 0 ? '+ Add another' : '+ Add input';
     
-    // Update inventory button
-    if (inventoryBtn) {
-      const mainText = inputCount > 0 ? '+ Add another input' : '+ Add input';
-      inventoryBtn.innerHTML = `
-        <span>${mainText}</span>
-        <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">from inventory</span>
-      `;
+    const inventoryBtnText = document.getElementById('add-another-inventory-text');
+    const newBtnText = document.getElementById('add-another-new-text');
+    if (inventoryBtnText) inventoryBtnText.textContent = label;
+    if (newBtnText) newBtnText.textContent = label;
+  }
+  
+  // Summary under item name. Raw materials: none (user selects batch at execution). Intermediate/final: process name, unit.
+  function inventoryCardSummary(item) {
+    const isRaw = (item.inventory_type || item.category) === 'raw_material';
+    if (isRaw) return ''; // No supplier/unit in selection; user picks from inventory at execution
+    const parts = [];
+    if (item.process_name) parts.push('process name: ' + escapeHtmlForText(item.process_name));
+    if (item.unit) parts.push('unit: ' + escapeHtmlForText(item.unit));
+    return parts.join(', ');
+  }
+  
+  // Build full metadata block. For raw materials, omit unit/supplier/batch/dates so users know they choose at execution.
+  function inventoryCardMetadataHtml(item) {
+    const lines = [];
+    const isRaw = (item.inventory_type || item.category) === 'raw_material';
+    if (!isRaw && item.unit != null && item.unit !== '') {
+      lines.push('<div class="meta-line"><span class="meta-label">Unit:</span> ' + escapeHtmlForText(String(item.unit)) + '</div>');
     }
-    
-    // Update new input button
-    if (newInputBtn) {
-      const mainText = inputCount > 0 ? '+ Add another input' : '+ Add input';
-      newInputBtn.innerHTML = `
-        <span>${mainText}</span>
-        <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">not from inventory</span>
-      `;
+    const cat = item.inventory_type || item.category;
+    if (cat) {
+      const label = cat === 'raw_material' ? 'Raw material' : cat === 'work_in_progress' ? 'Intermediate' : 'Final product';
+      lines.push('<div class="meta-line"><span class="meta-label">Type:</span> ' + escapeHtmlForText(label) + '</div>');
     }
-    
-    // Show/hide previous output button based on whether we have created steps
-    if (previousOutputBtn) {
-      if (createdSteps.length > 0) {
-        previousOutputBtn.style.display = 'flex';
-      } else {
-        previousOutputBtn.style.display = 'none';
+    if (isRaw) {
+      lines.push('<div class="meta-line" style="font-style: italic;">You will select which batch or supplier to use when this step runs.</div>');
+    }
+    if (!isRaw && item.supplier) {
+      lines.push('<div class="meta-line"><span class="meta-label">Supplier:</span> ' + escapeHtmlForText(item.supplier) + '</div>');
+    }
+    if (!isRaw && item.supplier_batch_number) {
+      lines.push('<div class="meta-line"><span class="meta-label">Supplier batch:</span> ' + escapeHtmlForText(item.supplier_batch_number) + '</div>');
+    }
+    if (!isRaw && item.purchase_date) {
+      lines.push('<div class="meta-line"><span class="meta-label">Purchase date:</span> ' + escapeHtmlForText(item.purchase_date) + '</div>');
+    }
+    if (!isRaw && item.expiry_date) {
+      lines.push('<div class="meta-line"><span class="meta-label">Expiry date:</span> ' + escapeHtmlForText(item.expiry_date) + '</div>');
+    }
+    if (item.process_name) {
+      lines.push('<div class="meta-line"><span class="meta-label">Process:</span> ' + escapeHtmlForText(item.process_name) + '</div>');
+    }
+    if (item.source_step_name) {
+      lines.push('<div class="meta-line"><span class="meta-label">Step:</span> ' + escapeHtmlForText(item.source_step_name) + '</div>');
+    }
+    const ed = item.extra_data;
+    if (ed && typeof ed === 'object') {
+      const prompts = ed.execution_prompts;
+      if (prompts && typeof prompts === 'object' && Object.keys(prompts).length > 0) {
+        lines.push('<div class="meta-line"><span class="meta-label">Execution prompts:</span></div>');
+        Object.keys(prompts).forEach(function(k) {
+          const v = prompts[k];
+          if (v != null && v !== '') {
+            lines.push('<div class="meta-line" style="padding-left: 12px;">' + escapeHtmlForText(String(k)) + ': ' + escapeHtmlForText(String(v)) + '</div>');
+          }
+        });
+      }
+      if (ed.variable_inputs && Array.isArray(ed.variable_inputs) && ed.variable_inputs.length > 0) {
+        lines.push('<div class="meta-line"><span class="meta-label">Variable inputs:</span></div>');
+        ed.variable_inputs.forEach(function(inp, idx) {
+          const n = inp && inp.name ? inp.name : 'Input ' + (idx + 1);
+          const q = inp && inp.quantity != null ? inp.quantity : '';
+          const u = inp && inp.unit ? inp.unit : '';
+          lines.push('<div class="meta-line" style="padding-left: 12px;">' + escapeHtmlForText(n) + (q !== '' ? ' — ' + escapeHtmlForText(String(q)) + (u ? ' ' + escapeHtmlForText(u) : '') : '') + '</div>');
+        });
+      }
+      if (ed.variable_output && typeof ed.variable_output === 'object') {
+        const o = ed.variable_output;
+        const oname = o.name || 'Output';
+        lines.push('<div class="meta-line"><span class="meta-label">Variable output:</span> ' + escapeHtmlForText(oname) + (o.quantity != null ? ' — ' + escapeHtmlForText(String(o.quantity)) + (o.unit ? ' ' + escapeHtmlForText(o.unit) : '') : '') + '</div>');
+      }
+      if (ed.previous_steps_data && Array.isArray(ed.previous_steps_data) && ed.previous_steps_data.length > 0) {
+        lines.push('<div class="meta-line"><span class="meta-label">Previous steps:</span></div>');
+        ed.previous_steps_data.forEach(function(ps) {
+          const stepLabel = ps.step_name || ps.step_number || 'Step';
+          lines.push('<div class="meta-line" style="padding-left: 12px;">' + escapeHtmlForText(stepLabel) + (ps.process_name ? ' (' + escapeHtmlForText(ps.process_name) + ')' : '') + '</div>');
+        });
       }
     }
+    if (lines.length === 0) return '<div class="meta-line">No additional metadata.</div>';
+    return lines.join('');
+  }
+  
+  // Render inventory cards by section (Raw materials, Intermediate, Final product); each card expandable with full metadata.
+  window.renderInventoryItemCards = async function() {
+    const container = document.getElementById('guided-inventory-cards-container');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    const categorized = await loadInventoryItems();
+    const sections = [
+      { key: 'raw_material', title: 'Raw materials', items: categorized.raw_material || [] },
+      { key: 'work_in_progress', title: 'Intermediate', items: categorized.work_in_progress || [] },
+      { key: 'final_product', title: 'Final product', items: categorized.final_product || [] }
+    ];
+    
+    let totalAvailable = 0;
+    sections.forEach(function(sec) {
+      const available = (sec.items || []).filter(function(item) { return item && item.name && !selectedInventoryItems.has(item.name); });
+      totalAvailable += available.length;
+    });
+    
+    const totalItems = (categorized.raw_material || []).length + (categorized.work_in_progress || []).length + (categorized.final_product || []).length;
+    if (totalAvailable === 0) {
+      const msg = document.createElement('p');
+      msg.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin: 0; padding: 8px 0;';
+      msg.textContent = totalItems === 0
+        ? 'No inventory items available. Add inventory items first.'
+        : 'All available items have been added. Expand an input above to edit.';
+      container.appendChild(msg);
+      return;
+    }
+    
+    sections.forEach(function(sec) {
+      const available = (sec.items || []).filter(function(item) { return item && item.name && !selectedInventoryItems.has(item.name); });
+      if (available.length === 0) return;
+      
+      const sectionEl = document.createElement('div');
+      sectionEl.className = 'guided-inventory-section';
+      const titleEl = document.createElement('h4');
+      titleEl.className = 'guided-inventory-section-title';
+      titleEl.textContent = sec.title;
+      sectionEl.appendChild(titleEl);
+      
+      available.forEach(function(item) {
+        const card = document.createElement('div');
+        card.className = 'guided-inventory-card';
+        const summary = inventoryCardSummary(item);
+        const metaHtml = inventoryCardMetadataHtml(item);
+        
+        const headerRow = document.createElement('div');
+        headerRow.className = 'card-header-row';
+        headerRow.innerHTML =
+          '<div class="card-header-text">' +
+            '<span class="card-name">' + escapeHtmlForText(item.name) + '</span>' +
+            (summary ? '<span class="card-summary" title="' + summary.replace(/"/g, '&quot;') + '">' + summary + '</span>' : '') +
+          '</div>' +
+          '<button type="button" class="card-expand-btn" aria-label="Toggle details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></button>';
+        
+        const metaBlock = document.createElement('div');
+        metaBlock.className = 'card-meta-block';
+        metaBlock.style.display = 'none';
+        metaBlock.innerHTML = metaHtml + '<div class="card-add-footer"><button type="button" class="card-add-btn btn btn-primary btn-sm">Add as input</button></div>';
+        
+        const expandBtn = headerRow.querySelector('.card-expand-btn');
+        const addBtn = metaBlock.querySelector('.card-add-btn');
+        
+        function toggleExpand() {
+          const open = card.classList.toggle('expanded');
+          metaBlock.style.display = open ? 'block' : 'none';
+        }
+        headerRow.addEventListener('click', function(e) {
+          if (e.target.closest('.card-expand-btn')) return;
+          toggleExpand();
+        });
+        expandBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          toggleExpand();
+        });
+        addBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          (async function() {
+            await window.addGuidedInput('inventory', false, item);
+            window.renderInventoryItemCards();
+            updateInputButtonsText();
+          })();
+        });
+        
+        card.appendChild(headerRow);
+        card.appendChild(metaBlock);
+        sectionEl.appendChild(card);
+      });
+      
+      container.appendChild(sectionEl);
+    });
+  };
+  
+  // Render list of previous step outputs in "Outputs from previous steps" tab; click to add as input.
+  window.renderPreviousOutputsList = function() {
+    const container = document.getElementById('guided-previous-outputs-container');
+    if (!container) return;
+    container.innerHTML = '';
+    const outputs = getPreviousStepOutputs();
+    const available = outputs.filter(function(item) {
+      const displayName = item.displayName || ('Step ' + (item.step_number || '') + ': ' + item.name);
+      return !selectedPreviousOutputs.has(displayName);
+    });
+    if (available.length === 0) {
+      const msg = document.createElement('p');
+      msg.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin: 0; padding: 8px 0;';
+      msg.textContent = outputs.length === 0
+        ? 'No previous step outputs available. Create a step with outputs first, then add another step.'
+        : 'All available outputs have been added. Expand an input above to edit.';
+      container.appendChild(msg);
+      return;
+    }
+    available.forEach(function(item) {
+      const displayName = item.displayName || ('Step ' + (item.step_number || '') + ': ' + item.name);
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 12px 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); background: var(--bg-card, #fff); color: var(--text-primary); font-size: 13px; text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s;';
+      row.innerHTML = '<span style="font-weight: 600;">' + escapeHtmlForText(displayName) + '</span>' +
+        (item.unit ? '<span style="font-size: 11px; color: var(--text-tertiary);">' + escapeHtmlForText(item.unit) + '</span>' : '');
+      row.onmouseenter = function() { row.style.background = 'var(--bg-secondary, #f9fafb)'; row.style.borderColor = 'var(--primary, #3b82f6)'; };
+      row.onmouseleave = function() { row.style.background = 'var(--bg-card, #fff)'; row.style.borderColor = 'var(--border-default, #e5e7eb)'; };
+      row.onclick = async function() {
+        await window.addGuidedInput('previous_output', false, item);
+        window.renderPreviousOutputsList();
+        updateInputButtonsText();
+      };
+      container.appendChild(row);
+    });
+  };
+  
+  function escapeHtmlForText(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
   
   // Update all inventory dropdowns to exclude selected items
   function updateInventoryDropdowns() {
-    const allInputs = document.querySelectorAll('#guided-inputs-list > div');
+    const allInputs = getAllGuidedInputElements();
     allInputs.forEach(inputEl => {
       const nameInput = inputEl.querySelector('.guided-input-name.searchable-dropdown-input');
       if (nameInput) {
@@ -1708,15 +2265,23 @@
   window.removeGuidedInput = function(inputId) {
     const inputElement = document.getElementById(inputId);
     if (inputElement) {
-      // Get the selected inventory item name before removing
+      const wasInventory = inputElement.dataset.inputType === 'inventory';
+      const wasPreviousOutput = inputElement.dataset.inputType === 'previous_output';
       const nameInput = inputElement.querySelector('.guided-input-name.searchable-dropdown-input');
-      if (nameInput && nameInput.value) {
+      if (nameInput && nameInput.value && wasInventory) {
         selectedInventoryItems.delete(nameInput.value.trim());
       }
+      if (wasPreviousOutput && inputElement.dataset.previousOutputDisplayName) {
+        selectedPreviousOutputs.delete(inputElement.dataset.previousOutputDisplayName);
+      }
       inputElement.remove();
-      
-      // Update button text after removing input
       updateInputButtonsText();
+      if (wasInventory && typeof window.renderInventoryItemCards === 'function') {
+        window.renderInventoryItemCards();
+      }
+      if (wasPreviousOutput && typeof window.renderPreviousOutputsList === 'function') {
+        window.renderPreviousOutputsList();
+      }
     }
   };
   
@@ -1988,7 +2553,7 @@
     const labelInput = document.createElement('input');
     labelInput.type = 'text';
     labelInput.className = 'guided-prompt-label';
-    labelInput.placeholder = 'e.g., Batch number, Temperature';
+    labelInput.placeholder = 'e.g., Temperature, Operator name';
     labelInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
     labelInput.addEventListener('input', updateLabelDisplay);
     labelInput.addEventListener('blur', updateLabelDisplay);
@@ -2136,13 +2701,27 @@
     const stepDescription = document.getElementById('guided-step-description').value.trim();
     
     if (!stepName) {
-      alert('Please enter a step name');
+      if (window.showNotification) {
+        window.showNotification('error', 'Step name required', 'Please enter a step name.');
+      } else {
+        alert('Please enter a step name');
+      }
       return;
     }
     
-    // Collect inputs
+    const invResult = validateInventoryInputs();
+    if (!invResult.valid) {
+      if (window.showNotification) {
+        window.showNotification('error', 'Inventory inputs required', invResult.message);
+      } else {
+        alert(invResult.message);
+      }
+      return;
+    }
+    
+    // Collect inputs (from both tabs)
     const inputs = [];
-    const inputElements = document.querySelectorAll('#guided-inputs-list > div');
+    const inputElements = getAllGuidedInputElements();
     inputElements.forEach(inputEl => {
       // Get name - could be from searchable dropdown (input) or regular input
       const nameInput = inputEl.querySelector('.guided-input-name');
@@ -2232,6 +2811,22 @@
         });
       }
     });
+    // Dedicated Batch number: add or remove based on dropdown (required / optional / don't ask)
+    const batchNumberModeEl = document.getElementById('guided-prompt-batch-number-mode');
+    const batchNumberMode = batchNumberModeEl ? batchNumberModeEl.value : 'dont_ask';
+    // Remove any Batch number from the list (we'll add one from the dropdown if needed)
+    const filteredPrompts = executionPrompts.filter(p => (p.label || '').toLowerCase() !== 'batch number');
+    if (batchNumberMode === 'required' || batchNumberMode === 'optional') {
+      filteredPrompts.unshift({
+        label: 'Batch number',
+        type: 'text',
+        unit: null,
+        required: batchNumberMode === 'required'
+      });
+    }
+    // Use filtered list (with Batch number only if required/optional)
+    executionPrompts.length = 0;
+    executionPrompts.push(...filteredPrompts);
     
     // Get process ID from URL params (same way as flows2.html)
     const urlParams = new URLSearchParams(window.location.search);
@@ -2242,28 +2837,31 @@
       return;
     }
     
-    // Calculate step number - use the maximum step_number from createdSteps or database steps + 1
+    // Calculate step number: when editing, preserve the step's current step_number; when creating, use max + 1
     let stepCount = 1;
+    const stepBeingEdited = editingStepId ? createdSteps.find(s => s.id === editingStepId) : null;
     
-    // First, check createdSteps (steps created in this session)
-    if (createdSteps.length > 0) {
-      const maxStepNumber = Math.max(...createdSteps.map(s => s.step_number || 0));
-      stepCount = maxStepNumber + 1;
-    }
-    
-    // Also check database steps to ensure we don't miss any
-    try {
-      const processData = await CoreAPI.getProcess(processId);
-      if (processData && processData.steps && processData.steps.length > 0) {
-        const maxDbStepNumber = Math.max(...processData.steps.map(s => s.step_number || 0));
-        // Use the higher of the two (createdSteps max or database max)
-        stepCount = Math.max(stepCount, maxDbStepNumber + 1);
+    if (stepBeingEdited) {
+      // Preserve existing step_number when updating a step (fixes single step showing "2")
+      stepCount = stepBeingEdited.step_number ?? 1;
+    } else {
+      // New step: use the maximum step_number from createdSteps or database steps + 1
+      if (createdSteps.length > 0) {
+        const maxStepNumber = Math.max(...createdSteps.map(s => s.step_number || 0));
+        stepCount = maxStepNumber + 1;
       }
-    } catch (err) {
-      console.warn('Could not fetch process data to determine step count, using createdSteps:', err);
+      try {
+        const processData = await CoreAPI.getProcess(processId);
+        if (processData && processData.steps && processData.steps.length > 0) {
+          const maxDbStepNumber = Math.max(...processData.steps.map(s => s.step_number || 0));
+          stepCount = Math.max(stepCount, maxDbStepNumber + 1);
+        }
+      } catch (err) {
+        console.warn('Could not fetch process data to determine step count, using createdSteps:', err);
+      }
     }
     
-    console.log('Calculated stepCount:', stepCount, 'from createdSteps:', createdSteps.length);
+    console.log('Calculated stepCount:', stepCount, 'from createdSteps:', createdSteps.length, 'editing:', !!editingStepId);
     
     try {
       // Create or update the step via API - same structure as existing saveStep function
@@ -2277,10 +2875,10 @@
       };
       
       let saved;
-      // If we're editing an existing step (resuming draft), update it instead of creating new
+      const wasEditingStepId = editingStepId;
+      // If we're editing an existing step (resuming draft or from edit-process view), update it instead of creating new
       if (editingStepId) {
         saved = await CoreAPI.updateStep(processId, editingStepId, stepData);
-        // Clear editingStepId after update
         editingStepId = null;
       } else {
         saved = await CoreAPI.createStep(processId, stepData);
@@ -2303,9 +2901,8 @@
         
         console.log('Created step with step_number:', savedStepNumber, 'step name:', stepName);
         
-        // If we were editing, the step was already in createdSteps (from loadDraft), so update it
-        // Otherwise, add the newly created step
-        if (editingStepId && saved.id === editingStepId) {
+        // If we were editing, the step was already in createdSteps, so update it
+        if (wasEditingStepId && saved.id === wasEditingStepId) {
           // Update existing step in createdSteps
           const stepIndex = createdSteps.findIndex(s => s.id === editingStepId);
           if (stepIndex !== -1) {
@@ -2323,18 +2920,39 @@
         // Update process to not be draft if it was (user is actively creating steps)
         await CoreAPI.updateProcess(processId, { is_draft: false });
         
-        // Show step summaries
-        if (createdSteps.length > 0) {
-          updateStepSummaries();
+        // After saving a step, show "Add another step" and "Finish process" (same for both create and edit flow)
+        if (isEditingExistingProcess) {
+          isEditingExistingProcess = false;
+          try {
+            const processData = await CoreAPI.getProcess(processId);
+            if (processData && processData.steps && processData.steps.length > 0) {
+              createdSteps = processData.steps.map(s => ({
+                id: s.id,
+                step_number: s.step_number,
+                name: s.name,
+                description: s.description,
+                inputs: s.inputs || [],
+                outputs: s.outputs || [],
+                execution_prompts: s.execution_prompts || []
+              }));
+            }
+          } catch (err) {
+            console.warn('Could not reload process steps after save:', err);
+          }
         }
-        
-        // Update input buttons to show/hide previous output button
-        updateInputButtonsText();
-        
-        // Hide all step forms and show post-creation options
         document.querySelectorAll('.create-process-step').forEach(step => {
           step.style.display = 'none';
         });
+        const existingView = document.getElementById('existing-steps-list-view');
+        if (existingView) existingView.style.display = 'none';
+        const indicators = document.getElementById('create-process-step-indicators');
+        if (indicators) indicators.style.display = 'flex';
+        if (createdSteps.length > 0) {
+          updateStepSummaries();
+          const summariesContainer = document.getElementById('step-summaries-container');
+          if (summariesContainer) summariesContainer.style.display = 'block';
+        }
+        updateInputButtonsText();
         const postCreationOptions = document.getElementById('post-creation-options');
         if (postCreationOptions) {
           postCreationOptions.style.display = 'block';
@@ -2380,7 +2998,9 @@
     summariesContainer.style.display = 'block';
     summariesList.innerHTML = '';
     
-    createdSteps.forEach((step, index) => {
+    const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+    sortedSteps.forEach((step, index) => {
+      const displayNumber = index + 1;
       const stepId = `step-summary-${step.id || index}`;
       const summaryCard = document.createElement('div');
       summaryCard.id = stepId;
@@ -2409,7 +3029,7 @@
       
       const stepNumber = document.createElement('div');
       stepNumber.style.cssText = 'width: 32px; height: 32px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; flex-shrink: 0;';
-      stepNumber.textContent = step.step_number || (index + 1);
+      stepNumber.textContent = displayNumber;
       stepHeader.appendChild(stepNumber);
       
       const stepInfo = document.createElement('div');
@@ -2545,6 +3165,75 @@
     }
   }
   
+  // Start editing an existing step (from the "existing steps" view when editing a non-draft process)
+  window.startEditingStep = async function(stepId) {
+    const step = createdSteps.find(s => s.id === stepId);
+    if (!step) return;
+    editingStepId = step.id;
+    resetForm(true);
+    await restoreStepIntoForm(step);
+    const existingView = document.getElementById('existing-steps-list-view');
+    if (existingView) existingView.style.display = 'none';
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (indicators) indicators.style.display = 'flex';
+    currentStep = 1;
+    updateStepDisplay();
+  };
+  
+  // Add new step from the "existing steps" view (when editing a non-draft process)
+  window.addNewStepFromEditView = function() {
+    editingStepId = null;
+    const existingView = document.getElementById('existing-steps-list-view');
+    if (existingView) existingView.style.display = 'none';
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (indicators) indicators.style.display = 'flex';
+    resetForm(true);
+    if (createdSteps.length > 0) {
+      updateStepSummaries();
+      const summariesContainer = document.getElementById('step-summaries-container');
+      if (summariesContainer) summariesContainer.style.display = 'block';
+    }
+    updateInputButtonsText();
+    currentStep = 1;
+    updateStepDisplay();
+  };
+
+  // Start new process from the "existing steps" view (when editing a saved/complete process — replaces all steps)
+  window.startNewFromEditView = async function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const processId = urlParams.get('id');
+    if (processId) {
+      try {
+        const processData = await CoreAPI.getProcess(processId);
+        if (processData && processData.steps && processData.steps.length > 0) {
+          startNewOldStepIds = processData.steps.map(function(s) { return s.id; });
+          isStartNewOverwriteDraft = true;
+        }
+      } catch (err) {
+        console.warn('Could not fetch process steps for Start new overwrite:', err);
+      }
+    }
+    createdSteps = [];
+    isEditingExistingProcess = false;
+    editingStepId = null;
+    const existingView = document.getElementById('existing-steps-list-view');
+    if (existingView) existingView.style.display = 'none';
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (indicators) indicators.style.display = 'flex';
+    const summariesContainer = document.getElementById('step-summaries-container');
+    if (summariesContainer) summariesContainer.style.display = 'none';
+    const postCreationOptions = document.getElementById('post-creation-options');
+    if (postCreationOptions) postCreationOptions.style.display = 'none';
+    resetForm(true);
+    updateInputButtonsText();
+    currentStep = 1;
+    updateStepDisplay();
+    const modalTitle = document.getElementById('modal-title');
+    const modalDescription = document.getElementById('modal-description');
+    if (modalTitle) modalTitle.textContent = 'Create Process Step';
+    if (modalDescription) modalDescription.textContent = 'You can expand existing steps to edit them, or use this interactive editor to add additional steps.';
+  };
+  
   // Add another step
   window.addAnotherStep = function() {
     // Hide post-creation options
@@ -2586,10 +3275,21 @@
       confirmationModal.style.display = 'none';
     }
     
-    // Get process ID and mark as not draft
     const urlParams = new URLSearchParams(window.location.search);
     const processId = urlParams.get('id');
     if (processId) {
+      // If user chose "Start New", remove old draft steps so only the new steps remain
+      if (isStartNewOverwriteDraft && startNewOldStepIds.length > 0) {
+        for (const stepId of startNewOldStepIds) {
+          try {
+            await CoreAPI.deleteStep(processId, stepId);
+          } catch (err) {
+            console.warn('Could not delete old draft step on finish:', stepId, err);
+          }
+        }
+        startNewOldStepIds = [];
+        isStartNewOverwriteDraft = false;
+      }
       try {
         await CoreAPI.updateProcess(processId, { is_draft: false });
       } catch (error) {
@@ -2620,25 +3320,102 @@
     resetForm(false);
   };
   
-  // Close modal on overlay click or close button
+  // Close modal on overlay click or close button — show "Save as draft or discard?" first
+  // Use data-create-step-close so the global [data-modal-close] handler (e.g. on flows2) does not run and close the modal before our prompt appears
   document.addEventListener('DOMContentLoaded', function() {
     const modal = document.getElementById('create-process-modal');
     if (modal) {
-      // Close on overlay click - DISABLED to prevent accidental closes
-      // modal.addEventListener('click', function(e) {
-      //   if (e.target === modal) {
-      //     closeModal();
-      //   }
-      // });
-      
-      // Close on close button
-      const closeButtons = modal.querySelectorAll('[data-modal-close]');
+      const closeButtons = modal.querySelectorAll('[data-create-step-close]');
       closeButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          resetForm(false); // Reset everything when closing
-          closeModal();
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          requestCloseCreateProcessModal();
         });
       });
     }
+    
+    // Save as draft or discard confirmation modal buttons
+    const saveDraftSaveBtn = document.getElementById('save-draft-save-btn');
+    const saveDraftDiscardBtn = document.getElementById('save-draft-discard-btn');
+    const saveDraftContinueBtn = document.getElementById('save-draft-continue-btn');
+    if (saveDraftSaveBtn) {
+      saveDraftSaveBtn.addEventListener('click', function() {
+        hideSaveDraftOrDiscardModal();
+        window.saveDraft();
+      });
+    }
+    if (saveDraftDiscardBtn) {
+      saveDraftDiscardBtn.addEventListener('click', function() {
+        hideSaveDraftOrDiscardModal();
+        resetForm(false);
+        closeModal();
+      });
+    }
+    if (saveDraftContinueBtn) {
+      saveDraftContinueBtn.addEventListener('click', function() {
+        hideSaveDraftOrDiscardModal();
+        // Keep create-process-modal open; user continues creating steps
+      });
+    }
+    
+    // Define Inputs step 2: tab switching (Inventory | Outputs from previous steps | Other materials)
+    const inputTabInventory = document.getElementById('input-tab-inventory');
+    const inputTabPreviousOutput = document.getElementById('input-tab-previous-output');
+    const inputTabNew = document.getElementById('input-tab-new');
+    const panelInventory = document.getElementById('guided-inputs-panel-inventory');
+    const panelPreviousOutput = document.getElementById('guided-inputs-panel-previous-output');
+    const panelNew = document.getElementById('guided-inputs-panel-new');
+    function switchInputTab(tab) {
+      const isInventory = tab === 'inventory';
+      const isPreviousOutput = tab === 'previous_output';
+      const isNew = tab === 'new';
+      if (inputTabInventory) {
+        inputTabInventory.classList.toggle('active', isInventory);
+        inputTabInventory.setAttribute('aria-selected', isInventory ? 'true' : 'false');
+      }
+      if (inputTabPreviousOutput) {
+        inputTabPreviousOutput.classList.toggle('active', isPreviousOutput);
+        inputTabPreviousOutput.setAttribute('aria-selected', isPreviousOutput ? 'true' : 'false');
+      }
+      if (inputTabNew) {
+        inputTabNew.classList.toggle('active', isNew);
+        inputTabNew.setAttribute('aria-selected', isNew ? 'true' : 'false');
+      }
+      if (panelInventory) panelInventory.style.display = isInventory ? 'block' : 'none';
+      if (panelPreviousOutput) panelPreviousOutput.style.display = isPreviousOutput ? 'block' : 'none';
+      if (panelNew) panelNew.style.display = isNew ? 'block' : 'none';
+      if (isInventory && typeof window.renderInventoryItemCards === 'function') window.renderInventoryItemCards();
+      if (isPreviousOutput && typeof window.renderPreviousOutputsList === 'function') window.renderPreviousOutputsList();
+    }
+    if (inputTabInventory) inputTabInventory.addEventListener('click', function() { switchInputTab('inventory'); });
+    if (inputTabPreviousOutput) inputTabPreviousOutput.addEventListener('click', function() { switchInputTab('previous_output'); });
+    if (inputTabNew) inputTabNew.addEventListener('click', function() { switchInputTab('new'); });
+    
+    // Show "Outputs from previous steps" tab only when there is at least one previous (saved/finished) step
+    window.updatePreviousOutputTabVisibility = function() {
+      const tab = document.getElementById('input-tab-previous-output');
+      const panel = document.getElementById('guided-inputs-panel-previous-output');
+      if (!tab || !panel) return;
+      let hasPreviousSteps = false;
+      if (editingStepId) {
+        const sorted = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+        const idx = sorted.findIndex(function(s) { return s.id === editingStepId; });
+        hasPreviousSteps = idx > 0;
+      } else {
+        hasPreviousSteps = createdSteps.length >= 1;
+      }
+      if (hasPreviousSteps) {
+        tab.style.display = '';
+        tab.removeAttribute('aria-hidden');
+      } else {
+        tab.style.display = 'none';
+        tab.setAttribute('aria-hidden', 'true');
+        if (tab.classList.contains('active')) {
+          switchInputTab('inventory');
+        }
+        panel.style.display = 'none';
+      }
+    };
   });
 })();

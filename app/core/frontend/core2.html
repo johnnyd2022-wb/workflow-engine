@@ -46,6 +46,38 @@
     .inventory-items-scroll-container::-webkit-scrollbar-thumb:hover {
       background-color: var(--text-tertiary, #9ca3af);
     }
+    /* Guided Create Process modal - responsive */
+    .create-process-guided .modal-card { max-width: 520px; width: 92%; padding: 20px; font-size: 15px; }
+    .create-process-guided .modal-title { font-size: 1.25rem; }
+    .create-process-guided .modal-intro { font-size: 0.9rem; padding: 14px; }
+    .create-process-guided .field-label { font-size: 0.875rem; }
+    .create-process-guided .field-hint { font-size: 0.8rem; }
+    .create-process-guided .help-icon { width: 18px; height: 18px; }
+    @media (min-width: 600px) {
+      .create-process-guided .modal-card { max-width: 560px; padding: 24px; font-size: 15px; }
+      .create-process-guided .modal-title { font-size: 1.35rem; }
+      .create-process-guided .modal-intro { font-size: 0.95rem; padding: 16px; }
+      .create-process-guided .field-label { font-size: 0.9rem; }
+      .create-process-guided .field-hint { font-size: 0.8125rem; }
+      .create-process-guided .help-icon { width: 18px; height: 18px; }
+    }
+    @media (min-width: 1024px) {
+      .create-process-guided .modal-card { max-width: 600px; padding: 28px; font-size: 16px; }
+      .create-process-guided .modal-title { font-size: 1.5rem; }
+      .create-process-guided .modal-intro { font-size: 1rem; padding: 20px; }
+      .create-process-guided .field-label { font-size: 0.9375rem; }
+      .create-process-guided .field-hint { font-size: 0.875rem; }
+      .create-process-guided .help-icon { width: 20px; height: 20px; }
+    }
+    .help-trigger { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: none; background: transparent; color: var(--text-tertiary, #9ca3af); cursor: help; border-radius: 50%; transition: color 0.2s; vertical-align: middle; margin-left: 4px; }
+    .help-trigger:hover { color: var(--primary, #3b82f6); }
+    .help-tooltip { position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 4px; max-width: 280px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
+    .help-tooltip.visible { display: block; }
+    .help-wrapper { position: relative; display: inline-block; }
+    .dopamine-line { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px; }
+    .dopamine-line p { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); line-height: 1.5; }
+    @media (min-width: 600px) { .dopamine-line { padding: 16px 20px; } .dopamine-line p { font-size: 0.95rem; } }
+    @media (min-width: 1024px) { .dopamine-line { padding: 18px 22px; } .dopamine-line p { font-size: 1rem; } }
   </style>
 </head>
 <body>
@@ -1202,16 +1234,33 @@
       }
     };
     
-    // Attach the Create Process Form Handler Once
+    // Attach the Create Process Form Handler Once + help tooltips
     document.addEventListener('DOMContentLoaded', () => {
-      const form = document.querySelector('#create-process-modal form');
-      if (!form) return;
-
-      form.addEventListener('submit', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        window.createNewProcess(this);
-        return false;
+      const form = document.querySelector('#create-process-modal form') || document.getElementById('create-process-guided-form');
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.createNewProcess(this);
+          return false;
+        });
+      }
+      // Help icon click/hover for guided create process modal
+      document.querySelectorAll('.help-trigger').forEach(btn => {
+        const tooltip = btn.parentElement && btn.parentElement.querySelector('.help-tooltip');
+        if (!tooltip) return;
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          document.querySelectorAll('.help-tooltip.visible').forEach(t => { if (t !== tooltip) t.classList.remove('visible'); });
+          tooltip.classList.toggle('visible');
+        });
+        btn.addEventListener('mouseenter', function () { tooltip.classList.add('visible'); });
+        btn.addEventListener('mouseleave', function () { tooltip.classList.remove('visible'); });
+      });
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('.help-wrapper')) {
+          document.querySelectorAll('.help-tooltip.visible').forEach(t => t.classList.remove('visible'));
+        }
       });
       
       // Attach the Add Inventory Form Handler Once
@@ -1263,7 +1312,7 @@
       // Render immediately
       prependProcessCardV2(optimisticProcess);
 
-      // Persist asynchronously
+      // Persist asynchronously, then redirect to flows2 with welcome=1
       (async () => {
         try {
           const saved = await CoreAPI.createProcess({
@@ -1278,11 +1327,8 @@
           const metrics = await CoreAPI.getMetrics();
           updateMetricsV2(metrics);
 
-          showNotification(
-            'success',
-            'Process Created',
-            `Process "${name}" has been created successfully.`
-          );
+          // Redirect to process flow page and show "define steps" welcome modal
+          window.location.href = `/core/flows?id=${saved.id}&welcome=1`;
         } catch (error) {
           removeOptimisticProcessV2(tempId);
 
@@ -1710,42 +1756,81 @@
     // Configuration is set above in ExecutionModalConfig
   </script>
   
-  <!-- Create Process Modal -->
-  <div class="modal-overlay" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Create New Process</h2>
-        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+  <!-- Create Process Modal - Guided flow (like flows2) -->
+  <div class="modal-overlay create-process-guided" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px; overflow-y: auto;">
+    <div class="card modal-card" style="margin: auto;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px;">
+        <div style="flex: 1; min-width: 0;">
+          <h2 class="modal-title" style="font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">Create New Process</h2>
+          <p style="font-size: 0.9rem; color: var(--text-secondary); margin: 0; line-height: 1.45;">Give your workflow a name and category so you can track it and run executions.</p>
+        </div>
+        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
       </div>
-      <form>
+
+      <div class="modal-intro" style="background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+        <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">What is a process?</h3>
+        <p style="font-size: inherit; color: var(--text-secondary); margin: 0; line-height: 1.55;">
+          A <strong>process</strong> is a repeatable workflow you run in your business—like a production line, a batch recipe, or a quality check. Once you create it, you can define steps (what happens), inputs and outputs (materials in and out), and run executions to get <strong>traceability</strong>, <strong>live inventory</strong>, and <strong>real-time visibility</strong>.
+        </p>
+        <p style="font-size: 0.85em; color: var(--text-tertiary); margin: 10px 0 0 0; line-height: 1.5;">
+          <strong>Examples:</strong> “Whisky Manufacturing”, “Tablet Production Line”, “Packaging Line”, “Quality Control Process”.
+        </p>
+      </div>
+
+      <div class="dopamine-line">
+        <p>You’re one step away from full visibility over this workflow. Name it and we’ll take you to set up steps and materials.</p>
+      </div>
+
+      <form id="create-process-guided-form">
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Process Name</label>
-            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Assembly Line C">
+            <label class="field-label" style="display: block; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Process name <span style="color: var(--error, #ef4444);">*</span>
+              <span class="help-wrapper">
+                <button type="button" class="help-trigger help-icon" aria-label="Help" data-help="name">?</button>
+                <span class="help-tooltip" id="help-name">Use the name of the overall workflow (e.g. “Whisky Manufacturing”, “Packaging Line”). You can change it later.</span>
+              </span>
+            </label>
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 1em; box-sizing: border-box;" placeholder="">
+            <p class="field-hint" style="color: var(--text-secondary); margin: 6px 0 0 0;">Example: <em>Whisky Manufacturing</em>, <em>Packaging Line</em></p>
           </div>
           <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Description</label>
-            <input type="text" name="description" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Brief description of the process">
+            <label class="field-label" style="display: block; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Description
+              <span class="help-wrapper">
+                <button type="button" class="help-trigger help-icon" aria-label="Help" data-help="description">?</button>
+                <span class="help-tooltip" id="help-description">A short summary helps others understand what this process does. Optional but useful for reports and onboarding.</span>
+              </span>
+            </label>
+            <input type="text" name="description" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 1em; box-sizing: border-box;" placeholder="">
+            <p class="field-hint" style="color: var(--text-secondary); margin: 6px 0 0 0;">Example: <em>Whisky Manufacturing</em> — end-to-end production from mashing to bottling. <em>Packaging Line</em> — filling, labelling, and palletising for finished goods.</p>
           </div>
           <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Category</label>
-            <select name="category" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <label class="field-label" style="display: block; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Category
+              <span class="help-wrapper">
+                <button type="button" class="help-trigger help-icon" aria-label="Help" data-help="category">?</button>
+                <span class="help-tooltip" id="help-category">Categories help you filter and report on processes (e.g. Manufacturing, Packaging). You can change this later.</span>
+              </span>
+            </label>
+            <select name="category" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 1em; box-sizing: border-box;">
               <option value="manufacturing">Manufacturing</option>
               <option value="chemical">Chemical</option>
               <option value="packaging">Packaging</option>
               <option value="assembly">Assembly</option>
               <option value="other">Other</option>
             </select>
+            <p class="field-hint" style="color: var(--text-secondary); margin: 6px 0 0 0;">Example: <em>Manufacturing</em> for production lines, <em>Packaging</em> for filling/labelling</p>
           </div>
         </div>
-        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">
           <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Process</button>
+          <button type="submit" class="btn btn-primary">Create process</button>
         </div>
       </form>
     </div>

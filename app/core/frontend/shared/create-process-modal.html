@@ -1,6 +1,33 @@
 <!-- Create Process Guided Flow Modal -->
 <div class="modal-overlay" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
   <div class="card" style="max-width: 700px; width: 90%; padding: 24px; max-height: 90vh; overflow-y: auto;">
+    <style>
+      .guided-inputs-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border-default, #e5e7eb); }
+      .guided-inputs-tab { flex: 1; padding: 12px 16px; border: none; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: background 0.2s, color 0.2s; }
+      .guided-inputs-tab:hover { background: var(--bg-hover, rgba(0,0,0,0.05)); color: var(--text-primary); }
+      .guided-inputs-tab.active { background: var(--bg-card, #fff); color: var(--primary, #3b82f6); border-bottom-color: var(--primary, #3b82f6); }
+      @media (min-width: 600px) { .guided-inputs-tab { padding: 14px 20px; font-size: 15px; } }
+      .guided-inventory-cards-stack { display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
+      .guided-inventory-section { display: flex; flex-direction: column; gap: 8px; }
+      .guided-inventory-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; padding: 4px 0; border-bottom: 1px solid var(--border-default, #e5e7eb); }
+      .guided-inventory-card { display: flex; flex-direction: column; align-items: stretch; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); background: var(--bg-card, #fff); color: var(--text-primary); font-size: 13px; text-align: left; width: 100%; min-height: 56px; box-sizing: border-box; overflow: hidden; }
+      .guided-inventory-card:hover { border-color: var(--primary, #3b82f6); }
+      .guided-inventory-card .card-header-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; }
+      .guided-inventory-card .card-header-row:hover { background: var(--bg-secondary, #f9fafb); }
+      .guided-inventory-card .card-header-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+      .guided-inventory-card .card-name { font-weight: 600; }
+      .guided-inventory-card .card-summary { font-size: 11px; color: var(--text-tertiary); }
+      .guided-inventory-card .card-expand-btn { flex-shrink: 0; padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-sm); }
+      .guided-inventory-card .card-expand-btn:hover { color: var(--primary, #3b82f6); background: var(--bg-secondary, #f3f4f6); }
+      .guided-inventory-card .card-expand-btn svg { transition: transform 0.2s; }
+      .guided-inventory-card.expanded .card-expand-btn svg { transform: rotate(180deg); }
+      .guided-inventory-card .card-add-btn { padding: 6px 12px; font-size: 12px; }
+      .guided-inventory-card .card-meta-block { padding: 0 14px 12px 14px; border-top: 1px solid var(--border-light, #eee); }
+      .guided-inventory-card .card-add-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-light, #eee); }
+      .guided-inventory-card .card-meta-block .meta-line { font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0; line-height: 1.5; }
+      .guided-inventory-card .card-meta-block .meta-line:first-child { margin-top: 10px; }
+      .guided-inventory-card .card-meta-block .meta-label { font-weight: 500; color: var(--text-primary); }
+    </style>
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
       <div>
         <h2 id="modal-title" style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">Create Process Step</h2>
@@ -8,7 +35,7 @@
           You can expand existing steps to edit them, or use this interactive editor to add additional steps.
         </p>
       </div>
-      <button class="modal-close" data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+      <button type="button" class="modal-close" data-create-step-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -24,8 +51,32 @@
       </div>
     </div>
     
+    <!-- Existing steps list view (when editing a non-draft process: list steps with Edit + Add new step + Start new) -->
+    <div id="existing-steps-list-view" style="display: none; margin-bottom: 24px;">
+      <div style="margin-bottom: 20px;">
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
+          Edit an existing step or add a new one. Changes apply to future executions.
+        </p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+          To start a completely new process from scratch (replacing all current steps), click <strong>Start new</strong>.
+        </p>
+      </div>
+      <div id="existing-steps-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+        <!-- Steps with Edit button will be added here by JS -->
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary" onclick="window.addNewStepFromEditView()">
+          + Add new step
+        </button>
+        <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" onclick="window.startNewFromEditView()">Start new</button>
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
+        </div>
+      </div>
+    </div>
+    
     <!-- Step Indicator -->
-    <div style="display: flex; justify-content: center; margin-bottom: 24px; gap: 8px;">
+    <div id="create-process-step-indicators" style="display: flex; justify-content: center; margin-bottom: 24px; gap: 8px;">
       <div class="step-indicator active" data-step="1" style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;">1</div>
       <div style="width: 40px; height: 2px; background: var(--border-default, #e5e7eb); margin-top: 15px;"></div>
       <div class="step-indicator" data-step="2" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; border: 2px solid var(--border-default, #e5e7eb);">2</div>
@@ -39,12 +90,9 @@
     <div id="create-process-step-1" class="create-process-step" style="display: block;">
       <div style="margin-bottom: 24px;">
         <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
-          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">What are Custom Processes?</h3>
-          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-            Custom processes allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
-          </p>
+          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">What are process steps?</h3>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
-            <strong>Examples:</strong> In food manufacturing, you might have steps like "Mixing", "Fermentation", "Packaging". In pharmaceuticals, steps could be "Active Ingredient Mixing", "Tablet Pressing", "Quality Control". In cosmetics, steps might include "Emulsion Creation", "Filling", "Labeling".
+            Process steps allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
           </p>
         </div>
         
@@ -52,9 +100,9 @@
           <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
             Step Name <span style="color: var(--error, #ef4444);">*</span>
           </label>
-          <input type="text" id="guided-step-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Mixing, Fermentation, Tablet Pressing">
+          <input type="text" id="guided-step-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
           <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
-            Use the name you already call this process internally. This helps your team recognize the step immediately.
+            Use the name you already call this process internally. Example: Mixing, Fermentation, Tablet Pressing.
           </p>
         </div>
         
@@ -62,9 +110,9 @@
           <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
             Description
           </label>
-          <textarea id="guided-step-description" rows="3" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; resize: vertical;" placeholder="Brief summary of what this step involves..."></textarea>
+          <textarea id="guided-step-description" rows="3" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; resize: vertical;"></textarea>
           <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
-            Provide a high-level summary of what this process step involves. This helps others understand the step's purpose.
+            Provide a high-level summary of what this process step involves. Example: Brief summary of what this step involves.
           </p>
         </div>
       </div>
@@ -74,7 +122,7 @@
           Save as draft
         </button>
         <div style="display: flex; gap: 12px;">
-          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
           <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
         </div>
       </div>
@@ -86,37 +134,55 @@
         <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
           <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Define Inputs</h3>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-            Inputs are the physical materials you add to this step. These can be raw materials, ingredients, or outputs from previous steps.
+            Inputs are the physical materials you add to this step. Add from items in stock below, or define other materials. Added inputs appear here (expand to edit).
           </p>
-          <div style="margin-top: 12px;">
-            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Add from inventory</p>
-            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
-              Select from existing inventory items. Use this when you have materials already in stock (e.g., raw materials from suppliers, outputs from previous steps). You'll define the quantity and unit here, and at execution time you'll choose which specific batch to consume from your inventory.
-            </p>
-            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">New Input</p>
-            <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-              Define a new input that will be manually entered at execution time. Use this for materials not yet in inventory or for variable quantities (e.g., water, specific ingredient amounts that change per batch). You can set a default quantity and unit, or choose to be prompted at execution.
-            </p>
+        </div>
+        
+        <!-- Inputs added: above selection; collapsed by default -->
+        <div style="margin-bottom: 20px;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">Inputs added (expand to edit):</p>
+          <div id="guided-inputs-list-unified" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
+            <!-- All input cards shown here; visible from both tabs -->
           </div>
         </div>
         
-        <div id="guided-inputs-container" style="margin-bottom: 20px;">
-          <div id="guided-inputs-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
-            <!-- Inputs will be added here dynamically -->
+        <!-- Tabs: Inventory items | Outputs from previous steps | Other materials -->
+        <div class="guided-inputs-tabs" style="margin-bottom: 16px;">
+          <button type="button" class="guided-inputs-tab active" data-input-tab="inventory" id="input-tab-inventory" aria-selected="true">
+            Inventory items
+          </button>
+          <button type="button" class="guided-inputs-tab" data-input-tab="previous_output" id="input-tab-previous-output" aria-selected="false">
+            Outputs from previous steps
+          </button>
+          <button type="button" class="guided-inputs-tab" data-input-tab="new" id="input-tab-new" aria-selected="false">
+            Other materials
+          </button>
+        </div>
+        
+        <!-- Tab panel: Inventory = sectioned cards; Previous outputs = list; Other = description + Add button -->
+        <div id="guided-inputs-panel-inventory" class="guided-inputs-panel" style="display: block;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">
+            Select an item below; then set quantity, unit and execution type in the form that appears above.
+          </p>
+          <div id="guided-inventory-cards-container" class="guided-inventory-cards-stack">
+            <!-- Section headers + expandable cards; populated by JS -->
           </div>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button type="button" id="add-inventory-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('inventory')" style="flex: 1;">
-              <span>+ Add input</span>
-              <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">from inventory</span>
-            </button>
-            <button type="button" id="add-new-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new')" style="flex: 1;">
-              <span>+ Add input</span>
-              <span style="display: block; font-size: 10px; color: var(--text-tertiary, #9ca3af); font-weight: normal; margin-top: 2px;">not from inventory</span>
-            </button>
-            <button type="button" id="add-previous-output-input-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('previous_output')" style="flex: 1; display: none;">
-              <span>+ Add output from previous step</span>
-            </button>
+        </div>
+        <div id="guided-inputs-panel-previous-output" class="guided-inputs-panel" style="display: none;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">
+            Select an output from a previous step below; then set quantity and unit in the form that appears above.
+          </p>
+          <div id="guided-previous-outputs-container" class="guided-inventory-cards-stack">
+            <!-- List of previous step outputs; populated by JS -->
           </div>
+        </div>
+        <div id="guided-inputs-panel-new" class="guided-inputs-panel" style="display: none;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
+            Define other materials used during this step that are not in your inventory (e.g. water, freshly foraged food). Set default quantity and unit or prompt at execution.
+          </p>
+          <button type="button" id="add-another-new-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new', false)">
+            <span id="add-another-new-text">+ Add input</span>
+          </button>
         </div>
       </div>
       
@@ -125,6 +191,7 @@
           Save as draft
         </button>
         <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
           <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
           <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
         </div>
@@ -143,11 +210,6 @@
             <p style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Example Workflow:</p>
             <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
               <strong>Step 1 "Mixing":</strong> Outputs "Mixed Base" → <strong>Step 2 "Fermentation":</strong> Uses "Mixed Base" as input, outputs "Fermented Product" → <strong>Step 3 "Packaging":</strong> Uses "Fermented Product" as input, outputs "Final Product"
-            </p>
-          </div>
-          <div style="margin-top: 12px;">
-            <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-              <strong>Industry Examples:</strong> In pharmaceuticals, a "Tablet Pressing" step might output "Compressed Tablets". In food manufacturing, "Baking" outputs "Baked Goods". In cosmetics, "Emulsion" outputs "Cream Base" that can be used in "Filling" steps.
             </p>
           </div>
         </div>
@@ -169,6 +231,7 @@
           Save as draft
         </button>
         <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
           <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
           <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
         </div>
@@ -181,16 +244,30 @@
         <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
           <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Execution Prompts</h3>
           <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-            Execution prompts are custom fields that will be recorded when this step runs. Use these to capture important metadata like batch numbers, quality control measurements, or other execution-specific information.
+            Execution prompts are custom fields recorded when this step runs. Use the Batch number field below for traceability (recommended), and add other prompts for quality control, measurements, or execution-specific information.
           </p>
           <div style="margin-top: 12px;">
             <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-              <strong>Examples:</strong> Batch number (text), Temperature reading (number with unit "°C"), Production date (date), Quality grade (select with options). These values are stored with each execution and can be used for traceability and reporting.
+              <strong>Recommendation:</strong> Use the Batch number field below for traceability. For other prompts, you can add e.g. Temperature (number with unit "°C"), Quality grade (select), Operator name (text), Pressure or viscosity (number with unit). These values are stored with each execution and used for traceability and reporting.
             </p>
           </div>
         </div>
         
+        <!-- Dedicated Batch number field: Required / Optional / Don't ask during execution -->
+        <div id="guided-prompt-batch-number-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
+          <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Batch number</label>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;">
+            Recommended for traceability — recorded with each execution so you can trace materials and steps. Choose whether to require it, prompt optionally, or not ask during execution.
+          </p>
+          <select id="guided-prompt-batch-number-mode" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 14px; box-sizing: border-box;">
+            <option value="required">Required — must be entered to complete this step</option>
+            <option value="optional" selected>Optional — prompt during execution but not mandatory</option>
+            <option value="dont_ask">Don't ask during execution — this step does not require a batch number</option>
+          </select>
+        </div>
+        
         <div id="guided-prompts-container" style="margin-bottom: 20px;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 10px 0;">Other execution prompts (e.g. temperature, quality grade, operator name):</p>
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
             <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedPrompt()" style="flex: 1;">
               + Add Prompt
@@ -207,9 +284,7 @@
           Save as draft
         </button>
         <div style="display: flex; gap: 12px;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()" style="margin-right: auto;">
-            Save as draft
-          </button>
+          <button type="button" class="btn btn-secondary" data-create-step-close>Cancel</button>
           <button type="button" class="btn btn-secondary" onclick="window.createProcessPreviousStep()">Back</button>
           <button type="button" class="btn btn-primary" onclick="window.createProcessFromGuidedFlow()">Create Step</button>
         </div>
@@ -298,4 +373,36 @@
       </div>
     </div>
   </div>
+  
 </div>
+  <!-- Save as draft or discard — sibling of create-process-modal so it shows on top when Cancel/X clicked -->
+  <div class="modal-overlay" id="save-draft-or-discard-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1003; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card" style="max-width: 480px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
+        <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--warning-bg, #fef3c7); display: flex; align-items: center; justify-content: center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--warning, #f59e0b);">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Save your progress?</h2>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;">
+            <strong>Continue creating steps</strong> — get value in front of you quickly. You can save as draft anytime.
+          </p>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;">
+            Or <strong>save as draft</strong> and all current step progress will be saved so you can continue later.
+          </p>
+          <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.55;">
+            Or <strong>discard</strong> and all progress will be lost — you will need to start again.
+          </p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary" id="save-draft-discard-btn">Discard</button>
+        <button type="button" class="btn btn-secondary" id="save-draft-save-btn">Save as draft</button>
+        <button type="button" class="btn btn-primary" id="save-draft-continue-btn">Continue creating steps</button>
+      </div>
+    </div>
+  </div>
