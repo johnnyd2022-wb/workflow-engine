@@ -1554,21 +1554,6 @@
       }
 
       try {
-        const expiredData = await CoreAPI.getExpiredMaterials();
-        const expiredRaw = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
-        if (expiredRaw.length > 0) {
-          const msg = expiredRaw.length === 1
-            ? 'There is 1 expired raw material with stock. Do you want to proceed anyway?'
-            : `There are ${expiredRaw.length} expired raw materials with stock. Do you want to proceed anyway?`;
-          if (!window.confirm(msg)) {
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('Pre-execution expiry check failed:', e);
-      }
-
-      try {
         const result = await CoreAPI.createExecution(processId);
         const executionId = result.id || result.execution_id || result.execution?.id;
         
@@ -3034,8 +3019,11 @@
       const banner = document.getElementById('compliance-banner');
       const msgEl = document.getElementById('compliance-banner-message');
       if (!banner || !msgEl) return;
+      // Ignore for today: don't show again until tomorrow
       const ignoredDate = sessionStorage.getItem('corechecks_ignore_date');
       if (ignoredDate === todayDateKey()) return;
+      // Dismiss: don't show again this browser session (until tab is closed)
+      if (sessionStorage.getItem('corechecks_banner_dismissed') === '1') return;
       try {
         const data = await CoreAPI.getExpiredMaterials();
         const expired = (data && data.expired_raw_materials) ? data.expired_raw_materials : [];
@@ -3068,6 +3056,7 @@
       const ignoreTodayBtn = document.getElementById('compliance-banner-ignore-today');
       if (dismissBtn) {
         dismissBtn.addEventListener('click', function() {
+          sessionStorage.setItem('corechecks_banner_dismissed', '1');
           hideComplianceBanner();
         });
       }

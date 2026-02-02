@@ -60,9 +60,22 @@
     if (promptsContainer) promptsContainer.innerHTML = '';
     if (outputsContainer) outputsContainer.innerHTML = '';
     
-    // Load inventory for variable inputs
-    const inventoryData = await CoreAPI.getInventory();
+    // Load inventory and expired/flagged materials in parallel (for highlighting step inputs only)
+    const [inventoryData, expiredData] = await Promise.all([
+      CoreAPI.getInventory(),
+      CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; })
+    ]);
     const allInventory = inventoryData.inventory_items || [];
+    const expiredRaw = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
+    const impactedItems = (expiredData && expiredData.impacted_items) ? expiredData.impacted_items : [];
+    const expiredIds = new Set(expiredRaw.map(function(m) { return String(m.id); }));
+    const impactedIds = new Set(impactedItems.map(function(i) { return String(i.id); }));
+    function getExpiredReason(id) {
+      if (expiredIds.has(String(id))) return 'Expired';
+      var imp = impactedItems.find(function(i) { return String(i.id) === String(id); });
+      if (imp && imp.expired_raw_material_name) return 'Made with expired: ' + imp.expired_raw_material_name;
+      return imp ? 'Made with expired ingredients' : null;
+    }
     
     // Simple unit conversion function for frontend
     function convertUnit(quantity, fromUnit, toUnit) {
@@ -238,13 +251,18 @@
                   displayText += ` | ${metadataParts.join(' | ')}`;
                 }
                 
+                // Highlight expired/flagged items (same concept as sourcemap check-needed)
+                const reason = getExpiredReason(inv.id);
+                const prefix = reason ? '⚠ ' + reason + ': ' : '';
+                
                 return `
-                  <option value="${inv.id}" data-quantity="${inv.quantity}" data-unit="${inv.unit}" title="${escapeHtml(displayText)}">
-                    ${displayText}
+                  <option value="${inv.id}" data-quantity="${inv.quantity}" data-unit="${inv.unit}" data-expired-reason="${reason ? escapeHtml(reason) : ''}" title="${escapeHtml(displayText)}">
+                    ${prefix}${displayText}
                   </option>
                 `;
               }).join('')}
             </select>
+            <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
             ${errorMessage}
           </div>
           <div>
@@ -263,11 +281,28 @@
         const unitDisplay = inputSection.querySelector('.execute-quantity-unit-display');
         
         if (select) {
+          const expiredWarningEl = inputSection.querySelector('.execute-input-expired-warning');
           select.addEventListener('change', function() {
             if (this.value) {
-              this.style.border = '';
-              // Update unit display and convert quantity to match selected inventory item
+              // Show/hide expired warning (step-specific: only items in this step's dropdown)
               const option = this.options[this.selectedIndex];
+              const reason = option && option.dataset.expiredReason;
+              if (reason) {
+                if (expiredWarningEl) {
+                  expiredWarningEl.textContent = 'Check: ' + reason;
+                  expiredWarningEl.style.display = 'block';
+                }
+                this.style.border = '2px solid var(--error, #ef4444)';
+                this.style.boxShadow = '0 0 0 1px var(--error, #ef4444)';
+              } else {
+                if (expiredWarningEl) {
+                  expiredWarningEl.style.display = 'none';
+                  expiredWarningEl.textContent = '';
+                }
+                this.style.border = '';
+                this.style.boxShadow = '';
+              }
+              // Update unit display and convert quantity to match selected inventory item
               if (option && unitDisplay && quantityInput) {
                 const inventoryUnit = option.dataset.unit || '';
                 const stepUnit = quantityInput.dataset.stepUnit || '';
@@ -343,14 +378,22 @@
                   submitBtn.title = '';
                 }
               }
-            } else if (unitDisplay && quantityInput) {
-              // Reset unit display and quantity to step definition values when no inventory is selected
-              const stepUnit = quantityInput.dataset.stepUnit || input.unit || '';
-              unitDisplay.textContent = stepUnit;
-              // Reset quantity to original step definition value
-              const originalQuantity = quantityInput.dataset.originalQuantity || input.quantity || '';
-              quantityInput.value = originalQuantity;
-              quantityInput.dataset.inventoryUnit = '';
+            } else {
+              // No inventory selected: hide expired warning and clear border
+              if (expiredWarningEl) {
+                expiredWarningEl.style.display = 'none';
+                expiredWarningEl.textContent = '';
+              }
+              this.style.border = '';
+              this.style.boxShadow = '';
+              if (unitDisplay && quantityInput) {
+                // Reset unit display and quantity to step definition values when no inventory is selected
+                const stepUnit = quantityInput.dataset.stepUnit || input.unit || '';
+                unitDisplay.textContent = stepUnit;
+                const originalQuantity = quantityInput.dataset.originalQuantity || input.quantity || '';
+                quantityInput.value = originalQuantity;
+                quantityInput.dataset.inventoryUnit = '';
+              }
             }
           });
         }
@@ -783,8 +826,8 @@
       executionData.completed_by = user.username;
       executionData.completed_by_email = user.email;
       executionData.completed_at = new Date().toISOString();
-      
-      // Complete the step
+
+      // Complete the step (expired/flagged items are highlighted in the Execute Step modal dropdowns; no separate modal)
       await CoreAPI.completeStep(executionId, executionStepId, {
         actual_inputs: actualInputs,
         actual_outputs: actualOutputs,
