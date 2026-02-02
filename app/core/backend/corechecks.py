@@ -125,7 +125,5 @@ def register_routes(bp):
         runner = CoreChecksRunner(org_id=org_id, session=db_session())
         result = runner.run_check("expired_materials")
         if result is None or result.data is None:
-            return jsonify(
-                {"expired_raw_materials": [], "impacted_items": [], "connections": []}
-            ), 200
+            return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
         return jsonify(result.data), 200
