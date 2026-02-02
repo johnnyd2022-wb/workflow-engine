@@ -1622,22 +1622,22 @@
     // Load all data needed for source map
     async function loadProcesses() {
       try {
-        // Load processes, inventory, executions, metadata, out-of-stock, and check-needed items in parallel
-        const [processesData, inventoryData, executionsData, metadataData, outOfStockData, checkNeededResult] = await Promise.all([
+        // Load processes, inventory, executions, metadata, out-of-stock, and expired-materials (compliance) in parallel
+        const [processesData, inventoryData, executionsData, metadataData, outOfStockData, expiredMaterialsResult] = await Promise.all([
           CoreAPI.getProcesses(),
           CoreAPI.getInventory(),
           CoreAPI.getExecutions(),
           CoreAPI.getExecutionMetadata(),
           CoreAPI.getOutOfStockRawMaterials(),
-          CoreAPI.getCheckNeededItems()
+          CoreAPI.getExpiredMaterials()
         ]);
-        
+
         allProcesses = processesData.processes || [];
         allInventory = inventoryData.inventory_items || [];
         allExecutions = executionsData.executions || [];
         allExecutionMetadata = metadataData.metadata || [];
         allOutOfStockRawMaterials = outOfStockData.inventory_items || [];
-        checkNeededData = checkNeededResult || { expired_raw_materials: [], impacted_items: [], connections: [] };
+        checkNeededData = expiredMaterialsResult || { expired_raw_materials: [], impacted_items: [], connections: [] };
         
         // Filter out any invalid executions before loading details
         const validExecutions = allExecutions.filter(exec => exec && exec.id);
@@ -5714,7 +5714,7 @@
       );
       if (expiredRaw) return (expiredRaw.name || 'Item') + ' expired';
       
-      // Impacted item: made using expired ingredient – name expired before execution of this process
+      // Impacted item: made using expired ingredient (produced after raw expired)
       const impactedItem = (checkNeededData.impacted_items || []).find(
         item => item.id === itemId
       );

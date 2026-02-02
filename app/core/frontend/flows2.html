@@ -23,6 +23,37 @@
     .searchable-dropdown-list .dropdown-item.selected {
       background: var(--bg-hover, rgba(0, 0, 0, 0.05));
     }
+    /* Compliance banner */
+    .compliance-banner {
+      background: linear-gradient(135deg, hsl(38, 92%, 50%, 0.12) 0%, hsl(25, 95%, 53%, 0.08) 100%);
+      border-bottom: 1px solid hsl(38, 92%, 50%, 0.35);
+      padding: 12px 24px;
+      margin: 0;
+    }
+    .compliance-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .compliance-banner-icon {
+      font-size: 1.25rem;
+      color: hsl(38, 92%, 40%);
+      flex-shrink: 0;
+    }
+    .compliance-banner-message {
+      flex: 1;
+      margin: 0;
+      font-size: 14px;
+      color: var(--text-primary, #1a1a1a);
+    }
+    .compliance-banner-actions {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -54,6 +85,18 @@
           </button>
         </div>
       </header>
+
+      <!-- Compliance / checks banner (expired materials, etc.) -->
+      <div id="compliance-banner" class="compliance-banner" role="alert" aria-live="polite" style="display: none;">
+        <div class="compliance-banner-content">
+          <span class="compliance-banner-icon" aria-hidden="true">⚠</span>
+          <p id="compliance-banner-message" class="compliance-banner-message"></p>
+          <div class="compliance-banner-actions">
+            <button type="button" id="compliance-banner-ignore-today" class="btn btn-secondary btn-sm">Ignore for today</button>
+            <button type="button" id="compliance-banner-dismiss" class="btn btn-ghost btn-sm">Dismiss</button>
+          </div>
+        </div>
+      </div>
       
       <!-- Page Content -->
       <main class="page-content">
@@ -1509,7 +1552,22 @@
         showNotification('error', 'Error', 'No process ID available');
         return;
       }
-      
+
+      try {
+        const expiredData = await CoreAPI.getExpiredMaterials();
+        const expiredRaw = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
+        if (expiredRaw.length > 0) {
+          const msg = expiredRaw.length === 1
+            ? 'There is 1 expired raw material with stock. Do you want to proceed anyway?'
+            : `There are ${expiredRaw.length} expired raw materials with stock. Do you want to proceed anyway?`;
+          if (!window.confirm(msg)) {
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Pre-execution expiry check failed:', e);
+      }
+
       try {
         const result = await CoreAPI.createExecution(processId);
         const executionId = result.id || result.execution_id || result.execution?.id;
@@ -2967,6 +3025,36 @@
       return div.innerHTML;
     }
     
+    // Compliance banner: show when expired materials (or other checks) are flagged
+    function todayDateKey() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    async function loadComplianceBanner() {
+      const banner = document.getElementById('compliance-banner');
+      const msgEl = document.getElementById('compliance-banner-message');
+      if (!banner || !msgEl) return;
+      const ignoredDate = sessionStorage.getItem('corechecks_ignore_date');
+      if (ignoredDate === todayDateKey()) return;
+      try {
+        const data = await CoreAPI.getExpiredMaterials();
+        const expired = (data && data.expired_raw_materials) ? data.expired_raw_materials : [];
+        if (expired.length === 0) return;
+        const count = expired.length;
+        const text = count === 1
+          ? '1 expired raw material with stock — review in Source Map or Inventory.'
+          : count + ' expired raw materials with stock — review in Source Map or Inventory.';
+        msgEl.textContent = text;
+        banner.style.display = 'block';
+      } catch (e) {
+        console.warn('Compliance banner check failed:', e);
+      }
+    }
+    function hideComplianceBanner() {
+      const banner = document.getElementById('compliance-banner');
+      if (banner) banner.style.display = 'none';
+    }
+
     // Load data on page load
     document.addEventListener('DOMContentLoaded', function() {
       if (processId) {
@@ -2974,6 +3062,20 @@
       } else {
         document.getElementById('process-name').textContent = 'No Process Selected';
         document.getElementById('process-description').textContent = 'Please select a process from the Process Hub';
+      }
+      loadComplianceBanner();
+      const dismissBtn = document.getElementById('compliance-banner-dismiss');
+      const ignoreTodayBtn = document.getElementById('compliance-banner-ignore-today');
+      if (dismissBtn) {
+        dismissBtn.addEventListener('click', function() {
+          hideComplianceBanner();
+        });
+      }
+      if (ignoreTodayBtn) {
+        ignoreTodayBtn.addEventListener('click', function() {
+          sessionStorage.setItem('corechecks_ignore_date', todayDateKey());
+          hideComplianceBanner();
+        });
       }
       // Welcome modal: Define steps now / I'll do this later
       const welcomeDefineNowBtn = document.getElementById('welcome-define-now-btn');
