@@ -1628,8 +1628,9 @@
         contentArea.appendChild(unitField);
         
         const typeField = document.createElement('div');
-        const isRawWithTraceability = (preSelectedItem.inventory_type === 'raw_material' || preSelectedItem.category === 'raw_material') && (preSelectedItem.supplier || preSelectedItem.supplier_batch_number);
-        if (isRawWithTraceability) {
+        const isRaw = (preSelectedItem.inventory_type || preSelectedItem.category) === 'raw_material';
+        // Raw materials: hide Execution type, show helper only. Intermediate/final: show "Select inventory at execution" dropdown.
+        if (isRaw) {
           const hiddenType = document.createElement('input');
           hiddenType.type = 'hidden';
           hiddenType.className = 'guided-input-execution-type';
@@ -1638,7 +1639,7 @@
           const explanationDiv = document.createElement('div');
           explanationDiv.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
           explanationDiv.id = `guided-input-explanation-${inputId}`;
-          explanationDiv.textContent = 'You will select which batch or supplier to use when this step runs.';
+          explanationDiv.textContent = inventoryExecutionHelperText(preSelectedItem);
           typeField.appendChild(explanationDiv);
         } else {
           const typeLabel = document.createElement('label');
@@ -1656,22 +1657,18 @@
           staticOption.value = 'static';
           staticOption.textContent = 'Use exact input every execution';
           typeSelect.appendChild(staticOption);
-          const promptOption = document.createElement('option');
-          promptOption.value = 'prompt';
-          promptOption.textContent = 'Prompt at execution';
-          typeSelect.appendChild(promptOption);
           typeField.appendChild(typeSelect);
           const explanationDiv = document.createElement('div');
           explanationDiv.style.cssText = 'margin-top: 8px; padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
           explanationDiv.id = `guided-input-explanation-${inputId}`;
-          explanationDiv.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs.';
+          explanationDiv.textContent = inventoryExecutionHelperText(preSelectedItem);
           typeField.appendChild(explanationDiv);
           typeSelect.addEventListener('change', function() {
             const explanation = document.getElementById(`guided-input-explanation-${inputId}`);
             if (explanation) {
-              explanation.innerHTML = this.value === 'variable'
-                ? '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs.'
-                : '<strong>Use this exact input every execution:</strong> The system will use the same quantity and unit for every execution without prompting.';
+              explanation.textContent = this.value === 'variable'
+                ? inventoryExecutionHelperText(preSelectedItem)
+                : 'Use this exact input every execution: The system will use the same quantity and unit for every execution without prompting.';
             }
           });
         }
@@ -1790,11 +1787,11 @@
             nameDisplay.style.display = 'inline';
             titleSpan.style.display = 'none';
           }
-          // Raw materials with supplier/batch: hide Execution type box, show only helper text
+          // Raw materials only: hide Execution type box, show only helper. Intermediate/final: keep "Select inventory at execution" visible.
           if (type === 'inventory') {
             const typeSelect = inputContainer.querySelector('.guided-input-execution-type.form-select');
-            const isRawWithTraceability = (item.category === 'raw_material' || item.inventory_type === 'raw_material') && (item.supplier || item.supplier_batch_number);
-            if (typeSelect && isRawWithTraceability) {
+            const isRaw = (item.inventory_type || item.category) === 'raw_material';
+            if (typeSelect && isRaw) {
               const typeField = typeSelect.parentElement;
               if (typeField) {
                 const label = typeField.querySelector('label');
@@ -1808,9 +1805,13 @@
                 const explanation = document.getElementById('guided-input-explanation-' + inputId);
                 if (explanation) {
                   explanation.style.marginTop = '0';
-                  explanation.textContent = 'You will select which batch or supplier to use when this step runs.';
+                  explanation.textContent = inventoryExecutionHelperText(item);
                 }
               }
+            } else if (typeSelect && !isRaw) {
+              typeSelect.value = 'variable';
+              const explanation = document.getElementById('guided-input-explanation-' + inputId);
+              if (explanation) explanation.textContent = inventoryExecutionHelperText(item);
             }
           }
         },
@@ -1978,10 +1979,10 @@
       typeSelect.className = 'guided-input-execution-type form-select';
       typeSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
       
-      const promptOption = document.createElement('option');
-      promptOption.value = 'prompt';
-      promptOption.textContent = 'Prompt at execution';
-      typeSelect.appendChild(promptOption);
+      const variableOption = document.createElement('option');
+      variableOption.value = 'variable';
+      variableOption.textContent = 'Select inventory at execution';
+      typeSelect.appendChild(variableOption);
       
       const staticOption = document.createElement('option');
       staticOption.value = 'static';
@@ -1994,14 +1995,14 @@
       const explanationDiv = document.createElement('div');
       explanationDiv.style.cssText = 'margin-top: 8px; padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
       explanationDiv.id = `guided-input-explanation-${inputId}`;
-      explanationDiv.innerHTML = '<strong>Prompt at execution:</strong> You will be asked to enter or confirm the quantity and unit when this step runs. Use this for inputs that may vary between executions.';
+      explanationDiv.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs. This allows you to track specific batches through your process.';
       typeField.appendChild(explanationDiv);
       
       // Update explanation when type changes
       typeSelect.addEventListener('change', function() {
         const explanation = document.getElementById(`guided-input-explanation-${inputId}`);
-        if (this.value === 'prompt') {
-          explanation.innerHTML = '<strong>Prompt at execution:</strong> You will be asked to enter or confirm the quantity and unit when this step runs. Use this for inputs that may vary between executions.';
+        if (this.value === 'variable') {
+          explanation.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs. This allows you to track specific batches through your process.';
         } else {
           explanation.innerHTML = '<strong>Use this exact input every execution:</strong> The system will use the same quantity and unit for every execution without prompting. Use this for consistent inputs that don\'t vary between batches.';
         }
@@ -2030,84 +2031,53 @@
     if (newBtnText) newBtnText.textContent = label;
   }
   
-  // Summary under item name. Raw materials: none (user selects batch at execution). Intermediate/final: process name, unit.
+  // Summary under item name. Raw: none (user selects at execution). Intermediate/final: process name, unit.
   function inventoryCardSummary(item) {
     const isRaw = (item.inventory_type || item.category) === 'raw_material';
-    if (isRaw) return ''; // No supplier/unit in selection; user picks from inventory at execution
+    if (isRaw) return '';
     const parts = [];
     if (item.process_name) parts.push('process name: ' + escapeHtmlForText(item.process_name));
     if (item.unit) parts.push('unit: ' + escapeHtmlForText(item.unit));
     return parts.join(', ');
   }
+
+  // Helper text for execution-time selection: raw vs intermediate/final.
+  function inventoryExecutionHelperText(item) {
+    const isRaw = (item.inventory_type || item.category) === 'raw_material';
+    return isRaw
+      ? 'You will select which batch or supplier to use when this step runs.'
+      : 'You will select which inventory item in stock to use when this step runs.';
+  }
   
-  // Build full metadata block. For raw materials, omit unit/supplier/batch/dates so users know they choose at execution.
+  // Build full metadata block. Raw: type + helper. Intermediate/final: type, unit, process, step, variable inputs + helper (no execution metadata: supplier/batch/dates/prompts/variable_output/previous_steps).
   function inventoryCardMetadataHtml(item) {
     const lines = [];
-    const isRaw = (item.inventory_type || item.category) === 'raw_material';
-    if (!isRaw && item.unit != null && item.unit !== '') {
-      lines.push('<div class="meta-line"><span class="meta-label">Unit:</span> ' + escapeHtmlForText(String(item.unit)) + '</div>');
-    }
     const cat = item.inventory_type || item.category;
     if (cat) {
       const label = cat === 'raw_material' ? 'Raw material' : cat === 'work_in_progress' ? 'Intermediate' : 'Final product';
       lines.push('<div class="meta-line"><span class="meta-label">Type:</span> ' + escapeHtmlForText(label) + '</div>');
     }
-    if (isRaw) {
-      lines.push('<div class="meta-line" style="font-style: italic;">You will select which batch or supplier to use when this step runs.</div>');
+    const isRaw = cat === 'raw_material';
+    if (!isRaw && item.unit != null && item.unit !== '') {
+      lines.push('<div class="meta-line"><span class="meta-label">Unit:</span> ' + escapeHtmlForText(String(item.unit)) + '</div>');
     }
-    if (!isRaw && item.supplier) {
-      lines.push('<div class="meta-line"><span class="meta-label">Supplier:</span> ' + escapeHtmlForText(item.supplier) + '</div>');
-    }
-    if (!isRaw && item.supplier_batch_number) {
-      lines.push('<div class="meta-line"><span class="meta-label">Supplier batch:</span> ' + escapeHtmlForText(item.supplier_batch_number) + '</div>');
-    }
-    if (!isRaw && item.purchase_date) {
-      lines.push('<div class="meta-line"><span class="meta-label">Purchase date:</span> ' + escapeHtmlForText(item.purchase_date) + '</div>');
-    }
-    if (!isRaw && item.expiry_date) {
-      lines.push('<div class="meta-line"><span class="meta-label">Expiry date:</span> ' + escapeHtmlForText(item.expiry_date) + '</div>');
-    }
-    if (item.process_name) {
+    if (!isRaw && item.process_name) {
       lines.push('<div class="meta-line"><span class="meta-label">Process:</span> ' + escapeHtmlForText(item.process_name) + '</div>');
     }
-    if (item.source_step_name) {
+    if (!isRaw && item.source_step_name) {
       lines.push('<div class="meta-line"><span class="meta-label">Step:</span> ' + escapeHtmlForText(item.source_step_name) + '</div>');
     }
     const ed = item.extra_data;
-    if (ed && typeof ed === 'object') {
-      const prompts = ed.execution_prompts;
-      if (prompts && typeof prompts === 'object' && Object.keys(prompts).length > 0) {
-        lines.push('<div class="meta-line"><span class="meta-label">Execution prompts:</span></div>');
-        Object.keys(prompts).forEach(function(k) {
-          const v = prompts[k];
-          if (v != null && v !== '') {
-            lines.push('<div class="meta-line" style="padding-left: 12px;">' + escapeHtmlForText(String(k)) + ': ' + escapeHtmlForText(String(v)) + '</div>');
-          }
-        });
-      }
-      if (ed.variable_inputs && Array.isArray(ed.variable_inputs) && ed.variable_inputs.length > 0) {
-        lines.push('<div class="meta-line"><span class="meta-label">Variable inputs:</span></div>');
-        ed.variable_inputs.forEach(function(inp, idx) {
-          const n = inp && inp.name ? inp.name : 'Input ' + (idx + 1);
-          const q = inp && inp.quantity != null ? inp.quantity : '';
-          const u = inp && inp.unit ? inp.unit : '';
-          lines.push('<div class="meta-line" style="padding-left: 12px;">' + escapeHtmlForText(n) + (q !== '' ? ' — ' + escapeHtmlForText(String(q)) + (u ? ' ' + escapeHtmlForText(u) : '') : '') + '</div>');
-        });
-      }
-      if (ed.variable_output && typeof ed.variable_output === 'object') {
-        const o = ed.variable_output;
-        const oname = o.name || 'Output';
-        lines.push('<div class="meta-line"><span class="meta-label">Variable output:</span> ' + escapeHtmlForText(oname) + (o.quantity != null ? ' — ' + escapeHtmlForText(String(o.quantity)) + (o.unit ? ' ' + escapeHtmlForText(o.unit) : '') : '') + '</div>');
-      }
-      if (ed.previous_steps_data && Array.isArray(ed.previous_steps_data) && ed.previous_steps_data.length > 0) {
-        lines.push('<div class="meta-line"><span class="meta-label">Previous steps:</span></div>');
-        ed.previous_steps_data.forEach(function(ps) {
-          const stepLabel = ps.step_name || ps.step_number || 'Step';
-          lines.push('<div class="meta-line" style="padding-left: 12px;">' + escapeHtmlForText(stepLabel) + (ps.process_name ? ' (' + escapeHtmlForText(ps.process_name) + ')' : '') + '</div>');
-        });
-      }
+    if (ed && typeof ed === 'object' && ed.variable_inputs && Array.isArray(ed.variable_inputs) && ed.variable_inputs.length > 0) {
+      lines.push('<div class="meta-line"><span class="meta-label">Variable inputs:</span></div>');
+      ed.variable_inputs.forEach(function(inp, idx) {
+        const n = inp && inp.name ? inp.name : 'Input ' + (idx + 1);
+        const q = inp && inp.quantity != null ? inp.quantity : '';
+        const u = inp && inp.unit ? inp.unit : '';
+        lines.push('<div class="meta-line" style="padding-left: 12px;">' + escapeHtmlForText(n) + (q !== '' ? ' — ' + escapeHtmlForText(String(q)) + (u ? ' ' + escapeHtmlForText(u) : '') : '') + '</div>');
+      });
     }
-    if (lines.length === 0) return '<div class="meta-line">No additional metadata.</div>';
+    lines.push('<div class="meta-line" style="font-style: italic;">' + escapeHtmlForText(inventoryExecutionHelperText(item)) + '</div>');
     return lines.join('');
   }
   
