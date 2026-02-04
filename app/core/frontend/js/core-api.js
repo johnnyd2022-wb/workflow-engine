@@ -125,8 +125,13 @@ const CoreAPI = {
         return this.request('/inventory/out-of-stock');
     },
     
+    async getExpiredMaterials() {
+        return this.request('/inventory/expired-materials');
+    },
+
+    /** @deprecated Use getExpiredMaterials() */
     async getCheckNeededItems() {
-        return this.request('/inventory/check-needed');
+        return this.getExpiredMaterials();
     },
     
     async createInventoryItem(data) {

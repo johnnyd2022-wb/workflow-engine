@@ -3,7 +3,7 @@ DAG Traversal for inventory traceability.
 
 Single unified traversal engine: tracer.traverse(start_nodes, direction, stop_conditions, filters).
 Returns TraversalResult objects; interpretation and presentation live on the result, not in API code.
-Used by /api/core/inventory/trace, /api/core/inventory/trace-backward, /api/core/inventory/check-needed,
+Used by /api/core/inventory/trace, /api/core/inventory/trace-backward, /api/core/inventory/expired-materials,
 and future use cases (site map, compliance, recall simulation).
 
 Connections are built by execution flow (execution_id on each connection).
@@ -537,8 +537,9 @@ class DAGTracer:
 
     def find_impacted_by_expired_raw(self, raw_material: InventoryItem) -> dict[str, Any]:
         """
-        Items that trace forward from an expired raw and were made after it expired.
-        Uses traverse(forward) then filters by production_date > expiry_date.
+        Items that trace forward from an expired raw and were produced after it expired.
+        Only flags products made after expiry_date (production_date > expiry_date).
+        Products made before the raw expired are compliant and are not included.
         """
         expiry_date = _normalize_date(raw_material.expiry_date)
         if not expiry_date:
@@ -553,7 +554,6 @@ class DAGTracer:
         trace_items = [i for i in result.nodes if i["id"] != str(raw_material.id)]
         trace_connections = [c for c in result.edges if c.get("from_id") == str(raw_material.id)]
 
-        # Use step IDs from result nodes (no item re-query); one bulk step query
         step_ids_orm = set()
         for i in trace_items:
             sid = i.get("source_execution_step_id")
@@ -581,15 +581,8 @@ class DAGTracer:
             step = step_by_id.get(str(step_id_str))
             if not step:
                 continue
-            step_used_this_raw = False
-            for inp in step.actual_inputs or []:
-                inp_id = inp.get("inventory_item_id")
-                if inp_id is not None and str(inp_id) == raw_id_str:
-                    step_used_this_raw = True
-                    break
-            if not step_used_this_raw:
-                continue
             production_date = _normalize_date(step.completed_at) if step.completed_at else None
+            # Only flag if produced after the raw expired (used expired material)
             if not production_date or production_date <= expiry_date:
                 continue
             completed_at_iso = step.completed_at.isoformat() if step.completed_at else None

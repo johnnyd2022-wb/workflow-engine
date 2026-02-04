@@ -8,6 +8,7 @@ from uuid import UUID
 from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
 
 from app.api.routes.auth_routes import limiter
+from app.core.backend import corechecks
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryType
@@ -1291,94 +1292,7 @@ def list_out_of_stock_raw_materials():
     return jsonify({"inventory_items": result}), 200
 
 
-@core_bp.route("/api/core/inventory/check-needed", methods=["GET"])
-@requires_auth
-def list_check_needed_items():
-    """List expired raw materials and products made with expired ingredients.
-
-    Uses find_impacted_by_expired_raw (DAG traversal) to find impacted items (products
-    that trace forward from expired raw materials and were made after the raw expired).
-    Returns:
-    - expired_raw_materials: Raw materials with expiry_date < today and quantity > 0
-    - impacted_items: Products made with expired raw (step completed after raw's expiry_date)
-    - connections: Links between expired raw materials and impacted items
-    """
-    import logging
-    from datetime import date
-
-    from app.core.backend.dagtraversal import find_impacted_by_expired_raw
-    from app.core.db.models.inventory_item import InventoryItem
-
-    _log = logging.getLogger(__name__)
-
-    org_id = UUID(g.org_id)
-    today = date.today()
-
-    expired_raw_materials = (
-        db_session.query(InventoryItem)
-        .filter(InventoryItem.org_id == org_id)
-        .filter(InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)
-        .filter(InventoryItem.expiry_date.isnot(None))
-        .filter(InventoryItem.expiry_date < today)
-        .all()
-    )
-
-    expired_with_stock = []
-    for item in expired_raw_materials:
-        try:
-            qty_str = str(item.quantity).strip() if item.quantity else "0"
-            quantity_decimal = Decimal(qty_str)
-            if quantity_decimal > Decimal("0"):
-                expired_with_stock.append(item)
-        except (InvalidOperation, ValueError, TypeError):
-            pass
-
-    result_expired = []
-    result_impacted = []
-    result_connections = []
-    impacted_item_ids = set()
-
-    for raw_material in expired_with_stock:
-        result_expired.append(
-            {
-                "id": str(raw_material.id),
-                "name": raw_material.name,
-                "quantity": raw_material.quantity,
-                "unit": raw_material.unit,
-                "inventory_type": raw_material.inventory_type,
-                "supplier": raw_material.supplier,
-                "purchase_date": raw_material.purchase_date.isoformat() if raw_material.purchase_date else None,
-                "supplier_batch_number": raw_material.supplier_batch_number,
-                "expiry_date": raw_material.expiry_date.isoformat() if raw_material.expiry_date else None,
-                "created_at": raw_material.created_at.isoformat() if raw_material.created_at else None,
-                "extra_data": raw_material.extra_data if raw_material.extra_data else {},
-                "is_expired": True,
-            }
-        )
-
-        data = find_impacted_by_expired_raw(org_id, db_session, raw_material)
-        for item in data["impacted_items"]:
-            item_id = item.get("id")
-            if not item_id or item_id in impacted_item_ids:
-                continue
-            impacted_item_ids.add(item_id)
-            result_impacted.append(item)
-        for conn in data["connections"]:
-            result_connections.append(
-                {
-                    "from_id": conn.get("from_id"),
-                    "to_id": conn.get("to_id"),
-                    "execution_id": conn.get("execution_id") or None,
-                }
-            )
-
-    return jsonify(
-        {
-            "expired_raw_materials": result_expired,
-            "impacted_items": result_impacted,
-            "connections": result_connections,
-        }
-    ), 200
+corechecks.register_routes(core_bp)
 
 
 @core_bp.route("/api/core/reset-demo-db", methods=["POST"])

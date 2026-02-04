@@ -1,0 +1,129 @@
+"""
+Core system checks for inventory, processes, and executions.
+
+Provides a main runner (CoreChecksRunner) that different checks hook into, similar to
+DAGTracer in dagtraversal.py: one entry point, pluggable checks. Used for compliance,
+expiry, and preventing user mistakes. Results drive sourcemap highlighting, pre-execution
+warnings in flows2.html, and top-level banners (e.g. expired materials with stock).
+
+Checks register by id and return a CheckResult (flagged, message, data). The runner
+exposes run_check(check_id) and run_all_checks() for APIs and UI.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+# ---------------------------------------------------------------------------
+# Check result and runner
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CheckResult:
+    """Result of a single check. Used by APIs and UI (banner, warnings)."""
+
+    check_id: str
+    flagged: bool
+    message: str | None = None
+    data: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"check_id": self.check_id, "flagged": self.flagged}
+        if self.message is not None:
+            out["message"] = self.message
+        if self.data is not None:
+            out["data"] = self.data
+        return out
+
+
+# Type for a check function: (org_id, session) -> CheckResult
+CheckFn = Callable[[UUID, Session], CheckResult]
+
+
+class CoreChecksRunner:
+    """
+    Main entry point for core system checks. Different checks register and run
+    through this runner (similar to DAGTracer: one class, pluggable operations).
+    """
+
+    def __init__(self, org_id: UUID, session: Session):
+        self.org_id = org_id
+        self.session = session
+        self._log = logging.getLogger(__name__)
+        self._checks: dict[str, CheckFn] = {}
+        self._register_builtin_checks()
+
+    def _register_builtin_checks(self) -> None:
+        """Register built-in checks so they can be run by id."""
+        from app.core.backend.checks.expired_materials import run_expired_materials_check
+
+        self.register_check("expired_materials", run_expired_materials_check)
+
+    def register_check(self, check_id: str, fn: CheckFn) -> None:
+        """Register a check so it can be run via run_check(check_id)."""
+        self._checks[check_id] = fn
+
+    def run_check(self, check_id: str) -> CheckResult | None:
+        """Run a single check by id. Returns None if check_id is unknown."""
+        fn = self._checks.get(check_id)
+        if not fn:
+            self._log.warning("Unknown check_id: %s", check_id)
+            return None
+        return fn(self.org_id, self.session)
+
+    def run_all_checks(self) -> list[CheckResult]:
+        """Run all registered checks. Used for banner and aggregate dashboards."""
+        results: list[CheckResult] = []
+        for check_id in self._checks:
+            try:
+                r = self.run_check(check_id)
+                if r is not None:
+                    results.append(r)
+            except Exception as e:
+                self._log.exception("Check %s failed: %s", check_id, e)
+                results.append(
+                    CheckResult(
+                        check_id=check_id,
+                        flagged=True,
+                        message=f"Check failed: {e}",
+                        data=None,
+                    )
+                )
+        return results
+
+
+# ---------------------------------------------------------------------------
+# API route registration (called from backend.py to avoid circular imports)
+# ---------------------------------------------------------------------------
+
+
+def register_routes(bp):
+    """Register core-checks API routes on the given Flask Blueprint."""
+    from uuid import UUID
+
+    from flask import g, jsonify
+
+    from app.core.db import db_session
+    from app.core.security.permissions import requires_auth
+
+    @bp.route("/api/core/inventory/expired-materials", methods=["GET"])
+    @requires_auth
+    def list_expired_materials():
+        """List expired raw materials and products made with expired ingredients.
+
+        Uses CoreChecksRunner (expired_materials check) which delegates to DAG traversal
+        for impacted items. Returns same shape for sourcemap and flows2.
+        """
+        org_id = UUID(g.org_id)
+        runner = CoreChecksRunner(org_id=org_id, session=db_session())
+        result = runner.run_check("expired_materials")
+        if result is None or result.data is None:
+            return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
+        return jsonify(result.data), 200
