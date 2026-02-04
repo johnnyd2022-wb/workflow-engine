@@ -67,8 +67,8 @@ class TestExpiredMaterialsComplianceSemantics:
     def test_expired_raw_with_zero_quantity_not_in_results(self, db):
         """Expired raw with zero quantity: not flagged, not included in expired_raw_materials."""
         from app.core.db.models.organisation import Organisation
-        from app.core.db.repositories.organisation_repo import OrganisationRepository
         from app.core.db.repositories.inventory_repo import InventoryRepository
+        from app.core.db.repositories.organisation_repo import OrganisationRepository
 
         org_repo = OrganisationRepository(db)
         inv_repo = InventoryRepository(db)
