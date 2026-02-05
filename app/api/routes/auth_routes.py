@@ -1260,9 +1260,9 @@ def change_password():
         for key, value in new_session_data.items():
             session[key] = value
         session["last_activity_at"] = datetime.utcnow().isoformat()
-        session["session_timeout_minutes"] = getattr(
-            updated_user, "session_timeout_minutes", None
-        ) or DEFAULT_SESSION_TIMEOUT_MINUTES
+        session["session_timeout_minutes"] = (
+            getattr(updated_user, "session_timeout_minutes", None) or DEFAULT_SESSION_TIMEOUT_MINUTES
+        )
         session.modified = True
 
         return jsonify({"message": "Password updated successfully"}), 200
