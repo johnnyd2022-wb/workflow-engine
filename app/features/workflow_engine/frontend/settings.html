@@ -1470,7 +1470,7 @@
     }
     
     // Session Timeout Management (API uses minutes; UI supports minutes / hours / days)
-    let MIN_SESSION_TIMEOUT = 15;      // minutes (from API; default 15)
+    let MIN_SESSION_TIMEOUT = 5;       // minutes (from API; min 5)
     let MAX_SESSION_TIMEOUT = 30 * 24 * 60;
     let lastSessionTimeoutUnit = 'minutes';
     let lastKnownSessionTimeoutMinutes = null;

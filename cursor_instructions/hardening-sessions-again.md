@@ -1,169 +1,92 @@
 # Final Session & Security Hardening Review – Closure Checks
 
-## Context
+Cursor Instructions: Final Session Security Tweaks
+1. Consolidate session activity update to after_request
 
-- Session handling, inactivity enforcement, password-change session rotation, and 2FA flows have already been implemented and reviewed.
-- The product is **not live**, no DB migrations are required, and there is no multi-user or role model yet.
-- The goal of this pass is to:
-  - Eliminate low-risk technical debt
-  - Confirm intentional design decisions
-  - Document why certain tradeoffs are correct and should not be revisited prematurely
+Goal: Avoid writing session data twice on every authenticated request (before_request + after_request). Only update last_activity_at in after_request.
 
-Cursor should **prefer documentation over change** unless the fix is low-risk and improves clarity or correctness.
+Instructions:
 
----
+In session_security.py:
 
-## 1. Session Activity Tracking Duplication
+In @app.before_request:
 
-### Current State
-- `last_activity_at` is updated in `@before_request`
-- It is also updated in `@after_request`
+# Remove session write logic
+# Old:
+session["last_activity_at"] = datetime.utcnow().isoformat()
+session.modified = True
 
-### Action
-- **Verify whether `after_request` is intentionally required**
-  - If the goal is to update activity even on error responses (4xx/5xx), **leave as-is**
-  - If not required, remove one to avoid duplicate writes
+# Keep only reading logic for inactivity enforcement:
+last_activity_str = session.get("last_activity_at")
+if last_activity_str:
+    try:
+        last_activity = datetime.fromisoformat(last_activity_str)
+        time_since_activity = datetime.utcnow() - last_activity
+        if time_since_activity > timedelta(minutes=timeout_minutes):
+            logger.info(f"Session expired due to inactivity for user {user_id}")
+            session.clear()
+            session.modified = True
+            # handle redirect / API JSON as before
+    except ValueError:
+        # Reset on invalid format
+        session["last_activity_at"] = datetime.utcnow().isoformat()
 
-### Decision Guidance
-If kept:
-- Add a short comment explaining **why both hooks exist**
-If removed:
-- Ensure all authenticated requests still update activity reliably
 
----
+In @app.after_request:
 
-## 2. Session Timeout Logic – Documentation Only
+# Keep writing activity here for all authenticated requests
+user_id = session.get("user_id")
+if user_id:
+    session["last_activity_at"] = datetime.utcnow().isoformat()
+    session.modified = True
 
-### Current State
-- Cookie lifetime may exceed inactivity timeout
-- Server-side inactivity timeout is strictly enforced
-- Sessions are cleared regardless of cookie validity
 
-### Action
-- **No code changes required**
-- Add a short comment near timeout enforcement explaining:
-  - Cookie lifetime ≠ session validity
-  - Inactivity timeout is authoritative
+Comment:
 
-### Rationale
-This mirrors Google / GitHub behavior and avoids false assumptions during audits.
+# Single authoritative update of last_activity_at occurs after the view returns,
+# ensuring 4xx/5xx responses still update inactivity without redundant writes.
 
----
 
-## 3. `session.modified` Redundancy
+Rationale:
 
-### Current State
-- `session.modified = True` is set multiple times in some flows (e.g. password change)
+Reduces duplicate session serialization and Set-Cookie headers.
 
-### Action
-- Optional cleanup:
-  - Consolidate to a single call at the end of the mutation
-- If left unchanged:
-  - Add a brief comment noting redundancy is intentional / harmless
+Ensures inactivity timeout enforcement remains correct.
 
-### Rationale
-This is not a bug or security issue—purely hygiene.
+Aligns with standard industry practice (Google/GitHub).
 
----
+2. Set minimum session timeout to 5 minutes
 
-## 4. Quantity Handling Consistency
+Goal: Align MIN_SESSION_TIMEOUT with common industry practice.
 
-### Current State
-- Some logic uses `float(quantity)`
-- Elsewhere `Decimal` is used
+In session_security.py:
 
-### Action
-- **Do not refactor now unless trivial**
-- Add a TODO comment noting:
-  - Inventory math should standardize on `Decimal`
-  - Current usage is comparison-only, not arithmetic
+MIN_SESSION_TIMEOUT_MINUTES = 5  # Minimum 5 minutes
 
-### Rationale
-Avoids scope creep while flagging future correctness improvements.
 
----
+In db/models/user.py (if default min is referenced):
 
-## 5. 401 / Session Expiry Handling
+Ensure any UI or default fallback values also respect the new minimum of 5 minutes.
 
-### Current State
-- Global 401 handler:
-  - Clears session
-  - Redirects browser requests
-  - Returns JSON for API calls
-  - Avoids redirect loops
+Comment:
 
-### Action
-- **No changes required**
-- Add a comment stating:
-  - This dual-mode behavior is intentional to support SPA + API usage
+# Conservative lower bound for user-configurable session timeout
+# Any value below 5 minutes is automatically capped
 
-### Rationale
-This prevents future “simplification” that would break the SPA.
+✅ Notes / Acceptance
 
----
+After these changes, last_activity_at is only written once per request.
 
-## 6. Password Change Session Rotation
+Inactivity timeout enforcement and SPA/API 401 behavior are unchanged.
 
-### Current State
-- All other sessions invalidated
-- Current session cleared and regenerated
-- User remains logged in
-- Session fixation prevented
+Session defaults:
 
-### Action
-- **No changes required**
-- Add a short comment clarifying:
-  - This behavior is intentional UX + security balance
-  - Matches industry best practice
+Default: 24 hours
 
----
+Min: 5 minutes
 
-## 7. Long Session Warning Banner
+Max: 30 days
 
-### Current State
-- Shown only when session timeout exceeds default
-- Dismissible per session
-- Non-blocking
+Existing long-session warnings / 2FA checks remain unaffected.
 
-### Action
-- **No changes required**
-- Add a comment explaining:
-  - This is a security nudge, not an enforcement mechanism
-
----
-
-## 8. 2FA Interaction (Confirm No Regression)
-
-### Current State
-- 2FA flow already implemented and reviewed
-
-### Action
-- Cursor should:
-  - Confirm session regeneration does not bypass 2FA
-  - Confirm session invalidation forces 2FA on next login where appropriate
-- If confirmed:
-  - Add a brief comment linking session lifecycle and 2FA expectations
-
----
-
-## 9. Explicit Non-Goals (Document)
-
-Add a short comment or doc note stating the following are **intentionally deferred**:
-- Trusted device modeling
-- Per-device session lifetimes
-- Admin-enforced org security policies
-- Role-based session controls
-
-### Rationale
-Prevents premature abstraction and aligns with current product maturity.
-
----
-
-## Exit Criteria
-
-This work is complete when:
-- Any truly redundant or confusing logic is clarified or removed
-- All remaining “why is it like this?” questions are answered in comments
-- No behavior changes occur without clear justification
-
-Once complete, this area should be considered **closed and stable**, allowing focus to shift back to core product value.
+This is the final step before fully closing session security hardening.

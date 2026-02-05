@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 # Conservative defaults (Google-style): 24h default; long sessions only with explicit user choice.
 DEFAULT_SESSION_TIMEOUT_MINUTES = 24 * 60  # 24 hours
-MIN_SESSION_TIMEOUT_MINUTES = 15  # Minimum 15 minutes
+# Conservative lower bound for user-configurable session timeout; any value below 5 minutes is capped.
+MIN_SESSION_TIMEOUT_MINUTES = 5  # Minimum 5 minutes
 MAX_SESSION_TIMEOUT_MINUTES = 30 * 24 * 60  # 30 days max
 
 
@@ -108,16 +109,17 @@ def setup_session_security(app):
 
             except (ValueError, TypeError) as e:
                 logger.warning(f"Invalid last_activity_at format: {e}")
-                # Reset on invalid format
+                # Reset on invalid format (only write in before_request when correcting bad data)
                 session["last_activity_at"] = datetime.utcnow().isoformat()
+                session.modified = True
 
-        # Update last activity on every authenticated request (so inactivity window is enforced).
-        session["last_activity_at"] = datetime.utcnow().isoformat()
-        session.modified = True
+        # No session write here: single authoritative update of last_activity_at is in after_request.
 
     @app.after_request
     def update_session_activity(response):
-        """Update last activity after each request so activity is recorded even when the view returns 4xx/5xx."""
+        """Single authoritative update of last_activity_at after the view returns.
+        Ensures 4xx/5xx responses still update inactivity without redundant writes (no duplicate Set-Cookie).
+        """
         if session.get("user_id"):
             session["last_activity_at"] = datetime.utcnow().isoformat()
             session.modified = True
