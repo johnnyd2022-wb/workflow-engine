@@ -845,7 +845,9 @@
       }
     }
   }
-  
+  // Expose for SPA page so it can sync step display without opening the modal
+  window.updateStepDisplay = updateStepDisplay;
+
   // Validate inventory inputs (quantity & unit required, quantity must be > 0)
   function validateInventoryInputs() {
     const list = document.getElementById('guided-inputs-list-unified');
@@ -2798,13 +2800,30 @@
     executionPrompts.length = 0;
     executionPrompts.push(...filteredPrompts);
     
-    // Get process ID from URL params (same way as flows2.html)
+    // Get process ID from URL params (same way as flows2.html). If missing (e.g. SPA opened at /core/flows/create), create draft first.
     const urlParams = new URLSearchParams(window.location.search);
-    const processId = urlParams.get('id') || null;
+    let processId = urlParams.get('id') || null;
     
     if (!processId) {
-      alert('Process ID is missing. Please ensure you are on a process page.');
-      return;
+      const processName = stepName || 'Untitled Process';
+      try {
+        const newProcess = await CoreAPI.createProcess({
+          name: processName,
+          description: stepDescription || '',
+          is_draft: true
+        });
+        processId = newProcess.id;
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('id', processId);
+        window.history.replaceState({}, '', newUrl);
+      } catch (err) {
+        if (window.showNotification) {
+          window.showNotification('error', 'Failed to create process', err.message || 'Could not create process.');
+        } else {
+          alert('Failed to create process: ' + (err.message || 'Unknown error'));
+        }
+        return;
+      }
     }
     
     // Calculate step number: when editing, preserve the step's current step_number; when creating, use max + 1

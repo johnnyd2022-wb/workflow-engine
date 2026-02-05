@@ -13,6 +13,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from app.api.middleware.session_security import (
+    DEFAULT_SESSION_TIMEOUT_MINUTES,
     MAX_SESSION_TIMEOUT_MINUTES,
     MIN_SESSION_TIMEOUT_MINUTES,
 )
@@ -597,13 +598,15 @@ def get_current_user():
     "1000 per minute" if IS_CI else "5 per 5 minutes"
 )  # CRITICAL: Rate limit 2FA verification to prevent brute force (higher limit for CI)
 def verify_two_factor():
-    """Verify TOTP token during login
+    """Verify TOTP token during login.
 
     IMPORTANT: This endpoint requires a valid pending_2fa_user_id in the session.
     The pending session is set by /auth/login after successful email/password verification.
     If the pending session doesn't exist, the user must start the login process again.
+    Session lifecycle: session clear/invalidation (e.g. logout, expiry) forces full re-login
+    and 2FA again when enabled; no "skip 2FA" state is persisted in the session.
 
-    Rate limited: 5 attempts per 5 minutes per IP
+    Rate limited: 5 attempts per 5 minutes per IP.
     """
     data = request.get_json()
 
@@ -1071,10 +1074,12 @@ def cancel_2fa():
 @auth_bp.route("/session-timeout", methods=["GET", "PUT"])
 @requires_auth
 def manage_session_timeout():
-    """Get or update user's session timeout preference
+    """Get or update user's session timeout preference.
 
-    GET: Returns current session timeout in minutes, plus min/max bounds
-    PUT: Updates session timeout (min/max from session_security constants)
+    Default is conservative (24h); long sessions (e.g. 30 days) are only available
+    via explicit user choice in settings (not applied by default).
+    GET: Returns current session timeout in minutes, plus min/max bounds.
+    PUT: Updates session timeout (min/max from session_security constants).
     """
     user = g.current_user
     if not user:
@@ -1086,7 +1091,7 @@ def manage_session_timeout():
 
         if request.method == "GET":
             # Get current timeout
-            timeout = getattr(user, "session_timeout_minutes", 10)
+            timeout = getattr(user, "session_timeout_minutes", DEFAULT_SESSION_TIMEOUT_MINUTES)
             return jsonify(
                 {
                     "session_timeout_minutes": timeout,
@@ -1215,11 +1220,10 @@ def change_password():
         auth_service = AuthService(db)
         user_repo = UserRepository(db)
 
-        # Verify current password
+        # Verify current password (return 400 so user stays logged in and sees the error)
         if not auth_service.verify_password(current_password, user.password_hash):
-            # CRITICAL: Never log passwords or sensitive data
             logger.warning(f"Failed password change attempt for user {user.id}")
-            return jsonify({"error": "Current password is incorrect"}), 401
+            return jsonify({"error": "Current password is incorrect. Please try again."}), 400
 
         # Hash new password using bcrypt (production-ready)
         new_password_hash = auth_service.hash_password(new_password)
@@ -1230,16 +1234,10 @@ def change_password():
         if not updated_user:
             return jsonify({"error": "Failed to update password"}), 500
 
-        # CRITICAL: Clear ALL trusted devices on password change
-        # This ensures that if password was compromised, trusted devices are invalidated
+        # Invalidate trusted devices on other machines; current session stays valid (no logout)
         trusted_device_repo = TrustedDeviceRepository(db)
         trusted_device_repo.delete_user_devices(user.id)
         db.commit()
-
-        # CRITICAL: Clear session and force re-authentication after password change
-        # This prevents session fixation and ensures user must login again
-        session.clear()
-        session.modified = True
 
         # Log password change
         # CRITICAL: Never log passwords
@@ -1254,6 +1252,21 @@ def change_password():
             user.org_id,
             user.id,
         )
+
+        # Rotate session ID on password change: clear and re-establish so the cookie gets a new
+        # identifier. Prevents session fixation; user stays logged in on this device; other devices
+        # were already invalidated via trusted_device cleanup above. Intentional UX + security
+        # balance; matches industry best practice. Session regeneration does not bypass 2FA
+        # (2FA is enforced at login only; this session carries no "skip 2FA" state).
+        new_session_data = auth_service.generate_session(updated_user)
+        session.clear()
+        for key, value in new_session_data.items():
+            session[key] = value
+        session["last_activity_at"] = datetime.utcnow().isoformat()
+        session["session_timeout_minutes"] = (
+            getattr(updated_user, "session_timeout_minutes", None) or DEFAULT_SESSION_TIMEOUT_MINUTES
+        )
+        session.modified = True  # Single write flag at end of mutation
 
         return jsonify({"message": "Password updated successfully"}), 200
 

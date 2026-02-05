@@ -48,6 +48,14 @@ def flows():
     return render_template("flows2.html", active_page="core", process_id=process_id)
 
 
+@core_bp.route("/core/flows/create", methods=["GET"])
+@requires_auth
+def flows_create():
+    """Serve the process creation SPA (guided step flow as full page)."""
+    process_id = request.args.get("id")
+    return render_template("process-flow-spa.html", active_page="core", process_id=process_id)
+
+
 @core_bp.route("/core/sourcemap", methods=["GET"])
 @requires_auth
 def sourcemap():
@@ -717,7 +725,9 @@ def complete_step(execution_id: str, execution_step_id: str):
                             )
                             continue
 
-                        # QUANTITY PRECISION: Use Decimal for safe arithmetic
+                        # QUANTITY PRECISION: Use Decimal for safe arithmetic.
+                        # TODO: Standardize all inventory quantity handling on Decimal; some paths still use float(quantity).
+                        # Current usage here is arithmetic; elsewhere may be comparison-only. Do not refactor broadly yet.
                         try:
                             current_quantity = Decimal(str(inventory_item.quantity))
                         except (InvalidOperation, ValueError, TypeError):

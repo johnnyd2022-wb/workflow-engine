@@ -33,7 +33,8 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     totp_secret = Column(String, nullable=True)
     two_factor_enabled = Column(Boolean, default=False, nullable=False)
-    session_timeout_minutes = Column(Integer, default=10, nullable=False)  # User-configurable session timeout
+    # Conservative default (24h); long sessions only with explicit user choice in settings.
+    session_timeout_minutes = Column(Integer, default=24 * 60, nullable=False)
 
     # Account lockout fields for brute force protection
     failed_login_attempts = Column(Integer, default=0, nullable=False)  # Count of consecutive failed login attempts
