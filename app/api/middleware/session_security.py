@@ -5,6 +5,10 @@ Design (aligned with big-tech SaaS):
 - Secure by default: short default session lifetime (24h); long sessions require explicit user choice.
 - Inactivity is always enforced: cookie lifetime != active session; every request checks last_activity_at.
 - Long sessions only after explicit user review (settings); no silent weakening of guarantees.
+
+Explicit non-goals (intentionally deferred for current product maturity):
+- Trusted device modeling; per-device session lifetimes; admin-enforced org security policies;
+  role-based session controls. Session invalidation forces full re-login (2FA required if enabled).
 """
 
 import logging
@@ -68,7 +72,7 @@ def setup_session_security(app):
         timeout_minutes = max(MIN_SESSION_TIMEOUT_MINUTES, min(MAX_SESSION_TIMEOUT_MINUTES, timeout_minutes))
 
         # Inactivity enforcement: compare last_activity_at to session_timeout_minutes; invalidate if exceeded.
-        # Expired sessions are cleared even if cookie is still valid (cookie lifetime != active session).
+        # Cookie lifetime != session validity; inactivity timeout is authoritative (Google/GitHub-style).
         last_activity_str = session.get("last_activity_at")
         if last_activity_str:
             try:
@@ -113,7 +117,7 @@ def setup_session_security(app):
 
     @app.after_request
     def update_session_activity(response):
-        """Update last activity timestamp after each request (authenticated only)."""
+        """Update last activity after each request so activity is recorded even when the view returns 4xx/5xx."""
         if session.get("user_id"):
             session["last_activity_at"] = datetime.utcnow().isoformat()
             session.modified = True

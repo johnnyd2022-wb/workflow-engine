@@ -598,13 +598,15 @@ def get_current_user():
     "1000 per minute" if IS_CI else "5 per 5 minutes"
 )  # CRITICAL: Rate limit 2FA verification to prevent brute force (higher limit for CI)
 def verify_two_factor():
-    """Verify TOTP token during login
+    """Verify TOTP token during login.
 
     IMPORTANT: This endpoint requires a valid pending_2fa_user_id in the session.
     The pending session is set by /auth/login after successful email/password verification.
     If the pending session doesn't exist, the user must start the login process again.
+    Session lifecycle: session clear/invalidation (e.g. logout, expiry) forces full re-login
+    and 2FA again when enabled; no "skip 2FA" state is persisted in the session.
 
-    Rate limited: 5 attempts per 5 minutes per IP
+    Rate limited: 5 attempts per 5 minutes per IP.
     """
     data = request.get_json()
 
@@ -1253,17 +1255,18 @@ def change_password():
 
         # Rotate session ID on password change: clear and re-establish so the cookie gets a new
         # identifier. Prevents session fixation; user stays logged in on this device; other devices
-        # were already invalidated via trusted_device cleanup above.
+        # were already invalidated via trusted_device cleanup above. Intentional UX + security
+        # balance; matches industry best practice. Session regeneration does not bypass 2FA
+        # (2FA is enforced at login only; this session carries no "skip 2FA" state).
         new_session_data = auth_service.generate_session(updated_user)
         session.clear()
-        session.modified = True
         for key, value in new_session_data.items():
             session[key] = value
         session["last_activity_at"] = datetime.utcnow().isoformat()
         session["session_timeout_minutes"] = (
             getattr(updated_user, "session_timeout_minutes", None) or DEFAULT_SESSION_TIMEOUT_MINUTES
         )
-        session.modified = True
+        session.modified = True  # Single write flag at end of mutation
 
         return jsonify({"message": "Password updated successfully"}), 200
 

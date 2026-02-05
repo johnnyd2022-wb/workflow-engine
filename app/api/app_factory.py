@@ -121,12 +121,13 @@ def create_app():
             logger.exception(f"Unexpected error serving static file: {filename}")
             abort(500, "Internal server error")
 
-    # Global 401 handler: clear session and redirect browser to login (avoids blank "Unauthorized" page)
+    # Global 401 handler: clear session; redirect browser requests, return JSON for API calls.
+    # This dual-mode behavior is intentional (SPA + API usage): browser GETs redirect to login,
+    # API/auth calls get JSON so the client can show errors and avoid redirect loops.
     @app.errorhandler(401)
     def handle_unauthorized(e):
         session.clear()
         session.modified = True
-        # Never redirect for auth API calls (e.g. change-password); always return JSON so client can show error
         if request.path.startswith("/auth/") and request.method != "GET":
             return jsonify({"error": "Authentication required", "message": "Session expired or not authenticated"}), 401
         accepts_html = "text/html" in (request.headers.get("Accept") or "")

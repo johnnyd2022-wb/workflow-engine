@@ -725,7 +725,9 @@ def complete_step(execution_id: str, execution_step_id: str):
                             )
                             continue
 
-                        # QUANTITY PRECISION: Use Decimal for safe arithmetic
+                        # QUANTITY PRECISION: Use Decimal for safe arithmetic.
+                        # TODO: Standardize all inventory quantity handling on Decimal; some paths still use float(quantity).
+                        # Current usage here is arithmetic; elsewhere may be comparison-only. Do not refactor broadly yet.
                         try:
                             current_quantity = Decimal(str(inventory_item.quantity))
                         except (InvalidOperation, ValueError, TypeError):
