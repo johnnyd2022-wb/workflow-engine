@@ -1072,10 +1072,12 @@ def cancel_2fa():
 @auth_bp.route("/session-timeout", methods=["GET", "PUT"])
 @requires_auth
 def manage_session_timeout():
-    """Get or update user's session timeout preference
+    """Get or update user's session timeout preference.
 
-    GET: Returns current session timeout in minutes, plus min/max bounds
-    PUT: Updates session timeout (min/max from session_security constants)
+    Default is conservative (24h); long sessions (e.g. 30 days) are only available
+    via explicit user choice in settings (not applied by default).
+    GET: Returns current session timeout in minutes, plus min/max bounds.
+    PUT: Updates session timeout (min/max from session_security constants).
     """
     user = g.current_user
     if not user:
@@ -1248,6 +1250,20 @@ def change_password():
             user.org_id,
             user.id,
         )
+
+        # Rotate session ID on password change: clear and re-establish so the cookie gets a new
+        # identifier. Prevents session fixation; user stays logged in on this device; other devices
+        # were already invalidated via trusted_device cleanup above.
+        new_session_data = auth_service.generate_session(updated_user)
+        session.clear()
+        session.modified = True
+        for key, value in new_session_data.items():
+            session[key] = value
+        session["last_activity_at"] = datetime.utcnow().isoformat()
+        session["session_timeout_minutes"] = getattr(
+            updated_user, "session_timeout_minutes", None
+        ) or DEFAULT_SESSION_TIMEOUT_MINUTES
+        session.modified = True
 
         return jsonify({"message": "Password updated successfully"}), 200
 

@@ -1,10 +1,10 @@
 """
 Session security middleware for inactivity timeout and session management.
 
-Implements:
-- Inactivity-based session timeout (default 10 minutes, user-configurable)
-- Session activity tracking (last_activity_at)
-- Automatic session expiry on inactivity
+Design (aligned with big-tech SaaS):
+- Secure by default: short default session lifetime (24h); long sessions require explicit user choice.
+- Inactivity is always enforced: cookie lifetime != active session; every request checks last_activity_at.
+- Long sessions only after explicit user review (settings); no silent weakening of guarantees.
 """
 
 import logging
@@ -20,10 +20,10 @@ from app.core.db.repositories.user_repo import UserRepository
 
 logger = logging.getLogger(__name__)
 
-# Default inactivity timeout (7 days); max 30 days
-DEFAULT_SESSION_TIMEOUT_MINUTES = 7 * 24 * 60  # 7 days
-MIN_SESSION_TIMEOUT_MINUTES = 1
-MAX_SESSION_TIMEOUT_MINUTES = 30 * 24 * 60  # 30 days
+# Conservative defaults (Google-style): 24h default; long sessions only with explicit user choice.
+DEFAULT_SESSION_TIMEOUT_MINUTES = 24 * 60  # 24 hours
+MIN_SESSION_TIMEOUT_MINUTES = 15  # Minimum 15 minutes
+MAX_SESSION_TIMEOUT_MINUTES = 30 * 24 * 60  # 30 days max
 
 
 def setup_session_security(app):
@@ -31,21 +31,17 @@ def setup_session_security(app):
 
     @app.before_request
     def check_session_timeout():
-        """Check and enforce session inactivity timeout"""
-        # Skip for public endpoints
+        """Check and enforce session inactivity timeout (hard requirement: every authenticated request)."""
         if not request.endpoint:
             return
-
-        # Use PUBLIC_ENDPOINTS from tenant_context to avoid duplication
         if request.endpoint in PUBLIC_ENDPOINTS or request.endpoint.endswith(".static"):
             return
 
-        # Check if user is authenticated
         user_id = session.get("user_id")
         if not user_id:
             return
 
-        # Get user's configured timeout from session, or load from database
+        # User's configured timeout (from session cache or database)
         timeout_minutes = session.get("session_timeout_minutes")
         if timeout_minutes is None:
             # Try to get from g.current_user first (loaded by tenant_context middleware)
@@ -69,24 +65,19 @@ def setup_session_security(app):
                     logger.warning(f"Failed to load user session timeout: {e}")
                     timeout_minutes = DEFAULT_SESSION_TIMEOUT_MINUTES
 
-        # Ensure timeout is within bounds
         timeout_minutes = max(MIN_SESSION_TIMEOUT_MINUTES, min(MAX_SESSION_TIMEOUT_MINUTES, timeout_minutes))
 
-        # Check last activity
+        # Inactivity enforcement: compare last_activity_at to session_timeout_minutes; invalidate if exceeded.
+        # Expired sessions are cleared even if cookie is still valid (cookie lifetime != active session).
         last_activity_str = session.get("last_activity_at")
         if last_activity_str:
             try:
                 last_activity = datetime.fromisoformat(last_activity_str)
                 time_since_activity = datetime.utcnow() - last_activity
-
-                # Check if timeout exceeded
                 if time_since_activity > timedelta(minutes=timeout_minutes):
-                    # Session expired due to inactivity
                     logger.info(f"Session expired due to inactivity for user {user_id}")
-                    # CRITICAL: Clear ALL session data on expiry to prevent session fixation
-                    # This ensures no authentication state persists after timeout
                     session.clear()
-                    session.modified = True  # Explicitly mark session as modified to ensure cookie is cleared
+                    session.modified = True
 
                     # Check if this is an HTML page request (not an API call)
                     # If Accept header includes text/html, or if it's a page route, redirect to login
@@ -116,17 +107,14 @@ def setup_session_security(app):
                 # Reset on invalid format
                 session["last_activity_at"] = datetime.utcnow().isoformat()
 
-        # Update last activity timestamp
-        # CRITICAL: Mark session as modified to ensure changes are persisted
+        # Update last activity on every authenticated request (so inactivity window is enforced).
         session["last_activity_at"] = datetime.utcnow().isoformat()
         session.modified = True
 
     @app.after_request
     def update_session_activity(response):
-        """Update session activity after each request"""
-        # Only update for authenticated requests
+        """Update last activity timestamp after each request (authenticated only)."""
         if session.get("user_id"):
-            # CRITICAL: Mark session as modified to ensure activity timestamp is persisted
             session["last_activity_at"] = datetime.utcnow().isoformat()
             session.modified = True
         return response

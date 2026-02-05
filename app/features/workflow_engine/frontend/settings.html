@@ -36,6 +36,33 @@
     @media (max-width: 767px) { .settings-page .toggle-row { flex-wrap: wrap; gap: 0.75rem; } .settings-page .form-input { max-width: 100%; } }
     /* Modals and notifications that still use .glass-card */
     .settings-page .glass-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); }
+    /* Long-session warning banner (non-blocking; same pattern as flows2 compliance banner) */
+    .long-session-banner {
+      background: linear-gradient(135deg, hsl(38, 92%, 50%, 0.12) 0%, hsl(25, 95%, 53%, 0.08) 100%);
+      border-bottom: 1px solid hsl(38, 92%, 50%, 0.35);
+      padding: 12px 24px;
+      margin: 0;
+    }
+    .long-session-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .long-session-banner-icon {
+      font-size: 1.25rem;
+      color: hsl(38, 92%, 40%);
+      flex-shrink: 0;
+    }
+    .long-session-banner-message {
+      flex: 1;
+      margin: 0;
+      font-size: 14px;
+      color: var(--text-primary, #1a1a1a);
+    }
+    .long-session-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
   </style>
 </head>
 <body class="settings-page">
@@ -49,6 +76,17 @@
           <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Configure your account and preferences</p>
         </div>
       </header>
+
+      <!-- Long-session warning: show when session timeout > 24h and 2FA is disabled (non-blocking) -->
+      <div id="long-session-banner" class="long-session-banner" role="alert" aria-live="polite" style="display: none;">
+        <div class="long-session-banner-content">
+          <span class="long-session-banner-icon" aria-hidden="true">⚠</span>
+          <p class="long-session-banner-message">You've chosen a long session without 2FA. This is convenient, but less secure.</p>
+          <div class="long-session-banner-actions">
+            <button type="button" id="long-session-banner-dismiss" class="btn btn-ghost btn-sm">Dismiss</button>
+          </div>
+        </div>
+      </div>
 
       <main class="page-content">
         <div class="max-content">
@@ -772,6 +810,14 @@
         enableBtn.style.display = 'block';
         disableBtn.style.display = 'none';
       }
+      const mins = lastKnownSessionTimeoutMinutes != null
+        ? lastKnownSessionTimeoutMinutes
+        : (function() {
+            const input = document.getElementById('session-timeout-input');
+            const unitSelect = document.getElementById('session-timeout-unit');
+            return (input && unitSelect) ? sessionTimeoutToMinutes(input.value, unitSelect.value) : null;
+          })();
+      if (mins != null) updateLongSessionBanner(mins);
     }
     
     // Display QR code from backend (generated server-side)
@@ -1399,6 +1445,15 @@
     // Load 2FA status on page load
     load2FAStatus();
     
+    const longSessionDismiss = document.getElementById('long-session-banner-dismiss');
+    if (longSessionDismiss) {
+      longSessionDismiss.addEventListener('click', function() {
+        sessionStorage.setItem('long_session_banner_dismissed', '1');
+        const b = document.getElementById('long-session-banner');
+        if (b) b.style.display = 'none';
+      });
+    }
+    
     // Show success notification (styled like the app)
     function showSuccessNotification(message) {
       const notification = document.createElement('div');
@@ -1415,9 +1470,10 @@
     }
     
     // Session Timeout Management (API uses minutes; UI supports minutes / hours / days)
-    let MIN_SESSION_TIMEOUT = 1;       // minutes (from API)
+    let MIN_SESSION_TIMEOUT = 15;      // minutes (from API; default 15)
     let MAX_SESSION_TIMEOUT = 30 * 24 * 60;
     let lastSessionTimeoutUnit = 'minutes';
+    let lastKnownSessionTimeoutMinutes = null;
     
     function sessionTimeoutToDisplay(totalMinutes) {
       const m = totalMinutes;
@@ -1484,7 +1540,7 @@
         
         if (response.ok) {
           const data = await response.json();
-          const timeoutMinutes = data.session_timeout_minutes ?? (7 * 24 * 60);
+          const timeoutMinutes = data.session_timeout_minutes ?? (24 * 60);
           if (data.min_session_timeout_minutes !== undefined) MIN_SESSION_TIMEOUT = data.min_session_timeout_minutes;
           if (data.max_session_timeout_minutes !== undefined) MAX_SESSION_TIMEOUT = data.max_session_timeout_minutes;
           
@@ -1503,12 +1559,26 @@
             lastSessionTimeoutUnit = unit;
           }
           if (display) display.textContent = formatSessionTimeoutLabel(value, unit);
+          lastKnownSessionTimeoutMinutes = timeoutMinutes;
+          updateLongSessionBanner(timeoutMinutes);
         } else if (response.status === 401) {
           window.location.href = '/';
         }
       } catch (error) {
         console.error('Failed to load session timeout:', error);
       }
+    }
+    
+    function updateLongSessionBanner(sessionTimeoutMinutes) {
+      const banner = document.getElementById('long-session-banner');
+      if (!banner) return;
+      if (sessionStorage.getItem('long_session_banner_dismissed') === '1') {
+        banner.style.display = 'none';
+        return;
+      }
+      const longSessionMinutes = 24 * 60;
+      const show = (sessionTimeoutMinutes != null && sessionTimeoutMinutes > longSessionMinutes) && !current2FAStatus;
+      banner.style.display = show ? 'block' : 'none';
     }
     
     async function saveSessionTimeout() {
@@ -1562,6 +1632,8 @@
             setTimeout(() => { messageDiv.style.display = 'none'; }, 3000);
           }
           showSuccessNotification('Session timeout updated');
+          lastKnownSessionTimeoutMinutes = data.session_timeout_minutes;
+          updateLongSessionBanner(data.session_timeout_minutes);
         } else if (response.status === 401) {
           window.location.href = '/';
         } else {
