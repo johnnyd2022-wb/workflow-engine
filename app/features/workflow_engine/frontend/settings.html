@@ -3,36 +3,60 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Settings — Flume Workflow Engine Visibility</title>
-  <meta name="description" content="Configure your Flume account and preferences">
-  
+  <title>Settings — SupplyChain</title>
+  <meta name="description" content="Configure your account and preferences">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <!-- Shared sidebar styles (loaded first, independent from page styles) -->
-  <link rel="stylesheet" href="/ui/shared/sidebar.css">
-  <script src="/ui/shared/sidebar.js" defer></script>
-  <!-- Page-specific styles (loaded after sidebar to allow overrides if needed) -->
-  <link rel="stylesheet" href="/workflow-engine-static/styles_10.css">
-  <link rel="stylesheet" href="/workflow-engine-static/styles_2.css">
+  <style>
+    /* Settings page: form and card overrides using styles2 tokens; responsive like process-flow-spa */
+    .settings-page .page-content { padding: 16px; }
+    @media (min-width: 768px) { .settings-page .page-content { padding: 24px; } }
+    @media (min-width: 1280px) { .settings-page .page-content { padding: 32px; } }
+    .settings-page .max-content { max-width: 1280px; margin: 0 auto; width: 100%; }
+    .settings-page .settings-card { margin-bottom: 1.5rem; }
+    .settings-page .settings-card:last-of-type { margin-bottom: 0; }
+    .settings-page .form-group { margin-bottom: 1rem; }
+    .settings-page .form-label { display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px; }
+    .settings-page .form-input { width: 100%; max-width: 400px; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; }
+    .settings-page .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px hsla(210, 100%, 50%, 0.15); }
+    .settings-page select.form-input { cursor: pointer; }
+    .settings-page .text-error { color: var(--error); font-size: 0.875rem; }
+    .settings-page .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-bottom: 0.75rem; background: var(--bg-card); }
+    .settings-page .toggle-row:last-child { margin-bottom: 0; }
+    .settings-page .toggle-label { font-weight: 600; margin-bottom: 0.25rem; }
+    .settings-page .toggle-desc { font-size: 0.875rem; color: var(--text-secondary); }
+    .settings-page .switch { position: relative; width: 48px; height: 24px; flex-shrink: 0; }
+    .settings-page .switch input { opacity: 0; width: 0; height: 0; }
+    .settings-page .switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border-default); border-radius: 24px; transition: 0.3s; }
+    .settings-page .switch-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; box-shadow: var(--shadow-sm); }
+    .settings-page .switch input:checked + .switch-slider { background: var(--primary); }
+    .settings-page .switch input:checked + .switch-slider:before { transform: translateX(24px); }
+    @media (max-width: 767px) { .settings-page .toggle-row { flex-wrap: wrap; gap: 0.75rem; } .settings-page .form-input { max-width: 100%; } }
+    /* Modals and notifications that still use .glass-card */
+    .settings-page .glass-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); }
+  </style>
 </head>
-<body>
-  <!-- Flume UI Version 5 — Liquid Depth Aesthetic with Darker Sidebar -->
-  {% include 'components/sidebar.html' %}
-    
-    <main class="main-content">
-      
+<body class="settings-page">
+  <div class="app-layout">
+    {% include 'shared/sidebar-v2.html' %}
+
+    <div class="main-content">
       <header class="main-header">
         <div>
-          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem;">Settings</h1>
-          <p style="color: var(--text-secondary); font-size: 0.9375rem;">Configure your account and preferences</p>
+          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">Settings</h1>
+          <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Configure your account and preferences</p>
         </div>
       </header>
-      
-      <div class="main-body">
-        
-        <div class="glass-card mb-4">
-          <h2 class="mb-3">Account Information</h2>
+
+      <main class="page-content">
+        <div class="max-content">
+          <section class="card settings-card">
+            <div class="card-header" style="padding-bottom: 12px;">
+              <h2 class="card-title" style="margin-bottom: 0;">Account Information</h2>
+            </div>
+            <div class="card-content">
           
           <div id="settings-message" style="display: none; margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.875rem;"></div>
           
@@ -73,54 +97,52 @@
           </div>
           
           <button id="settings-save-btn" class="btn btn-primary" onclick="saveSettings()">Save Changes</button>
-        </div>
-        
-        <div class="glass-card mb-4">
-          <h2 class="mb-3">Notification Preferences</h2>
-          
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 0.75rem;">
-            <div>
-              <div style="font-weight: 600; margin-bottom: 0.25rem;">Email Notifications</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary);">Receive email alerts for important events</div>
             </div>
-            <label style="position: relative; display: inline-block; width: 48px; height: 24px;">
-              <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
-              <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--azure-blue); transition: 0.3s; border-radius: 24px;">
-                <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; transition: 0.3s; border-radius: 50%;"></span>
-              </span>
-            </label>
-          </div>
-          
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 0.75rem;">
-            <div>
-              <div style="font-weight: 600; margin-bottom: 0.25rem;">Compliance Alerts</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary);">Get notified about compliance status changes</div>
+          </section>
+
+          <section class="card settings-card">
+            <div class="card-header" style="padding-bottom: 12px;">
+              <h2 class="card-title" style="margin-bottom: 0;">Notification Preferences</h2>
             </div>
-            <label style="position: relative; display: inline-block; width: 48px; height: 24px;">
-              <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
-              <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--azure-blue); transition: 0.3s; border-radius: 24px;">
-                <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; transition: 0.3s; border-radius: 50%;"></span>
-              </span>
-            </label>
-          </div>
-          
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md);">
-            <div>
-              <div style="font-weight: 600; margin-bottom: 0.25rem;">Weekly Reports</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary);">Receive weekly summary reports</div>
+            <div class="card-content">
+              <div class="toggle-row">
+                <div>
+                  <div class="toggle-label">Email Notifications</div>
+                  <div class="toggle-desc">Receive email alerts for important events</div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              <div class="toggle-row">
+                <div>
+                  <div class="toggle-label">Compliance Alerts</div>
+                  <div class="toggle-desc">Get notified about compliance status changes</div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              <div class="toggle-row">
+                <div>
+                  <div class="toggle-label">Weekly Reports</div>
+                  <div class="toggle-desc">Receive weekly summary reports</div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox">
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
             </div>
-            <label style="position: relative; display: inline-block; width: 48px; height: 24px;">
-              <input type="checkbox" style="opacity: 0; width: 0; height: 0;">
-              <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border-color); transition: 0.3s; border-radius: 24px;">
-                <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; transition: 0.3s; border-radius: 50%;"></span>
-              </span>
-            </label>
-          </div>
-        </div>
-        
-        <div class="glass-card">
-          <h2 class="mb-3">Security</h2>
-          
+          </section>
+
+          <section class="card settings-card">
+            <div class="card-header" style="padding-bottom: 12px;">
+              <h2 class="card-title" style="margin-bottom: 0;">Security</h2>
+            </div>
+            <div class="card-content">
           <form id="password-reset-form" style="display: flex; flex-direction: column; gap: 1rem;">
             <div class="form-group">
               <label class="form-label">Current Password</label>
@@ -160,29 +182,39 @@
             
             <button type="submit" id="password-reset-btn" class="btn btn-primary">Update Password</button>
           </form>
-        </div>
-        
-        <div class="glass-card" style="margin-top: 1.5rem;">
-          <h2 class="mb-3">Session Settings</h2>
-          
+            </div>
+          </section>
+
+          <section class="card settings-card">
+            <div class="card-header" style="padding-bottom: 12px;">
+              <h2 class="card-title" style="margin-bottom: 0;">Session Settings</h2>
+            </div>
+            <div class="card-content">
           <div class="form-group">
             <label class="form-label">Session Timeout</label>
-            <div style="display: flex; align-items: center; gap: 1rem;">
-              <input type="number" id="session-timeout-input" class="form-input" step="1" style="width: 120px;">
-              <span style="color: var(--text-secondary);">minutes</span>
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <input type="number" id="session-timeout-input" class="form-input" step="1" min="1" style="width: 100px;">
+              <select id="session-timeout-unit" class="form-input" style="width: 110px;">
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+                <option value="days">Days</option>
+              </select>
             </div>
             <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
-              Automatically log me out after <span id="session-timeout-display">10</span> minutes of inactivity
+              Automatically log me out after <span id="session-timeout-display">—</span> of inactivity
             </div>
             <button id="save-session-timeout-btn" class="btn btn-primary" style="margin-top: 1rem;">Save Session Timeout</button>
             <div id="session-timeout-message" style="margin-top: 0.5rem; display: none;"></div>
           </div>
-        </div>
-        
-        <div class="glass-card" style="margin-top: 1.5rem;">
-          <h2 class="mb-3">Two-Factor Authentication</h2>
-          
-          <div id="2fa-status-section" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 1rem;">
+            </div>
+          </section>
+
+          <section class="card settings-card">
+            <div class="card-header" style="padding-bottom: 12px;">
+              <h2 class="card-title" style="margin-bottom: 0;">Two-Factor Authentication</h2>
+            </div>
+            <div class="card-content">
+          <div id="2fa-status-section" class="toggle-row" style="margin-bottom: 0;">
             <div>
               <div style="font-weight: 600; margin-bottom: 0.25rem;">Two-Factor Authentication</div>
               <div style="font-size: 0.875rem; color: var(--text-secondary);" id="2fa-status-text">
@@ -194,12 +226,11 @@
               <button id="disable-2fa-btn" class="btn btn-primary" style="display: none;">Disable 2FA</button>
             </div>
           </div>
+            </div>
+          </section>
         </div>
-        
-      </div>
-      
-    </main>
-    
+      </main>
+    </div>
   </div>
   
   <style>
@@ -217,173 +248,145 @@
     #sessionTimeoutModal.active {
       display: flex !important;
     }
-    
+    /* Modal overlay: match core2/flows2 – full-screen dim, no blur, z-index 1000, scrollable area */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    .modal-overlay.active {
+      display: flex !important;
+    }
+    #2fa-enrollment-modal.active {
+      display: flex !important;
+    }
     .text-error {
       color: #ef4444;
       font-size: 0.875rem;
     }
   </style>
   
-  <!-- Session Timeout Modal -->
-  <div id="sessionTimeoutModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 2000; align-items: center; justify-content: center;">
-    <div class="glass-card" style="max-width: 28rem; padding: 2rem; text-align: center; animation: modalFadeIn 0.2s ease-out;">
-      <div style="margin-bottom: 1.5rem;">
-        <div style="width: 64px; height: 64px; margin: 0 auto 1rem; background: rgba(239, 68, 68, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-        </div>
-        <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem;">Session Expired</h2>
-        <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+  <!-- Session Timeout Modal (core2-style card) -->
+  <div id="sessionTimeoutModal" class="modal-overlay" style="display: none;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Session Expired</h2>
+      </div>
+      <div style="margin-bottom: 24px;">
+        <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.5; margin-bottom: 12px;">
           Your session has expired due to inactivity. You will be redirected to the Sign In screen.
         </p>
-        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: var(--text-secondary); font-size: 0.875rem;">
+        <p style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 14px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
           </svg>
           <span id="sessionTimeoutCountdown">Redirecting in 3 seconds...</span>
-        </div>
+        </p>
       </div>
     </div>
   </div>
   
-  <!-- 2FA Enrollment Modal -->
-  <div id="2fa-enrollment-modal" class="modal-overlay">
-    <div class="modal-content glass-card" style="max-width: 32rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h2 class="text-2xl font-bold">Set Up Two-Factor Authentication</h2>
-        <button id="2fa-close-btn" class="btn btn-ghost" style="padding: 0.5rem;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <!-- 2FA Enrollment Modal (core2-style card, hidden until Enable 2FA) -->
+  <div id="2fa-enrollment-modal" class="modal-overlay" aria-hidden="true" style="display: none;">
+    <div class="card settings-modal-card" style="max-width: min(44rem, 92vw); width: 100%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Set Up Two-Factor Authentication</h2>
+        <button id="2fa-close-btn" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
       </div>
-      
       <!-- Step 1: QR Code Display -->
-      <div id="2fa-enrollment-step1" style="display: flex; flex-direction: column; gap: 1rem;">
-        <p style="color: var(--text-secondary); font-size: 0.9375rem;">
+      <div id="2fa-enrollment-step1" style="display: flex; flex-direction: column; gap: 16px;">
+        <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;">
           Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
         </p>
         <div style="display: flex; justify-content: center; margin: 1rem 0; padding: 1.5rem; background: #FFFFFF; border-radius: 0.75rem; border: 1px solid rgba(0, 0, 0, 0.1);">
           <div id="qrcode-container" style="min-height: 256px; min-width: 256px; display: flex; align-items: center; justify-content: center; background: #FFFFFF;"></div>
         </div>
-        <p style="font-size: 0.875rem; color: var(--text-secondary);">
-          Or enter this code manually: <code id="2fa-secret-text" style="background: rgba(255, 255, 255, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace; font-size: 0.875rem; word-break: break-all;"></code>
+        <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;">
+          Or enter this code manually: <code id="2fa-secret-text" style="background: var(--bg-secondary, #f9fafb); padding: 4px 8px; border-radius: var(--radius-md); font-family: monospace; font-size: 13px; word-break: break-all; border: 1px solid var(--border-default);"></code>
         </p>
-        <p style="font-size: 0.875rem; color: var(--text-secondary);">
+        <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;">
           After scanning, you'll need to enter two consecutive codes from your authenticator app to verify setup.
         </p>
-        <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
-          <button id="2fa-cancel-btn" class="btn btn-glass" style="flex: 1;">Cancel</button>
-          <button id="2fa-start-verification-btn" class="btn btn-hero" style="flex: 1;">Start Verification</button>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
+          <button type="button" id="2fa-cancel-btn" class="btn btn-secondary">Cancel</button>
+          <button type="button" id="2fa-start-verification-btn" class="btn btn-primary">Start Verification</button>
         </div>
       </div>
       
       <!-- Step 2: First Token Verification -->
-      <div id="2fa-enrollment-step2" style="display: none; flex-direction: column; gap: 1rem;">
-        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-          <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--azure-blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600;">1</div>
-          <p style="color: var(--text); font-size: 0.9375rem; margin: 0;">
-            Enter the first 6-digit code from your authenticator app
-          </p>
-        </div>
+      <div id="2fa-enrollment-step2" style="display: none; flex-direction: column; gap: 16px;">
+        <p style="color: var(--text-primary); font-size: 14px; font-weight: 500; margin: 0;">Enter the first 6-digit code from your authenticator app</p>
         <div>
-          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">First Code</label>
-          <input 
-            type="text" 
-            id="2fa-verification-code-1" 
-            class="input"
-            placeholder="000000" 
-            maxlength="6" 
-            pattern="[0-9]{6}"
-            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
-          >
+          <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">First Code</label>
+          <input type="text" id="2fa-verification-code-1" placeholder="000000" maxlength="6" pattern="[0-9]{6}" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
         </div>
-        <div id="2fa-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
-        <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
-          <button id="2fa-back-to-step1-btn" class="btn btn-glass" style="flex: 1;">Back</button>
-          <button id="2fa-verify-token1-btn" class="btn btn-hero" style="flex: 1;">Verify First Code</button>
+        <div id="2fa-error" class="text-error" style="display: none; padding: 12px; border-radius: var(--radius-md); background: var(--error-bg, #fef2f2); border: 1px solid var(--error); font-size: 14px;"></div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" id="2fa-back-to-step1-btn" class="btn btn-secondary">Back</button>
+          <button type="button" id="2fa-verify-token1-btn" class="btn btn-primary">Verify First Code</button>
         </div>
       </div>
       
       <!-- Step 3: Second Token Verification -->
-      <div id="2fa-enrollment-step3" style="display: none; flex-direction: column; gap: 1rem;">
-        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-          <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--azure-blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600;">2</div>
-          <p style="color: var(--text); font-size: 0.9375rem; margin: 0;">
-            Enter the next 6-digit code from your authenticator app
-          </p>
-        </div>
-        <p style="font-size: 0.875rem; color: var(--text-secondary);">
-          Wait for a new code to appear (codes change every 30 seconds), then enter it below.
-        </p>
+      <div id="2fa-enrollment-step3" style="display: none; flex-direction: column; gap: 16px;">
+        <p style="color: var(--text-primary); font-size: 14px; font-weight: 500; margin: 0;">Enter the next 6-digit code from your authenticator app</p>
+        <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.5; margin: 0;">Wait for a new code to appear (codes change every 30 seconds), then enter it below.</p>
         <div>
-          <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Second Code</label>
-          <input 
-            type="text" 
-            id="2fa-verification-code-2" 
-            class="input"
-            placeholder="000000" 
-            maxlength="6" 
-            pattern="[0-9]{6}"
-            style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); color: var(--text);"
-          >
+          <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Second Code</label>
+          <input type="text" id="2fa-verification-code-2" placeholder="000000" maxlength="6" pattern="[0-9]{6}" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
         </div>
-        <div id="2fa-error-step3" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
-        <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
-          <button id="2fa-back-to-step2-btn" class="btn btn-glass" style="flex: 1;">Back</button>
-          <button id="2fa-verify-token2-btn" class="btn btn-hero" style="flex: 1;">Verify & Enable 2FA</button>
+        <div id="2fa-error-step3" class="text-error" style="display: none; padding: 12px; border-radius: var(--radius-md); background: var(--error-bg, #fef2f2); border: 1px solid var(--error); font-size: 14px;"></div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" id="2fa-back-to-step2-btn" class="btn btn-secondary">Back</button>
+          <button type="button" id="2fa-verify-token2-btn" class="btn btn-primary">Verify & Enable 2FA</button>
         </div>
       </div>
       
       <!-- Step 4: Backup Codes Display and Confirmation -->
-      <div id="2fa-enrollment-step4" style="display: none; flex-direction: column; gap: 1rem;">
-        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-          <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--azure-blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600;">3</div>
-          <p style="color: var(--text); font-size: 0.9375rem; margin: 0; font-weight: 600;">
-            Save Your Backup Codes
+      <div id="2fa-enrollment-step4" style="display: none; flex-direction: column; gap: 16px;">
+        <p style="color: var(--text-primary); font-size: 14px; font-weight: 600; margin: 0;">Save Your Backup Codes</p>
+        <div style="padding: 16px; border-radius: var(--radius-lg); background: var(--error-bg, #fef2f2); border: 1px solid var(--error);">
+          <p style="color: var(--error); font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Important</p>
+          <p style="color: var(--text-secondary); font-size: 14px; margin: 0; line-height: 1.5;">
+            These backup codes will only be shown once. Write them down and store them in a safe place. You can use them to access your account if you lose your 2FA device.
           </p>
         </div>
-        
-        <div style="padding: 1rem; border-radius: 0.75rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); margin-bottom: 1rem;">
-          <p style="color: #ef4444; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem;">⚠️ Important Warning</p>
-          <p style="color: var(--text-secondary); font-size: 0.875rem; margin: 0; line-height: 1.5;">
-            These backup codes will only be shown once. Write them down and store them in a safe place. 
-            You can use these codes one time each to access your account if you lose access to your 2FA device.
-          </p>
-        </div>
-        
-        <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1.5rem;">
-          <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem; font-weight: 600;">Your Backup Codes:</p>
-          <div id="backup-codes-container" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; font-family: monospace; font-size: 0.9375rem;">
+        <div style="padding: 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb);">
+          <p style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin: 0 0 12px 0;">Your Backup Codes:</p>
+          <div id="backup-codes-container" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-family: monospace; font-size: 14px;">
             <!-- Backup codes will be inserted here -->
           </div>
         </div>
-        
-        <div style="display: flex; align-items: start; gap: 0.75rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; margin-top: 1rem;">
-          <input type="checkbox" id="backup-codes-confirmed" style="margin-top: 0.25rem; cursor: pointer;">
-          <label for="backup-codes-confirmed" style="font-size: 0.875rem; color: var(--text); cursor: pointer; line-height: 1.5;">
-            <strong>Yes, I have saved my backup codes</strong><br>
-            <span style="color: var(--text-secondary);">I understand these codes will not be shown again and I need them to recover my account.</span>
+        <div style="display: flex; align-items: start; gap: 12px; padding: 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--primary-bg, #eff6ff);">
+          <input type="checkbox" id="backup-codes-confirmed" style="margin-top: 3px; cursor: pointer;">
+          <label for="backup-codes-confirmed" style="font-size: 14px; color: var(--text-primary); cursor: pointer; line-height: 1.5;">
+            <strong>I have saved my backup codes</strong>. I understand they will not be shown again and I need them to recover my account.
           </label>
         </div>
-        
-        <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
-          <button id="2fa-cancel-step4-btn" class="btn btn-glass" style="flex: 1;">Cancel Enrollment</button>
-          <button id="2fa-confirm-backup-codes-btn" class="btn btn-hero" style="flex: 1;" disabled>Complete Setup</button>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" id="2fa-cancel-step4-btn" class="btn btn-secondary">Cancel Enrollment</button>
+          <button type="button" id="2fa-confirm-backup-codes-btn" class="btn btn-primary" disabled>Complete Setup</button>
         </div>
       </div>
     </div>
   </div>
   
   
-  <!-- Sidebar JS is now in /ui/shared/sidebar.js (loaded in head) -->
   <script src="/ui/shared/password-policy.js"></script>
   <script src="/ui/shared/account-info.js"></script>
+  <script src="/ui/shared/sidebar-v2.js"></script>
   <script>
     // Initialize account info component (HTML is already inlined in the page)
     // The component will render immediately, and data will load asynchronously
@@ -523,7 +526,7 @@
                   // Restore enrollment state
                   backupCodes = codes;
                   enrollmentCompleted = false;
-                  // Show modal with step 4
+                  closeDynamicModals();
                   document.getElementById('2fa-enrollment-modal').classList.add('active');
                   displayBackupCodes(codes);
                   show2FAStep(4);
@@ -848,7 +851,8 @@
           // Display secret text
           document.getElementById('2fa-secret-text').textContent = enrollmentSecret;
           
-          // Show modal and reset to step 1
+          // Show modal and reset to step 1 (close any other dynamic modal first)
+          closeDynamicModals();
           document.getElementById('2fa-enrollment-modal').classList.add('active');
           show2FAStep(1);
         } else {
@@ -1251,42 +1255,76 @@
       }
     });
     
-    // Prevent event propagation from modal content to overlay
+    // Prevent event propagation from modal card to overlay (core2-style)
     const modal = document.getElementById('2fa-enrollment-modal');
     if (modal) {
-      const modalContent = modal.querySelector('.modal-content');
-      if (modalContent) {
-        modalContent.addEventListener('click', function(e) {
+      const modalCard = modal.querySelector('.card');
+      if (modalCard) {
+        modalCard.addEventListener('click', function(e) {
           e.stopPropagation();
         });
       }
     }
     
+    // Remove any dynamically created modal overlays (e.g. disable-2fa confirm). Keeps #sessionTimeoutModal and #2fa-enrollment-modal.
+    function closeDynamicModals() {
+      document.querySelectorAll('.modal-overlay').forEach(function(el) {
+        if (el.id === 'sessionTimeoutModal' || el.id === '2fa-enrollment-modal') return;
+        el.remove();
+      });
+    }
+
     // Disable 2FA
     document.getElementById('disable-2fa-btn').addEventListener('click', async function() {
-      // Use custom styled confirmation dialog
+      closeDynamicModals(); // remove any existing dynamic modal (e.g. previous confirm) so only one is open
+      const disableBtn = document.getElementById('disable-2fa-btn');
+      disableBtn.disabled = true;
       let confirmed = false;
       const confirmDiv = document.createElement('div');
       confirmDiv.className = 'modal-overlay active';
+      confirmDiv.setAttribute('data-modal', 'disable-2fa-confirm');
       confirmDiv.innerHTML = `
-        <div class="modal-content glass-card" style="max-width: 28rem;">
-          <h2 style="margin-bottom: 1rem;">Disable Two-Factor Authentication?</h2>
-          <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">This will make your account less secure. Are you sure you want to continue?</p>
-          <div style="display: flex; gap: 0.75rem;">
-            <button id="confirm-cancel" class="btn btn-glass" style="flex: 1;">Cancel</button>
-            <button id="confirm-disable" class="btn btn-hero" style="flex: 1;">Disable</button>
+        <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+            <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Disable Two-Factor Authentication?</h2>
+            <button type="button" id="confirm-close-x" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div style="margin-bottom: 24px;">
+            <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;">This will make your account less secure. Are you sure you want to continue?</p>
+          </div>
+          <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button type="button" id="confirm-cancel" class="btn btn-secondary">Cancel</button>
+            <button type="button" id="confirm-disable" class="btn btn-primary">Disable</button>
           </div>
         </div>
       `;
       document.body.appendChild(confirmDiv);
-      
-      document.getElementById('confirm-cancel').addEventListener('click', function() {
+
+      function closeConfirm() {
         confirmDiv.remove();
+        disableBtn.disabled = false;
+      }
+
+      confirmDiv.addEventListener('click', function(e) {
+        if (e.target === confirmDiv) closeConfirm();
       });
-      
+      confirmDiv.querySelector('.card').addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      document.getElementById('confirm-close-x').addEventListener('click', closeConfirm);
+
+      document.getElementById('confirm-cancel').addEventListener('click', function() {
+        closeConfirm();
+      });
+
       document.getElementById('confirm-disable').addEventListener('click', function() {
         confirmed = true;
-        confirmDiv.remove();
+        closeConfirm();
         proceedDisable();
       });
       
@@ -1376,10 +1414,58 @@
       }, 3000);
     }
     
-    // Session Timeout Management
-    // Store min/max values from API (will be set when loading)
-    let MIN_SESSION_TIMEOUT = 1;
-    let MAX_SESSION_TIMEOUT = 240;
+    // Session Timeout Management (API uses minutes; UI supports minutes / hours / days)
+    let MIN_SESSION_TIMEOUT = 1;       // minutes (from API)
+    let MAX_SESSION_TIMEOUT = 30 * 24 * 60;
+    let lastSessionTimeoutUnit = 'minutes';
+    
+    function sessionTimeoutToDisplay(totalMinutes) {
+      const m = totalMinutes;
+      if (m >= 24 * 60 && m % (24 * 60) === 0) {
+        return { value: m / (24 * 60), unit: 'days' };
+      }
+      if (m >= 60 && m % 60 === 0) {
+        return { value: m / 60, unit: 'hours' };
+      }
+      return { value: m, unit: 'minutes' };
+    }
+    
+    function sessionTimeoutToMinutes(value, unit) {
+      const n = Number(value);
+      if (isNaN(n) || n < 0) return 0;
+      if (unit === 'days') return Math.round(n * 24 * 60);
+      if (unit === 'hours') return Math.round(n * 60);
+      return Math.round(n);
+    }
+    
+    function getSessionTimeoutInputBounds() {
+      const unit = (document.getElementById('session-timeout-unit') || {}).value || 'minutes';
+      if (unit === 'days') {
+        return { min: Math.max(1, Math.ceil(MIN_SESSION_TIMEOUT / (24 * 60))), max: Math.floor(MAX_SESSION_TIMEOUT / (24 * 60)) };
+      }
+      if (unit === 'hours') {
+        return { min: Math.max(1, Math.ceil(MIN_SESSION_TIMEOUT / 60)), max: Math.floor(MAX_SESSION_TIMEOUT / 60) };
+      }
+      return { min: MIN_SESSION_TIMEOUT, max: MAX_SESSION_TIMEOUT };
+    }
+    
+    function formatSessionTimeoutLabel(value, unit) {
+      const v = Number(value);
+      const u = unit === 'days' ? (v === 1 ? 'day' : 'days') : unit === 'hours' ? (v === 1 ? 'hour' : 'hours') : (v === 1 ? 'minute' : 'minutes');
+      return (isNaN(v) ? '—' : v) + ' ' + u;
+    }
+    
+    function updateSessionTimeoutUI() {
+      const input = document.getElementById('session-timeout-input');
+      const unitSelect = document.getElementById('session-timeout-unit');
+      const display = document.getElementById('session-timeout-display');
+      if (!input || !unitSelect) return;
+      const bounds = getSessionTimeoutInputBounds();
+      input.min = bounds.min;
+      input.max = bounds.max;
+      const unit = unitSelect.value;
+      if (display) display.textContent = formatSessionTimeoutLabel(input.value, unit);
+    }
     
     async function loadSessionTimeout() {
       try {
@@ -1388,7 +1474,6 @@
           credentials: 'include'
         });
         
-        // Check for 401 before parsing JSON
         if (response.status === 401) {
           const path = window.location.pathname;
           if (path !== '/' && !path.includes('login')) {
@@ -1399,27 +1484,26 @@
         
         if (response.ok) {
           const data = await response.json();
-          const timeout = data.session_timeout_minutes || 10;
+          const timeoutMinutes = data.session_timeout_minutes ?? (7 * 24 * 60);
+          if (data.min_session_timeout_minutes !== undefined) MIN_SESSION_TIMEOUT = data.min_session_timeout_minutes;
+          if (data.max_session_timeout_minutes !== undefined) MAX_SESSION_TIMEOUT = data.max_session_timeout_minutes;
           
-          // Update min/max from API response
-          if (data.min_session_timeout_minutes !== undefined) {
-            MIN_SESSION_TIMEOUT = data.min_session_timeout_minutes;
-          }
-          if (data.max_session_timeout_minutes !== undefined) {
-            MAX_SESSION_TIMEOUT = data.max_session_timeout_minutes;
-          }
-          
-          // Update input attributes with min/max values
+          const { value, unit } = sessionTimeoutToDisplay(timeoutMinutes);
           const input = document.getElementById('session-timeout-input');
+          const unitSelect = document.getElementById('session-timeout-unit');
           const display = document.getElementById('session-timeout-display');
           if (input) {
-            input.min = MIN_SESSION_TIMEOUT;
-            input.max = MAX_SESSION_TIMEOUT;
-            input.value = timeout;
+            input.value = value;
+            const bounds = getSessionTimeoutInputBounds();
+            input.min = bounds.min;
+            input.max = bounds.max;
           }
-          if (display) display.textContent = timeout;
+          if (unitSelect) {
+            unitSelect.value = unit;
+            lastSessionTimeoutUnit = unit;
+          }
+          if (display) display.textContent = formatSessionTimeoutLabel(value, unit);
         } else if (response.status === 401) {
-          // Session expired - redirect to login
           window.location.href = '/';
         }
       } catch (error) {
@@ -1429,15 +1513,18 @@
     
     async function saveSessionTimeout() {
       const input = document.getElementById('session-timeout-input');
+      const unitSelect = document.getElementById('session-timeout-unit');
       const messageDiv = document.getElementById('session-timeout-message');
       const saveBtn = document.getElementById('save-session-timeout-btn');
       
-      if (!input) return;
+      if (!input || !unitSelect) return;
       
-      const timeout = parseInt(input.value, 10);
-      if (isNaN(timeout) || timeout < MIN_SESSION_TIMEOUT || timeout > MAX_SESSION_TIMEOUT) {
+      const unit = unitSelect.value;
+      const timeoutMinutes = sessionTimeoutToMinutes(input.value, unit);
+      if (timeoutMinutes < MIN_SESSION_TIMEOUT || timeoutMinutes > MAX_SESSION_TIMEOUT) {
         if (messageDiv) {
-          messageDiv.textContent = `Session timeout must be between ${MIN_SESSION_TIMEOUT} and ${MAX_SESSION_TIMEOUT} minutes`;
+          const bounds = getSessionTimeoutInputBounds();
+          messageDiv.textContent = `Session timeout must be between ${bounds.min} and ${bounds.max} ${unit}`;
           messageDiv.style.color = '#ef4444';
           messageDiv.style.display = 'block';
         }
@@ -1450,14 +1537,11 @@
       try {
         const response = await fetch('/auth/session-timeout', {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ session_timeout_minutes: timeout })
+          body: JSON.stringify({ session_timeout_minutes: timeoutMinutes })
         });
         
-        // Check for 401 before parsing JSON
         if (response.status === 401) {
           const path = window.location.pathname;
           if (path !== '/' && !path.includes('login')) {
@@ -1468,29 +1552,20 @@
         
         if (response.ok) {
           const data = await response.json();
+          const { value: v, unit: u } = sessionTimeoutToDisplay(data.session_timeout_minutes);
           const display = document.getElementById('session-timeout-display');
-          if (display) display.textContent = data.session_timeout_minutes;
+          if (display) display.textContent = formatSessionTimeoutLabel(v, u);
           if (messageDiv) {
             messageDiv.textContent = 'Session timeout updated successfully';
             messageDiv.style.color = '#10b981';
             messageDiv.style.display = 'block';
-            setTimeout(() => {
-              messageDiv.style.display = 'none';
-            }, 3000);
+            setTimeout(() => { messageDiv.style.display = 'none'; }, 3000);
           }
           showSuccessNotification('Session timeout updated');
         } else if (response.status === 401) {
           window.location.href = '/';
         } else {
-          // Check for 401 before parsing JSON
-          if (response.status === 401) {
-            const path = window.location.pathname;
-            if (path !== '/' && !path.includes('login')) {
-              showSessionTimeoutModal();
-              return;
-            }
-          }
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({}));
           if (messageDiv) {
             messageDiv.textContent = errorData.error || 'Failed to update session timeout';
             messageDiv.style.color = '#ef4444';
@@ -1512,20 +1587,29 @@
     
     // Initialize session timeout UI
     const saveTimeoutBtn = document.getElementById('save-session-timeout-btn');
-    if (saveTimeoutBtn) {
-      saveTimeoutBtn.addEventListener('click', saveSessionTimeout);
-    }
+    if (saveTimeoutBtn) saveTimeoutBtn.addEventListener('click', saveSessionTimeout);
     
     const timeoutInput = document.getElementById('session-timeout-input');
+    const timeoutUnitSelect = document.getElementById('session-timeout-unit');
     if (timeoutInput) {
-      timeoutInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-          saveSessionTimeout();
+      timeoutInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') saveSessionTimeout(); });
+      timeoutInput.addEventListener('input', updateSessionTimeoutUI);
+    }
+    if (timeoutUnitSelect) {
+      timeoutUnitSelect.addEventListener('change', function() {
+        const input = document.getElementById('session-timeout-input');
+        if (input) {
+          const minutes = sessionTimeoutToMinutes(input.value, lastSessionTimeoutUnit);
+          lastSessionTimeoutUnit = this.value;
+          const bounds = getSessionTimeoutInputBounds();
+          let displayValue = lastSessionTimeoutUnit === 'days' ? minutes / (24 * 60) : lastSessionTimeoutUnit === 'hours' ? minutes / 60 : minutes;
+          displayValue = Math.max(bounds.min, Math.min(bounds.max, Math.round(displayValue * 100) / 100));
+          input.value = displayValue % 1 === 0 ? Math.round(displayValue) : displayValue;
         }
+        updateSessionTimeoutUI();
       });
     }
     
-    // Load session timeout on page load
     loadSessionTimeout();
     
     // Add password policy checking to new password field
@@ -1576,8 +1660,10 @@
           const response = await fetch('/auth/change-password', {
             method: 'POST',
             credentials: 'include',
+            redirect: 'manual',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
             },
             body: JSON.stringify({
               current_password: currentPassword,
@@ -1586,26 +1672,51 @@
             })
           });
           
-          // Check for 401 before parsing JSON
+          let data = {};
+          try {
+            const text = await response.text();
+            if (text && text.trim().length > 0) {
+              data = JSON.parse(text);
+            }
+          } catch (_) {
+            data = {};
+          }
+          
+          if (response.type === 'opaqueredirect' || response.status === 302 || response.status === 301) {
+            errorDiv.textContent = 'Your session may have expired. Please sign in again.';
+            errorDiv.style.display = 'block';
+            return;
+          }
+          
+          if (response.ok) {
+            passwordResetForm.reset();
+            if (document.getElementById('new-password-warnings')) document.getElementById('new-password-warnings').style.display = 'none';
+            showSuccessNotification('Password updated successfully.');
+            return;
+          }
+          
+          if (response.status === 400) {
+            errorDiv.textContent = data.error || 'Current password is incorrect. Please try again.';
+            errorDiv.style.display = 'block';
+            return;
+          }
+          
           if (response.status === 401) {
+            const msg = (data.error || data.message || '').toLowerCase();
+            if (msg.includes('current password') || msg.includes('incorrect')) {
+              errorDiv.textContent = data.error || data.message || 'Current password is incorrect. Please try again.';
+              errorDiv.style.display = 'block';
+              return;
+            }
             const path = window.location.pathname;
             if (path !== '/' && !path.includes('login')) {
               showSessionTimeoutModal();
-              return;
             }
+            return;
           }
           
-          const data = await response.json();
-          
-          if (response.ok) {
-            // Success - clear form and show success message
-            passwordResetForm.reset();
-            showSuccessNotification('Password updated successfully!');
-          } else {
-            // Show error
-            errorDiv.textContent = data.error || 'Failed to update password';
-            errorDiv.style.display = 'block';
-          }
+          errorDiv.textContent = data.error || 'Failed to update password. Please try again.';
+          errorDiv.style.display = 'block';
         } catch (error) {
           console.error('Error updating password:', error);
           errorDiv.textContent = 'Network error. Please try again.';

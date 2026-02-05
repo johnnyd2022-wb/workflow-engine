@@ -13,6 +13,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from app.api.middleware.session_security import (
+    DEFAULT_SESSION_TIMEOUT_MINUTES,
     MAX_SESSION_TIMEOUT_MINUTES,
     MIN_SESSION_TIMEOUT_MINUTES,
 )
@@ -1086,7 +1087,7 @@ def manage_session_timeout():
 
         if request.method == "GET":
             # Get current timeout
-            timeout = getattr(user, "session_timeout_minutes", 10)
+            timeout = getattr(user, "session_timeout_minutes", DEFAULT_SESSION_TIMEOUT_MINUTES)
             return jsonify(
                 {
                     "session_timeout_minutes": timeout,
@@ -1215,11 +1216,10 @@ def change_password():
         auth_service = AuthService(db)
         user_repo = UserRepository(db)
 
-        # Verify current password
+        # Verify current password (return 400 so user stays logged in and sees the error)
         if not auth_service.verify_password(current_password, user.password_hash):
-            # CRITICAL: Never log passwords or sensitive data
             logger.warning(f"Failed password change attempt for user {user.id}")
-            return jsonify({"error": "Current password is incorrect"}), 401
+            return jsonify({"error": "Current password is incorrect. Please try again."}), 400
 
         # Hash new password using bcrypt (production-ready)
         new_password_hash = auth_service.hash_password(new_password)
@@ -1230,16 +1230,10 @@ def change_password():
         if not updated_user:
             return jsonify({"error": "Failed to update password"}), 500
 
-        # CRITICAL: Clear ALL trusted devices on password change
-        # This ensures that if password was compromised, trusted devices are invalidated
+        # Invalidate trusted devices on other machines; current session stays valid (no logout)
         trusted_device_repo = TrustedDeviceRepository(db)
         trusted_device_repo.delete_user_devices(user.id)
         db.commit()
-
-        # CRITICAL: Clear session and force re-authentication after password change
-        # This prevents session fixation and ensures user must login again
-        session.clear()
-        session.modified = True
 
         # Log password change
         # CRITICAL: Never log passwords

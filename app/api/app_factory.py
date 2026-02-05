@@ -2,7 +2,7 @@
 
 import os
 
-from flask import Flask, redirect, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory, session
 
 from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
@@ -34,8 +34,8 @@ def create_app():
     app.config["SESSION_COOKIE_HTTPONLY"] = True  # Prevent XSS attacks by blocking JavaScript access
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"  # Prevent CSRF attacks by blocking cross-site requests
     app.config["SESSION_COOKIE_PATH"] = "/"  # Explicitly set cookie path to root
-    # Align PERMANENT_SESSION_LIFETIME with default user session timeout (10 minutes default, max 24 hours)
-    app.config["PERMANENT_SESSION_LIFETIME"] = 86400  # 24 hours (max session lifetime)
+    # Align PERMANENT_SESSION_LIFETIME with default user session timeout (7 days default, max 30 days)
+    app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600  # 30 days (max session lifetime)
 
     # Initialize rate limiter (IP-based)
     # Import limiter from auth_routes and initialize it with the app
@@ -120,6 +120,20 @@ def create_app():
             logger = logging.getLogger(__name__)
             logger.exception(f"Unexpected error serving static file: {filename}")
             abort(500, "Internal server error")
+
+    # Global 401 handler: clear session and redirect browser to login (avoids blank "Unauthorized" page)
+    @app.errorhandler(401)
+    def handle_unauthorized(e):
+        session.clear()
+        session.modified = True
+        # Never redirect for auth API calls (e.g. change-password); always return JSON so client can show error
+        if request.path.startswith("/auth/") and request.method != "GET":
+            return jsonify({"error": "Authentication required", "message": "Session expired or not authenticated"}), 401
+        accepts_html = "text/html" in (request.headers.get("Accept") or "")
+        is_likely_page = request.method == "GET" and not request.path.startswith("/api/") and not request.path.startswith("/auth/")
+        if accepts_html or is_likely_page:
+            return redirect("/", code=302)
+        return jsonify({"error": "Authentication required", "message": "Session expired or not authenticated"}), 401
 
     # Set up middleware
     setup_tenant_context(app)

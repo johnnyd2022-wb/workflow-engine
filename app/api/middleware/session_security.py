@@ -20,10 +20,10 @@ from app.core.db.repositories.user_repo import UserRepository
 
 logger = logging.getLogger(__name__)
 
-# Default inactivity timeout (10 minutes)
-DEFAULT_SESSION_TIMEOUT_MINUTES = 10
+# Default inactivity timeout (7 days); max 30 days
+DEFAULT_SESSION_TIMEOUT_MINUTES = 7 * 24 * 60  # 7 days
 MIN_SESSION_TIMEOUT_MINUTES = 1
-MAX_SESSION_TIMEOUT_MINUTES = 240
+MAX_SESSION_TIMEOUT_MINUTES = 30 * 24 * 60  # 30 days
 
 
 def setup_session_security(app):
