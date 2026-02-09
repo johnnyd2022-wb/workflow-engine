@@ -125,36 +125,28 @@ def _synthetic_org_process_yield(db, org, process, num_steps=None):
 @pytest.fixture
 def synthetic_org_and_process_clean(db):
     """Minimal org + process with 2 steps (linear chain). Cleared at teardown."""
-    org, process = _create_linear_process_n_steps(
-        db, "Execution Test Org Clean", "Two Step Process", 2
-    )
+    org, process = _create_linear_process_n_steps(db, "Execution Test Org Clean", "Two Step Process", 2)
     yield from _synthetic_org_process_yield(db, org, process)
 
 
 @pytest.fixture
 def synthetic_org_process_three_steps(db):
     """Org + process with 3 steps (linear chain). Cleared at teardown."""
-    org, process = _create_linear_process_n_steps(
-        db, "Execution Test Org Three Steps", "Three Step Process", 3
-    )
+    org, process = _create_linear_process_n_steps(db, "Execution Test Org Three Steps", "Three Step Process", 3)
     yield from _synthetic_org_process_yield(db, org, process)
 
 
 @pytest.fixture
 def synthetic_org_process_five_steps(db):
     """Org + process with 5 steps (linear chain). Cleared at teardown."""
-    org, process = _create_linear_process_n_steps(
-        db, "Execution Test Org Five Steps", "Five Step Process", 5
-    )
+    org, process = _create_linear_process_n_steps(db, "Execution Test Org Five Steps", "Five Step Process", 5)
     yield from _synthetic_org_process_yield(db, org, process)
 
 
 @pytest.fixture
 def synthetic_org_process_ten_steps(db):
     """Org + process with 10 steps (linear chain). Cleared at teardown."""
-    org, process = _create_linear_process_n_steps(
-        db, "Execution Test Org Ten Steps", "Ten Step Process", 10
-    )
+    org, process = _create_linear_process_n_steps(db, "Execution Test Org Ten Steps", "Ten Step Process", 10)
     yield from _synthetic_org_process_yield(db, org, process)
 
 
@@ -162,9 +154,7 @@ def synthetic_org_process_ten_steps(db):
 def synthetic_org_process_n_steps(db, request):
     """Parametrized: org + process with request.param steps (use with @pytest.mark.parametrize(..., indirect=True))."""
     n = request.param
-    org, process = _create_linear_process_n_steps(
-        db, f"Execution Test Org {n} Steps", f"{n} Step Process", n
-    )
+    org, process = _create_linear_process_n_steps(db, f"Execution Test Org {n} Steps", f"{n} Step Process", n)
     yield from _synthetic_org_process_yield(db, org, process, num_steps=n)
 
 
@@ -509,7 +499,12 @@ class TestMultiStepProcess:
                 execution_step_id=step.id,
                 org_id=org_id,
                 actual_inputs=[
-                    {"name": prev_output_name, "quantity": qty_in, "unit": "kg", "inventory_item_id": INVENTORY_ITEM_ID_NONE}
+                    {
+                        "name": prev_output_name,
+                        "quantity": qty_in,
+                        "unit": "kg",
+                        "inventory_item_id": INVENTORY_ITEM_ID_NONE,
+                    }
                 ],
                 actual_outputs=[
                     {"name": out_name, "quantity": qty_out, "unit": "kg", "inventory_item_id": INVENTORY_ITEM_ID_NONE}
@@ -542,7 +537,12 @@ class TestMultiStepProcess:
                 execution_step_id=step.id,
                 org_id=org_id,
                 actual_inputs=[
-                    {"name": prev_output_name, "quantity": qty_in, "unit": "kg", "inventory_item_id": INVENTORY_ITEM_ID_NONE}
+                    {
+                        "name": prev_output_name,
+                        "quantity": qty_in,
+                        "unit": "kg",
+                        "inventory_item_id": INVENTORY_ITEM_ID_NONE,
+                    }
                 ],
                 actual_outputs=[
                     {"name": out_name, "quantity": qty_out, "unit": "kg", "inventory_item_id": INVENTORY_ITEM_ID_NONE}
@@ -756,26 +756,26 @@ class TestActualInputsOutputsStrictShape:
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step = next(es for es in loaded.execution_steps if es.step_number == 1)
         for d in step.actual_inputs:
-            assert set(d.keys()) <= ALLOWED_INPUT_KEYS, (
-                f"actual_inputs has extra keys: {set(d.keys()) - ALLOWED_INPUT_KEYS}"
-            )
+            assert (
+                set(d.keys()) <= ALLOWED_INPUT_KEYS
+            ), f"actual_inputs has extra keys: {set(d.keys()) - ALLOWED_INPUT_KEYS}"
             assert isinstance(d["name"], str)
             _assert_quantity_numeric(d["quantity"])
             assert isinstance(d["unit"], str)
-            assert "inventory_item_id" in d, (
-                "actual_inputs should include inventory_item_id (str or None) for downstream consistency"
-            )
+            assert (
+                "inventory_item_id" in d
+            ), "actual_inputs should include inventory_item_id (str or None) for downstream consistency"
             assert d["inventory_item_id"] is None or isinstance(d["inventory_item_id"], str)
         for d in step.actual_outputs:
-            assert set(d.keys()) <= ALLOWED_OUTPUT_KEYS, (
-                f"actual_outputs has extra keys: {set(d.keys()) - ALLOWED_OUTPUT_KEYS}"
-            )
+            assert (
+                set(d.keys()) <= ALLOWED_OUTPUT_KEYS
+            ), f"actual_outputs has extra keys: {set(d.keys()) - ALLOWED_OUTPUT_KEYS}"
             assert isinstance(d["name"], str)
             _assert_quantity_numeric(d["quantity"])
             assert isinstance(d["unit"], str)
-            assert "inventory_item_id" in d, (
-                "actual_outputs should include inventory_item_id (str or None) for downstream consistency"
-            )
+            assert (
+                "inventory_item_id" in d
+            ), "actual_outputs should include inventory_item_id (str or None) for downstream consistency"
             assert d["inventory_item_id"] is None or isinstance(d["inventory_item_id"], str)
 
 
@@ -814,9 +814,9 @@ class TestCompletedAtTimestamp:
         completed_utc = (
             loaded.completed_at if loaded.completed_at.tzinfo else loaded.completed_at.replace(tzinfo=timezone.utc)
         )
-        assert before <= completed_utc <= after + timedelta(seconds=5), (
-            "completed_at should be within a few seconds of test run"
-        )
+        assert (
+            before <= completed_utc <= after + timedelta(seconds=5)
+        ), "completed_at should be within a few seconds of test run"
 
     def test_completed_at_timezone_consistent_utc(self, db, synthetic_org_and_process_clean):
         """completed_at is stored and comparable in UTC (timezone-aware or naive UTC)."""
@@ -865,9 +865,9 @@ class TestCompletedAtTimestamp:
         completed_steps = [es for es in full.execution_steps if es.completed_at is not None]
         completed_steps.sort(key=lambda s: s.step_number)
         for i in range(1, len(completed_steps)):
-            assert completed_steps[i - 1].completed_at <= completed_steps[i].completed_at, (
-                "completed_at should be monotonic by step order"
-            )
+            assert (
+                completed_steps[i - 1].completed_at <= completed_steps[i].completed_at
+            ), "completed_at should be monotonic by step order"
 
 
 # ---------------------------------------------------------------------------
