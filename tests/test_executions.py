@@ -74,6 +74,15 @@ def _clear_synthetic_executions(db, org_id, process_id):
     db.commit()
 
 
+def _teardown_synthetic_org_process(db, org, process):
+    """Shared teardown: clear executions, delete steps, process, org."""
+    _clear_synthetic_executions(db, org.id, process.id)
+    db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
+    db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
+    db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+    db.commit()
+
+
 def _create_linear_process_n_steps(db, org_name, process_name, n_steps):
     """
     Create org + process with n_steps in a linear chain: Input A -> Out1 -> ... -> Out(n-1) -> Final.
@@ -102,120 +111,51 @@ def _create_linear_process_n_steps(db, org_name, process_name, n_steps):
     return org, process
 
 
+def _synthetic_org_process_yield(db, org, process, num_steps=None):
+    """Shared yield + teardown for all synthetic org/process fixtures."""
+    data = {"org_id": org.id, "process_id": process.id}
+    if num_steps is not None:
+        data["num_steps"] = num_steps
+    try:
+        yield data
+    finally:
+        _teardown_synthetic_org_process(db, org, process)
+
+
 @pytest.fixture
 def synthetic_org_and_process_clean(db):
-    """Minimal org + process with 2 steps; no executions. Cleared at teardown."""
-    org_repo = OrganisationRepository(db)
-    process_repo = ProcessRepository(db)
-    org = org_repo.create_org("Execution Test Org Clean")
-    process = process_repo.create_process(
-        org_id=org.id,
-        name="Two Step Process Clean",
-        description="Minimal process",
-        is_draft=False,
+    """Minimal org + process with 2 steps (linear chain). Cleared at teardown."""
+    org, process = _create_linear_process_n_steps(
+        db, "Execution Test Org Clean", "Two Step Process", 2
     )
-    process_repo.add_step(
-        process_id=process.id,
-        org_id=org.id,
-        step_number=1,
-        name="Step One",
-        inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-        outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
-    )
-    process_repo.add_step(
-        process_id=process.id,
-        org_id=org.id,
-        step_number=2,
-        name="Step Two",
-        inputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
-        outputs=[{"name": "Final", "quantity": 7, "unit": "kg"}],
-    )
-    try:
-        yield {"org_id": org.id, "process_id": process.id}
-    finally:
-        _clear_synthetic_executions(db, org.id, process.id)
-        db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
-        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
-        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
-        db.commit()
+    yield from _synthetic_org_process_yield(db, org, process)
 
 
 @pytest.fixture
 def synthetic_org_process_three_steps(db):
-    """Org + process with 3 steps (Step 1 → Step 2 → Step 3). Cleared at teardown."""
-    org_repo = OrganisationRepository(db)
-    process_repo = ProcessRepository(db)
-    org = org_repo.create_org("Execution Test Org Three Steps")
-    process = process_repo.create_process(
-        org_id=org.id,
-        name="Three Step Process",
-        description="Multi-step for execution tests",
-        is_draft=False,
+    """Org + process with 3 steps (linear chain). Cleared at teardown."""
+    org, process = _create_linear_process_n_steps(
+        db, "Execution Test Org Three Steps", "Three Step Process", 3
     )
-    process_repo.add_step(
-        process_id=process.id,
-        org_id=org.id,
-        step_number=1,
-        name="Step One",
-        inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-        outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
-    )
-    process_repo.add_step(
-        process_id=process.id,
-        org_id=org.id,
-        step_number=2,
-        name="Step Two",
-        inputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
-        outputs=[{"name": "Output C", "quantity": 6, "unit": "kg"}],
-    )
-    process_repo.add_step(
-        process_id=process.id,
-        org_id=org.id,
-        step_number=3,
-        name="Step Three",
-        inputs=[{"name": "Output C", "quantity": 6, "unit": "kg"}],
-        outputs=[{"name": "Final", "quantity": 5, "unit": "kg"}],
-    )
-    try:
-        yield {"org_id": org.id, "process_id": process.id}
-    finally:
-        _clear_synthetic_executions(db, org.id, process.id)
-        db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
-        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
-        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
-        db.commit()
+    yield from _synthetic_org_process_yield(db, org, process)
 
 
 @pytest.fixture
 def synthetic_org_process_five_steps(db):
-    """Org + process with 5 steps for larger multi-step coverage. Cleared at teardown."""
+    """Org + process with 5 steps (linear chain). Cleared at teardown."""
     org, process = _create_linear_process_n_steps(
         db, "Execution Test Org Five Steps", "Five Step Process", 5
     )
-    try:
-        yield {"org_id": org.id, "process_id": process.id}
-    finally:
-        _clear_synthetic_executions(db, org.id, process.id)
-        db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
-        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
-        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
-        db.commit()
+    yield from _synthetic_org_process_yield(db, org, process)
 
 
 @pytest.fixture
 def synthetic_org_process_ten_steps(db):
-    """Org + process with 10 steps for stress/large workflow. Cleared at teardown."""
+    """Org + process with 10 steps (linear chain). Cleared at teardown."""
     org, process = _create_linear_process_n_steps(
         db, "Execution Test Org Ten Steps", "Ten Step Process", 10
     )
-    try:
-        yield {"org_id": org.id, "process_id": process.id}
-    finally:
-        _clear_synthetic_executions(db, org.id, process.id)
-        db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
-        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
-        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
-        db.commit()
+    yield from _synthetic_org_process_yield(db, org, process)
 
 
 @pytest.fixture
@@ -225,14 +165,7 @@ def synthetic_org_process_n_steps(db, request):
     org, process = _create_linear_process_n_steps(
         db, f"Execution Test Org {n} Steps", f"{n} Step Process", n
     )
-    try:
-        yield {"org_id": org.id, "process_id": process.id, "num_steps": n}
-    finally:
-        _clear_synthetic_executions(db, org.id, process.id)
-        db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
-        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
-        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
-        db.commit()
+    yield from _synthetic_org_process_yield(db, org, process, num_steps=n)
 
 
 # Allowed keys and types for actual_inputs/actual_outputs (execution modal contract)
@@ -355,7 +288,7 @@ class TestCompleteStepContract:
         actual_inputs = [
             {"name": "Input A", "quantity": 5, "unit": "kg", "inventory_item_id": str(uuid4())},
         ]
-        actual_outputs = [{"name": "Output B", "quantity": 4, "unit": "kg"}]
+        actual_outputs = [{"name": "Out1", "quantity": 4, "unit": "kg"}]
         execution_data = {"completed_by": "test@example.com"}
         completed = repo.complete_step(
             execution_step_id=step1.id,
@@ -425,8 +358,8 @@ class TestCompleteStepOrder:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step2 = next(es for es in loaded.execution_steps if es.step_number == 2)
@@ -441,13 +374,13 @@ class TestCompleteStepOrder:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
             actual_outputs=[{"name": "Final", "quantity": 7, "unit": "kg"}],
         )
         loaded = repo.get_execution_by_id(execution.id, org_id)
@@ -474,8 +407,8 @@ class TestMultiStepProcess:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step2 = next(es for es in loaded.execution_steps if es.step_number == 2)
@@ -484,8 +417,8 @@ class TestMultiStepProcess:
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
-            actual_outputs=[{"name": "Output C", "quantity": 6, "unit": "kg"}],
+            actual_inputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
+            actual_outputs=[{"name": "Out2", "quantity": 7, "unit": "kg"}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step3 = next(es for es in loaded.execution_steps if es.step_number == 3)
@@ -494,8 +427,8 @@ class TestMultiStepProcess:
         repo.complete_step(
             execution_step_id=steps[2].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output C", "quantity": 6, "unit": "kg"}],
-            actual_outputs=[{"name": "Final", "quantity": 5, "unit": "kg"}],
+            actual_inputs=[{"name": "Out2", "quantity": 7, "unit": "kg"}],
+            actual_outputs=[{"name": "Final", "quantity": 6, "unit": "kg"}],
         )
         loaded = repo.get_execution_by_id(execution.id, org_id)
         assert loaded.status == ExecutionStatus.COMPLETED
@@ -669,8 +602,8 @@ class TestStepFailureHandling:
             repo.complete_step(
                 execution_step_id=steps[2].id,
                 org_id=org_id,
-                actual_inputs=[{"name": "Output C", "quantity": 6, "unit": "kg"}],
-                actual_outputs=[{"name": "Final", "quantity": 5, "unit": "kg"}],
+                actual_inputs=[{"name": "Out2", "quantity": 7, "unit": "kg"}],
+                actual_outputs=[{"name": "Final", "quantity": 6, "unit": "kg"}],
             )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step1 = next(es for es in loaded.execution_steps if es.step_number == 1)
@@ -697,11 +630,11 @@ class TestStepOrderAndInputOutputConsistency:
         repo = ExecutionRepository(db)
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
-        step1_outputs = [{"name": "Output B", "quantity": 8, "unit": "kg", "inventory_item_id": None}]
+        step1_outputs = [{"name": "Out1", "quantity": 8, "unit": "kg", "inventory_item_id": None}]
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg", "inventory_item_id": str(uuid4())}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg", "inventory_item_id": str(uuid4())}],
             actual_outputs=step1_outputs,
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
@@ -712,8 +645,8 @@ class TestStepOrderAndInputOutputConsistency:
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 8, "unit": def_unit, "inventory_item_id": None}],
-            actual_outputs=[{"name": "Output C", "quantity": 6, "unit": "kg", "inventory_item_id": None}],
+            actual_inputs=[{"name": "Out1", "quantity": 8, "unit": def_unit, "inventory_item_id": None}],
+            actual_outputs=[{"name": "Out2", "quantity": 7, "unit": "kg", "inventory_item_id": None}],
         )
         loaded2 = repo.get_execution_with_steps(execution.id, org_id)
         step1_loaded = next(es for es in loaded2.execution_steps if es.step_number == 1)
@@ -733,8 +666,8 @@ class TestStepOrderAndInputOutputConsistency:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg", "inventory_item_id": None}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg", "inventory_item_id": None}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg", "inventory_item_id": None}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg", "inventory_item_id": None}],
         )
         loaded = repo.get_execution_with_steps(execution_id, org_id)
         assert loaded.status == ExecutionStatus.IN_PROGRESS
@@ -743,8 +676,8 @@ class TestStepOrderAndInputOutputConsistency:
         repo.complete_step(
             execution_step_id=step2.id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 8, "unit": "kg", "inventory_item_id": None}],
-            actual_outputs=[{"name": "Output C", "quantity": 6, "unit": "kg", "inventory_item_id": None}],
+            actual_inputs=[{"name": "Out1", "quantity": 8, "unit": "kg", "inventory_item_id": None}],
+            actual_outputs=[{"name": "Out2", "quantity": 7, "unit": "kg", "inventory_item_id": None}],
         )
         loaded2 = repo.get_execution_with_steps(execution_id, org_id)
         assert loaded2.status == ExecutionStatus.IN_PROGRESS
@@ -776,8 +709,8 @@ class TestDatabaseTransactionIsolation:
             completed = repo2.complete_step(
                 execution_step_id=step1_id,
                 org_id=org_id,
-                actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg", "inventory_item_id": None}],
-                actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg", "inventory_item_id": None}],
+                actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg", "inventory_item_id": None}],
+                actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg", "inventory_item_id": None}],
             )
             assert completed is not None
         finally:
@@ -790,7 +723,7 @@ class TestDatabaseTransactionIsolation:
             assert loaded is not None
             step1 = next(es for es in loaded.execution_steps if es.step_number == 1)
             assert step1.status == ExecutionStepStatus.COMPLETED
-            assert step1.actual_outputs and step1.actual_outputs[0]["name"] == "Output B"
+            assert step1.actual_outputs and step1.actual_outputs[0]["name"] == "Out1"
         finally:
             session3.close()
             db_session.remove()
@@ -813,7 +746,7 @@ class TestActualInputsOutputsStrictShape:
         actual_inputs = [
             {"name": "Input A", "quantity": 5.0, "unit": "kg", "inventory_item_id": str(uuid4())},
         ]
-        actual_outputs = [{"name": "Output B", "quantity": 4, "unit": "kg", "inventory_item_id": None}]
+        actual_outputs = [{"name": "Out1", "quantity": 4, "unit": "kg", "inventory_item_id": None}]
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
@@ -864,13 +797,13 @@ class TestCompletedAtTimestamp:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
             actual_outputs=[{"name": "Final", "quantity": 7, "unit": "kg"}],
         )
         after = datetime.now(timezone.utc)
@@ -895,13 +828,13 @@ class TestCompletedAtTimestamp:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
             actual_outputs=[{"name": "Final", "quantity": 7, "unit": "kg"}],
         )
         loaded = repo.get_execution_by_id(execution.id, org_id)
@@ -918,8 +851,8 @@ class TestCompletedAtTimestamp:
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
         for i, step in enumerate(steps):
-            prev = "Input A" if i == 0 else ("Output B" if i == 1 else "Output C")
-            out = "Output B" if i == 0 else ("Output C" if i == 1 else "Final")
+            prev = "Input A" if i == 0 else ("Out1" if i == 1 else "Out2")
+            out = "Out1" if i == 0 else ("Out2" if i == 1 else "Final")
             q_in = 10 - i - 1
             q_out = 8 - i - 1
             repo.complete_step(
@@ -979,8 +912,8 @@ class TestCompleteStepNegative:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         with pytest.raises(ValueError, match=RE_NOT_IN_STATE_TO_COMPLETE):
             repo.complete_step(
@@ -1000,8 +933,8 @@ class TestCompleteStepNegative:
             repo.complete_step(
                 execution_step_id=steps[2].id,
                 org_id=org_id,
-                actual_inputs=[{"name": "Output C", "quantity": 6, "unit": "kg"}],
-                actual_outputs=[{"name": "Final", "quantity": 5, "unit": "kg"}],
+                actual_inputs=[{"name": "Out2", "quantity": 7, "unit": "kg"}],
+                actual_outputs=[{"name": "Final", "quantity": 6, "unit": "kg"}],
             )
 
     def test_complete_step_after_execution_fully_completed_raises(self, db, synthetic_org_process_three_steps):
@@ -1014,20 +947,20 @@ class TestCompleteStepNegative:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg"}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 8, "unit": "kg"}],
-            actual_outputs=[{"name": "Output C", "quantity": 6, "unit": "kg"}],
+            actual_inputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
+            actual_outputs=[{"name": "Out2", "quantity": 7, "unit": "kg"}],
         )
         repo.complete_step(
             execution_step_id=steps[2].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output C", "quantity": 6, "unit": "kg"}],
-            actual_outputs=[{"name": "Final", "quantity": 5, "unit": "kg"}],
+            actual_inputs=[{"name": "Out2", "quantity": 7, "unit": "kg"}],
+            actual_outputs=[{"name": "Final", "quantity": 6, "unit": "kg"}],
         )
         loaded = repo.get_execution_by_id(execution.id, org_id)
         assert loaded.status == ExecutionStatus.COMPLETED
@@ -1058,7 +991,7 @@ class TestExecutionFlowE2E:
         step1_inputs = [
             {"name": "Input A", "quantity": 12.5, "unit": "kg", "inventory_item_id": str(uuid4())},
         ]
-        step1_outputs = [{"name": "Output B", "quantity": 10, "unit": "kg"}]
+        step1_outputs = [{"name": "Out1", "quantity": 10, "unit": "kg"}]
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
@@ -1072,7 +1005,7 @@ class TestExecutionFlowE2E:
         _assert_quantity_close(step1.actual_inputs[0]["quantity"], 12.5)
         assert step1.actual_inputs[0]["unit"] == "kg"
         assert "inventory_item_id" in step1.actual_inputs[0]
-        assert step1.actual_outputs[0]["name"] == "Output B"
+        assert step1.actual_outputs[0]["name"] == "Out1"
         _assert_quantity_close(step1.actual_outputs[0]["quantity"], 10)
         assert step1.actual_outputs[0]["unit"] == "kg"
         _assert_quantity_positive(step1.actual_inputs[0]["quantity"])
@@ -1082,7 +1015,7 @@ class TestExecutionFlowE2E:
         repo.complete_step(
             execution_step_id=step2.id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 10, "unit": "kg"}],
+            actual_inputs=[{"name": "Out1", "quantity": 10, "unit": "kg"}],
             actual_outputs=[{"name": "Final", "quantity": 9, "unit": "kg"}],
         )
         loaded2 = repo.get_execution_with_steps(execution.id, org_id)
@@ -1108,7 +1041,7 @@ class TestExecutionFlowE2E:
             execution_step_id=steps[0].id,
             org_id=org_id,
             actual_inputs=[{"name": "Input A", "quantity": 12.5, "unit": "kg", "inventory_item_id": str(uuid4())}],
-            actual_outputs=[{"name": "Output B", "quantity": 10.0, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 10.0, "unit": "kg"}],
             execution_data={"completed_by": "user@test.com"},
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
@@ -1124,8 +1057,8 @@ class TestExecutionFlowE2E:
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 10.0, "unit": "kg"}],
-            actual_outputs=[{"name": "Output C", "quantity": 7.5, "unit": "kg"}],
+            actual_inputs=[{"name": "Out1", "quantity": 10.0, "unit": "kg"}],
+            actual_outputs=[{"name": "Out2", "quantity": 7.5, "unit": "kg"}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         assert loaded.status == ExecutionStatus.IN_PROGRESS
@@ -1136,7 +1069,7 @@ class TestExecutionFlowE2E:
         repo.complete_step(
             execution_step_id=steps[2].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output C", "quantity": 7.5, "unit": "kg"}],
+            actual_inputs=[{"name": "Out2", "quantity": 7.5, "unit": "kg"}],
             actual_outputs=[{"name": "Final", "quantity": 6.0, "unit": "kg"}],
         )
         loaded = repo.get_execution_by_id(execution.id, org_id)
@@ -1170,7 +1103,7 @@ class TestRegressionSafeguards:
             execution_step_id=steps[0].id,
             org_id=org_id,
             actual_inputs=[{"name": "Input A", "quantity": 2.5, "unit": "kg", "inventory_item_id": None}],
-            actual_outputs=[{"name": "Output B", "quantity": 1.875, "unit": "kg", "inventory_item_id": None}],
+            actual_outputs=[{"name": "Out1", "quantity": 1.875, "unit": "kg", "inventory_item_id": None}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step = next(es for es in loaded.execution_steps if es.step_number == 1)
@@ -1188,7 +1121,7 @@ class TestRegressionSafeguards:
             execution_step_id=steps[0].id,
             org_id=org_id,
             actual_inputs=[{"name": "Input A", "quantity": 0, "unit": "kg", "inventory_item_id": None}],
-            actual_outputs=[{"name": "Output B", "quantity": 0, "unit": "kg", "inventory_item_id": None}],
+            actual_outputs=[{"name": "Out1", "quantity": 0, "unit": "kg", "inventory_item_id": None}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step = next(es for es in loaded.execution_steps if es.step_number == 1)
@@ -1206,7 +1139,7 @@ class TestRegressionSafeguards:
             execution_step_id=steps[0].id,
             org_id=org_id,
             actual_inputs=[{"name": "Input A", "quantity": 1, "unit": "invalid_unit", "inventory_item_id": None}],
-            actual_outputs=[{"name": "Output B", "quantity": 1, "unit": "invalid_unit", "inventory_item_id": None}],
+            actual_outputs=[{"name": "Out1", "quantity": 1, "unit": "invalid_unit", "inventory_item_id": None}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step = next(es for es in loaded.execution_steps if es.step_number == 1)
@@ -1227,7 +1160,7 @@ class TestRegressionSafeguards:
                 {"name": "Input A", "quantity": 1, "unit": "kg", "inventory_item_id": None, "extra": "ignored"},
             ],
             actual_outputs=[
-                {"name": "Output B", "quantity": 1, "unit": "kg", "inventory_item_id": None, "extra": "ignored"}
+                {"name": "Out1", "quantity": 1, "unit": "kg", "inventory_item_id": None, "extra": "ignored"}
             ],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
@@ -1247,12 +1180,12 @@ class TestRegressionSafeguards:
             execution_step_id=steps[0].id,
             org_id=org_id,
             actual_inputs=[{"name": "Input A", "quantity": 1, "unit": "kg"}],
-            actual_outputs=[{"name": "Output B", "quantity": 1, "unit": "kg"}],
+            actual_outputs=[{"name": "Out1", "quantity": 1, "unit": "kg"}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step = next(es for es in loaded.execution_steps if es.step_number == 1)
         assert step.actual_inputs[0]["name"] == "Input A"
-        assert step.actual_outputs[0]["name"] == "Output B"
+        assert step.actual_outputs[0]["name"] == "Out1"
         _assert_quantity_close(step.actual_inputs[0]["quantity"], 1)
         _assert_quantity_close(step.actual_outputs[0]["quantity"], 1)
 
@@ -1287,7 +1220,7 @@ class TestRegressionSafeguards:
             execution_step_id=steps[0].id,
             org_id=org_id,
             actual_inputs=[{"name": "Input A", "quantity": -1, "unit": "kg", "inventory_item_id": None}],
-            actual_outputs=[{"name": "Output B", "quantity": -1, "unit": "kg", "inventory_item_id": None}],
+            actual_outputs=[{"name": "Out1", "quantity": -1, "unit": "kg", "inventory_item_id": None}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step = next(es for es in loaded.execution_steps if es.step_number == 1)
@@ -1305,14 +1238,14 @@ class TestRegressionSafeguards:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 10, "unit": "kg", "inventory_item_id": inv_id}],
-            actual_outputs=[{"name": "Output B", "quantity": 8, "unit": "kg", "inventory_item_id": None}],
+            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg", "inventory_item_id": inv_id}],
+            actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg", "inventory_item_id": None}],
         )
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Output B", "quantity": 8, "unit": "kg", "inventory_item_id": inv_id}],
-            actual_outputs=[{"name": "Output C", "quantity": 6, "unit": "kg", "inventory_item_id": None}],
+            actual_inputs=[{"name": "Out1", "quantity": 8, "unit": "kg", "inventory_item_id": inv_id}],
+            actual_outputs=[{"name": "Out2", "quantity": 7, "unit": "kg", "inventory_item_id": None}],
         )
         full = repo.get_execution_with_steps(execution.id, org_id)
         step1 = next(es for es in full.execution_steps if es.step_number == 1)
