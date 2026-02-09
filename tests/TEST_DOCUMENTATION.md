@@ -581,3 +581,34 @@ Potential additions:
 - Performance tests for backup code generation/verification
 - Tests for edge cases (empty codes, special characters, etc.)
 
+---
+
+## Execution Tests (test_executions.py)
+
+**Purpose:** Gate for deployments. Ensures the execution lifecycle (create execution, get execution with steps, complete step with `actual_inputs`/`actual_outputs`) does not regress. Locks in the contract used by the flows2 execution modal (quantity/unit/inventory_item_id shape).
+
+**Scope:** `ExecutionRepository`, execution/execution_step models. Uses real DB and fixtures (same pattern as `test_corechecks`, `test_dag_traversal`).
+
+### Test Classes
+
+| Class | What it tests |
+|-------|----------------|
+| **TestCreateExecution** | Create execution creates steps; first step READY, rest PENDING; invalid process_id raises. |
+| **TestGetExecution** | Get execution returns steps with `actual_inputs`/`actual_outputs`; wrong org or nonexistent id returns None. |
+| **TestCompleteStepContract** | Complete step persists `actual_inputs`, `actual_outputs`, `execution_data`; get returns them; accepts empty lists. |
+| **TestCompleteStepOrder** | Cannot complete step 2 before step 1; completing step 1 marks step 2 READY; completing all marks execution COMPLETED. |
+| **TestCompleteStepNegative** | Complete with wrong org returns None; nonexistent step id returns None; completing already-completed step raises. |
+| **TestExecutionFlowE2E** | Full flow: create → complete step 1 (modal-shaped payload) → get → complete step 2 → get; asserts persisted quantities and execution status. |
+
+### Running execution tests
+
+```bash
+pytest tests/test_executions.py -v
+```
+
+To run as part of the full test suite (e.g. in CI):
+
+```bash
+uv run pytest tests/ -v
+```
+
