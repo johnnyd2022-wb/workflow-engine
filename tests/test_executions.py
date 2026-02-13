@@ -74,12 +74,17 @@ def _clear_synthetic_executions(db, org_id, process_id):
     db.commit()
 
 
-def _teardown_synthetic_org_process(db, org, process):
-    """Shared teardown: clear executions, delete steps, process, org."""
-    _clear_synthetic_executions(db, org.id, process.id)
-    db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
-    db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
-    db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+def _teardown_synthetic_org_process(db, org_id, process_id):
+    """Shared teardown: clear executions, delete steps, process, org.
+
+    org_id and process_id are plain UUIDs so this still works even if the original
+    ORM instances have been detached from the session (e.g. in tests that call
+    db_session.remove() or close the session explicitly).
+    """
+    _clear_synthetic_executions(db, org_id, process_id)
+    db.query(Step).filter(Step.process_id == process_id).delete(synchronize_session=False)
+    db.query(Process).filter(Process.id == process_id).delete(synchronize_session=False)
+    db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
     db.commit()
 
 
@@ -90,7 +95,8 @@ def _create_linear_process_n_steps(db, org_name, process_name, n_steps):
     """
     org_repo = OrganisationRepository(db)
     process_repo = ProcessRepository(db)
-    org = org_repo.create_org(org_name)
+    # Use a unique org name to avoid collisions with existing data in the test database
+    org = org_repo.create_org(f"{org_name} {uuid4()}")
     process = process_repo.create_process(
         org_id=org.id,
         name=process_name,
@@ -119,7 +125,7 @@ def _synthetic_org_process_yield(db, org, process, num_steps=None):
     try:
         yield data
     finally:
-        _teardown_synthetic_org_process(db, org, process)
+        _teardown_synthetic_org_process(db, data["org_id"], data["process_id"])
 
 
 @pytest.fixture
@@ -331,6 +337,7 @@ class TestCompleteStepOrder:
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
         step2 = steps[1]
+        # Completing step 2 before step 1 should raise a prior-steps-not-completed error.
         with pytest.raises(ValueError, match=RE_PRIOR_STEPS_NOT_COMPLETED):
             repo.complete_step(
                 execution_step_id=step2.id,
@@ -574,6 +581,7 @@ class TestStepFailureHandling:
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
         # Attempt to complete step 3 before step 1 and 2 (controlled exception)
+        # This should raise a prior-steps-not-completed error.
         with pytest.raises(ValueError, match=RE_PRIOR_STEPS_NOT_COMPLETED):
             repo.complete_step(
                 execution_step_id=steps[2].id,
@@ -598,6 +606,7 @@ class TestStepFailureHandling:
         repo = ExecutionRepository(db)
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
+        # Out-of-order completion should raise a prior-steps-not-completed error.
         with pytest.raises(ValueError, match=RE_PRIOR_STEPS_NOT_COMPLETED):
             repo.complete_step(
                 execution_step_id=steps[2].id,
@@ -929,6 +938,7 @@ class TestCompleteStepNegative:
         repo = ExecutionRepository(db)
         execution = repo.create_execution(org_id=org_id, process_id=synthetic_org_process_three_steps["process_id"])
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
+        # Completing step 3 before 1 and 2 should raise a prior-steps-not-completed error.
         with pytest.raises(ValueError, match=RE_PRIOR_STEPS_NOT_COMPLETED):
             repo.complete_step(
                 execution_step_id=steps[2].id,
