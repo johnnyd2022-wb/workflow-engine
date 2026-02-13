@@ -179,7 +179,7 @@ INVENTORY_ITEM_ID_NONE = None
 
 def _assert_quantity_numeric(value, msg="quantity"):
     """Assert quantity is int or float (consistent numeric type)."""
-    assert isinstance(value, (int, float)), f"{msg} must be int or float, got {type(value)}"
+    assert isinstance(value, int | float), f"{msg} must be int or float, got {type(value)}"
 
 
 def _assert_quantity_positive(value, msg="quantity"):
