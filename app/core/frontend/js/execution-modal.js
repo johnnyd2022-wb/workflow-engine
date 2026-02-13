@@ -271,7 +271,7 @@
               <input type="number" class="form-input execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0.01" style="flex: 1; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
               <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
             </div>
-            <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Quantity will be converted to selected inventory item's unit automatically</p>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">When you select an inventory item, quantity updates to that item's total. You can edit to consume less.</p>
           </div>
         `;
         
@@ -302,58 +302,14 @@
                 this.style.border = '';
                 this.style.boxShadow = '';
               }
-              // Update unit display and convert quantity to match selected inventory item
+              // When user selects an inventory item: set quantity to that item's total (for confirmation)
+              // User can edit down if consuming less. DAG traces via execution_id; no need to assume previous-step usage.
               if (option && unitDisplay && quantityInput) {
                 const inventoryUnit = option.dataset.unit || '';
-                const stepUnit = quantityInput.dataset.stepUnit || '';
-                
-                // CRITICAL: Always use the original step definition quantity for conversion
-                // This prevents double/triple conversion when switching between inventory items
-                // The original quantity is stored in data-original-quantity and never changes
-                let originalQuantity = 0;
-                const originalQuantityStr = quantityInput.dataset.originalQuantity;
-                
-                if (originalQuantityStr && originalQuantityStr !== '' && originalQuantityStr !== 'undefined') {
-                  originalQuantity = parseFloat(originalQuantityStr);
-                  // Validate the parsed value
-                  if (isNaN(originalQuantity)) {
-                    // If parsing failed, try to get from the initial input value
-                    originalQuantity = parseFloat(input.quantity) || 0;
-                    quantityInput.dataset.originalQuantity = originalQuantity.toString();
-                  }
-                } else {
-                  // Fallback: if original quantity not set, get it from the input object
-                  originalQuantity = parseFloat(input.quantity) || 0;
-                  quantityInput.dataset.originalQuantity = originalQuantity.toString();
-                }
-                
-                // Ensure we have valid units for conversion
-                if (!stepUnit || !inventoryUnit) {
-                  // If units are missing, just display the quantity as-is
-                  quantityInput.value = originalQuantity;
-                  unitDisplay.textContent = inventoryUnit || stepUnit || '';
-                  quantityInput.dataset.inventoryUnit = inventoryUnit || '';
-                  return;
-                }
-                
-                // Convert quantity from step definition unit to inventory unit
-                // Always convert from stepUnit (the original unit) to inventoryUnit (the new unit)
-                if (stepUnit.toLowerCase() !== inventoryUnit.toLowerCase()) {
-                  const convertedQuantity = convertUnit(originalQuantity, stepUnit, inventoryUnit);
-                  if (!isNaN(convertedQuantity) && isFinite(convertedQuantity)) {
-                    quantityInput.value = convertedQuantity.toFixed(6).replace(/\.?0+$/, ''); // Remove trailing zeros
-                  } else {
-                    // Conversion failed, use original quantity
-                    quantityInput.value = originalQuantity;
-                  }
-                } else {
-                  // If units are the same, just use the original quantity
-                  quantityInput.value = originalQuantity;
-                }
-                
-                // Update unit display
+                const inventoryQuantity = option.dataset.quantity != null && option.dataset.quantity !== '' ? option.dataset.quantity : quantityInput.value;
+                quantityInput.value = inventoryQuantity;
+                quantityInput.dataset.originalQuantity = inventoryQuantity;
                 unitDisplay.textContent = inventoryUnit;
-                // Store the unit on the quantity input for validation
                 quantityInput.dataset.inventoryUnit = inventoryUnit;
               }
               // Clear quantity error if inventory is selected
@@ -387,11 +343,10 @@
               this.style.border = '';
               this.style.boxShadow = '';
               if (unitDisplay && quantityInput) {
-                // Reset unit display and quantity to step definition values when no inventory is selected
-                const stepUnit = quantityInput.dataset.stepUnit || input.unit || '';
-                unitDisplay.textContent = stepUnit;
-                const originalQuantity = quantityInput.dataset.originalQuantity || input.quantity || '';
-                quantityInput.value = originalQuantity;
+                // Reset to step definition when no inventory is selected
+                unitDisplay.textContent = quantityInput.dataset.stepUnit || input.unit || '';
+                quantityInput.value = input.quantity || '';
+                quantityInput.dataset.originalQuantity = input.quantity || '';
                 quantityInput.dataset.inventoryUnit = '';
               }
             }
@@ -399,20 +354,11 @@
         }
         
         if (quantityInput) {
-          // CRITICAL: Ensure original quantity is always set and preserved at initialization
-          // This must be the step definition quantity, never the converted value
-          const initialQuantity = input.quantity || quantityInput.value || '0';
           if (!quantityInput.dataset.originalQuantity || quantityInput.dataset.originalQuantity === '' || quantityInput.dataset.originalQuantity === 'undefined') {
-            quantityInput.dataset.originalQuantity = initialQuantity;
+            quantityInput.dataset.originalQuantity = input.quantity || quantityInput.value || '0';
           }
-          
           quantityInput.addEventListener('input', function() {
-            const qty = parseFloat(this.value);
-            if (qty && qty > 0) {
-              this.style.border = '';
-            }
-            // Note: We don't update originalQuantity here - it should always remain the step definition value
-            // This ensures conversions always use the original base quantity when switching inventory items
+            if (parseFloat(this.value) > 0) this.style.border = '';
           });
         }
         

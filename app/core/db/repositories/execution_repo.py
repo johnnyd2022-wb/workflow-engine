@@ -141,14 +141,10 @@ class ExecutionRepository:
         if not execution_step:
             return None
 
-        if (
-            execution_step.status != ExecutionStepStatus.READY
-            and execution_step.status != ExecutionStepStatus.IN_PROGRESS
-        ):
-            raise ValueError(f"Step {execution_step_id} is not in a state that can be completed")
-
-        # Enforce step order: check that all prior steps are completed
         execution = execution_step.execution
+
+        # Enforce step order FIRST: all prior steps must be completed. This ensures that
+        # out-of-order attempts raise a distinct error that tests (and callers) can rely on.
         prior_steps = (
             self.db.query(ExecutionStep)
             .filter(
@@ -163,6 +159,10 @@ class ExecutionRepository:
                 f"Cannot complete step {execution_step.step_number}: "
                 f"prior steps {[es.step_number for es in incomplete_prior_steps]} are not completed"
             )
+
+        # Then enforce that this step itself is in a completable state
+        if execution_step.status not in (ExecutionStepStatus.READY, ExecutionStepStatus.IN_PROGRESS):
+            raise ValueError(f"Step {execution_step_id} is not in a state that can be completed")
 
         # Update step status and data
         execution_step.status = ExecutionStepStatus.COMPLETED
