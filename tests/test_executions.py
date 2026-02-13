@@ -352,6 +352,7 @@ class TestCompleteStepOrder:
         repo = ExecutionRepository(db)
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
+        # Complete step 1 – it should move to COMPLETED and step 2 should become READY.
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
@@ -359,7 +360,9 @@ class TestCompleteStepOrder:
             actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
+        step1 = next(es for es in loaded.execution_steps if es.step_number == 1)
         step2 = next(es for es in loaded.execution_steps if es.step_number == 2)
+        assert step1.status == ExecutionStepStatus.COMPLETED
         assert step2.status == ExecutionStepStatus.READY
 
     def test_completing_all_steps_marks_execution_completed(self, db, synthetic_org_and_process_clean):
@@ -368,6 +371,7 @@ class TestCompleteStepOrder:
         repo = ExecutionRepository(db)
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
+        # Complete both steps in order.
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
@@ -383,6 +387,10 @@ class TestCompleteStepOrder:
         loaded = repo.get_execution_by_id(execution.id, org_id)
         assert loaded.status == ExecutionStatus.COMPLETED
         assert loaded.completed_at is not None
+        # Both steps should be COMPLETED.
+        full = repo.get_execution_with_steps(execution.id, org_id)
+        for es in full.execution_steps:
+            assert es.status == ExecutionStepStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------
@@ -400,7 +408,7 @@ class TestMultiStepProcess:
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
         assert len(steps) == 3
-        # Complete Step 1 → Step 2 should move to READY
+        # Complete Step 1 → Step 1 should be COMPLETED, Step 2 should move to READY, Step 3 remains PENDING.
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
@@ -408,9 +416,13 @@ class TestMultiStepProcess:
             actual_outputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
+        step1 = next(es for es in loaded.execution_steps if es.step_number == 1)
         step2 = next(es for es in loaded.execution_steps if es.step_number == 2)
+        step3 = next(es for es in loaded.execution_steps if es.step_number == 3)
+        assert step1.status == ExecutionStepStatus.COMPLETED
         assert step2.status == ExecutionStepStatus.READY
-        # Complete Step 2 → Step 3 should move to READY
+        assert step3.status == ExecutionStepStatus.PENDING
+        # Complete Step 2 → Step 2 should be COMPLETED, Step 3 should move to READY.
         repo.complete_step(
             execution_step_id=steps[1].id,
             org_id=org_id,
@@ -418,9 +430,13 @@ class TestMultiStepProcess:
             actual_outputs=[{"name": "Out2", "quantity": 7, "unit": "kg"}],
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
+        step1 = next(es for es in loaded.execution_steps if es.step_number == 1)
+        step2 = next(es for es in loaded.execution_steps if es.step_number == 2)
         step3 = next(es for es in loaded.execution_steps if es.step_number == 3)
+        assert step1.status == ExecutionStepStatus.COMPLETED
+        assert step2.status == ExecutionStepStatus.COMPLETED
         assert step3.status == ExecutionStepStatus.READY
-        # Complete Step 3 → Execution should be COMPLETED
+        # Complete Step 3 → Execution should be COMPLETED and all steps COMPLETED.
         repo.complete_step(
             execution_step_id=steps[2].id,
             org_id=org_id,
@@ -432,6 +448,7 @@ class TestMultiStepProcess:
         # Verify actual_inputs and actual_outputs persist for all steps
         full = repo.get_execution_with_steps(execution.id, org_id)
         for es in full.execution_steps:
+            assert es.status == ExecutionStepStatus.COMPLETED
             assert es.actual_inputs is not None and len(es.actual_inputs) >= 0
             assert es.actual_outputs is not None and len(es.actual_outputs) >= 1
             for out in es.actual_outputs:
@@ -461,6 +478,7 @@ class TestMultiStepProcess:
         assert loaded.status == ExecutionStatus.COMPLETED
         full = repo.get_execution_with_steps(execution.id, org_id)
         for es in full.execution_steps:
+            assert es.status == ExecutionStepStatus.COMPLETED
             assert es.actual_inputs is not None
             assert es.actual_outputs is not None and len(es.actual_outputs) >= 1
             for out in es.actual_outputs:
@@ -700,7 +718,7 @@ class TestStepOrderAndInputOutputConsistency:
 
 
 class TestDatabaseTransactionIsolation:
-    """Separate sessions: create in one, complete in another, verify no stale data."""
+    """Separate sessions: create in one, complete in another, verify no stale data and rollback safety."""
 
     def test_complete_step_in_separate_session_visible_on_reload(self, db, synthetic_org_and_process_clean):
         """Create execution in session 1; complete step in session 2; reload in session 3 sees updated data."""
@@ -733,6 +751,48 @@ class TestDatabaseTransactionIsolation:
             step1 = next(es for es in loaded.execution_steps if es.step_number == 1)
             assert step1.status == ExecutionStepStatus.COMPLETED
             assert step1.actual_outputs and step1.actual_outputs[0]["name"] == "Out1"
+        finally:
+            session3.close()
+            db_session.remove()
+
+    def test_rollback_in_one_session_does_not_affect_others(self, db, synthetic_org_and_process_clean):
+        """If a transaction is rolled back in one session, other sessions should still see pre-failure state."""
+        from app.core.db.models.execution_step import ExecutionStep as ExecStepModel
+
+        org_id = synthetic_org_and_process_clean["org_id"]
+        process_id = synthetic_org_and_process_clean["process_id"]
+        # Session 1: create execution
+        repo1 = ExecutionRepository(db)
+        execution = repo1.create_execution(org_id=org_id, process_id=process_id)
+        execution_id = execution.id
+        step1_id = next(es.id for es in execution.execution_steps if es.step_number == 1)
+        db.commit()
+        db_session.remove()
+
+        # Session 2: mutate step status then roll back (simulate failure mid-transaction)
+        session2 = db_session()
+        try:
+            step1_s2 = session2.query(ExecStepModel).filter(ExecStepModel.id == step1_id).first()
+            assert step1_s2 is not None
+            original_status = step1_s2.status
+            step1_s2.status = ExecutionStepStatus.COMPLETED
+            session2.flush()
+            # Simulate an exception / failure before commit by rolling back explicitly
+            session2.rollback()
+            # After rollback in this session, the in-memory object should reflect original status again
+            assert step1_s2.status == original_status
+        finally:
+            session2.close()
+            db_session.remove()
+
+        # Session 3: verify that the rolled-back change is not visible
+        session3 = db_session()
+        try:
+            repo3 = ExecutionRepository(session3)
+            loaded = repo3.get_execution_with_steps(execution_id, org_id)
+            assert loaded is not None
+            step1 = next(es for es in loaded.execution_steps if es.step_number == 1)
+            assert step1.status == ExecutionStepStatus.READY
         finally:
             session3.close()
             db_session.remove()
