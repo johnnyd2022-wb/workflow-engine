@@ -60,3 +60,16 @@
     </div>
   </div>
 </div>
+
+<!-- Record missing output item: form modal (content filled by JS) -->
+<div class="modal-overlay" id="execute-missing-output-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1100; align-items: center; justify-content: center; overflow-y: auto;">
+  <div class="card" style="max-width: 500px; width: 90%; padding: 24px; margin: 24px auto; max-height: 90vh; overflow-y: auto;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+      <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0;">Record missing output item</h2>
+      <button type="button" class="execute-missing-output-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="execute-missing-output-form-container"></div>
+  </div>
+</div>

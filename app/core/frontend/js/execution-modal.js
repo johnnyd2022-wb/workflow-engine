@@ -31,6 +31,57 @@
     }
   };
   
+  // Context set when user clicks "Add missing item"; used by choice modal to open Add Inventory or Record output modal.
+  let _missingItemContext = null;
+  
+  // Create untracked inventory item and refresh execution modal. Used from both inline flow and from Record missing output modal.
+  async function createUntrackedItemWithContext(context, options) {
+    if (!context) return;
+    const {
+      name,
+      quantity,
+      unit,
+      inventoryType,
+      sourceType,
+      inputName,
+      processId,
+      stepId,
+      metadataExtras,
+    } = options || {};
+    const parsedQuantity = parseFloat(quantity);
+    if (!name || !unit || !parsedQuantity || isNaN(parsedQuantity) || parsedQuantity <= 0) {
+      showNotification('error', 'Invalid Missing Item', 'Please provide a name, valid quantity, and unit to record the missing item.');
+      return;
+    }
+    try {
+      const user = await getCurrentUser();
+      const baseMetadata = {
+        untracked: true,
+        untracked_source: sourceType || 'raw_material',
+        untracked_input_name: inputName || null,
+        untracked_execution_id: context.executionId || null,
+        untracked_execution_step_id: context.executionStep && context.executionStep.id ? context.executionStep.id : null,
+        untracked_process_id: processId || null,
+        untracked_step_id: stepId || null,
+        untracked_recorded_by: user && (user.username || user.email) ? (user.username || user.email) : null,
+        untracked_recorded_at: new Date().toISOString(),
+      };
+      const metadata = Object.assign({}, baseMetadata, metadataExtras || {});
+      await CoreAPI.createInventoryItem({
+        name: name,
+        quantity: parsedQuantity,
+        unit: unit,
+        inventory_type: inventoryType || 'raw_material',
+        metadata: metadata,
+      });
+      showNotification('success', 'Missing Item Recorded', `"${name}" has been recorded as an untracked inventory item. Inventory has been refreshed for this step.`);
+      await window.openExecutionModal(context.executionId, context.executionStep, context.stepDefinition);
+    } catch (error) {
+      console.error('Failed to record missing item from execution flow:', error);
+      showNotification('error', 'Failed to Record Missing Item', error.message || 'Failed to record missing item. Please try again.');
+    }
+  }
+  
   // ============================================================
   // OPEN EXECUTION MODAL
   // ============================================================
@@ -60,12 +111,31 @@
     if (promptsContainer) promptsContainer.innerHTML = '';
     if (outputsContainer) outputsContainer.innerHTML = '';
     
-    // Load inventory and expired/flagged materials in parallel (for highlighting step inputs only)
-    const [inventoryData, expiredData] = await Promise.all([
+    // Load inventory, expired data, and process (for classifying missing inputs as raw vs previous-step output)
+    const [inventoryData, expiredData, executionData] = await Promise.all([
       CoreAPI.getInventory(),
-      CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; })
+      CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; }),
+      CoreAPI.getExecution(executionId).catch(function() { return null; })
     ]);
     const allInventory = inventoryData.inventory_items || [];
+    let processData = null;
+    let previousStepOutputNames = new Set();
+    if (executionData && executionData.process_id) {
+      try {
+        processData = await CoreAPI.getProcess(executionData.process_id);
+        const currentStepNumber = executionStep.step_number != null ? executionStep.step_number : 0;
+        const steps = processData.steps || [];
+        steps.forEach(function(s) {
+          if ((s.step_number != null ? s.step_number : 0) < currentStepNumber) {
+            (s.outputs || []).forEach(function(o) {
+              if (o && o.name) previousStepOutputNames.add(String(o.name).trim());
+            });
+          }
+        });
+      } catch (e) {
+        console.warn('Could not load process for missing-item classification:', e);
+      }
+    }
     const expiredRaw = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
     const impactedItems = (expiredData && expiredData.impacted_items) ? expiredData.impacted_items : [];
     const expiredIds = new Set(expiredRaw.map(function(m) { return String(m.id); }));
@@ -75,6 +145,11 @@
       var imp = impactedItems.find(function(i) { return String(i.id) === String(id); });
       if (imp && imp.expired_raw_material_name) return 'Made with expired: ' + imp.expired_raw_material_name;
       return imp ? 'Made with expired ingredients' : null;
+    }
+    
+    // Helper: create an untracked inventory item (delegates to IIFE-level createUntrackedItemWithContext).
+    async function createUntrackedInventoryItem(options) {
+      await createUntrackedItemWithContext({ executionId, executionStep, stepDefinition }, options);
     }
     
     // Simple unit conversion function for frontend
@@ -192,8 +267,21 @@
         
         // Check if no matching inventory is available
         const hasNoInventory = sortedInventory.length === 0;
+        const isOutputFromPreviousStep = hasNoInventory && previousStepOutputNames.has(String(input.name || '').trim());
+        const missingItemType = isOutputFromPreviousStep ? 'output' : 'raw';
         const errorStyle = hasNoInventory ? 'border: 2px solid var(--error, #ef4444);' : '';
-        const errorMessage = hasNoInventory ? `<p style="color: var(--error, #ef4444); font-size: 12px; margin-top: 4px; font-weight: 500;">⚠️ No matching inventory items found. Please add inventory before executing this step.</p>` : '';
+        const errorMessage = hasNoInventory
+          ? `
+            <div class="execute-missing-inventory" data-input-name="${escapeHtml(input.name)}" style="margin-top: 8px;">
+              <p style="color: var(--error, #ef4444); font-size: 12px; margin: 0 0 6px 0; font-weight: 500;">
+                ⚠️ No matching inventory items found. You can record a missing item without leaving this flow.
+              </p>
+              <button type="button" class="btn btn-secondary btn-sm execute-add-missing-item-trigger" data-input-name="${escapeHtml(input.name)}" data-missing-type="${missingItemType}">
+                Add missing item
+              </button>
+            </div>
+          `
+          : '';
         
         inputSection.innerHTML = `
           <div style="margin-bottom: 12px;">
@@ -279,6 +367,33 @@
         const select = inputSection.querySelector('.execute-inventory-select');
         const quantityInput = inputSection.querySelector('.execute-quantity-input');
         const unitDisplay = inputSection.querySelector('.execute-quantity-unit-display');
+        const addMissingTriggerBtn = inputSection.querySelector('.execute-add-missing-item-trigger');
+        
+        // Single "Add missing item" opens the relevant modal: Add Inventory (raw) or Record missing output (output from previous step)
+        if (addMissingTriggerBtn) {
+          addMissingTriggerBtn.addEventListener('click', function () {
+            _missingItemContext = { input: input, executionId: executionId, executionStep: executionStep, stepDefinition: stepDefinition };
+            const missingType = this.getAttribute('data-missing-type') || 'raw';
+            if (missingType === 'output') {
+              openRecordMissingOutputModal();
+            } else {
+              const addModalEl = document.getElementById('add-inventory-modal');
+              if (addModalEl) {
+                addModalEl.style.zIndex = '1100';
+                if (typeof window.openModal === 'function') {
+                  window.openModal('add-inventory-modal');
+                } else {
+                  addModalEl.style.display = 'flex';
+                  document.body.style.overflow = 'hidden';
+                }
+                const nameInput = addModalEl.querySelector('input[name="name"]');
+                if (nameInput && input.name) {
+                  nameInput.value = input.name;
+                }
+              }
+            }
+          });
+        }
         
         if (select) {
           const expiredWarningEl = inputSection.querySelector('.execute-input-expired-warning');
@@ -796,5 +911,169 @@
       showNotification('error', 'Failed to Complete Step', error.message || 'Failed to complete step. Please try again.');
     }
   };
+  
+  // Open "Record missing output item" modal (used when Add missing item is for an input that is a previous-step output)
+  function openRecordMissingOutputModal() {
+    const ctx = _missingItemContext;
+    const outputModal = document.getElementById('execute-missing-output-modal');
+    if (!ctx || !outputModal) return;
+    const input = ctx.input;
+    const executionId = ctx.executionId;
+    const executionStep = ctx.executionStep;
+    const container = document.getElementById('execute-missing-output-form-container');
+    if (!container) return;
+
+    function closeOutputModal() {
+      if (outputModal) {
+        outputModal.style.display = 'none';
+        document.body.style.overflow = '';
+      }
+    }
+
+    container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px;">Loading...</p>';
+    var safeName = (input && input.name && typeof escapeHtml === 'function') ? escapeHtml(input.name) : (input && input.name ? String(input.name).replace(/"/g, '&quot;').replace(/</g, '&lt;') : '');
+    var safeUnit = (input && input.unit && typeof escapeHtml === 'function') ? escapeHtml(input.unit) : (input && input.unit ? String(input.unit).replace(/"/g, '&quot;').replace(/</g, '&lt;') : '');
+    var formHtml = '<div style="padding: 0 0 20px 0;">' +
+      '<p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 12px 0;">Record a missing output item that should have been produced earlier.</p>' +
+      '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">' +
+      '<div><label style="display: block; font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Process</label>' +
+      '<select class="form-select execute-missing-output-process" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 13px;"><option value="">Loading...</option></select></div>' +
+      '<div><label style="display: block; font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Step</label>' +
+      '<select class="form-select execute-missing-output-step" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 13px;"><option value="">Select process first</option></select></div></div>' +
+      '<div style="margin-bottom: 12px;"><label style="display: block; font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Item Name</label>' +
+      '<input type="text" class="form-input execute-missing-output-name" value="' + safeName + '" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 13px;"></div>' +
+      '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">' +
+      '<div><label style="display: block; font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Quantity</label>' +
+      '<input type="number" class="form-input execute-missing-output-quantity" value="' + (input && input.quantity != null ? input.quantity : '') + '" step="0.01" min="0.01" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 13px;"></div>' +
+      '<div><label style="display: block; font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Unit</label>' +
+      '<input type="text" class="form-input execute-missing-output-unit" value="' + safeUnit + '" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 13px;"></div></div>' +
+      '<div style="margin-bottom: 16px;"><label style="display: block; font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Date (when this output was produced)</label>' +
+      '<input type="date" class="form-input execute-missing-output-date" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 13px;"></div>' +
+      '<div style="display: flex; justify-content: flex-end; gap: 8px;">' +
+      '<button type="button" class="btn btn-secondary execute-missing-output-cancel">Cancel</button>' +
+      '<button type="button" class="btn btn-primary execute-missing-output-save">Save and refresh</button></div></div>';
+    container.innerHTML = formHtml;
+
+    outputModal.style.zIndex = '1100';
+    outputModal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    var outNameInput = container.querySelector('.execute-missing-output-name');
+    var outQtyInput = container.querySelector('.execute-missing-output-quantity');
+    var outUnitInput = container.querySelector('.execute-missing-output-unit');
+    var outDateInput = container.querySelector('.execute-missing-output-date');
+    var processSelect = container.querySelector('.execute-missing-output-process');
+    var stepSelect = container.querySelector('.execute-missing-output-step');
+    var outCancelBtn = container.querySelector('.execute-missing-output-cancel');
+    var outSaveBtn = container.querySelector('.execute-missing-output-save');
+
+    if (outCancelBtn) outCancelBtn.addEventListener('click', closeOutputModal);
+
+    (async function () {
+      try {
+        var execData = await CoreAPI.getExecution(executionId);
+        var currentProcessId = execData.process_id;
+        var processes = await CoreAPI.getProcesses();
+        if (processSelect) {
+          processSelect.innerHTML = '';
+          processes.forEach(function (proc) {
+            var opt = document.createElement('option');
+            opt.value = proc.id;
+            opt.textContent = proc.name || 'Untitled process';
+            if (String(proc.id) === String(currentProcessId)) opt.selected = true;
+            processSelect.appendChild(opt);
+          });
+        }
+        async function loadSteps(processId, preselectStep) {
+          if (!stepSelect || !processId) return;
+          stepSelect.innerHTML = '<option value="">Loading...</option>';
+          try {
+            var processData = await CoreAPI.getProcess(processId);
+            var steps = processData.steps || [];
+            stepSelect.innerHTML = '';
+            steps.forEach(function (step) {
+              var o = document.createElement('option');
+              o.value = step.id;
+              o.textContent = step.name || 'Untitled step';
+              if (preselectStep && executionStep && executionStep.step_id && String(step.id) === String(executionStep.step_id)) o.selected = true;
+              stepSelect.appendChild(o);
+            });
+            var selStepId = stepSelect.value;
+            var selStep = steps.find(function (s) { return String(s.id) === String(selStepId); });
+            if (selStep && selStep.outputs && selStep.outputs.length > 0) {
+              var def = selStep.outputs[0];
+              if (outNameInput) outNameInput.value = def.name || outNameInput.value;
+              if (outQtyInput && def.quantity != null) outQtyInput.value = def.quantity;
+              if (outUnitInput && def.unit) outUnitInput.value = def.unit;
+            }
+          } catch (err) {
+            stepSelect.innerHTML = '<option value="">Failed to load</option>';
+          }
+        }
+        await loadSteps(currentProcessId, true);
+        if (processSelect) processSelect.addEventListener('change', function () { loadSteps(this.value, false); });
+      } catch (err) {
+        if (processSelect) processSelect.innerHTML = '<option value="">Failed to load</option>';
+      }
+    })();
+
+    if (outSaveBtn && outNameInput && outQtyInput && outUnitInput) {
+      outSaveBtn.addEventListener('click', async function () {
+        var itemName = (outNameInput.value || '').trim() || (input && input.name) || '';
+        var qty = parseFloat(outQtyInput.value);
+        var unitValue = (outUnitInput.value || (input && input.unit) || '').trim();
+        var dateValue = outDateInput && outDateInput.value ? outDateInput.value : null;
+        var selectedProcessId = processSelect && processSelect.value ? processSelect.value : null;
+        var selectedStepId = stepSelect && stepSelect.value ? stepSelect.value : null;
+        if (!selectedProcessId) { showNotification('error', 'Missing Process', 'Please select a process.'); return; }
+        if (!selectedStepId) { showNotification('error', 'Missing Step', 'Please select a step.'); return; }
+        if (!itemName) { showNotification('error', 'Invalid Name', 'Please enter a name.'); return; }
+        if (!qty || isNaN(qty) || qty <= 0) { showNotification('error', 'Invalid Quantity', 'Please enter a valid quantity.'); return; }
+        if (!unitValue) { showNotification('error', 'Invalid Unit', 'Please enter a unit.'); return; }
+        try {
+          var processDataForOutputs = await CoreAPI.getProcess(selectedProcessId);
+          var allSteps = processDataForOutputs.steps || [];
+          var matchedStep = allSteps.find(function (s) { return String(s.id) === String(selectedStepId); }) || null;
+          var inventoryType = (matchedStep && matchedStep.is_terminal_step) ? 'final_product' : 'work_in_progress';
+          var metadataExtras = {};
+          if (dateValue) metadataExtras.untracked_output_date = dateValue;
+          closeOutputModal();
+          await createUntrackedItemWithContext(ctx, {
+            name: itemName,
+            quantity: qty,
+            unit: unitValue,
+            inventoryType: inventoryType,
+            sourceType: 'missing_output',
+            inputName: input && input.name ? input.name : null,
+            processId: selectedProcessId,
+            stepId: matchedStep ? matchedStep.id : selectedStepId,
+            metadataExtras: metadataExtras
+          });
+        } catch (error) {
+          console.error('Failed to record missing output:', error);
+          showNotification('error', 'Failed to Record Missing Output', error.message || 'Please try again.');
+        }
+      });
+    }
+  }
+
+  // One-time wiring: output modal close button
+  function wireMissingItemModals() {
+    const outputModal = document.getElementById('execute-missing-output-modal');
+    if (!outputModal) return;
+    function closeOutputModal() {
+      outputModal.style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    outputModal.querySelectorAll('.execute-missing-output-close').forEach(function (b) {
+      b.addEventListener('click', closeOutputModal);
+    });
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireMissingItemModals);
+  } else {
+    wireMissingItemModals();
+  }
   
 })();
