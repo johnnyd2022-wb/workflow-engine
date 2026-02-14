@@ -37,6 +37,7 @@ from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.process import Process
+from app.core.db.models.step import Step
 
 try:
     from dateutil import parser as dateutil_parser
@@ -775,6 +776,87 @@ class DAGTracer:
                             }
                         )
                         conn_set.add((earlier_item["id"], later_item["id"]))
+
+
+# ---------------------------------------------------------------------------
+# Process DAG: classify missing inputs (output from upstream step vs raw)
+# Uses factual links only: source_step_id / source_process_id on each input.
+# No name matching.
+# ---------------------------------------------------------------------------
+
+
+def _parse_uuid(value: Any) -> UUID | None:
+    """Return UUID if value is a valid UUID string or UUID; else None."""
+    if value is None:
+        return None
+    if isinstance(value, UUID):
+        return value
+    try:
+        return UUID(str(value).strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def _output_id_exists_in_org(session: Session, org_id: UUID, output_id: UUID) -> bool:
+    """True if any step in the org has an output with id == output_id (in outputs JSONB)."""
+    steps = (
+        session.query(Step)
+        .join(Process, Step.process_id == Process.id)
+        .filter(Process.org_id == org_id)
+        .all()
+    )
+    out_str = str(output_id)
+    for s in steps:
+        for o in s.outputs or []:
+            if isinstance(o, dict) and str(o.get("id") or "").strip() == out_str:
+                return True
+    return False
+
+
+def classify_missing_inputs_by_process_dag(
+    session: Session,
+    org_id: UUID,
+    process_id: UUID,
+    step_id: UUID,
+    inputs: list[dict[str, Any]],
+) -> dict[str, Literal["output", "raw"]]:
+    """
+    Classify each input as 'output' or 'raw' using IDs only (no name matching).
+
+    Uses source_step_id, source_process_id, or source_output_id from the input.
+    source_output_id references step.outputs[].id; we verify that id exists on some
+    step in the org. No fallback on name or inventory item name.
+    """
+    result: dict[str, Literal["output", "raw"]] = {}
+    for inp in inputs:
+        name = (inp.get("name") or "").strip()
+        if not name:
+            continue
+        source_step_id = _parse_uuid(inp.get("source_step_id"))
+        source_process_id = _parse_uuid(inp.get("source_process_id"))
+        source_output_id = _parse_uuid(inp.get("source_output_id"))
+
+        if source_output_id is not None:
+            result[name] = "output" if _output_id_exists_in_org(session, org_id, source_output_id) else "raw"
+            continue
+        if source_step_id is not None or source_process_id is not None:
+            is_output = False
+            if source_step_id is not None:
+                step = session.query(Step).filter(Step.id == source_step_id).first()
+                if step is not None:
+                    proc_id = source_process_id if source_process_id is not None else process_id
+                    if step.process_id == proc_id:
+                        proc = session.query(Process).filter(Process.id == proc_id, Process.org_id == org_id).first()
+                        if proc is not None:
+                            is_output = True
+            elif source_process_id is not None:
+                proc = session.query(Process).filter(Process.id == source_process_id, Process.org_id == org_id).first()
+                if proc is not None:
+                    is_output = True
+            result[name] = "output" if is_output else "raw"
+            continue
+        result[name] = "raw"
+    return result
 
 
 # ---------------------------------------------------------------------------

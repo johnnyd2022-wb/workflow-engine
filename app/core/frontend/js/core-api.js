@@ -79,6 +79,18 @@ const CoreAPI = {
             method: 'DELETE',
         });
     },
+
+    /**
+     * Classify missing inputs as 'output' or 'raw' using source_step_id/source_process_id (no name matching).
+     * inputs: [{ name, source_step_id?, source_process_id? }, ...]
+     * Returns { by_input_name: { "name1": "output", "name2": "raw", ... } }.
+     */
+    async classifyMissingInputs(processId, stepId, inputs) {
+        return this.request(`/processes/${processId}/steps/${stepId}/classify-missing-inputs`, {
+            method: 'POST',
+            body: { inputs: inputs },
+        });
+    },
     
     // Alias for addStep
     async createStep(processId, stepData) {

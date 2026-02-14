@@ -38,6 +38,7 @@ class InventoryItem(Base):
     # Traceability: link to execution/step that produced this (for WIP and final products)
     source_execution_id = Column(UUID(as_uuid=True), ForeignKey("executions.id"), nullable=True, index=True)
     source_execution_step_id = Column(UUID(as_uuid=True), ForeignKey("execution_steps.id"), nullable=True, index=True)
+    source_output_id = Column(UUID(as_uuid=True), nullable=True, index=True)  # step.outputs[].id from process definition
     source_step_name = Column(String(255), nullable=True)  # Denormalized for easier querying
     # Additional metadata (renamed from 'metadata' to avoid SQLAlchemy reserved name)
     extra_data = Column(JSONB, nullable=True)  # For storing additional flexible data

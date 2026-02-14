@@ -1,6 +1,7 @@
 """Core backend API routes for process execution platform"""
 
 import os
+import uuid as uuid_module
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
@@ -20,6 +21,14 @@ from app.core.security.permissions import requires_auth
 from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
 from app.utils.config_loader import config
+
+def _ensure_output_ids(outputs: list) -> list:
+    """Ensure each output dict has a stable 'id' (UUID string). Mutates and returns the list."""
+    for o in outputs:
+        if isinstance(o, dict) and (o.get("id") is None or o.get("id") == ""):
+            o["id"] = str(uuid_module.uuid4())
+    return outputs
+
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -350,7 +359,7 @@ def get_process(process_id: str):
                 "name": step.name,
                 "description": step.description,
                 "inputs": step.inputs or [],
-                "outputs": step.outputs or [],
+                "outputs": _ensure_output_ids(list(step.outputs or [])),
                 "execution_prompts": step.execution_prompts or [],
             }
         )
@@ -388,6 +397,7 @@ def add_step(process_id: str):
     if step_number is None or name is None:
         return jsonify({"error": "step_number and name are required"}), 400
 
+    outputs = _ensure_output_ids(list(data.get("outputs") or []))
     repo = ProcessRepository(db_session)
     step = repo.add_step(
         process_id=process_uuid,
@@ -396,7 +406,7 @@ def add_step(process_id: str):
         name=name,
         description=data.get("description"),
         inputs=data.get("inputs", []),
-        outputs=data.get("outputs", []),
+        outputs=outputs,
         execution_prompts=data.get("execution_prompts", []),
     )
 
@@ -431,6 +441,9 @@ def update_step(process_id: str, step_id: str):
         return jsonify({"error": "Invalid process or step ID"}), 400
 
     data = request.get_json()
+    outputs = data.get("outputs")
+    if outputs is not None:
+        outputs = _ensure_output_ids(list(outputs))
     repo = ProcessRepository(db_session)
     step = repo.update_step(
         step_id=step_uuid,
@@ -440,7 +453,7 @@ def update_step(process_id: str, step_id: str):
         name=data.get("name"),
         description=data.get("description"),
         inputs=data.get("inputs"),
-        outputs=data.get("outputs"),
+        outputs=outputs,
         execution_prompts=data.get("execution_prompts"),
     )
 
@@ -485,6 +498,59 @@ def delete_step(process_id: str, step_id: str):
         return jsonify({"error": "Step or process not found"}), 404
 
     return jsonify({"message": "Step deleted successfully"}), 200
+
+
+@core_bp.route("/api/core/processes/<process_id>/steps/<step_id>/classify-missing-inputs", methods=["POST"])
+@requires_auth
+def classify_missing_inputs(process_id: str, step_id: str):
+    """
+    Classify missing inputs as 'output' or 'raw' using source_step_id/source_process_id only.
+    Body: { "inputs": [{ "name": "...", "source_step_id": "uuid?", "source_process_id": "uuid?" }, ...] }.
+    Returns { "by_input_name": { "name1": "output", "name2": "raw", ... } }.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    org_id = UUID(g.org_id)
+    try:
+        process_uuid = UUID(process_id)
+        step_uuid = UUID(step_id)
+    except ValueError:
+        return jsonify({"error": "Invalid process or step ID"}), 400
+    data = request.get_json() or {}
+    inputs = data.get("inputs")
+    if isinstance(inputs, list) and len(inputs) > 0:
+        inputs = [
+            {
+                "name": (i.get("name") or "").strip() if isinstance(i, dict) else "",
+                "source_step_id": i.get("source_step_id") if isinstance(i, dict) else None,
+                "source_process_id": i.get("source_process_id") if isinstance(i, dict) else None,
+                "source_output_id": i.get("source_output_id") if isinstance(i, dict) else None,
+            }
+            for i in inputs
+        ]
+        inputs = [i for i in inputs if i["name"]]
+    else:
+        input_names = data.get("input_names")
+        if isinstance(input_names, list):
+            inputs = [{"name": str(n).strip()} for n in input_names if n is not None and str(n).strip()]
+        else:
+            inputs = []
+    if not inputs:
+        return jsonify({"error": "inputs or input_names array is required"}), 400
+    from app.core.backend.dagtraversal import classify_missing_inputs_by_process_dag
+
+    by_input_name = classify_missing_inputs_by_process_dag(
+        db_session, org_id, process_uuid, step_uuid, inputs
+    )
+    logger.info(
+        "classify_missing_inputs process_id=%s step_id=%s inputs_count=%s by_input_name=%s",
+        process_id,
+        step_id,
+        len(inputs),
+        by_input_name,
+    )
+    return jsonify({"by_input_name": by_input_name}), 200
 
 
 @core_bp.route("/api/core/executions", methods=["POST"])
@@ -879,20 +945,31 @@ def complete_step(execution_id: str, execution_step_id: str):
                     if matching_output:
                         extra_data["variable_output"] = matching_output
 
+                # Resolve source_output_id from step definition (step.outputs[].id) for ID-based classification
+                source_output_id = None
+                step_outputs = (execution_step.step.outputs if execution_step.step and execution_step.step.outputs else []) or []
+                step_output_def = next((o for o in step_outputs if (o.get("name") or "").strip() == (output_name or "").strip()), None)
+                if step_output_def and step_output_def.get("id"):
+                    try:
+                        source_output_id = UUID(str(step_output_def["id"]))
+                    except (ValueError, TypeError):
+                        pass
+
                 # Store creation parameters for atomic commit
-                output_creations.append(
-                    {
-                        "org_id": org_id,
-                        "name": output_name,
-                        "quantity": str(quantity_decimal),  # Convert Decimal to string for storage
-                        "unit": output.get("unit", "units"),
-                        "inventory_type": inventory_type,
-                        "source_execution_id": execution_uuid,
-                        "source_execution_step_id": execution_step_uuid,
-                        "source_step_name": execution_step.step.name if execution_step.step else None,
-                        "extra_data": extra_data if extra_data else None,
-                    }
-                )
+                output_params = {
+                    "org_id": org_id,
+                    "name": output_name,
+                    "quantity": str(quantity_decimal),  # Convert Decimal to string for storage
+                    "unit": output.get("unit", "units"),
+                    "inventory_type": inventory_type,
+                    "source_execution_id": execution_uuid,
+                    "source_execution_step_id": execution_step_uuid,
+                    "source_step_name": execution_step.step.name if execution_step.step else None,
+                    "extra_data": extra_data if extra_data else None,
+                }
+                if source_output_id is not None:
+                    output_params["source_output_id"] = source_output_id
+                output_creations.append(output_params)
 
         # FAILURE HANDLING: Persist warnings to execution_data for audit trail
         if execution_warnings:

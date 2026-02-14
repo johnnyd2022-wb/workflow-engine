@@ -111,31 +111,13 @@
     if (promptsContainer) promptsContainer.innerHTML = '';
     if (outputsContainer) outputsContainer.innerHTML = '';
     
-    // Load inventory, expired data, and process (for classifying missing inputs as raw vs previous-step output)
+    // Load inventory, expired data, execution (for process_id/step_id when classifying missing inputs via backend DAG)
     const [inventoryData, expiredData, executionData] = await Promise.all([
       CoreAPI.getInventory(),
       CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; }),
       CoreAPI.getExecution(executionId).catch(function() { return null; })
     ]);
     const allInventory = inventoryData.inventory_items || [];
-    let processData = null;
-    let previousStepOutputNames = new Set();
-    if (executionData && executionData.process_id) {
-      try {
-        processData = await CoreAPI.getProcess(executionData.process_id);
-        const currentStepNumber = executionStep.step_number != null ? executionStep.step_number : 0;
-        const steps = processData.steps || [];
-        steps.forEach(function(s) {
-          if ((s.step_number != null ? s.step_number : 0) < currentStepNumber) {
-            (s.outputs || []).forEach(function(o) {
-              if (o && o.name) previousStepOutputNames.add(String(o.name).trim());
-            });
-          }
-        });
-      } catch (e) {
-        console.warn('Could not load process for missing-item classification:', e);
-      }
-    }
     const expiredRaw = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
     const impactedItems = (expiredData && expiredData.impacted_items) ? expiredData.impacted_items : [];
     const expiredIds = new Set(expiredRaw.map(function(m) { return String(m.id); }));
@@ -222,7 +204,30 @@
     const variableInputs = (stepDefinition.inputs || []).filter(input => 
       input.requires_inventory_selection !== false && input.is_variable !== false
     );
-    
+    // Classify missing inputs via backend (source_step_id / source_process_id only — no name matching)
+    let missingInputClassification = {};
+    if (executionData && executionData.process_id && executionStep && executionStep.step_id && variableInputs.length > 0) {
+      try {
+        const inputsPayload = variableInputs.map(function(i) {
+          return {
+            name: (i.name || '').trim(),
+            source_step_id: i.source_step_id || null,
+            source_process_id: i.source_process_id || null,
+            source_output_id: i.source_output_id || null
+          };
+        });
+        const res = await CoreAPI.classifyMissingInputs(executionData.process_id, executionStep.step_id, inputsPayload);
+        if (res && res.by_input_name) missingInputClassification = res.by_input_name;
+        // Log what the system is using to choose which modal to show for "Add missing item"
+        console.group('[Execution modal] Missing-input classification (source_step_id / source_process_id)');
+        console.log('executionId:', executionId, 'process_id:', executionData.process_id, 'step_id:', executionStep.step_id);
+        console.log('Inputs sent:', inputsPayload);
+        console.log('DAG result (by_input_name):', JSON.stringify(missingInputClassification, null, 2));
+        console.groupEnd();
+      } catch (e) {
+        console.warn('Could not classify missing inputs:', e);
+      }
+    }
     // Render confirm inputs (editable quantity/unit at execution)
     // These are inputs where is_variable is true but requires_inventory_selection is false
     const confirmInputs = (stepDefinition.inputs || []).filter(input => {
@@ -267,8 +272,11 @@
         
         // Check if no matching inventory is available
         const hasNoInventory = sortedInventory.length === 0;
-        const isOutputFromPreviousStep = hasNoInventory && previousStepOutputNames.has(String(input.name || '').trim());
-        const missingItemType = isOutputFromPreviousStep ? 'output' : 'raw';
+        const missingItemType = hasNoInventory ? (missingInputClassification[(input.name || '').trim()] || 'raw') : 'raw';
+        if (hasNoInventory) {
+          const modalLabel = missingItemType === 'output' ? 'Record missing output' : 'Add Inventory (raw)';
+          console.log('[Execution modal] Missing item:', input.name, '→', missingItemType, '(will open:', modalLabel + ')');
+        }
         const errorStyle = hasNoInventory ? 'border: 2px solid var(--error, #ef4444);' : '';
         const errorMessage = hasNoInventory
           ? `
@@ -359,7 +367,7 @@
               <input type="number" class="form-input execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0.01" style="flex: 1; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
               <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
             </div>
-            <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">When you select an inventory item, quantity updates to that item's total. You can edit to consume less.</p>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Quantity defaults to the step requirement; if the selected batch has less than required, it defaults to available. You can edit as needed.</p>
           </div>
         `;
         
@@ -417,13 +425,18 @@
                 this.style.border = '';
                 this.style.boxShadow = '';
               }
-              // When user selects an inventory item: set quantity to that item's total (for confirmation)
-              // User can edit down if consuming less. DAG traces via execution_id; no need to assume previous-step usage.
+              // When user selects an inventory item: use step required quantity unless selected batch has less
               if (option && unitDisplay && quantityInput) {
                 const inventoryUnit = option.dataset.unit || '';
-                const inventoryQuantity = option.dataset.quantity != null && option.dataset.quantity !== '' ? option.dataset.quantity : quantityInput.value;
-                quantityInput.value = inventoryQuantity;
-                quantityInput.dataset.originalQuantity = inventoryQuantity;
+                const availableQty = parseFloat(option.dataset.quantity);
+                const available = !isNaN(availableQty) ? availableQty : 0;
+                const stepRequired = parseFloat(input.quantity);
+                const required = !isNaN(stepRequired) ? stepRequired : 0;
+                const stepUnit = input.unit || '';
+                const requiredInInventoryUnit = (stepUnit && inventoryUnit) ? convertUnit(required, stepUnit, inventoryUnit) : required;
+                const quantityToUse = (available > 0 && available < requiredInInventoryUnit) ? available : (requiredInInventoryUnit > 0 ? requiredInInventoryUnit : available);
+                quantityInput.value = quantityToUse;
+                quantityInput.dataset.originalQuantity = String(quantityToUse);
                 unitDisplay.textContent = inventoryUnit;
                 quantityInput.dataset.inventoryUnit = inventoryUnit;
               }
@@ -481,9 +494,12 @@
       });
     }
     
-    // Render confirm inputs (editable quantity/unit)
+    // Render confirm inputs (editable quantity/unit) — quantity and unit prefilled from process step
     if (confirmInputs.length > 0 && inputsContainer) {
+      const standardUnits = ['kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in', 'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers'];
       confirmInputs.forEach(input => {
+        const stepUnit = (input.unit || '').trim();
+        const unitOptions = stepUnit && !standardUnits.includes(stepUnit) ? [stepUnit, ...standardUnits] : standardUnits;
         const inputSection = document.createElement('div');
         inputSection.className = 'execute-input-section';
         inputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
@@ -504,16 +520,18 @@
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit <span style="color: var(--error, #ef4444);">*</span></label>
             <select class="form-select execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
               <option value="">Select unit...</option>
-              ${['kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in', 'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers'].map(unit => `
-                <option value="${unit}" ${input.unit === unit ? 'selected' : ''}>${unit}</option>
+              ${unitOptions.map(unit => `
+                <option value="${escapeHtml(unit)}" ${(input.unit || '') === unit ? 'selected' : ''}>${escapeHtml(unit)}</option>
               `).join('')}
             </select>
           </div>
         `;
         
-        // Add event listeners to clear error styling
         const quantityInput = inputSection.querySelector('.execute-confirm-quantity-input');
         const unitSelect = inputSection.querySelector('.execute-confirm-unit-input');
+        if (unitSelect && stepUnit) {
+          unitSelect.value = stepUnit;
+        }
         
         if (quantityInput) {
           quantityInput.addEventListener('input', function() {
@@ -522,7 +540,6 @@
             }
           });
         }
-        
         if (unitSelect) {
           unitSelect.addEventListener('change', function() {
             if (this.value) {

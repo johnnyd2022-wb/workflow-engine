@@ -31,8 +31,23 @@
     
     if (step.inputs && step.inputs.length > 0) {
       for (const input of step.inputs) {
-        const inputType = input.requires_inventory_selection ? 'inventory' : 'new';
-        await window.addGuidedInput(inputType, true); // start collapsed so user can expand from either tab
+        const hasSourceStep = !!(input.source_step_id || input.source_process_id || input.source_output_id);
+        const inputType = hasSourceStep ? 'previous_output' : (input.requires_inventory_selection ? 'inventory' : 'new');
+        const preSelected = hasSourceStep ? {
+          name: input.name,
+          quantity: input.quantity,
+          unit: input.unit || '',
+          step_id: input.source_step_id,
+          process_id: input.source_process_id,
+          output_id: input.source_output_id,
+          source_step_id: input.source_step_id,
+          source_process_id: input.source_process_id,
+          source_output_id: input.source_output_id,
+          displayName: input.name,
+          step_number: 0,
+          is_previous_output: true
+        } : undefined;
+        await window.addGuidedInput(inputType, true, preSelected);
         const listEl = getGuidedInputListElement(inputType);
         const inputContainers = listEl ? listEl.querySelectorAll(':scope > div') : [];
         const lastInputContainer = inputContainers[inputContainers.length - 1];
@@ -926,37 +941,79 @@
   
   // Load inventory items (all types)
   let inventoryCache = null;
-  // Get previous step outputs for current step
-  function getPreviousStepOutputs() {
+  // Cache outputs from other processes (so we can pick outputs from a different process in the org)
+  let otherProcessOutputsCache = [];
+  let otherProcessOutputsCacheProcessId = null;
+
+  // Get previous step outputs: current process steps + other processes in org (for cross-process output selection)
+  async function getPreviousStepOutputs() {
     const previousOutputs = [];
-    
-    // Get outputs from all previously created steps
-    // createdSteps contains steps that have been created in this session
-    // Sort by step_number to ensure correct order
+    const urlParams = new URLSearchParams(window.location.search);
+    const processId = urlParams.get('id') || null;
+
+    // 1) Outputs from current process steps (createdSteps)
     const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
-    
     sortedSteps.forEach(step => {
       if (step.outputs && step.outputs.length > 0) {
         step.outputs.forEach(output => {
           if (output.name) {
-            // Ensure step_number is valid (should be from step.step_number)
             const stepNumber = step.step_number || 0;
             previousOutputs.push({
               name: output.name,
               quantity: output.quantity !== null && output.quantity !== undefined ? output.quantity : null,
               unit: output.unit || '',
               step_number: stepNumber,
-              is_previous_output: true, // Mark as previous output
-              displayName: `Step ${stepNumber}: ${output.name}` // For display in dropdown
+              step_id: step.id || null,
+              process_id: processId || null,
+              output_id: output.id || null,
+              is_previous_output: true,
+              displayName: `Step ${stepNumber}: ${output.name}`
             });
           }
         });
       }
     });
-    
-    console.log('getPreviousStepOutputs: found', previousOutputs.length, 'outputs from', sortedSteps.length, 'steps');
-    console.log('Step numbers:', sortedSteps.map(s => s.step_number));
-    
+
+    // 2) Outputs from other processes in the org (so "output from different process" works)
+    if (processId) {
+      if (otherProcessOutputsCacheProcessId !== processId) {
+        otherProcessOutputsCache = [];
+        otherProcessOutputsCacheProcessId = processId;
+        try {
+          const processes = await CoreAPI.getProcesses();
+          const list = Array.isArray(processes) ? processes : (processes.processes || processes);
+          for (const proc of list || []) {
+            const pid = proc.id || proc.process_id;
+            if (!pid || String(pid) === String(processId)) continue;
+            try {
+              const processData = await CoreAPI.getProcess(pid);
+              const steps = processData.steps || [];
+              const procName = (processData.name || proc.name || 'Process').trim();
+              steps.forEach(step => {
+                (step.outputs || []).forEach(output => {
+                  if (output && output.name) {
+                    const stepNumber = step.step_number || 0;
+                    otherProcessOutputsCache.push({
+                      name: output.name,
+                      quantity: output.quantity != null ? output.quantity : null,
+                      unit: output.unit || '',
+                      step_number: stepNumber,
+                      step_id: step.id || null,
+                      process_id: pid,
+                      output_id: output.id || null,
+                      is_previous_output: true,
+                      displayName: `${procName} › Step ${stepNumber}: ${output.name}`
+                    });
+                  }
+                });
+              });
+            } catch (_) { /* skip process */ }
+          }
+        } catch (_) { otherProcessOutputsCache = []; }
+      }
+      previousOutputs.push(...otherProcessOutputsCache);
+    }
+
     return previousOutputs;
   }
   
@@ -1524,6 +1581,26 @@
         hiddenName.className = 'guided-input-name searchable-dropdown-input';
         hiddenName.value = preSelectedItem.name;
         contentArea.appendChild(hiddenName);
+        const hiddenSourceStepId = document.createElement('input');
+        hiddenSourceStepId.type = 'hidden';
+        hiddenSourceStepId.className = 'guided-input-source-step-id';
+        hiddenSourceStepId.value = (preSelectedItem.step_id || preSelectedItem.source_step_id || '').toString().trim();
+        contentArea.appendChild(hiddenSourceStepId);
+        const hiddenSourceProcessId = document.createElement('input');
+        hiddenSourceProcessId.type = 'hidden';
+        hiddenSourceProcessId.className = 'guided-input-source-process-id';
+        hiddenSourceProcessId.value = (preSelectedItem.process_id || preSelectedItem.source_process_id || '').toString().trim();
+        contentArea.appendChild(hiddenSourceProcessId);
+        const hiddenSourceOutputId = document.createElement('input');
+        hiddenSourceOutputId.type = 'hidden';
+        hiddenSourceOutputId.className = 'guided-input-source-output-id';
+        const outputIdVal = (preSelectedItem.output_id || preSelectedItem.source_output_id || '').toString().trim();
+        hiddenSourceOutputId.value = outputIdVal;
+        contentArea.appendChild(hiddenSourceOutputId);
+        inputContainer.dataset.sourceStepId = (preSelectedItem.step_id || preSelectedItem.source_step_id || '').toString().trim();
+        inputContainer.dataset.sourceProcessId = (preSelectedItem.process_id || preSelectedItem.source_process_id || '').toString().trim();
+        inputContainer.dataset.sourceOutputId = outputIdVal;
+        inputContainer._previousOutputItem = preSelectedItem;
         const quantityField = document.createElement('div');
         quantityField.style.marginBottom = '12px';
         const quantityLabel = document.createElement('label');
@@ -1688,8 +1765,8 @@
       let allCategorizedItems;
       
       if (type === 'previous_output') {
-        // Only get previous step outputs
-        const previousOutputs = getPreviousStepOutputs();
+        // Only get previous step outputs (current process + other processes in org)
+        const previousOutputs = await getPreviousStepOutputs();
         
         if (previousOutputs.length === 0) {
           const messageDiv = document.createElement('div');
@@ -1713,7 +1790,10 @@
             displayName: output.displayName || output.name,
             is_previous_output: true,
             step_number: output.step_number,
-            quantity: output.quantity
+            quantity: output.quantity,
+            step_id: output.step_id,
+            process_id: output.process_id,
+            output_id: output.output_id
           }))
         };
       } else {
@@ -1742,6 +1822,24 @@
         }
       }
       
+      // For previous_output with dropdown: add hidden inputs for source_step_id/source_process_id (set on select)
+      if (type === 'previous_output') {
+        const hiddenSourceStepId = document.createElement('input');
+        hiddenSourceStepId.type = 'hidden';
+        hiddenSourceStepId.className = 'guided-input-source-step-id';
+        hiddenSourceStepId.value = '';
+        contentArea.appendChild(hiddenSourceStepId);
+        const hiddenSourceProcessId = document.createElement('input');
+        hiddenSourceProcessId.type = 'hidden';
+        hiddenSourceProcessId.className = 'guided-input-source-process-id';
+        hiddenSourceProcessId.value = '';
+        contentArea.appendChild(hiddenSourceProcessId);
+        const hiddenSourceOutputId = document.createElement('input');
+        hiddenSourceOutputId.type = 'hidden';
+        hiddenSourceOutputId.className = 'guided-input-source-output-id';
+        hiddenSourceOutputId.value = '';
+        contentArea.appendChild(hiddenSourceOutputId);
+      }
       // Name field with searchable dropdown
       const nameField = document.createElement('div');
       nameField.style.marginBottom = '12px';
@@ -1778,6 +1876,19 @@
             const displayName = item.displayName || item.name;
             selectedPreviousOutputs.add(displayName);
             inputContainer.dataset.previousOutputDisplayName = displayName;
+            const stepIdVal = (item.step_id || item.source_step_id || '').toString().trim();
+            const procIdVal = (item.process_id || item.source_process_id || '').toString().trim();
+            const outputIdVal = (item.output_id || item.source_output_id || '').toString().trim();
+            const srcStepEl = inputContainer.querySelector('.guided-input-source-step-id');
+            const srcProcEl = inputContainer.querySelector('.guided-input-source-process-id');
+            const srcOutputEl = inputContainer.querySelector('.guided-input-source-output-id');
+            if (srcStepEl) srcStepEl.value = stepIdVal;
+            if (srcProcEl) srcProcEl.value = procIdVal;
+            if (srcOutputEl) srcOutputEl.value = outputIdVal;
+            inputContainer.dataset.sourceStepId = stepIdVal;
+            inputContainer.dataset.sourceProcessId = procIdVal;
+            inputContainer.dataset.sourceOutputId = outputIdVal;
+            inputContainer._previousOutputItem = item;
           } else {
             selectedInventoryItems.add(item.name);
           }
@@ -1971,7 +2082,7 @@
       unitField.appendChild(unitSelect);
       contentArea.appendChild(unitField);
       
-      // Execution type dropdown
+      // Execution type dropdown (Other materials: Prompt at execution | Use exact every execution)
       const typeField = document.createElement('div');
       const typeLabel = document.createElement('label');
       typeLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
@@ -1981,10 +2092,10 @@
       typeSelect.className = 'guided-input-execution-type form-select';
       typeSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
       
-      const variableOption = document.createElement('option');
-      variableOption.value = 'variable';
-      variableOption.textContent = 'Select inventory at execution';
-      typeSelect.appendChild(variableOption);
+      const promptOption = document.createElement('option');
+      promptOption.value = 'prompt';
+      promptOption.textContent = 'Prompt at execution';
+      typeSelect.appendChild(promptOption);
       
       const staticOption = document.createElement('option');
       staticOption.value = 'static';
@@ -1997,14 +2108,14 @@
       const explanationDiv = document.createElement('div');
       explanationDiv.style.cssText = 'margin-top: 8px; padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
       explanationDiv.id = `guided-input-explanation-${inputId}`;
-      explanationDiv.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs. This allows you to track specific batches through your process.';
+      explanationDiv.innerHTML = '<strong>Prompt at execution:</strong> Quantity and unit entered here are used as defaults. When the step runs, the operator will be prompted to confirm or adjust them.';
       typeField.appendChild(explanationDiv);
       
       // Update explanation when type changes
       typeSelect.addEventListener('change', function() {
         const explanation = document.getElementById(`guided-input-explanation-${inputId}`);
-        if (this.value === 'variable') {
-          explanation.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs. This allows you to track specific batches through your process.';
+        if (this.value === 'prompt') {
+          explanation.innerHTML = '<strong>Prompt at execution:</strong> Quantity and unit entered here are used as defaults. When the step runs, the operator will be prompted to confirm or adjust them.';
         } else {
           explanation.innerHTML = '<strong>Use this exact input every execution:</strong> The system will use the same quantity and unit for every execution without prompting. Use this for consistent inputs that don\'t vary between batches.';
         }
@@ -2178,11 +2289,11 @@
   };
   
   // Render list of previous step outputs in "Outputs from previous steps" tab; click to add as input.
-  window.renderPreviousOutputsList = function() {
+  window.renderPreviousOutputsList = async function() {
     const container = document.getElementById('guided-previous-outputs-container');
     if (!container) return;
     container.innerHTML = '';
-    const outputs = getPreviousStepOutputs();
+    const outputs = await getPreviousStepOutputs();
     const available = outputs.filter(function(item) {
       const displayName = item.displayName || ('Step ' + (item.step_number || '') + ': ' + item.name);
       return !selectedPreviousOutputs.has(displayName);
@@ -2722,21 +2833,31 @@
       const executionType = executionTypeSelect ? executionTypeSelect.value : 'variable'; // Default to variable for previous outputs
       
       if (name && unit) {
-        // Map execution type to the existing structure
-        // variable = Select inventory at execution (requires_inventory_selection: true, is_variable: true)
-        // static = Use exact input (is_variable: false, requires_inventory_selection: false)
-        // prompt = Prompt at execution (is_variable: true, requires_inventory_selection: false)
-        // Previous outputs are always treated as variable (requires inventory selection at execution)
         const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
         const requiresInventorySelection = isPreviousOutput ? true : (executionType === 'variable');
-        
-        inputs.push({
+        let sourceStepId = null;
+        let sourceProcessId = null;
+        let sourceOutputId = null;
+        if (isPreviousOutput && inputEl._previousOutputItem) {
+          const po = inputEl._previousOutputItem;
+          sourceStepId = (po.step_id || po.source_step_id || '').toString().trim() || null;
+          sourceProcessId = (po.process_id || po.source_process_id || '').toString().trim() || null;
+          sourceOutputId = (po.output_id || po.source_output_id || '').toString().trim() || null;
+        }
+        if (!sourceStepId) sourceStepId = (inputEl.querySelector('.guided-input-source-step-id')?.value || '').trim() || (inputEl.dataset.sourceStepId || '').trim() || null;
+        if (!sourceProcessId) sourceProcessId = (inputEl.querySelector('.guided-input-source-process-id')?.value || '').trim() || (inputEl.dataset.sourceProcessId || '').trim() || null;
+        if (!sourceOutputId) sourceOutputId = (inputEl.querySelector('.guided-input-source-output-id')?.value || '').trim() || (inputEl.dataset.sourceOutputId || '').trim() || null;
+        const inputObj = {
           name: name,
           quantity: quantity ? parseFloat(quantity) : null,
           unit: unit,
           is_variable: isVariable,
           requires_inventory_selection: requiresInventorySelection
-        });
+        };
+        if (sourceStepId) inputObj.source_step_id = sourceStepId;
+        if (sourceProcessId) inputObj.source_process_id = sourceProcessId;
+        if (sourceOutputId) inputObj.source_output_id = sourceOutputId;
+        inputs.push(inputObj);
       }
     });
     
@@ -2876,15 +2997,15 @@
       if (saved && saved.id) {
         // Use the step_number from the saved step (backend might have adjusted it)
         const savedStepNumber = saved.step_number || stepCount;
-        
-        // Store the created step
+        // Use saved.inputs/saved.outputs from the API so createdSteps has server truth (e.g. output ids)
+        // Backend ensures output ids exist; we need them in getPreviousStepOutputs() for source_output_id
         const stepSummary = {
           id: saved.id,
           step_number: savedStepNumber, // Use step_number from saved step
           name: stepName,
           description: stepDescription,
-          inputs: inputs || [],
-          outputs: outputs || [],
+          inputs: (saved.inputs && saved.inputs.length) ? saved.inputs : (inputs || []),
+          outputs: (saved.outputs && saved.outputs.length) ? saved.outputs : (outputs || []),
           execution_prompts: executionPrompts || []
         };
         
