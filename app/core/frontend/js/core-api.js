@@ -129,6 +129,10 @@ const CoreAPI = {
         return this.request('/inventory/expired-materials');
     },
 
+    async getUntrackedItems() {
+        return this.request('/inventory/untracked-items');
+    },
+
     /** @deprecated Use getExpiredMaterials() */
     async getCheckNeededItems() {
         return this.getExpiredMaterials();

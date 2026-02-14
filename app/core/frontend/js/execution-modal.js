@@ -60,21 +60,26 @@
     if (promptsContainer) promptsContainer.innerHTML = '';
     if (outputsContainer) outputsContainer.innerHTML = '';
     
-    // Load inventory and expired/flagged materials in parallel (for highlighting step inputs only)
-    const [inventoryData, expiredData] = await Promise.all([
+    // Load inventory, expired/flagged, and untracked materials in parallel (for highlighting step inputs)
+    const [inventoryData, expiredData, untrackedData] = await Promise.all([
       CoreAPI.getInventory(),
-      CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; })
+      CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; }),
+      CoreAPI.getUntrackedItems().catch(function() { return { untracked_items: [] }; })
     ]);
     const allInventory = inventoryData.inventory_items || [];
     const expiredRaw = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
     const impactedItems = (expiredData && expiredData.impacted_items) ? expiredData.impacted_items : [];
+    const untrackedItems = (untrackedData && untrackedData.untracked_items) ? untrackedData.untracked_items : [];
     const expiredIds = new Set(expiredRaw.map(function(m) { return String(m.id); }));
     const impactedIds = new Set(impactedItems.map(function(i) { return String(i.id); }));
+    const untrackedIds = new Set(untrackedItems.map(function(i) { return String(i.id); }));
     function getExpiredReason(id) {
       if (expiredIds.has(String(id))) return 'Expired';
       var imp = impactedItems.find(function(i) { return String(i.id) === String(id); });
       if (imp && imp.expired_raw_material_name) return 'Made with expired: ' + imp.expired_raw_material_name;
-      return imp ? 'Made with expired ingredients' : null;
+      if (imp) return 'Made with expired ingredients';
+      if (untrackedIds.has(String(id))) return 'Untracked inventory item — reconciliation required';
+      return null;
     }
     
     // Simple unit conversion function for frontend
@@ -884,8 +889,8 @@
     document.body.style.overflow = 'hidden';
   };
 
-  // Submit handler for add-untracked-output form (bound once on load)
-  (function bindUntrackedOutputForm() {
+  // Submit handler for add-untracked-output form (bound when DOM ready so form exists)
+  function bindUntrackedOutputForm() {
     var form = document.getElementById('add-untracked-output-form');
     if (!form) return;
     form.addEventListener('submit', async function(e) {
@@ -929,7 +934,12 @@
         if (typeof showNotification === 'function') showNotification('error', 'Failed to add', err.message || 'Could not add untracked output.');
       }
     });
-  })();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindUntrackedOutputForm);
+  } else {
+    bindUntrackedOutputForm();
+  }
 
   // Called by core2/flows2 add-inventory success when item was added from execution modal.
   // Refetches inventory and updates execute-step-modal dropdowns; optionally selects the new item.

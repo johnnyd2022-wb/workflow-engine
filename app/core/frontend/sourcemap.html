@@ -1317,7 +1317,7 @@
     let allExecutions = [];
     let allExecutionMetadata = [];
     let allOutOfStockRawMaterials = [];
-    let checkNeededData = { expired_raw_materials: [], impacted_items: [], connections: [] };
+    let checkNeededData = { expired_raw_materials: [], impacted_items: [], connections: [], untracked_items: [] };
     let showCheckNeededOnly = false;
     let showWastageOnly = false;
     let processDetailsForMapping = [];
@@ -1654,14 +1654,15 @@
     // Load all data needed for source map
     async function loadProcesses() {
       try {
-        // Load processes, inventory, executions, metadata, out-of-stock, and expired-materials (compliance) in parallel
-        const [processesData, inventoryData, executionsData, metadataData, outOfStockData, expiredMaterialsResult] = await Promise.all([
+        // Load processes, inventory, executions, metadata, out-of-stock, expired-materials, and untracked-items in parallel
+        const [processesData, inventoryData, executionsData, metadataData, outOfStockData, expiredMaterialsResult, untrackedResult] = await Promise.all([
           CoreAPI.getProcesses(),
           CoreAPI.getInventory(),
           CoreAPI.getExecutions(),
           CoreAPI.getExecutionMetadata(),
           CoreAPI.getOutOfStockRawMaterials(),
-          CoreAPI.getExpiredMaterials()
+          CoreAPI.getExpiredMaterials(),
+          CoreAPI.getUntrackedItems().catch(() => ({ untracked_items: [], connections: [] }))
         ]);
 
         allProcesses = processesData.processes || [];
@@ -1670,6 +1671,7 @@
         allExecutionMetadata = metadataData.metadata || [];
         allOutOfStockRawMaterials = outOfStockData.inventory_items || [];
         checkNeededData = expiredMaterialsResult || { expired_raw_materials: [], impacted_items: [], connections: [] };
+        checkNeededData.untracked_items = (untrackedResult && untrackedResult.untracked_items) ? untrackedResult.untracked_items : [];
         
         // Filter out any invalid executions before loading details
         const validExecutions = allExecutions.filter(exec => exec && exec.id);
@@ -1848,18 +1850,17 @@
       // Don't render anything if not tracing - user needs to search and select an item
       // Only render when tracing or in check needed mode
       
-      // If check needed filter is active, show all expired items and impacted products
+      // If check needed filter is active, show expired items, impacted products, and untracked items
       if (showCheckNeededOnly && checkNeededData) {
         const expiredRawMaterials = (checkNeededData.expired_raw_materials || []).slice();
         const impactedItems = (checkNeededData.impacted_items || []).slice();
+        const untrackedItems = (checkNeededData.untracked_items || []).slice();
         const connections = checkNeededData.connections || [];
         
-        // Parse date for sorting (null/undefined -> far future so they sort last)
         const parseSortDate = (str) => {
           if (!str) return null;
           try { return new Date(str).getTime(); } catch { return null; }
         };
-        // Sort expired raw materials by expiry_date (oldest first) so visual left column is in time order
         expiredRawMaterials.sort((a, b) => {
           const ta = parseSortDate(a.expiry_date);
           const tb = parseSortDate(b.expiry_date);
@@ -1868,7 +1869,6 @@
           if (tb != null) return 1;
           return (a.name || '').localeCompare(b.name || '');
         });
-        // Sort impacted items by completed_at (earliest first) so visual right column matches data table order
         impactedItems.sort((a, b) => {
           const ta = parseSortDate(getCompletedAtForItem(a));
           const tb = parseSortDate(getCompletedAtForItem(b));
@@ -1877,8 +1877,10 @@
           if (tb != null) return 1;
           return (a.name || '').localeCompare(b.name || '');
         });
+        untrackedItems.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         
-        if (expiredRawMaterials.length === 0) {
+        const hasAnyIssues = expiredRawMaterials.length > 0 || impactedItems.length > 0 || untrackedItems.length > 0;
+        if (!hasAnyIssues) {
           const noIssuesText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           noIssuesText.setAttribute('x', maxX / 2);
           noIssuesText.setAttribute('y', maxY / 2);
@@ -1886,7 +1888,7 @@
           noIssuesText.setAttribute('fill', '#10b981');
           noIssuesText.setAttribute('text-anchor', 'middle');
           noIssuesText.setAttribute('dominant-baseline', 'middle');
-          noIssuesText.textContent = '✓ No expired raw materials with stock found';
+          noIssuesText.textContent = '✓ No issues found';
           svg.appendChild(noIssuesText);
         } else {
           // Sort connections by position of "To" (impacted) item in visual order so data table rows match visual exactly
@@ -1899,7 +1901,7 @@
             const bFrom = expiredRawMaterials.findIndex(r => String(r.id) === b.from_id);
             return (aFrom === -1 ? 9999 : aFrom) - (bFrom === -1 ? 9999 : bFrom);
           });
-          sourceMapTableData = { items: [...expiredRawMaterials, ...impactedItems], connections: sortedConnections };
+          sourceMapTableData = { items: [...expiredRawMaterials, ...impactedItems, ...untrackedItems], connections: sortedConnections };
           // Render check needed flow: same min width (paneWidth) as trace view so cards don't clip text
           const col1MaxWidth = Math.max(paneWidth, ...expiredRawMaterials.map(r => getItemCardWidth(r)));
           const col2MaxWidth = Math.max(paneWidth, ...impactedItems.map(i => getItemCardWidth(i)));
@@ -1933,7 +1935,20 @@
             maxY = Math.max(maxY, itemY + 90);
           });
           
-          maxX = col2X + col2MaxWidth + 50;
+          // Untracked items (third column: reconciliation required)
+          const col3MaxWidth = untrackedItems.length > 0 ? Math.max(paneWidth, ...untrackedItems.map(i => getItemCardWidth(i))) : 0;
+          const col3X = col2X + col2MaxWidth + paneGap;
+          untrackedItems.forEach((item, index) => {
+            const itemY = startY + (index * (90 + itemSpacing));
+            const cardWidth = Math.max(paneWidth, getItemCardWidth(item));
+            item._flowchartX = col3X + cardWidth;
+            item._flowchartY = itemY + 45;
+            const itemType = item.inventory_type === 'work_in_progress' ? 'wip' : (item.inventory_type === 'final_product' ? 'final' : 'raw');
+            renderSingleInventoryItem(svg, item, col3X, itemY, cardWidth, itemType, null);
+            maxY = Math.max(maxY, itemY + 90);
+          });
+          
+          maxX = (untrackedItems.length > 0 ? col3X + col3MaxWidth : col2X + col2MaxWidth) + 50;
           
           // Draw connections (from right edge of each source card, to left edge of each target card)
           connections.forEach(conn => {
@@ -5748,40 +5763,34 @@
       }
     }
     
-    // Check if an item needs attention (expired or made with expired ingredients)
+    // Check if an item needs attention (expired, made with expired ingredients, or untracked)
     function isCheckNeededItem(itemId) {
       if (!checkNeededData) return false;
       
-      // Check if it's an expired raw material
-      const isExpiredRaw = (checkNeededData.expired_raw_materials || []).some(
-        rm => rm.id === itemId
-      );
+      const isExpiredRaw = (checkNeededData.expired_raw_materials || []).some(rm => rm.id === itemId);
       if (isExpiredRaw) return true;
       
-      // Check if it's an impacted item (made with expired ingredients)
-      const isImpacted = (checkNeededData.impacted_items || []).some(
-        item => item.id === itemId
-      );
-      return isImpacted;
+      const isImpacted = (checkNeededData.impacted_items || []).some(item => item.id === itemId);
+      if (isImpacted) return true;
+      
+      const isUntracked = (checkNeededData.untracked_items || []).some(item => item.id === itemId);
+      return isUntracked;
     }
     
-    // Get check reason text for display (dynamic for current and future check types)
+    // Get check reason text for display (expired, impacted, or untracked)
     function getCheckReason(itemId) {
       if (!checkNeededData) return null;
       
-      // Source item expired (raw material or intermediate/final with expiry – same logic for any expired source)
-      const expiredRaw = (checkNeededData.expired_raw_materials || []).find(
-        rm => rm.id === itemId
-      );
+      const expiredRaw = (checkNeededData.expired_raw_materials || []).find(rm => rm.id === itemId);
       if (expiredRaw) return (expiredRaw.name || 'Item') + ' expired';
       
-      // Impacted item: made using expired ingredient (produced after raw expired)
-      const impactedItem = (checkNeededData.impacted_items || []).find(
-        item => item.id === itemId
-      );
+      const impactedItem = (checkNeededData.impacted_items || []).find(item => item.id === itemId);
       if (impactedItem && impactedItem.expired_raw_material_name) {
         return impactedItem.expired_raw_material_name + ' expired before execution of this process';
       }
+      
+      const untrackedItem = (checkNeededData.untracked_items || []).find(item => item.id === itemId);
+      if (untrackedItem) return untrackedItem.check_reason || 'Untracked inventory item — reconciliation required';
       
       return null;
     }
@@ -5792,13 +5801,15 @@
       return reason ? 'Check reason: ' + reason : null;
     }
     
-    // Id of the item to locate in map (the cause of the check failure – e.g. expired raw, not the impacted product)
+    // Id of the item to locate in map (the cause of the check failure – expired raw, impacted product, or untracked item)
     function getCheckFailureCauseId(itemId) {
       if (!checkNeededData || !itemId) return null;
       const expiredRaw = (checkNeededData.expired_raw_materials || []).find(rm => rm.id === itemId);
       if (expiredRaw) return String(itemId);
       const impactedItem = (checkNeededData.impacted_items || []).find(item => item.id === itemId);
       if (impactedItem && impactedItem.expired_raw_material_id) return String(impactedItem.expired_raw_material_id);
+      const untrackedItem = (checkNeededData.untracked_items || []).find(item => item.id === itemId);
+      if (untrackedItem) return String(itemId);
       return null;
     }
     

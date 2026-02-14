@@ -74,6 +74,24 @@
     .help-tooltip { position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 4px; max-width: 280px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
     .help-tooltip.visible { display: block; }
     .help-wrapper { position: relative; display: inline-block; }
+    /* Compliance / core checks banner */
+    .compliance-banner {
+      background: linear-gradient(135deg, hsl(38, 92%, 50%, 0.12) 0%, hsl(25, 95%, 53%, 0.08) 100%);
+      border-bottom: 1px solid hsl(38, 92%, 50%, 0.35);
+      padding: 12px 24px;
+      margin: 0;
+    }
+    .compliance-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .compliance-banner-icon { font-size: 1.25rem; color: hsl(38, 92%, 40%); flex-shrink: 0; }
+    .compliance-banner-message { flex: 1; margin: 0; font-size: 14px; color: var(--text-primary, #1a1a1a); }
+    .compliance-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
     .dopamine-line { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px; }
     .dopamine-line p { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); line-height: 1.5; }
     @media (min-width: 600px) { .dopamine-line { padding: 16px 20px; } .dopamine-line p { font-size: 0.95rem; } }
@@ -118,6 +136,18 @@
           </button>
         </div>
       </header>
+
+      <!-- Compliance / core checks banner (expired materials, untracked items, etc.) -->
+      <div id="compliance-banner" class="compliance-banner" role="alert" aria-live="polite" style="display: none;">
+        <div class="compliance-banner-content">
+          <span class="compliance-banner-icon" aria-hidden="true">⚠</span>
+          <p id="compliance-banner-message" class="compliance-banner-message"></p>
+          <div class="compliance-banner-actions">
+            <button type="button" id="compliance-banner-ignore-today" class="btn btn-secondary btn-sm">Ignore for today</button>
+            <button type="button" id="compliance-banner-dismiss" class="btn btn-ghost btn-sm">Dismiss</button>
+          </div>
+        </div>
+      </div>
       
       <!-- Page Content -->
       <main class="page-content">
@@ -1183,25 +1213,69 @@
       card.remove();
     }
     
+    // Compliance banner: show when any core check is flagged (expired materials, untracked items, etc.)
+    function todayDateKey() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    async function loadComplianceBanner() {
+      const banner = document.getElementById('compliance-banner');
+      const msgEl = document.getElementById('compliance-banner-message');
+      if (!banner || !msgEl) return;
+      if (sessionStorage.getItem('corechecks_ignore_date') === todayDateKey()) return;
+      if (sessionStorage.getItem('corechecks_banner_dismissed') === '1') return;
+      try {
+        const [expiredData, untrackedData] = await Promise.all([
+          CoreAPI.getExpiredMaterials().catch(() => ({ expired_raw_materials: [], impacted_items: [] })),
+          CoreAPI.getUntrackedItems().catch(() => ({ untracked_items: [] }))
+        ]);
+        const expired = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
+        const untracked = (untrackedData && untrackedData.untracked_items) ? untrackedData.untracked_items : [];
+        if (expired.length === 0 && untracked.length === 0) return;
+        const parts = [];
+        if (expired.length > 0) {
+          parts.push(expired.length === 1 ? '1 expired raw material with stock' : expired.length + ' expired raw materials with stock');
+        }
+        if (untracked.length > 0) {
+          parts.push(untracked.length === 1 ? '1 untracked item (reconciliation required)' : untracked.length + ' untracked items (reconciliation required)');
+        }
+        msgEl.textContent = parts.join('; ') + ' — review in Source Map or Inventory.';
+        banner.style.display = 'block';
+      } catch (e) {
+        console.warn('Compliance banner check failed:', e);
+      }
+    }
+    function hideComplianceBanner() {
+      const banner = document.getElementById('compliance-banner');
+      if (banner) banner.style.display = 'none';
+    }
+
     // Load dashboard data on page load
     document.addEventListener('DOMContentLoaded', async function() {
       try {
-        // Load metrics
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
-        
-        // Load processes
         const processesData = await CoreAPI.getProcesses();
         renderProcessesV2(processesData.processes);
-        
-        // Load inventory
         await loadInventoryV2();
-        
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       }
-      
-      // Setup modal handlers
+      loadComplianceBanner();
+      const dismissBtn = document.getElementById('compliance-banner-dismiss');
+      const ignoreTodayBtn = document.getElementById('compliance-banner-ignore-today');
+      if (dismissBtn) {
+        dismissBtn.addEventListener('click', function() {
+          sessionStorage.setItem('corechecks_banner_dismissed', '1');
+          hideComplianceBanner();
+        });
+      }
+      if (ignoreTodayBtn) {
+        ignoreTodayBtn.addEventListener('click', function() {
+          sessionStorage.setItem('corechecks_ignore_date', todayDateKey());
+          hideComplianceBanner();
+        });
+      }
       setupModalHandlers();
     });
     

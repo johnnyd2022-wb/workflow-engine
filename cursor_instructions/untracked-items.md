@@ -1,80 +1,53 @@
-Step 1: Prefill & Modal Handling Improvements
-Goal
+Implement a System Check framework for untracked items following the pattern used in expired_materials.py, leveraging corechecks.py and dagtraversal.py.
 
-Enhance in-flow missing item handling by:
+Requirements:
 
-Prefilling unit from step definition (instead of default 'kg') for raw inputs.
+1. Banner Alerts
 
-Parallelizing input modal initialization to improve performance.
+Display unresolved untracked items across the system to all relevant operators, similar to expired materials.
 
-Standardizing dataset flags to reliably determine raw vs output.
+Copy existing alert formatting and behavior.
 
-Clarifying validation messages for untracked outputs.
+Ensure alerts dynamically update when items are reconciled or added to inventory.
 
-Requirements
-1. Prefill Unit from Step
+2. Sourcemap Checks
 
-For window.openAddInventoryModalForMissingInput(prefill):
+Track all items with no upstream source.
 
-Use prefill.unit if present.
+Mark these as “Check needed” in the sourcemap UI, using the same approach as expired materials.
 
-Fall back to default 'kg' only if no unit in step definition.
+Include reasons for the check, e.g., “Untracked inventory item”, “Reconciliation required”.
 
-if (unitEl) unitEl.value = prefill.unit || 'kg';
+Highlight discrepancies between execution inputs and inventory outputs, ensuring operators can see potential negative or unbalanced quantities.
 
-2. Parallelize Input Initialization
+3. Execution Flow Validation
 
-Currently:
+Validate downstream steps that reference these items:
 
-for (const input of step.inputs) {
-  await window.addGuidedInput(inputType, true);
-}
+Prevent negative stock or unbalanced quantities from propagating.
 
+Mark dependent steps as blocked or warning if reconciliation is needed.
 
-Suggested:
+Maintain consistency with existing DAG traversal logic to determine impact.
 
-await Promise.all(step.inputs.map(input => window.addGuidedInput(inputType, true)));
+4. Implementation Guidelines
 
+Reuse functions from corechecks.py for standard check registration and result reporting.
 
-Keeps modals collapsible, avoids serial delays for many inputs.
+Use dagtraversal.py to traverse dependencies and update downstream validation.
 
-3. Standardize Dataset Flags
+Ensure all untracked item checks are timestamped, user-stamped, and linked to relevant process/step for auditability.
 
-Determine whether “Add Missing Item” is from previous output or raw input consistently:
+Include automated update of banners, sourcemap highlights, and downstream execution state when reconciliation occurs.
 
-var fromOutput = Boolean(
-  this.dataset.sourceOutputId || this.dataset.sourceStepId || this.dataset.sourceProcessId
-);
+5. UX Principles
 
+Minimal friction: operators should be able to continue execution while checks exist.
 
-Use this flag to decide which modal to open:
+Clear visibility: all unresolved untracked items are visible in banners and sourcemap.
 
-fromOutput === true → window.openAddUntrackedOutputModal
+Contextual linking: provide clickable references for mapping items to relevant executions.
 
-fromOutput === false → window.openAddInventoryModalForMissingInput
+Immediate feedback: when an item is reconciled, remove alerts and update inventory in real-time.
 
-4. Clarify Validation Messages
-
-In add-untracked-output-form submit handler:
-
-if (!name || !unit || isNaN(quantity) || quantity < 0) {
-  showNotification(
-    'error',
-    'Validation error',
-    'Please provide a valid name, unit, and non-negative quantity.'
-  );
-  return;
-}
-
-
-Ensures user understands exactly what is missing or invalid.
-
-Deliverables
-
-Prefill raw input modal with unit from step definition.
-
-Input modals initialized in parallel.
-
-Consistent logic for determining raw vs output when opening missing item modals.
-
-Clear, user-friendly validation for untracked output submission.
+Deliver a Python module or extension that integrates with the existing system check framework, is fully testable, and can be called after recording any missing item.

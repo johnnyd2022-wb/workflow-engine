@@ -63,8 +63,10 @@ class CoreChecksRunner:
     def _register_builtin_checks(self) -> None:
         """Register built-in checks so they can be run by id."""
         from app.core.backend.checks.expired_materials import run_expired_materials_check
+        from app.core.backend.checks.untracked_items import run_untracked_items_check
 
         self.register_check("expired_materials", run_expired_materials_check)
+        self.register_check("untracked_items", run_untracked_items_check)
 
     def register_check(self, check_id: str, fn: CheckFn) -> None:
         """Register a check so it can be run via run_check(check_id)."""
@@ -126,4 +128,19 @@ def register_routes(bp):
         result = runner.run_check("expired_materials")
         if result is None or result.data is None:
             return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
+        return jsonify(result.data), 200
+
+    @bp.route("/api/core/inventory/untracked-items", methods=["GET"])
+    @requires_auth
+    def list_untracked_items():
+        """List inventory items flagged as untracked (reconciliation required).
+
+        Uses CoreChecksRunner (untracked_items check). Used by banners, sourcemap
+        Check needed, and execution modal dropdown highlighting.
+        """
+        org_id = UUID(g.org_id)
+        runner = CoreChecksRunner(org_id=org_id, session=db_session())
+        result = runner.run_check("untracked_items")
+        if result is None or result.data is None:
+            return jsonify({"untracked_items": [], "connections": []}), 200
         return jsonify(result.data), 200
