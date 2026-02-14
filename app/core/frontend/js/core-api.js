@@ -153,7 +153,19 @@ const CoreAPI = {
             method: 'DELETE',
         });
     },
-    
+
+    async recordWastage(entries) {
+        return this.request('/inventory/wastage', {
+            method: 'POST',
+            body: { entries },
+        });
+    },
+
+    async getWastageRecords(inventoryItemId = null) {
+        const query = inventoryItemId ? `?inventory_item_id=${encodeURIComponent(inventoryItemId)}` : '';
+        return this.request(`/inventory/wastage${query}`);
+    },
+
     async traceRawMaterial(rawMaterialId) {
         return this.request(`/inventory/trace/${rawMaterialId}`);
     },

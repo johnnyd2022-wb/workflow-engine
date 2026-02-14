@@ -1704,7 +1704,7 @@
       };
       
       try {
-        await CoreAPI.createInventoryItem(data);
+        const saved = await CoreAPI.createInventoryItem(data);
         
         // Close modal
         closeModal('add-inventory-modal');
@@ -1714,6 +1714,11 @@
         
         // Reload inventory
         await loadInventory();
+        
+        // If added from execution modal (missing raw material), refresh step dropdown and select new item
+        if (window.addInventoryContext && window.addInventoryContext.fromExecutionModal && typeof window.refreshExecutionModalInventory === 'function') {
+          await window.refreshExecutionModalInventory(saved);
+        }
         
         showNotification('success', 'Inventory Item Added', `"${data.name}" has been added to inventory successfully.`);
         

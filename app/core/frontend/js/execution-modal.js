@@ -264,6 +264,7 @@
             </select>
             <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
             ${errorMessage}
+            ${hasNoInventory ? `<p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-from-output="${(input.source_output_id || input.source_step_id || input.source_process_id) ? 'true' : 'false'}" style="font-size: 13px;">Add Missing Item</button></p>` : ''}
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume <span style="color: var(--error, #ef4444);">*</span></label>
@@ -359,6 +360,30 @@
           }
           quantityInput.addEventListener('input', function() {
             if (parseFloat(this.value) > 0) this.style.border = '';
+          });
+        }
+        
+        // Add Missing Item: if from output (source_output_id or source_step_id/source_process_id) -> untracked output modal; else -> raw material modal
+        const addMissingBtn = inputSection.querySelector('.add-missing-item-btn');
+        if (addMissingBtn) {
+          addMissingBtn.addEventListener('click', function() {
+            var fromOutput = this.dataset.fromOutput === 'true';
+            var sourceOutputId = this.dataset.sourceOutputId || '';
+            var name_ = this.dataset.inputName || '';
+            var quantity_ = this.dataset.inputQuantity != null && this.dataset.inputQuantity !== '' ? this.dataset.inputQuantity : '';
+            var unit_ = this.dataset.inputUnit || '';
+            if (fromOutput && window.openAddUntrackedOutputModal) {
+              window.addInventoryContext = { fromExecutionModal: true, inputName: name_ };
+              window.openAddUntrackedOutputModal(
+                { name: name_, quantity: quantity_, unit: unit_, id: sourceOutputId || undefined },
+                modal.dataset.executionId,
+                modal.dataset.executionStepId
+              );
+              var untrackedModal = document.getElementById('add-untracked-output-modal');
+              if (untrackedModal) untrackedModal.style.zIndex = '1001';
+            } else if (!fromOutput && window.openAddInventoryModalForMissingInput) {
+              window.openAddInventoryModalForMissingInput({ name: name_, quantity: quantity_, unit: unit_ });
+            }
           });
         }
         
@@ -481,7 +506,7 @@
         const outputSection = document.createElement('div');
         outputSection.className = 'execute-output-section';
         outputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
-        
+        const outputId = output.id != null ? escapeHtml(String(output.id)) : '';
         outputSection.innerHTML = `
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
@@ -490,9 +515,20 @@
             </label>
             <input type="number" class="form-input execute-output-quantity-input" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
+            <p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-untracked-output-btn" data-output-name="${escapeHtml(output.name)}" data-output-quantity="${output.quantity != null ? output.quantity : ''}" data-output-unit="${escapeHtml(output.unit || '')}" data-output-id="${outputId}" style="font-size: 12px;">Add as untracked output</button></p>
           </div>
         `;
-        
+        const addUntrackedBtn = outputSection.querySelector('.add-untracked-output-btn');
+        if (addUntrackedBtn) {
+          addUntrackedBtn.addEventListener('click', function() {
+            window.openAddUntrackedOutputModal && window.openAddUntrackedOutputModal({
+              name: this.dataset.outputName || '',
+              quantity: this.dataset.outputQuantity != null && this.dataset.outputQuantity !== '' ? this.dataset.outputQuantity : '',
+              unit: this.dataset.outputUnit || '',
+              id: this.dataset.outputId || null
+            }, modal.dataset.executionId, modal.dataset.executionStepId);
+          });
+        }
         outputsContainer.appendChild(outputSection);
       });
     } else if (outputsContainer) {
@@ -796,5 +832,170 @@
       showNotification('error', 'Failed to Complete Step', error.message || 'Failed to complete step. Please try again.');
     }
   };
-  
+
+  // ============================================================
+  // ADD MISSING ITEM (in-flow raw material)
+  // ============================================================
+  // Opens the page's Add Inventory modal with prefill. Set window.addInventoryContext
+  // so the add-inventory submit handler can call refreshExecutionModalInventory(savedItem) on success.
+  window.openAddInventoryModalForMissingInput = function(prefill) {
+    var addModal = document.getElementById('add-inventory-modal');
+    if (!addModal) return;
+    var form = addModal.querySelector('form');
+    if (form) {
+      var nameEl = form.querySelector('[name="name"]');
+      var qtyEl = form.querySelector('[name="quantity"]');
+      var unitEl = form.querySelector('[name="unit"]');
+      if (nameEl) nameEl.value = prefill.name || '';
+      if (qtyEl) qtyEl.value = prefill.quantity != null && prefill.quantity !== '' ? prefill.quantity : '';
+      if (unitEl) unitEl.value = prefill.unit || 'kg';
+    }
+    window.addInventoryContext = { fromExecutionModal: true, inputName: prefill.name || '' };
+    addModal.style.zIndex = '1001'; // Above execution modal (z-index 1000)
+    addModal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  };
+
+  // Open lightweight "Add untracked output" modal (missing output recorded during execution).
+  window.openAddUntrackedOutputModal = function(outputDef, executionId, executionStepId) {
+    var m = document.getElementById('add-untracked-output-modal');
+    if (!m) return;
+    var nameEl = document.getElementById('untracked-output-name');
+    var qtyEl = document.getElementById('untracked-output-quantity');
+    var unitEl = document.getElementById('untracked-output-unit');
+    var dateEl = document.getElementById('untracked-output-date');
+    if (nameEl) nameEl.value = outputDef.name || '';
+    if (qtyEl) qtyEl.value = outputDef.quantity != null && outputDef.quantity !== '' ? outputDef.quantity : '';
+    if (unitEl) unitEl.value = outputDef.unit || 'units';
+    if (dateEl) {
+      var today = new Date();
+      dateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    }
+    window.untrackedOutputContext = {
+      executionId: executionId,
+      executionStepId: executionStepId,
+      outputId: outputDef.id || null
+    };
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  };
+
+  // Submit handler for add-untracked-output form (bound once on load)
+  (function bindUntrackedOutputForm() {
+    var form = document.getElementById('add-untracked-output-form');
+    if (!form) return;
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      var ctx = window.untrackedOutputContext;
+      if (!ctx) return;
+      var name = (form.querySelector('[name="name"]') || {}).value;
+      var quantity = parseFloat((form.querySelector('[name="quantity"]') || {}).value);
+      var unit = (form.querySelector('[name="unit"]') || {}).value;
+      var inventoryType = (form.querySelector('[name="inventory_type"]') || {}).value || 'work_in_progress';
+      var dateEl = document.getElementById('untracked-output-date');
+      var recordedDate = dateEl ? dateEl.value : null;
+      if (!name || !unit || isNaN(quantity) || quantity < 0) {
+        if (typeof showNotification === 'function') showNotification('error', 'Validation', 'Name, quantity and unit are required.');
+        return;
+      }
+      var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      var payload = {
+        name: name,
+        quantity: quantity,
+        unit: unit,
+        inventory_type: inventoryType,
+        source_execution_id: ctx.executionId || undefined,
+        source_execution_step_id: ctx.executionStepId || undefined,
+        untracked: true,
+        metadata: recordedDate ? { recorded_date: recordedDate } : {}
+      };
+      if (ctx.outputId && uuidRe.test(String(ctx.outputId))) payload.source_output_id = ctx.outputId;
+      try {
+        var created = await CoreAPI.createInventoryItem(payload);
+        var m = document.getElementById('add-untracked-output-modal');
+        if (m) { m.style.display = 'none'; document.body.style.overflow = 'auto'; }
+        window.untrackedOutputContext = null;
+        if (typeof showNotification === 'function') showNotification('success', 'Untracked output added', 'Item has been added to inventory and flagged for reconciliation.');
+        if (window.addInventoryContext && window.addInventoryContext.fromExecutionModal && created) {
+          await window.refreshExecutionModalInventory(created);
+        }
+        if (config.onStepCompleted) await config.onStepCompleted();
+      } catch (err) {
+        console.error('Failed to add untracked output:', err);
+        if (typeof showNotification === 'function') showNotification('error', 'Failed to add', err.message || 'Could not add untracked output.');
+      }
+    });
+  })();
+
+  // Called by core2/flows2 add-inventory success when item was added from execution modal.
+  // Refetches inventory and updates execute-step-modal dropdowns; optionally selects the new item.
+  window.refreshExecutionModalInventory = async function(newItem) {
+    var modal = document.getElementById('execute-step-modal');
+    if (!modal || modal.style.display === 'none') return;
+    var ctx = window.addInventoryContext;
+    if (!ctx || !ctx.fromExecutionModal) return;
+
+    var inventoryData = await CoreAPI.getInventory();
+    var allInventory = inventoryData.inventory_items || [];
+    var currentExecutionId = modal.dataset.executionId;
+
+    var selects = modal.querySelectorAll('.execute-inventory-select');
+    for (var i = 0; i < selects.length; i++) {
+      var select = selects[i];
+      var inputName = select.dataset.inputName;
+      if (!inputName) continue;
+      var matching = allInventory.filter(function(inv) {
+        return inv.name.toLowerCase().indexOf(inputName.toLowerCase()) !== -1 ||
+          inputName.toLowerCase().indexOf(inv.name.toLowerCase()) !== -1;
+      });
+      matching.sort(function(a, b) {
+        var aEid = a.source_execution_id || a.execution_id || null;
+        var bEid = b.source_execution_id || b.execution_id || null;
+        if (currentExecutionId) {
+          var aMatch = aEid && String(aEid) === String(currentExecutionId);
+          var bMatch = bEid && String(bEid) === String(currentExecutionId);
+          if (aMatch && !bMatch) return -1;
+          if (!aMatch && bMatch) return 1;
+        }
+        return 0;
+      });
+      var optionsHtml = matching.map(function(inv) {
+        var displayText = (inv.process_name ? inv.process_name + ' - ' : '') + inv.name + ' - ' + inv.quantity + ' ' + inv.unit;
+        if (inv.supplier) displayText += ' (' + (inv.supplier || '') + ')';
+        return '<option value="' + inv.id + '" data-quantity="' + (inv.quantity || '') + '" data-unit="' + (inv.unit || '') + '">' + escapeHtml(displayText) + '</option>';
+      }).join('');
+      select.innerHTML = '<option value="">Select inventory item...</option>' + optionsHtml;
+      if (newItem && ctx.inputName && inputName === ctx.inputName) {
+        var newId = (newItem.id != null) ? String(newItem.id) : '';
+        select.value = newId;
+        var opt = select.options[select.selectedIndex];
+        if (opt && opt.value) {
+          var section = select.closest('.execute-input-section');
+          if (section) {
+            var qtyInput = section.querySelector('.execute-quantity-input');
+            var unitDisplay = section.querySelector('.execute-quantity-unit-display');
+            if (qtyInput) {
+              qtyInput.value = opt.dataset.quantity != null ? opt.dataset.quantity : qtyInput.value;
+              qtyInput.dataset.inventoryUnit = opt.dataset.unit || '';
+            }
+            if (unitDisplay) unitDisplay.textContent = opt.dataset.unit || '';
+          }
+          var submitBtn = modal.querySelector('#execute-step-submit-btn');
+          if (submitBtn) {
+            var allRequired = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
+            var allHave = true;
+            allRequired.forEach(function(s) { if (!s.value) allHave = false; });
+            if (allHave) {
+              submitBtn.disabled = false;
+              submitBtn.style.opacity = '1';
+              submitBtn.style.cursor = 'pointer';
+              submitBtn.title = '';
+            }
+          }
+        }
+      }
+    }
+    window.addInventoryContext = null;
+  };
+
 })();

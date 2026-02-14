@@ -221,13 +221,25 @@
                 <h2 class="card-title">Inventory</h2>
                 <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Monitor your inventory with real-time visibility across your entire supply chain.</p>
               </div>
-              <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" style="margin-top: 0;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Add to Inventory
-              </button>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" style="margin-top: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Add to Inventory
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="record-wastage-btn" style="margin-top: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                  </svg>
+                  Record wastage
+                </button>
+              </div>
             </div>
             <div class="card-content">
               <div class="inventory-category-grid" id="inventory-grid">
@@ -1278,6 +1290,108 @@
           return false;
         });
       }
+
+      // Record wastage: open modal, render inventory cards, submit
+      const recordWastageBtn = document.getElementById('record-wastage-btn');
+      const recordWastageModal = document.getElementById('record-wastage-modal');
+      const recordWastageClose = document.getElementById('record-wastage-modal-close');
+      const recordWastageCancel = document.getElementById('record-wastage-cancel');
+      const recordWastageSubmit = document.getElementById('record-wastage-submit');
+      const recordWastageCardsContainer = document.getElementById('record-wastage-cards-container');
+
+      async function openRecordWastageModal() {
+        if (!recordWastageModal || !recordWastageCardsContainer) return;
+        recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">Loading inventory...</p>';
+        recordWastageModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        try {
+          const data = await CoreAPI.getInventory();
+          const items = (data.inventory_items || []).filter(function(item) {
+            const q = parseFloat(item.quantity);
+            return !isNaN(q) && q > 0;
+          });
+          if (items.length === 0) {
+            recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">No inventory with quantity to record wastage.</p>';
+            return;
+          }
+          recordWastageCardsContainer.innerHTML = '';
+          items.forEach(function(item) {
+            const qtyNum = parseFloat(item.quantity);
+            const unit = item.unit || 'units';
+            const card = document.createElement('div');
+            card.className = 'wastage-card';
+            card.style.cssText = 'border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 14px; background: var(--bg-card); display: flex; flex-direction: column; gap: 10px;';
+            card.dataset.inventoryId = item.id;
+            card.dataset.maxQuantity = String(item.quantity);
+            const nameLine = (item.process_name ? item.process_name + ' – ' : '') + item.name;
+            card.innerHTML =
+              '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">' +
+              '<div><span style="font-weight: 600; color: var(--text-primary);">' + escapeHtml(nameLine) + '</span>' +
+              '<span style="font-size: 12px; color: var(--text-secondary); margin-left: 6px;">Available: ' + escapeHtml(String(item.quantity)) + ' ' + escapeHtml(unit) + '</span></div>' +
+              '</div>' +
+              '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">' +
+              '<label style="font-size: 12px; color: var(--text-secondary);">Quantity to waste</label>' +
+              '<input type="number" class="wastage-qty-input" min="0" max="' + (qtyNum + 1) + '" step="0.0001" placeholder="0" value="" style="width: 100px; padding: 8px 10px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">' +
+              '<span style="font-size: 13px; color: var(--text-secondary);">' + escapeHtml(unit) + '</span>' +
+              '<button type="button" class="btn btn-secondary btn-sm waste-entire-btn" style="font-size: 12px;">Waste entire item</button>' +
+              '</div>';
+            const qtyInput = card.querySelector('.wastage-qty-input');
+            const wasteEntireBtn = card.querySelector('.waste-entire-btn');
+            wasteEntireBtn.addEventListener('click', function() {
+              qtyInput.value = String(item.quantity);
+            });
+            qtyInput.addEventListener('input', function() {
+              const v = parseFloat(this.value);
+              const max = parseFloat(card.dataset.maxQuantity);
+              if (!isNaN(v) && v > max) this.value = String(max);
+            });
+            recordWastageCardsContainer.appendChild(card);
+          });
+        } catch (e) {
+          console.error('Failed to load inventory for wastage', e);
+          recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--error);">Failed to load inventory.</p>';
+        }
+      }
+
+      function closeRecordWastageModal() {
+        if (recordWastageModal) {
+          recordWastageModal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+        }
+      }
+
+      async function submitRecordWastage() {
+        if (!recordWastageCardsContainer) return;
+        const cards = recordWastageCardsContainer.querySelectorAll('.wastage-card');
+        const entries = [];
+        cards.forEach(function(card) {
+          const id = card.dataset.inventoryId;
+          const input = card.querySelector('.wastage-qty-input');
+          const val = input && parseFloat(input.value);
+          if (id && !isNaN(val) && val > 0) entries.push({ inventory_item_id: id, quantity_wasted: val });
+        });
+        if (entries.length === 0) {
+          showNotification('error', 'No wastage entered', 'Enter quantity to waste for at least one item.');
+          return;
+        }
+        try {
+          const res = await CoreAPI.recordWastage(entries);
+          closeRecordWastageModal();
+          if (res && res.wastage_records && res.wastage_records.length) {
+            showNotification('success', 'Wastage recorded', res.wastage_records.length + ' item(s) updated. Quantity deducted from inventory.');
+          }
+          if (typeof loadInventoryV2 === 'function') loadInventoryV2();
+          const metrics = await CoreAPI.getMetrics();
+          if (typeof updateMetricsV2 === 'function') updateMetricsV2(metrics);
+        } catch (e) {
+          showNotification('error', 'Failed to record wastage', e.message || 'Could not record wastage.');
+        }
+      }
+
+      if (recordWastageBtn) recordWastageBtn.addEventListener('click', openRecordWastageModal);
+      if (recordWastageClose) recordWastageClose.addEventListener('click', closeRecordWastageModal);
+      if (recordWastageCancel) recordWastageCancel.addEventListener('click', closeRecordWastageModal);
+      if (recordWastageSubmit) recordWastageSubmit.addEventListener('click', submitRecordWastage);
     });
     
     // Create process handler with optimistic UI
@@ -1539,6 +1653,11 @@
           });
 
           replaceOptimisticInventoryV2(tempId, saved);
+
+          // If added from execution modal (missing raw material), refresh step dropdown and select new item
+          if (window.addInventoryContext && window.addInventoryContext.fromExecutionModal && typeof window.refreshExecutionModalInventory === 'function') {
+            await window.refreshExecutionModalInventory(saved);
+          }
 
           // Update metrics
           const metrics = await CoreAPI.getMetrics();
@@ -1991,6 +2110,26 @@
           <button type="submit" class="btn btn-primary">Add Inventory Item</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Record wastage modal: scrollable inventory cards, quantity per item, Waste entire item -->
+  <div class="modal-overlay" id="record-wastage-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 560px; width: 90%; padding: 24px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Record wastage</h2>
+        <button type="button" id="record-wastage-modal-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 16px 0; flex-shrink: 0;">Select item(s) and enter quantity to waste. Quantity will be deducted from inventory; items at zero will no longer appear in stock.</p>
+      <div id="record-wastage-cards-container" class="guided-inventory-cards-stack" style="flex: 1; min-height: 0; max-height: 320px; overflow-y: auto; padding: 4px 0; display: flex; flex-direction: column; gap: 12px;">
+        <!-- Cards rendered by JS -->
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); flex-shrink: 0;">
+        <button type="button" class="btn btn-secondary" id="record-wastage-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="record-wastage-submit">Record wastage</button>
+      </div>
     </div>
   </div>
   

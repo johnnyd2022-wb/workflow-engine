@@ -11,11 +11,13 @@ from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
-from app.core.db.models.inventory_item import InventoryType
+from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.process import ProcessCategory
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.core.db.repositories.wastage_repo import WastageRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
@@ -1242,6 +1244,137 @@ def list_inventory():
     return jsonify({"inventory_items": result}), 200
 
 
+@core_bp.route("/api/core/inventory/wastage", methods=["POST"])
+@requires_auth
+def record_wastage():
+    """Record wastage for one or more inventory items. Deducts quantity; items at zero disappear from list."""
+    org_id = UUID(g.org_id)
+    data = request.get_json() or {}
+    entries = data.get("entries")
+    if not entries or not isinstance(entries, list):
+        return jsonify({"error": "entries (array of {inventory_item_id, quantity_wasted}) required"}), 400
+
+    inventory_repo = InventoryRepository(db_session)
+    recorded_by = getattr(g, "user_email", None) or getattr(g, "username", None)
+
+    result_records = []
+    errors = []
+
+    for idx, entry in enumerate(entries):
+        item_id_str = entry.get("inventory_item_id")
+        qty_wasted = entry.get("quantity_wasted")
+        if not item_id_str:
+            errors.append(f"Entry {idx + 1}: inventory_item_id required")
+            continue
+        try:
+            item_id = UUID(item_id_str)
+        except (ValueError, TypeError):
+            errors.append(f"Entry {idx + 1}: invalid inventory_item_id")
+            continue
+        item = inventory_repo.get_inventory_item_by_id(item_id, org_id)
+        if not item:
+            errors.append(f"Entry {idx + 1}: inventory item not found or access denied")
+            continue
+        try:
+            current_str = str(item.quantity).strip() if item.quantity else "0"
+            current_qty = Decimal(current_str)
+        except (InvalidOperation, ValueError, TypeError):
+            errors.append(f"Entry {idx + 1}: invalid current quantity for item")
+            continue
+        try:
+            waste_decimal = Decimal(str(qty_wasted)).quantize(Decimal("0.0001"))
+        except (InvalidOperation, ValueError, TypeError):
+            errors.append(f"Entry {idx + 1}: quantity_wasted must be a number")
+            continue
+        if waste_decimal <= 0:
+            errors.append(f"Entry {idx + 1}: quantity_wasted must be positive")
+            continue
+        actual_waste = min(waste_decimal, current_qty)
+        if actual_waste <= 0:
+            errors.append(f"Entry {idx + 1}: item has no quantity to waste")
+            continue
+        new_qty = current_qty - actual_waste
+        if new_qty < 0:
+            new_qty = Decimal("0")
+        new_qty_str = str(new_qty.quantize(Decimal("0.0001"))).rstrip("0").rstrip(".")
+        if new_qty_str == "" or new_qty_str == "-":
+            new_qty_str = "0"
+        unit = (item.unit or "units").strip() or "units"
+        try:
+            item.quantity = new_qty_str
+            record = InventoryWastage(
+                org_id=org_id,
+                inventory_item_id=item.id,
+                quantity_wasted=str(actual_waste),
+                unit=unit,
+                recorded_by=recorded_by,
+            )
+            db_session.add(record)
+            db_session.flush()
+            result_records.append(
+                {
+                    "id": str(record.id),
+                    "inventory_item_id": str(item.id),
+                    "item_name": item.name,
+                    "quantity_wasted": str(actual_waste),
+                    "unit": unit,
+                    "recorded_at": record.recorded_at.isoformat() if record.recorded_at else None,
+                }
+            )
+        except Exception as e:
+            db_session.rollback()
+            return jsonify({"error": "Failed to record wastage", "details": str(e)}), 500
+
+    if errors and not result_records:
+        return jsonify({"error": "Validation failed", "details": errors}), 400
+    try:
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"error": "Failed to save wastage", "details": str(e)}), 500
+    return jsonify({"wastage_records": result_records, "errors": errors}), 201
+
+
+@core_bp.route("/api/core/inventory/wastage", methods=["GET"])
+@requires_auth
+def list_wastage():
+    """List wastage records for sourcemap/trace. Optional ?inventory_item_id= for single item."""
+    org_id = UUID(g.org_id)
+    item_id_str = request.args.get("inventory_item_id")
+    inventory_item_id = None
+    if item_id_str:
+        try:
+            inventory_item_id = UUID(item_id_str)
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid inventory_item_id"}), 400
+    repo = WastageRepository(db_session)
+    records = repo.list_wastage_records(org_id=org_id, inventory_item_id=inventory_item_id)
+    items_by_id = {}
+    if records:
+        item_ids = {r.inventory_item_id for r in records}
+        for iid in item_ids:
+            item = db_session.query(InventoryItem).filter(
+                InventoryItem.id == iid, InventoryItem.org_id == org_id
+            ).first()
+            if item:
+                items_by_id[str(iid)] = {"name": item.name, "unit": item.unit}
+    result = []
+    for r in records:
+        info = items_by_id.get(str(r.inventory_item_id)) or {}
+        result.append(
+            {
+                "id": str(r.id),
+                "inventory_item_id": str(r.inventory_item_id),
+                "item_name": info.get("name") or "Unknown",
+                "quantity_wasted": r.quantity_wasted,
+                "unit": r.unit,
+                "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
+                "recorded_by": r.recorded_by,
+            }
+        )
+    return jsonify({"wastage_records": result}), 200
+
+
 @core_bp.route("/api/core/inventory/out-of-stock", methods=["GET"])
 @requires_auth
 def list_out_of_stock_raw_materials():
@@ -1356,6 +1489,21 @@ def create_inventory_item():
         if data.get("expiry_date"):
             expiry_date = datetime.fromisoformat(data.get("expiry_date").replace("Z", "+00:00")).date()
 
+        # Optional traceability (e.g. in-flow "add missing output" from execution step)
+        source_execution_id = None
+        if data.get("source_execution_id"):
+            source_execution_id = UUID(data["source_execution_id"])
+        source_execution_step_id = None
+        if data.get("source_execution_step_id"):
+            source_execution_step_id = UUID(data["source_execution_step_id"])
+        source_output_id = None
+        if data.get("source_output_id"):
+            source_output_id = UUID(data["source_output_id"])
+
+        extra_data = dict(data.get("metadata") or {})
+        if data.get("untracked"):
+            extra_data["untracked"] = True  # Flag for reconciliation/sourcemap banners
+
         item = repo.create_inventory_item(
             org_id=org_id,
             name=name,
@@ -1366,7 +1514,10 @@ def create_inventory_item():
             purchase_date=purchase_date,
             supplier_batch_number=data.get("supplier_batch_number"),
             expiry_date=expiry_date,
-            extra_data=data.get("metadata", {}),  # Frontend sends 'metadata', we store as 'extra_data'
+            source_execution_id=source_execution_id,
+            source_execution_step_id=source_execution_step_id,
+            source_output_id=source_output_id,
+            extra_data=extra_data if extra_data else None,
         )
 
         return (
