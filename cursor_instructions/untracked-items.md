@@ -1,80 +1,80 @@
-# Step 1: In-Flow Recording of Missing Inventory Items (Updated)
+Step 1: Prefill & Modal Handling Improvements
+Goal
 
-## Goal
-Allow operators to record missing inventory items directly during execution without blocking workflow. The system should remain accurate and auditable, and the new item should appear in the correct inventory category.
+Enhance in-flow missing item handling by:
 
-## Tables
-Relevant tables:
+Prefilling unit from step definition (instead of default 'kg') for raw inputs.
 
-### 1. `steps`
-- `id`, `process_id`, `name`  
-- `inputs`: JSON array of expected inputs  
-- `outputs`: JSON array of expected outputs  
-- `execution_prompts`: additional prompts (batch number, etc.)
+Parallelizing input modal initialization to improve performance.
 
-### 2. `inventory_items`
-- `id`, `name`, `unit`, `quantity`  
-- `inventory_type` (`raw_material` / `work_in_progress` / `final_product`)  
-- `source_execution_step_id` / `source_output_id`
+Standardizing dataset flags to reliably determine raw vs output.
 
-### 3. `execution_steps`
-- `id`, `execution_id`, `step_id`  
-- `actual_inputs`, `actual_outputs`  
+Clarifying validation messages for untracked outputs.
 
----
+Requirements
+1. Prefill Unit from Step
 
-## Requirements
+For window.openAddInventoryModalForMissingInput(prefill):
 
-1. **Trigger**
-   - Inline “Add Missing Item” button on the step execution modal.
-   - Only visible when execution step detects missing inventory:
-     ⚠️ *No matching inventory items found. Please add inventory before executing this step.*
+Use prefill.unit if present.
 
-2. **UI Behavior**
+Fall back to default 'kg' only if no unit in step definition.
 
-   **Raw Material Inputs**  
-   - If missing item is a **raw material** (from `steps.inputs`):  
-     - Open the **existing “Add Inventory Item” modal** from `+ Add to Inventory` on `core2.html`.  
-     - Let operator fill in supplier, quantity, unit, date, etc.  
-     - Upon saving, the item is added to `inventory_items` in `raw_material` inventory_type.
+if (unitEl) unitEl.value = prefill.unit || 'kg';
 
-   **Missing Output Items**  
-   - If missing item is an **expected output** (from `steps.outputs`):  
-     - Open a **new lightweight modal**:
-       - Prefill **Name**, **Quantity**, **Unit** from the step definition (`steps.outputs`).  
-       - Allow operator to edit these fields.  
-       - Include **Date** (default = today).  
-     - Upon saving, insert into `inventory_items` in the appropriate inventory_type (intermediate or final).  
-     - Flag item as **untracked/unreconciled**.
+2. Parallelize Input Initialization
 
-3. **Inventory Insert**
-   - Store missing item in `inventory_items`:
-     - Set `source_execution_step_id` = current `execution_steps.id`  
-     - Set `source_output_id` = relevant `steps.outputs.id` (if output)  
-     - Ensure audit fields: created_by, timestamp, step, process  
+Currently:
 
-4. **System Behavior**
-   - Execution continues **without blocking**.  
-   - Newly added items appear in the correct inventory category.  
-   - Untracked items are **highlighted in banners or sourcemaps** for reconciliation.
+for (const input of step.inputs) {
+  await window.addGuidedInput(inputType, true);
+}
 
----
 
-## Constraints
-- Reuse existing functions to store inventory items wherever possible.  
-- Do not create unnecessary duplication of items.  
-- Maintain auditability (user, timestamp, step, process).  
-- UI must be lightweight and simple; focus on minimal friction.  
+Suggested:
 
----
+await Promise.all(step.inputs.map(input => window.addGuidedInput(inputType, true)));
 
-## Deliverables for Cursor
-- Code that:
-  1. Detects missing items for the execution step.  
-  2. Opens the correct modal:
-     - **Raw inputs** → existing “Add Inventory Item” modal.  
-     - **Missing outputs** → lightweight modal prefilled from step definition.  
-  3. Saves item into `inventory_items` with correct inventory_type.  
-  4. Flags item as untracked/unreconciled.  
-  5. Allows execution to continue without blocking.  
-- Include table/field comments and keep implementation minimal.
+
+Keeps modals collapsible, avoids serial delays for many inputs.
+
+3. Standardize Dataset Flags
+
+Determine whether “Add Missing Item” is from previous output or raw input consistently:
+
+var fromOutput = Boolean(
+  this.dataset.sourceOutputId || this.dataset.sourceStepId || this.dataset.sourceProcessId
+);
+
+
+Use this flag to decide which modal to open:
+
+fromOutput === true → window.openAddUntrackedOutputModal
+
+fromOutput === false → window.openAddInventoryModalForMissingInput
+
+4. Clarify Validation Messages
+
+In add-untracked-output-form submit handler:
+
+if (!name || !unit || isNaN(quantity) || quantity < 0) {
+  showNotification(
+    'error',
+    'Validation error',
+    'Please provide a valid name, unit, and non-negative quantity.'
+  );
+  return;
+}
+
+
+Ensures user understands exactly what is missing or invalid.
+
+Deliverables
+
+Prefill raw input modal with unit from step definition.
+
+Input modals initialized in parallel.
+
+Consistent logic for determining raw vs output when opening missing item modals.
+
+Clear, user-friendly validation for untracked output submission.

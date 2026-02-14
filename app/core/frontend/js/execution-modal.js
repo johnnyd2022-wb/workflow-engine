@@ -264,7 +264,7 @@
             </select>
             <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
             ${errorMessage}
-            ${hasNoInventory ? `<p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-from-output="${(input.source_output_id || input.source_step_id || input.source_process_id) ? 'true' : 'false'}" style="font-size: 13px;">Add Missing Item</button></p>` : ''}
+            ${hasNoInventory ? `<p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-source-step-id="${input.source_step_id ? escapeHtml(String(input.source_step_id)) : ''}" data-source-process-id="${input.source_process_id ? escapeHtml(String(input.source_process_id)) : ''}" style="font-size: 13px;">Add Missing Item</button></p>` : ''}
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume <span style="color: var(--error, #ef4444);">*</span></label>
@@ -363,11 +363,11 @@
           });
         }
         
-        // Add Missing Item: if from output (source_output_id or source_step_id/source_process_id) -> untracked output modal; else -> raw material modal
+        // Add Missing Item: fromOutput = from previous output; else raw material modal
         const addMissingBtn = inputSection.querySelector('.add-missing-item-btn');
         if (addMissingBtn) {
           addMissingBtn.addEventListener('click', function() {
-            var fromOutput = this.dataset.fromOutput === 'true';
+            var fromOutput = Boolean(this.dataset.sourceOutputId || this.dataset.sourceStepId || this.dataset.sourceProcessId);
             var sourceOutputId = this.dataset.sourceOutputId || '';
             var name_ = this.dataset.inputName || '';
             var quantity_ = this.dataset.inputQuantity != null && this.dataset.inputQuantity !== '' ? this.dataset.inputQuantity : '';
@@ -866,7 +866,11 @@
     var dateEl = document.getElementById('untracked-output-date');
     if (nameEl) nameEl.value = outputDef.name || '';
     if (qtyEl) qtyEl.value = outputDef.quantity != null && outputDef.quantity !== '' ? outputDef.quantity : '';
-    if (unitEl) unitEl.value = outputDef.unit || 'units';
+    if (unitEl) {
+      var allowedUnits = ['kg', 'g', 'L', 'mL', 'pcs', 'units'];
+      var u = (outputDef.unit || 'kg').trim();
+      unitEl.value = allowedUnits.indexOf(u) !== -1 ? u : 'kg';
+    }
     if (dateEl) {
       var today = new Date();
       dateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
@@ -895,7 +899,7 @@
       var dateEl = document.getElementById('untracked-output-date');
       var recordedDate = dateEl ? dateEl.value : null;
       if (!name || !unit || isNaN(quantity) || quantity < 0) {
-        if (typeof showNotification === 'function') showNotification('error', 'Validation', 'Name, quantity and unit are required.');
+        if (typeof showNotification === 'function') showNotification('error', 'Validation error', 'Please provide a valid name, unit, and non-negative quantity.');
         return;
       }
       var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
