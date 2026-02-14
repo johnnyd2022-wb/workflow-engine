@@ -1353,9 +1353,9 @@ def list_wastage():
     if records:
         item_ids = {r.inventory_item_id for r in records}
         for iid in item_ids:
-            item = db_session.query(InventoryItem).filter(
-                InventoryItem.id == iid, InventoryItem.org_id == org_id
-            ).first()
+            item = (
+                db_session.query(InventoryItem).filter(InventoryItem.id == iid, InventoryItem.org_id == org_id).first()
+            )
             if item:
                 items_by_id[str(iid)] = {"name": item.name, "unit": item.unit}
     result = []

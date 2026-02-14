@@ -17,9 +17,7 @@ class InventoryWastage(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
-    inventory_item_id = Column(
-        UUID(as_uuid=True), ForeignKey("inventory_items.id"), nullable=False, index=True
-    )
+    inventory_item_id = Column(UUID(as_uuid=True), ForeignKey("inventory_items.id"), nullable=False, index=True)
     quantity_wasted = Column(String(50), nullable=False)  # Same precision as inventory quantity
     unit = Column(String(50), nullable=False)  # Denormalized from item at time of record
     recorded_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
