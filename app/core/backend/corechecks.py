@@ -144,3 +144,20 @@ def register_routes(bp):
         if result is None or result.data is None:
             return jsonify({"untracked_items": [], "connections": []}), 200
         return jsonify(result.data), 200
+
+    @bp.route("/api/core/system-findings", methods=["GET"])
+    @requires_auth
+    def list_system_findings():
+        """Run all registered checks and return banner-ready findings (flagged checks with messages).
+
+        Single endpoint for the system-findings banner so the UI always reflects current checks.
+        """
+        org_id = UUID(g.org_id)
+        runner = CoreChecksRunner(org_id=org_id, session=db_session())
+        results = runner.run_all_checks()
+        findings = [
+            {"text": r.message}
+            for r in results
+            if r.flagged and r.message
+        ]
+        return jsonify({"findings": findings}), 200

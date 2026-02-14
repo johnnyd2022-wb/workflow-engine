@@ -74,24 +74,6 @@
     .help-tooltip { position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 4px; max-width: 280px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
     .help-tooltip.visible { display: block; }
     .help-wrapper { position: relative; display: inline-block; }
-    /* Compliance / core checks banner */
-    .compliance-banner {
-      background: linear-gradient(135deg, hsl(38, 92%, 50%, 0.12) 0%, hsl(25, 95%, 53%, 0.08) 100%);
-      border-bottom: 1px solid hsl(38, 92%, 50%, 0.35);
-      padding: 12px 24px;
-      margin: 0;
-    }
-    .compliance-banner-content {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    .compliance-banner-icon { font-size: 1.25rem; color: hsl(38, 92%, 40%); flex-shrink: 0; }
-    .compliance-banner-message { flex: 1; margin: 0; font-size: 14px; color: var(--text-primary, #1a1a1a); }
-    .compliance-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
     .dopamine-line { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px; }
     .dopamine-line p { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); line-height: 1.5; }
     @media (min-width: 600px) { .dopamine-line { padding: 16px 20px; } .dopamine-line p { font-size: 0.95rem; } }
@@ -137,15 +119,39 @@
         </div>
       </header>
 
-      <!-- Compliance / core checks banner (expired materials, untracked items, etc.) -->
-      <div id="compliance-banner" class="compliance-banner" role="alert" aria-live="polite" style="display: none;">
-        <div class="compliance-banner-content">
-          <span class="compliance-banner-icon" aria-hidden="true">⚠</span>
-          <p id="compliance-banner-message" class="compliance-banner-message"></p>
-          <div class="compliance-banner-actions">
-            <button type="button" id="compliance-banner-ignore-today" class="btn btn-secondary btn-sm">Ignore for today</button>
-            <button type="button" id="compliance-banner-dismiss" class="btn btn-ghost btn-sm">Dismiss</button>
+      <!-- System findings banner (inlined from shared/system-findings-banner.html) -->
+      <style>
+        .system-findings-banner { background: linear-gradient(135deg, hsl(38, 92%, 50%, 0.12) 0%, hsl(25, 95%, 53%, 0.08) 100%); border-bottom: 1px solid hsl(38, 92%, 50%, 0.35); margin: 0; padding: 0; }
+        .system-findings-banner__header { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; padding: 10px 16px; max-width: 1200px; margin: 0 auto; min-height: 44px; box-sizing: border-box; }
+        .system-findings-banner__icon { font-size: 1.25rem; color: hsl(38, 92%, 40%); flex-shrink: 0; }
+        .system-findings-banner__title { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary, #1a1a1a); line-height: 1.4; }
+        .system-findings-banner__toggle { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; border: none; background: transparent; color: var(--text-secondary, #6b7280); cursor: pointer; border-radius: var(--radius-md, 6px); flex-shrink: 0; }
+        .system-findings-banner__toggle:hover { background: rgba(0,0,0,0.06); color: var(--text-primary, #1a1a1a); }
+        .system-findings-banner__toggle[aria-expanded="false"] .system-findings-banner__chevron { transform: rotate(-90deg); }
+        .system-findings-banner__chevron { transition: transform 0.2s; }
+        .system-findings-banner__actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .system-findings-banner__body { padding: 0 16px 12px 16px; max-width: 1200px; margin: 0 auto; }
+        .system-findings-banner__body[hidden] { display: none; }
+        .system-findings-list { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.5; color: var(--text-primary, #1a1a1a); }
+        .system-findings-list li { margin-bottom: 4px; }
+        .system-findings-banner__hint { margin-top: 8px; font-size: 12px; color: var(--text-secondary, #6b7280); }
+        @media (min-width: 600px) { .system-findings-banner__header { padding: 12px 24px; } .system-findings-banner__body { padding: 0 24px 14px 24px; } .system-findings-banner__title { font-size: 15px; } .system-findings-list { font-size: 14px; } }
+      </style>
+      <div id="system-findings-banner" class="system-findings-banner" role="alert" aria-live="polite" style="display: none;">
+        <div class="system-findings-banner__header">
+          <span class="system-findings-banner__icon" aria-hidden="true">&#9888;</span>
+          <h2 class="system-findings-banner__title">System findings</h2>
+          <button type="button" id="system-findings-banner-toggle" class="system-findings-banner__toggle" aria-expanded="false" aria-controls="system-findings-banner-body" title="Expand or collapse findings">
+            <svg class="system-findings-banner__chevron" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="system-findings-banner__actions">
+            <button type="button" id="system-findings-banner-ignore-today" class="btn btn-secondary btn-sm">Ignore for today</button>
+            <button type="button" id="system-findings-banner-dismiss" class="btn btn-ghost btn-sm">Dismiss</button>
           </div>
+        </div>
+        <div id="system-findings-banner-body" class="system-findings-banner__body" hidden>
+          <ul id="system-findings-list" class="system-findings-list"></ul>
+          <p class="system-findings-banner__hint">Review in Source Map or Inventory.</p>
         </div>
       </div>
       
@@ -1213,44 +1219,7 @@
       card.remove();
     }
     
-    // Compliance banner: show when any core check is flagged (expired materials, untracked items, etc.)
-    function todayDateKey() {
-      const d = new Date();
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    }
-    async function loadComplianceBanner() {
-      const banner = document.getElementById('compliance-banner');
-      const msgEl = document.getElementById('compliance-banner-message');
-      if (!banner || !msgEl) return;
-      if (sessionStorage.getItem('corechecks_ignore_date') === todayDateKey()) return;
-      if (sessionStorage.getItem('corechecks_banner_dismissed') === '1') return;
-      try {
-        const [expiredData, untrackedData] = await Promise.all([
-          CoreAPI.getExpiredMaterials().catch(() => ({ expired_raw_materials: [], impacted_items: [] })),
-          CoreAPI.getUntrackedItems().catch(() => ({ untracked_items: [] }))
-        ]);
-        const expired = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
-        const untracked = (untrackedData && untrackedData.untracked_items) ? untrackedData.untracked_items : [];
-        if (expired.length === 0 && untracked.length === 0) return;
-        const parts = [];
-        if (expired.length > 0) {
-          parts.push(expired.length === 1 ? '1 expired raw material with stock' : expired.length + ' expired raw materials with stock');
-        }
-        if (untracked.length > 0) {
-          parts.push(untracked.length === 1 ? '1 untracked item (reconciliation required)' : untracked.length + ' untracked items (reconciliation required)');
-        }
-        msgEl.textContent = parts.join('; ') + ' — review in Source Map or Inventory.';
-        banner.style.display = 'block';
-      } catch (e) {
-        console.warn('Compliance banner check failed:', e);
-      }
-    }
-    function hideComplianceBanner() {
-      const banner = document.getElementById('compliance-banner');
-      if (banner) banner.style.display = 'none';
-    }
-
-    // Load dashboard data on page load
+    // Load dashboard data on page load (system findings banner is handled by shared system-findings-banner.js)
     document.addEventListener('DOMContentLoaded', async function() {
       try {
         const metrics = await CoreAPI.getMetrics();
@@ -1261,21 +1230,7 @@
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       }
-      loadComplianceBanner();
-      const dismissBtn = document.getElementById('compliance-banner-dismiss');
-      const ignoreTodayBtn = document.getElementById('compliance-banner-ignore-today');
-      if (dismissBtn) {
-        dismissBtn.addEventListener('click', function() {
-          sessionStorage.setItem('corechecks_banner_dismissed', '1');
-          hideComplianceBanner();
-        });
-      }
-      if (ignoreTodayBtn) {
-        ignoreTodayBtn.addEventListener('click', function() {
-          sessionStorage.setItem('corechecks_ignore_date', todayDateKey());
-          hideComplianceBanner();
-        });
-      }
+      if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
       setupModalHandlers();
     });
     
@@ -2340,6 +2295,7 @@
   <!-- Execute Step Modal (Shared) -->
   {% include 'shared/execution-modal.html' %}
   
+  <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
   <script src="/ui/shared/sidebar-v2.js"></script>
 </body>
 </html>

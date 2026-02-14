@@ -133,6 +133,11 @@ const CoreAPI = {
         return this.request('/inventory/untracked-items');
     },
 
+    /** Run all system checks and return banner-ready findings (one request for the system-findings banner). */
+    async getSystemFindings() {
+        return this.request('/system-findings');
+    },
+
     /** @deprecated Use getExpiredMaterials() */
     async getCheckNeededItems() {
         return this.getExpiredMaterials();
@@ -195,4 +200,8 @@ const CoreAPI = {
         });
     },
 };
+
+if (typeof window !== 'undefined') {
+    window.CoreAPI = CoreAPI;
+}
 
