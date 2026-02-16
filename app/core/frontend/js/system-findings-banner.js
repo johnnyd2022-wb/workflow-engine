@@ -77,7 +77,7 @@
         var expiredIdsAttr = expiredIds.length ? " data-expired-ids='" + String(JSON.stringify(expiredIds)).replace(/'/g, "&#39;") + "'" : '';
         var menuItems = '<a href="' + sourcemapUrl + '" class="system-findings-item__menu-item" data-action="review-sourcemap">Review in Sourcemap</a>';
         if (hasWastageModal && expiredIds.length > 0) {
-          menuItems += '<button type="button" class="system-findings-item__menu-item" data-action="dispose">Dispose of material</button>';
+          menuItems += '<button type="button" class="system-findings-item__menu-item" data-action="dispose">Dispose of inventory item</button>';
         }
         actionBlock =
           '<div class="system-findings-item__action-dropdown"' + expiredIdsAttr + '>' +

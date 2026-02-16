@@ -273,7 +273,7 @@
                     <line x1="10" y1="11" x2="10" y2="17"/>
                     <line x1="14" y1="11" x2="14" y2="17"/>
                   </svg>
-                  Record wastage
+                  Dispose of inventory item
                 </button>
               </div>
             </div>
@@ -1320,7 +1320,7 @@
         });
       }
 
-      // Record wastage: open modal, render inventory cards, submit
+      // Dispose of inventory item: open modal, render inventory cards, submit
       const recordWastageBtn = document.getElementById('record-wastage-btn');
       const recordWastageModal = document.getElementById('record-wastage-modal');
       const recordWastageClose = document.getElementById('record-wastage-modal-close');
@@ -1345,7 +1345,7 @@
             items = items.filter(function(item) { return item && idSet.has(String(item.id)); });
           }
           if (items.length === 0) {
-            recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">' + (filterIds ? 'No expired materials with quantity to record wastage.' : 'No inventory with quantity to record wastage.') + '</p>';
+            recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">' + (filterIds ? 'No expired materials with quantity to dispose.' : 'No inventory with quantity to dispose.') + '</p>';
             return;
           }
           recordWastageCardsContainer.innerHTML = '';
@@ -1405,20 +1405,20 @@
           if (id && !isNaN(val) && val > 0) entries.push({ inventory_item_id: id, quantity_wasted: val });
         });
         if (entries.length === 0) {
-          showNotification('error', 'No wastage entered', 'Enter quantity to waste for at least one item.');
+          showNotification('error', 'No quantity entered', 'Enter quantity to dispose for at least one item.');
           return;
         }
         try {
           const res = await CoreAPI.recordWastage(entries);
           closeRecordWastageModal();
           if (res && res.wastage_records && res.wastage_records.length) {
-            showNotification('success', 'Wastage recorded', res.wastage_records.length + ' item(s) updated. Quantity deducted from inventory.');
+            showNotification('success', 'Inventory disposed', res.wastage_records.length + ' item(s) disposed. Quantity deducted from inventory.');
           }
           if (typeof loadInventoryV2 === 'function') loadInventoryV2();
           const metrics = await CoreAPI.getMetrics();
           if (typeof updateMetricsV2 === 'function') updateMetricsV2(metrics);
         } catch (e) {
-          showNotification('error', 'Failed to record wastage', e.message || 'Could not record wastage.');
+          showNotification('error', 'Failed to dispose of inventory', e.message || 'Could not dispose of inventory.');
         }
       }
 
@@ -2150,22 +2150,22 @@
     </div>
   </div>
 
-  <!-- Record wastage modal: scrollable inventory cards, quantity per item, Waste entire item -->
+  <!-- Dispose of inventory item modal: scrollable inventory cards, quantity per item, Waste entire item -->
   <div class="modal-overlay" id="record-wastage-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
     <div class="card" style="max-width: 560px; width: 90%; padding: 24px; max-height: 90vh; display: flex; flex-direction: column;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Record wastage</h2>
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Dispose of inventory item</h2>
         <button type="button" id="record-wastage-modal-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 16px 0; flex-shrink: 0;">Select item(s) and enter quantity to waste. Quantity will be deducted from inventory; items at zero will no longer appear in stock.</p>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 16px 0; flex-shrink: 0;">Select item(s) and enter quantity to dispose. Quantity will be deducted from inventory; items at zero will no longer appear in stock.</p>
       <div id="record-wastage-cards-container" class="guided-inventory-cards-stack" style="flex: 1; min-height: 0; max-height: 320px; overflow-y: auto; padding: 4px 0; display: flex; flex-direction: column; gap: 12px;">
         <!-- Cards rendered by JS -->
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); flex-shrink: 0;">
         <button type="button" class="btn btn-secondary" id="record-wastage-cancel">Cancel</button>
-        <button type="button" class="btn btn-primary" id="record-wastage-submit">Record wastage</button>
+        <button type="button" class="btn btn-primary" id="record-wastage-submit">Dispose of inventory item</button>
       </div>
     </div>
   </div>
