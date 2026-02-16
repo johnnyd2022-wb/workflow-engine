@@ -690,7 +690,6 @@
       itemsContainer.style.flexDirection = 'column';
       itemsContainer.style.gap = '12px';
       
-      // Create scrollable container wrapper
       const scrollContainer = document.createElement('div');
       scrollContainer.className = 'inventory-items-scroll-container';
       scrollContainer.style.overflowX = 'hidden';
@@ -723,7 +722,7 @@
       const hasMoreThanThree = items.length > 3;
       const typeIndex = { raw: 0, intermediate: 1, final: 2 }[type];
       const categoryId = `category-${type}-${typeIndex}`;
-      
+      scrollContainer.id = `scroll-${categoryId}`;
       if (!hasMoreThanThree) {
         scrollContainer.classList.add('expanded');
       }
@@ -758,11 +757,13 @@
         const expandButton = document.createElement('button');
         expandButton.className = 'btn btn-secondary btn-sm';
         expandButton.id = `toggle-${categoryId}`;
+        expandButton.setAttribute('role', 'button');
         expandButton.setAttribute('aria-expanded', 'false');
+        expandButton.setAttribute('aria-controls', `scroll-${categoryId}`);
         expandButton.style.cssText = 'margin-top: 12px; width: 100%; padding: 8px; font-size: 12px;';
         expandButton.onclick = () => toggleInventoryCategory(categoryId);
         expandButton.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
+          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
           Show ${items.length - 3} more
@@ -775,23 +776,15 @@
     
     function createInventoryItemCardV2(item) {
       const card = document.createElement('div');
-      card.className = 'card card-interactive process-card';
+      card.className = 'card card-interactive process-card inventory-card-collapsed';
       card.dataset.inventoryId = item.id;
       card.dataset.isExpanded = 'false';
       card.style.marginBottom = '0';
-      // Apply wrapping to the card itself to prevent overflow
       card.style.wordWrap = 'break-word';
       card.style.overflowWrap = 'break-word';
-      // Set fixed height to match raw materials cards (ensure consistency)
-      // Raw materials cards are approximately 90px tall (header + content)
-      // We'll use a fixed height to ensure all cards are the same size
-      // The button section (if present) must fit within this height
-      // Override default process-card padding to fit content
-      card.style.height = '90px';
       card.style.display = 'flex';
       card.style.flexDirection = 'column';
-      card.style.overflow = 'hidden';
-      card.style.padding = '12px 24px'; // Reduced from default 24px to fit content
+      card.style.padding = '12px 24px';
       
       const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' : 
                        item.inventory_type === 'work_in_progress' ? 'Work in Progress' : 
@@ -997,8 +990,8 @@
       if (isExpanded) {
         details.style.display = 'none';
         arrow.style.transform = 'rotate(0deg)';
-        card.style.height = '90px';
-        card.style.overflow = 'hidden';
+        card.classList.remove('inventory-card-expanded');
+        card.classList.add('inventory-card-collapsed');
         card.dataset.isExpanded = 'false';
         if (categoryCard) updateScrollContainerState(categoryCard);
       } else {
@@ -1009,7 +1002,7 @@
           if (toggleButton) {
             toggleButton.setAttribute('aria-expanded', 'true');
             toggleButton.innerHTML = `
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s; transform: rotate(180deg);" id="toggle-icon-${categoryId}">
+              <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
               Show less
@@ -1019,8 +1012,8 @@
         }
         details.style.display = 'block';
         arrow.style.transform = 'rotate(90deg)';
-        card.style.height = 'auto';
-        card.style.overflow = 'visible';
+        card.classList.remove('inventory-card-collapsed');
+        card.classList.add('inventory-card-expanded');
         card.dataset.isExpanded = 'true';
         if (scrollContainer) card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
       }
@@ -1039,7 +1032,7 @@
         if (toggleButton) toggleButton.setAttribute('aria-expanded', 'false');
         updateScrollContainerState(categoryCard);
         toggleButton.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
+          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
           Show ${parseInt(categoryCard.querySelector('.inventory-category-count').textContent) - 3} more
@@ -1049,7 +1042,7 @@
         if (toggleButton) toggleButton.setAttribute('aria-expanded', 'true');
         updateScrollContainerState(categoryCard);
         toggleButton.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s; transform: rotate(180deg);" id="toggle-icon-${categoryId}">
+          <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
           Show less

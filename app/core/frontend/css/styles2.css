@@ -1662,10 +1662,32 @@
   max-height: 306px;
   overflow-y: auto;
   overflow-x: hidden;
+  scroll-padding-top: 24px;
 }
 .inventory-items-scroll-container.expanded {
   max-height: none;
   overflow-y: visible;
+}
+
+/* Category toggle button icon – avoid inline styles */
+.inventory-toggle-icon {
+  margin-right: 6px;
+  display: inline-block;
+  vertical-align: middle;
+  transition: transform 0.2s;
+}
+.inventory-toggle-icon.expanded {
+  transform: rotate(180deg);
+}
+
+/* Inventory item card collapsed/expanded state (replaces inline height) */
+.process-card.inventory-card-collapsed {
+  height: 90px;
+  overflow: hidden;
+}
+.process-card.inventory-card-expanded {
+  height: auto;
+  overflow: visible;
 }
 
 /* System findings banner – per-finding expand/collapse */
