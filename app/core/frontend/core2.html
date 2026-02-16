@@ -720,10 +720,9 @@
         itemsContainer.appendChild(emptyMessage);
       }
       
-      // Always limit to 3 cards with scroll and expand/collapse option
       const hasMoreThanThree = items.length > 3;
-      const isExpanded = false; // Start collapsed
-      const categoryId = `category-${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const typeIndex = { raw: 0, intermediate: 1, final: 2 }[type];
+      const categoryId = `category-${type}-${typeIndex}`;
       
       if (!hasMoreThanThree) {
         scrollContainer.classList.add('expanded');
@@ -759,6 +758,7 @@
         const expandButton = document.createElement('button');
         expandButton.className = 'btn btn-secondary btn-sm';
         expandButton.id = `toggle-${categoryId}`;
+        expandButton.setAttribute('aria-expanded', 'false');
         expandButton.style.cssText = 'margin-top: 12px; width: 100%; padding: 8px; font-size: 12px;';
         expandButton.onclick = () => toggleInventoryCategory(categoryId);
         expandButton.innerHTML = `
@@ -977,6 +977,13 @@
       return card;
     }
     
+    function updateScrollContainerState(categoryCard) {
+      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
+      if (!scrollContainer) return;
+      const isCategoryExpanded = categoryCard.dataset.isExpanded === 'true';
+      scrollContainer.classList.toggle('expanded', isCategoryExpanded);
+    }
+    
     function toggleInventoryItemDetails(itemId) {
       const card = document.querySelector(`[data-inventory-id="${itemId}"]`);
       if (!card) return;
@@ -984,36 +991,38 @@
       const details = document.getElementById(`details-${itemId}`);
       const arrow = document.getElementById(`arrow-${itemId}`);
       const isExpanded = card.dataset.isExpanded === 'true';
-      
-      // Find the scroll container that contains this card
       const scrollContainer = card.closest('.inventory-items-scroll-container');
+      const categoryCard = scrollContainer && scrollContainer.closest('.inventory-category-card');
       
       if (isExpanded) {
-        // Collapse: hide details and restore fixed height
         details.style.display = 'none';
         arrow.style.transform = 'rotate(0deg)';
         card.style.height = '90px';
         card.style.overflow = 'hidden';
         card.dataset.isExpanded = 'false';
-        
-        if (scrollContainer) {
-          const categoryCard = scrollContainer.closest('.inventory-category-card');
-          if (categoryCard && categoryCard.dataset.isExpanded !== 'true') {
-            scrollContainer.classList.remove('expanded');
-          }
-        }
+        if (categoryCard) updateScrollContainerState(categoryCard);
       } else {
-        // Expand: show details and allow card to grow
+        if (categoryCard && categoryCard.dataset.isExpanded !== 'true') {
+          categoryCard.dataset.isExpanded = 'true';
+          const categoryId = categoryCard.dataset.categoryId;
+          const toggleButton = document.getElementById(`toggle-${categoryId}`);
+          if (toggleButton) {
+            toggleButton.setAttribute('aria-expanded', 'true');
+            toggleButton.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s; transform: rotate(180deg);" id="toggle-icon-${categoryId}">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              Show less
+            `;
+          }
+          updateScrollContainerState(categoryCard);
+        }
         details.style.display = 'block';
         arrow.style.transform = 'rotate(90deg)';
         card.style.height = 'auto';
         card.style.overflow = 'visible';
         card.dataset.isExpanded = 'true';
-        
-        if (scrollContainer) {
-          scrollContainer.classList.add('expanded');
-          card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-        }
+        if (scrollContainer) card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
       }
     }
     
@@ -1023,27 +1032,28 @@
       
       const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
       const toggleButton = document.getElementById(`toggle-${categoryId}`);
-      const toggleIcon = document.getElementById(`toggle-icon-${categoryId}`);
       const isExpanded = categoryCard.dataset.isExpanded === 'true';
       
       if (isExpanded) {
-        scrollContainer.classList.remove('expanded');
+        categoryCard.dataset.isExpanded = 'false';
+        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'false');
+        updateScrollContainerState(categoryCard);
         toggleButton.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
           Show ${parseInt(categoryCard.querySelector('.inventory-category-count').textContent) - 3} more
         `;
-        categoryCard.dataset.isExpanded = 'false';
       } else {
-        scrollContainer.classList.add('expanded');
+        categoryCard.dataset.isExpanded = 'true';
+        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'true');
+        updateScrollContainerState(categoryCard);
         toggleButton.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s; transform: rotate(180deg);" id="toggle-icon-${categoryId}">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
           Show less
         `;
-        categoryCard.dataset.isExpanded = 'true';
       }
     }
     
@@ -1306,7 +1316,10 @@
           let val = input && parseFloat(input.value);
           if (id && !isNaN(val) && val > 0) {
             const max = parseFloat(card.dataset.maxQuantity);
-            if (!isNaN(max) && val > max) val = max;
+            if (!isNaN(max) && val > max) {
+              val = max;
+              if (input) input.value = String(max);
+            }
             entries.push({ inventory_item_id: id, quantity_wasted: val });
           }
         });
