@@ -67,9 +67,8 @@ def sourcemap():
 
 @core_bp.route("/static/js/<filename>")
 @limiter.exempt
-@requires_auth
 def serve_core_js(filename):
-    """Serve JavaScript files from core frontend - requires authentication"""
+    """Serve JavaScript files from core frontend (no auth so they load reliably; pages that include them are protected)."""
     from flask import abort
     from werkzeug.security import safe_join
 
@@ -113,9 +112,8 @@ def serve_core_js(filename):
 
 @core_bp.route("/static/css/<filename>")
 @limiter.exempt
-@requires_auth
 def serve_core_css(filename):
-    """Serve CSS files from core frontend - requires authentication"""
+    """Serve CSS files from core frontend (no auth so they load reliably; pages that include them are protected)."""
     from flask import abort
     from werkzeug.security import safe_join
 
