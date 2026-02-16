@@ -30,66 +30,15 @@
     if (stepDescInput) stepDescInput.value = step.description || '';
     
     if (step.inputs && step.inputs.length > 0) {
-      for (const input of step.inputs) {
-        const inputType = input.requires_inventory_selection ? 'inventory' : 'new';
-        await window.addGuidedInput(inputType, true); // start collapsed so user can expand from either tab
-        const listEl = getGuidedInputListElement(inputType);
-        const inputContainers = listEl ? listEl.querySelectorAll(':scope > div') : [];
-        const lastInputContainer = inputContainers[inputContainers.length - 1];
-        if (lastInputContainer && input.name) {
-          const nameInput = lastInputContainer.querySelector('.guided-input-name');
-          if (nameInput) {
-            nameInput.value = input.name;
-            if (nameInput.classList.contains('searchable-dropdown-input')) {
-              selectedInventoryItems.add(input.name);
-              try {
-                const categorizedItems = await loadInventoryItems();
-                const allItems = [
-                  ...(categorizedItems.raw_material || []),
-                  ...(categorizedItems.work_in_progress || []),
-                  ...(categorizedItems.final_product || [])
-                ];
-                const matchingItem = allItems.find(item => item.name === input.name);
-                if (matchingItem) {
-                  const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
-                  if (unitSelect) unitSelect.value = input.unit || matchingItem.unit || '';
-                }
-              } catch (err) {
-                console.warn('Could not load inventory items for restoration:', err);
-              }
-              nameInput.dispatchEvent(new Event('input'));
-              nameInput.dispatchEvent(new Event('blur'));
-            } else {
-              nameInput.dispatchEvent(new Event('input'));
-              nameInput.dispatchEvent(new Event('blur'));
-            }
-          }
-          const quantityInput = lastInputContainer.querySelector('.guided-input-quantity');
-          if (quantityInput && input.quantity !== null && input.quantity !== undefined) {
-            quantityInput.value = input.quantity;
-          }
-          const unitSelect = lastInputContainer.querySelector('.guided-input-unit');
-          if (unitSelect && input.unit && !unitSelect.value) {
-            unitSelect.value = input.unit;
-          }
-          const executionTypeSelect = lastInputContainer.querySelector('.guided-input-execution-type');
-          if (executionTypeSelect) {
-            if (input.requires_inventory_selection) executionTypeSelect.value = 'variable';
-            else if (input.is_variable === false) executionTypeSelect.value = 'static';
-            else executionTypeSelect.value = 'prompt';
-            executionTypeSelect.dispatchEvent(new Event('change'));
-          }
-          setTimeout(() => {
-            const nameDisplay = lastInputContainer.querySelector('.guided-input-name-display');
-            const titleSpan = lastInputContainer.querySelector('.guided-input-title');
-            if (nameDisplay && titleSpan && input.name) {
-              nameDisplay.textContent = input.name;
-              nameDisplay.style.display = 'inline';
-              titleSpan.style.display = 'none';
-            }
-          }, 100);
-        }
+      const inputContainers = await Promise.all(step.inputs.map(input => {
+        const inputType = input.source_output_id ? 'previous_output' : (input.requires_inventory_selection ? 'inventory' : 'new');
+        return window.addGuidedInput(inputType, true, undefined, input);
+      }));
+      const listEl = getGuidedInputListElement('inventory');
+      if (listEl) {
+        inputContainers.forEach(c => listEl.appendChild(c));
       }
+      updateInputButtonsText();
     }
     
     if (step.outputs && step.outputs.length > 0) {
@@ -110,6 +59,7 @@
           }
           const unitSelect = lastOutputContainer.querySelector('.guided-output-unit');
           if (unitSelect && output.unit) unitSelect.value = output.unit;
+          if (output.id) lastOutputContainer.dataset.outputId = output.id;
           const nameDisplay = lastOutputContainer.querySelector('.guided-output-name-display');
           const titleSpan = lastOutputContainer.querySelector('.guided-output-title');
           if (nameDisplay && titleSpan && output.name) {
@@ -942,12 +892,13 @@
             // Ensure step_number is valid (should be from step.step_number)
             const stepNumber = step.step_number || 0;
             previousOutputs.push({
+              id: output.id || null,
               name: output.name,
               quantity: output.quantity !== null && output.quantity !== undefined ? output.quantity : null,
               unit: output.unit || '',
               step_number: stepNumber,
-              is_previous_output: true, // Mark as previous output
-              displayName: `Step ${stepNumber}: ${output.name}` // For display in dropdown
+              is_previous_output: true,
+              displayName: `Step ${stepNumber}: ${output.name}`
             });
           }
         });
@@ -1405,8 +1356,65 @@
     }
   }
   
-  // Add guided input (startCollapsed: when true, input row starts collapsed; preSelectedItem: when set, item is pre-selected and form shown for quantity/unit/execution type)
-  window.addGuidedInput = async function(type, startCollapsed, preSelectedItem) {
+  // Populate a guided input container from saved step data (used when loading a step or when adding in parallel with load data).
+  async function populateGuidedInputFromLoadData(container, data, type) {
+    if (!container || !data || !data.name) return;
+    const nameInput = container.querySelector('.guided-input-name');
+    if (nameInput) {
+      nameInput.value = data.name;
+      if (nameInput.classList.contains('searchable-dropdown-input')) {
+        selectedInventoryItems.add(data.name);
+        try {
+          const categorizedItems = await loadInventoryItems();
+          const allItems = [
+            ...(categorizedItems.raw_material || []),
+            ...(categorizedItems.work_in_progress || []),
+            ...(categorizedItems.final_product || [])
+          ];
+          const matchingItem = allItems.find(item => item.name === data.name);
+          if (matchingItem) {
+            const unitSelect = container.querySelector('.guided-input-unit');
+            if (unitSelect) unitSelect.value = data.unit || matchingItem.unit || '';
+          }
+        } catch (err) {
+          console.warn('Could not load inventory items for restoration:', err);
+        }
+        nameInput.dispatchEvent(new Event('input'));
+        nameInput.dispatchEvent(new Event('blur'));
+      } else {
+        nameInput.dispatchEvent(new Event('input'));
+        nameInput.dispatchEvent(new Event('blur'));
+      }
+    }
+    const quantityInput = container.querySelector('.guided-input-quantity');
+    if (quantityInput && data.quantity !== null && data.quantity !== undefined) {
+      quantityInput.value = data.quantity;
+    }
+    const unitSelect = container.querySelector('.guided-input-unit');
+    if (unitSelect && data.unit && !unitSelect.value) {
+      unitSelect.value = data.unit;
+    }
+    const executionTypeSelect = container.querySelector('.guided-input-execution-type');
+    if (executionTypeSelect) {
+      if (data.requires_inventory_selection) executionTypeSelect.value = 'variable';
+      else if (data.is_variable === false) executionTypeSelect.value = 'static';
+      else executionTypeSelect.value = 'prompt';
+      executionTypeSelect.dispatchEvent(new Event('change'));
+    }
+    if (data.source_output_id) container.dataset.sourceOutputId = data.source_output_id;
+    setTimeout(() => {
+      const nameDisplay = container.querySelector('.guided-input-name-display');
+      const titleSpan = container.querySelector('.guided-input-title');
+      if (nameDisplay && titleSpan && data.name) {
+        nameDisplay.textContent = data.name;
+        nameDisplay.style.display = 'inline';
+        titleSpan.style.display = 'none';
+      }
+    }, 100);
+  }
+
+  // Add guided input (startCollapsed: when true, input row starts collapsed; preSelectedItem: when set, item is pre-selected; loadInputData: when set, populate and return container without appending)
+  window.addGuidedInput = async function(type, startCollapsed, preSelectedItem, loadInputData) {
     // Collapse all existing inputs before adding a new one
     collapseAllInputs();
     
@@ -1778,6 +1786,7 @@
             const displayName = item.displayName || item.name;
             selectedPreviousOutputs.add(displayName);
             inputContainer.dataset.previousOutputDisplayName = displayName;
+            if (item.id) inputContainer.dataset.sourceOutputId = item.id;
           } else {
             selectedInventoryItems.add(item.name);
           }
@@ -2015,9 +2024,11 @@
     
     inputContainer.appendChild(contentArea);
     const listEl = getGuidedInputListElement(type);
+    if (loadInputData) {
+      await populateGuidedInputFromLoadData(inputContainer, loadInputData, type);
+      return inputContainer;
+    }
     if (listEl) listEl.appendChild(inputContainer);
-    
-    // Update button text after adding input
     updateInputButtonsText();
   };
   
@@ -2722,21 +2733,18 @@
       const executionType = executionTypeSelect ? executionTypeSelect.value : 'variable'; // Default to variable for previous outputs
       
       if (name && unit) {
-        // Map execution type to the existing structure
-        // variable = Select inventory at execution (requires_inventory_selection: true, is_variable: true)
-        // static = Use exact input (is_variable: false, requires_inventory_selection: false)
-        // prompt = Prompt at execution (is_variable: true, requires_inventory_selection: false)
-        // Previous outputs are always treated as variable (requires inventory selection at execution)
         const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
         const requiresInventorySelection = isPreviousOutput ? true : (executionType === 'variable');
-        
-        inputs.push({
+        const sourceOutputId = inputEl.dataset.sourceOutputId || null;
+        const inputObj = {
           name: name,
           quantity: quantity ? parseFloat(quantity) : null,
           unit: unit,
           is_variable: isVariable,
           requires_inventory_selection: requiresInventorySelection
-        });
+        };
+        if (sourceOutputId) inputObj.source_output_id = sourceOutputId;
+        inputs.push(inputObj);
       }
     });
     
@@ -2751,12 +2759,15 @@
       const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
       
       if (name && unit) {
-        // Outputs are automatically added to inventory (can be used in subsequent steps)
+        const existingId = outputEl.dataset.outputId || null;
+        const outputId = existingId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'out-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11));
+        if (!existingId) outputEl.dataset.outputId = outputId;
         outputs.push({
+          id: outputId,
           name: name,
           unit: unit,
           quantity: quantity ? parseFloat(quantity) : null,
-          is_variable: true, // Outputs are always variable (can be used in subsequent steps)
+          is_variable: true,
           requires_execution_confirmation: true
         });
       }

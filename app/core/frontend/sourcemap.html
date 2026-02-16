@@ -1182,7 +1182,7 @@
                 </div>
               </div>
               
-              <!-- Key above visual view: Show Check Needed + legend (Process, Raw, WIP, Final, Check needed) -->
+              <!-- Key above visual view: Show Check Needed, Trace wastage + legend (Process, Raw, WIP, Final, Check needed) -->
               <div class="sourcemap-visual-key-box">
                 <button id="check-needed-filter" class="quick-filter-toggle" onclick="toggleCheckNeededFilter()">
                   <span class="toggle-indicator">
@@ -1196,6 +1196,13 @@
                     <line x1="12" y1="17" x2="12.01" y2="17"/>
                   </svg>
                   Show Check Needed
+                </button>
+                <button id="trace-wastage-btn" class="quick-filter-toggle" type="button" onclick="toggleTraceWastage()" title="View recorded wastage (item, date, quantity disposed)">
+                  <span class="toggle-indicator" id="trace-wastage-indicator" style="display: none;"></span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+                  </svg>
+                  Trace wastage
                 </button>
                 <div class="flowchart-legend-item">
                   <div class="flowchart-legend-color" style="background: #dbeafe; border-color: #3b82f6;"></div>
@@ -1310,8 +1317,9 @@
     let allExecutions = [];
     let allExecutionMetadata = [];
     let allOutOfStockRawMaterials = [];
-    let checkNeededData = { expired_raw_materials: [], impacted_items: [], connections: [] };
+    let checkNeededData = { expired_raw_materials: [], impacted_items: [], connections: [], untracked_items: [] };
     let showCheckNeededOnly = false;
+    let showWastageOnly = false;
     let processDetailsForMapping = [];
     let currentInventoryFilter = 'all';
     
@@ -1336,6 +1344,7 @@
     
     // Update the source map table pane with same data as the visual view
     function updateSourceMapTable(items, connections) {
+      if (showWastageOnly) return;
       const tableContainer = document.getElementById('sourcemap-table-container');
       const table = document.getElementById('sourcemap-data-table');
       const thead = document.getElementById('sourcemap-table-head');
@@ -1470,6 +1479,29 @@
           linksEl.innerHTML = linkParts.join('');
         }
       }
+    }
+
+    // Show wastage records in the source map table (item, date of wastage, quantity disposed)
+    function updateWastageTable(records) {
+      const tableContainer = document.getElementById('sourcemap-table-container');
+      const table = document.getElementById('sourcemap-data-table');
+      const thead = document.getElementById('sourcemap-table-head');
+      const tbody = document.getElementById('sourcemap-table-body');
+      const emptyEl = document.getElementById('sourcemap-table-empty');
+      if (!tableContainer || !table || !thead || !tbody || !emptyEl) return;
+      const hasData = records && records.length > 0;
+      table.style.display = hasData ? '' : 'none';
+      emptyEl.style.display = hasData ? 'none' : 'block';
+      if (!hasData) return;
+      thead.innerHTML = '<tr><th>Item</th><th>Date of wastage</th><th>Quantity disposed / wasted</th></tr>';
+      tbody.innerHTML = '';
+      records.forEach(function(r) {
+        const tr = document.createElement('tr');
+        const dateStr = r.recorded_at ? new Date(r.recorded_at).toLocaleDateString() : '—';
+        const qty = (r.quantity_wasted != null ? r.quantity_wasted : '') + (r.unit ? ' ' + r.unit : '');
+        tr.innerHTML = '<td>' + escapeHtml(r.item_name || 'Unknown') + '</td><td>' + escapeHtml(dateStr) + '</td><td>' + escapeHtml(qty) + '</td>';
+        tbody.appendChild(tr);
+      });
     }
     
     // Scroll to and briefly highlight an item in the visual source map (for "Locate in map" links – targets the cause, e.g. expired raw)
@@ -1622,14 +1654,15 @@
     // Load all data needed for source map
     async function loadProcesses() {
       try {
-        // Load processes, inventory, executions, metadata, out-of-stock, and expired-materials (compliance) in parallel
-        const [processesData, inventoryData, executionsData, metadataData, outOfStockData, expiredMaterialsResult] = await Promise.all([
+        // Load processes, inventory, executions, metadata, out-of-stock, expired-materials, and untracked-items in parallel
+        const [processesData, inventoryData, executionsData, metadataData, outOfStockData, expiredMaterialsResult, untrackedResult] = await Promise.all([
           CoreAPI.getProcesses(),
           CoreAPI.getInventory(),
           CoreAPI.getExecutions(),
           CoreAPI.getExecutionMetadata(),
           CoreAPI.getOutOfStockRawMaterials(),
-          CoreAPI.getExpiredMaterials()
+          CoreAPI.getExpiredMaterials(),
+          CoreAPI.getUntrackedItems().catch(() => ({ untracked_items: [], connections: [] }))
         ]);
 
         allProcesses = processesData.processes || [];
@@ -1638,6 +1671,7 @@
         allExecutionMetadata = metadataData.metadata || [];
         allOutOfStockRawMaterials = outOfStockData.inventory_items || [];
         checkNeededData = expiredMaterialsResult || { expired_raw_materials: [], impacted_items: [], connections: [] };
+        checkNeededData.untracked_items = (untrackedResult && untrackedResult.untracked_items) ? untrackedResult.untracked_items : [];
         
         // Filter out any invalid executions before loading details
         const validExecutions = allExecutions.filter(exec => exec && exec.id);
@@ -1816,18 +1850,17 @@
       // Don't render anything if not tracing - user needs to search and select an item
       // Only render when tracing or in check needed mode
       
-      // If check needed filter is active, show all expired items and impacted products
+      // If check needed filter is active, show expired items, impacted products, and untracked items
       if (showCheckNeededOnly && checkNeededData) {
         const expiredRawMaterials = (checkNeededData.expired_raw_materials || []).slice();
         const impactedItems = (checkNeededData.impacted_items || []).slice();
+        const untrackedItems = (checkNeededData.untracked_items || []).slice();
         const connections = checkNeededData.connections || [];
         
-        // Parse date for sorting (null/undefined -> far future so they sort last)
         const parseSortDate = (str) => {
           if (!str) return null;
           try { return new Date(str).getTime(); } catch { return null; }
         };
-        // Sort expired raw materials by expiry_date (oldest first) so visual left column is in time order
         expiredRawMaterials.sort((a, b) => {
           const ta = parseSortDate(a.expiry_date);
           const tb = parseSortDate(b.expiry_date);
@@ -1836,7 +1869,6 @@
           if (tb != null) return 1;
           return (a.name || '').localeCompare(b.name || '');
         });
-        // Sort impacted items by completed_at (earliest first) so visual right column matches data table order
         impactedItems.sort((a, b) => {
           const ta = parseSortDate(getCompletedAtForItem(a));
           const tb = parseSortDate(getCompletedAtForItem(b));
@@ -1845,8 +1877,10 @@
           if (tb != null) return 1;
           return (a.name || '').localeCompare(b.name || '');
         });
+        untrackedItems.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         
-        if (expiredRawMaterials.length === 0) {
+        const hasAnyIssues = expiredRawMaterials.length > 0 || impactedItems.length > 0 || untrackedItems.length > 0;
+        if (!hasAnyIssues) {
           const noIssuesText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           noIssuesText.setAttribute('x', maxX / 2);
           noIssuesText.setAttribute('y', maxY / 2);
@@ -1854,7 +1888,7 @@
           noIssuesText.setAttribute('fill', '#10b981');
           noIssuesText.setAttribute('text-anchor', 'middle');
           noIssuesText.setAttribute('dominant-baseline', 'middle');
-          noIssuesText.textContent = '✓ No expired raw materials with stock found';
+          noIssuesText.textContent = '✓ No issues found';
           svg.appendChild(noIssuesText);
         } else {
           // Sort connections by position of "To" (impacted) item in visual order so data table rows match visual exactly
@@ -1867,7 +1901,7 @@
             const bFrom = expiredRawMaterials.findIndex(r => String(r.id) === b.from_id);
             return (aFrom === -1 ? 9999 : aFrom) - (bFrom === -1 ? 9999 : bFrom);
           });
-          sourceMapTableData = { items: [...expiredRawMaterials, ...impactedItems], connections: sortedConnections };
+          sourceMapTableData = { items: [...expiredRawMaterials, ...impactedItems, ...untrackedItems], connections: sortedConnections };
           // Render check needed flow: same min width (paneWidth) as trace view so cards don't clip text
           const col1MaxWidth = Math.max(paneWidth, ...expiredRawMaterials.map(r => getItemCardWidth(r)));
           const col2MaxWidth = Math.max(paneWidth, ...impactedItems.map(i => getItemCardWidth(i)));
@@ -1901,7 +1935,20 @@
             maxY = Math.max(maxY, itemY + 90);
           });
           
-          maxX = col2X + col2MaxWidth + 50;
+          // Untracked items (third column: reconciliation required)
+          const col3MaxWidth = untrackedItems.length > 0 ? Math.max(paneWidth, ...untrackedItems.map(i => getItemCardWidth(i))) : 0;
+          const col3X = col2X + col2MaxWidth + paneGap;
+          untrackedItems.forEach((item, index) => {
+            const itemY = startY + (index * (90 + itemSpacing));
+            const cardWidth = Math.max(paneWidth, getItemCardWidth(item));
+            item._flowchartX = col3X + cardWidth;
+            item._flowchartY = itemY + 45;
+            const itemType = item.inventory_type === 'work_in_progress' ? 'wip' : (item.inventory_type === 'final_product' ? 'final' : 'raw');
+            renderSingleInventoryItem(svg, item, col3X, itemY, cardWidth, itemType, null);
+            maxY = Math.max(maxY, itemY + 90);
+          });
+          
+          maxX = (untrackedItems.length > 0 ? col3X + col3MaxWidth : col2X + col2MaxWidth) + 50;
           
           // Draw connections (from right edge of each source card, to left edge of each target card)
           connections.forEach(conn => {
@@ -2492,6 +2539,7 @@
               traceButton.addEventListener('click', async function(e) {
                 e.stopPropagation();
                 tracedRawMaterialId = isTraced ? null : rawMaterial.id;
+                if (tracedRawMaterialId) setWastageViewActive(false);
                 await renderProcessFlowcharts(allProcesses);
               });
       svg.appendChild(traceButton);
@@ -2508,6 +2556,7 @@
               traceText.addEventListener('click', async function(e) {
                 e.stopPropagation();
                 tracedRawMaterialId = isTraced ? null : rawMaterial.id;
+                if (tracedRawMaterialId) setWastageViewActive(false);
                 await renderProcessFlowcharts(allProcesses);
               });
       svg.appendChild(traceText);
@@ -5686,41 +5735,62 @@
       // Re-render flowchart with check needed filter
       renderProcessFlowcharts(allProcesses);
     }
+
+    function setWastageViewActive(active) {
+      showWastageOnly = !!active;
+      const btn = document.getElementById('trace-wastage-btn');
+      const indicator = document.getElementById('trace-wastage-indicator');
+      if (btn) btn.classList.toggle('active', showWastageOnly);
+      if (indicator) indicator.style.display = showWastageOnly ? 'block' : 'none';
+    }
+
+    // Toggle Trace wastage view: show wastage records in table (item, date, quantity disposed)
+    async function toggleTraceWastage() {
+      showWastageOnly = !showWastageOnly;
+      setWastageViewActive(showWastageOnly);
+      if (showWastageOnly) {
+        tracedRawMaterialId = null;
+        try {
+          const data = await CoreAPI.getWastageRecords();
+          updateWastageTable(data.wastage_records || []);
+        } catch (e) {
+          console.error('Failed to load wastage records', e);
+          updateWastageTable([]);
+        }
+        renderProcessFlowcharts(allProcesses);
+      } else {
+        renderProcessFlowcharts(allProcesses);
+      }
+    }
     
-    // Check if an item needs attention (expired or made with expired ingredients)
+    // Check if an item needs attention (expired, made with expired ingredients, or untracked)
     function isCheckNeededItem(itemId) {
       if (!checkNeededData) return false;
       
-      // Check if it's an expired raw material
-      const isExpiredRaw = (checkNeededData.expired_raw_materials || []).some(
-        rm => rm.id === itemId
-      );
+      const isExpiredRaw = (checkNeededData.expired_raw_materials || []).some(rm => rm.id === itemId);
       if (isExpiredRaw) return true;
       
-      // Check if it's an impacted item (made with expired ingredients)
-      const isImpacted = (checkNeededData.impacted_items || []).some(
-        item => item.id === itemId
-      );
-      return isImpacted;
+      const isImpacted = (checkNeededData.impacted_items || []).some(item => item.id === itemId);
+      if (isImpacted) return true;
+      
+      const isUntracked = (checkNeededData.untracked_items || []).some(item => item.id === itemId);
+      return isUntracked;
     }
     
-    // Get check reason text for display (dynamic for current and future check types)
+    // Get check reason text for display (expired, impacted, or untracked)
     function getCheckReason(itemId) {
       if (!checkNeededData) return null;
       
-      // Source item expired (raw material or intermediate/final with expiry – same logic for any expired source)
-      const expiredRaw = (checkNeededData.expired_raw_materials || []).find(
-        rm => rm.id === itemId
-      );
+      const expiredRaw = (checkNeededData.expired_raw_materials || []).find(rm => rm.id === itemId);
       if (expiredRaw) return (expiredRaw.name || 'Item') + ' expired';
       
-      // Impacted item: made using expired ingredient (produced after raw expired)
-      const impactedItem = (checkNeededData.impacted_items || []).find(
-        item => item.id === itemId
-      );
+      const impactedItem = (checkNeededData.impacted_items || []).find(item => item.id === itemId);
       if (impactedItem && impactedItem.expired_raw_material_name) {
         return impactedItem.expired_raw_material_name + ' expired before execution of this process';
       }
+      
+      const untrackedItem = (checkNeededData.untracked_items || []).find(item => item.id === itemId);
+      if (untrackedItem) return untrackedItem.check_reason || 'Untracked inventory item — reconciliation required';
       
       return null;
     }
@@ -5731,13 +5801,15 @@
       return reason ? 'Check reason: ' + reason : null;
     }
     
-    // Id of the item to locate in map (the cause of the check failure – e.g. expired raw, not the impacted product)
+    // Id of the item to locate in map (the cause of the check failure – expired raw, impacted product, or untracked item)
     function getCheckFailureCauseId(itemId) {
       if (!checkNeededData || !itemId) return null;
       const expiredRaw = (checkNeededData.expired_raw_materials || []).find(rm => rm.id === itemId);
       if (expiredRaw) return String(itemId);
       const impactedItem = (checkNeededData.impacted_items || []).find(item => item.id === itemId);
       if (impactedItem && impactedItem.expired_raw_material_id) return String(impactedItem.expired_raw_material_id);
+      const untrackedItem = (checkNeededData.untracked_items || []).find(item => item.id === itemId);
+      if (untrackedItem) return String(itemId);
       return null;
     }
     
@@ -5988,8 +6060,7 @@
       // Use the first linked inventory item to trace
       const firstItemId = metadata.inventory_item_ids[0];
       tracedRawMaterialId = firstItemId;
-      
-      // Re-render the flowchart with this trace
+      setWastageViewActive(false);
       await renderProcessFlowcharts(allProcesses);
     }
     
@@ -6145,6 +6216,7 @@
           // Set traced material and re-render
           // Now supports tracing from any inventory type
           tracedRawMaterialId = entry.id;
+          setWastageViewActive(false);
           await renderProcessFlowcharts(allProcesses);
         });
       }
@@ -6171,6 +6243,21 @@
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', async function() {
       await loadProcesses();
+      
+      // If URL has ?show=check-needed (e.g. from banner "Review in Sourcemap"), enable expired materials trace view
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('show') === 'check-needed') {
+        showCheckNeededOnly = true;
+        var filterBtn = document.getElementById('check-needed-filter');
+        if (filterBtn) {
+          filterBtn.classList.add('active');
+          var checkIcon = filterBtn.querySelector('.toggle-indicator svg');
+          if (checkIcon) checkIcon.style.display = 'block';
+        }
+        var hint = document.getElementById('check-needed-hint');
+        if (hint) hint.classList.add('visible');
+        renderProcessFlowcharts(processDetailsForMapping);
+      }
       
       // Update search inventory list
       if (allInventory && allInventory.length > 0) {

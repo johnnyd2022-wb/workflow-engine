@@ -27,6 +27,7 @@ class InventoryRepository:
         expiry_date: date | None = None,
         source_execution_id: UUID | None = None,
         source_execution_step_id: UUID | None = None,
+        source_output_id: UUID | None = None,
         source_step_name: str | None = None,
         extra_data: dict | None = None,
     ) -> InventoryItem:
@@ -43,6 +44,7 @@ class InventoryRepository:
             expiry_date=expiry_date,
             source_execution_id=source_execution_id,
             source_execution_step_id=source_execution_step_id,
+            source_output_id=source_output_id,
             source_step_name=source_step_name,
             extra_data=extra_data or {},
         )

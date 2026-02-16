@@ -131,8 +131,12 @@ def create_app():
         if request.path.startswith("/auth/") and request.method != "GET":
             return jsonify({"error": "Authentication required", "message": "Session expired or not authenticated"}), 401
         accepts_html = "text/html" in (request.headers.get("Accept") or "")
+        is_static_asset = request.path.startswith("/static/")
         is_likely_page = (
-            request.method == "GET" and not request.path.startswith("/api/") and not request.path.startswith("/auth/")
+            request.method == "GET"
+            and not request.path.startswith("/api/")
+            and not request.path.startswith("/auth/")
+            and not is_static_asset
         )
         if accepts_html or is_likely_page:
             return redirect("/", code=302)
