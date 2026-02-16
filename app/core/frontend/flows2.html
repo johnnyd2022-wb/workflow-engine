@@ -72,41 +72,7 @@
         </div>
       </header>
 
-      <!-- System findings banner (inlined from shared/system-findings-banner.html) -->
-      <style>
-        .system-findings-banner { background: linear-gradient(135deg, hsl(38, 92%, 50%, 0.12) 0%, hsl(25, 95%, 53%, 0.08) 100%); border-bottom: 1px solid hsl(38, 92%, 50%, 0.35); margin: 0; padding: 0; }
-        .system-findings-banner__header { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; padding: 10px 16px; max-width: 1200px; margin: 0 auto; min-height: 44px; box-sizing: border-box; }
-        .system-findings-banner__icon { font-size: 1.25rem; color: hsl(38, 92%, 40%); flex-shrink: 0; }
-        .system-findings-banner__title { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary, #1a1a1a); line-height: 1.4; }
-        .system-findings-banner__toggle { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; border: none; background: transparent; color: var(--text-secondary, #6b7280); cursor: pointer; border-radius: var(--radius-md, 6px); flex-shrink: 0; }
-        .system-findings-banner__toggle:hover { background: rgba(0,0,0,0.06); color: var(--text-primary, #1a1a1a); }
-        .system-findings-banner__toggle[aria-expanded="false"] .system-findings-banner__chevron { transform: rotate(-90deg); }
-        .system-findings-banner__chevron { transition: transform 0.2s; }
-        .system-findings-banner__actions { display: flex; gap: 8px; flex-shrink: 0; }
-        .system-findings-banner__body { padding: 0 16px 12px 16px; max-width: 1200px; margin: 0 auto; }
-        .system-findings-banner__body[hidden] { display: none; }
-        .system-findings-list { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.5; color: var(--text-primary, #1a1a1a); }
-        .system-findings-list li { margin-bottom: 4px; }
-        .system-findings-banner__hint { margin-top: 8px; font-size: 12px; color: var(--text-secondary, #6b7280); }
-        @media (min-width: 600px) { .system-findings-banner__header { padding: 12px 24px; } .system-findings-banner__body { padding: 0 24px 14px 24px; } .system-findings-banner__title { font-size: 15px; } .system-findings-list { font-size: 14px; } }
-      </style>
-      <div id="system-findings-banner" class="system-findings-banner" role="alert" aria-live="polite" style="display: none;">
-        <div class="system-findings-banner__header">
-          <span class="system-findings-banner__icon" aria-hidden="true">&#9888;</span>
-          <h2 class="system-findings-banner__title">System findings</h2>
-          <button type="button" id="system-findings-banner-toggle" class="system-findings-banner__toggle" aria-expanded="false" aria-controls="system-findings-banner-body" title="Expand or collapse findings">
-            <svg class="system-findings-banner__chevron" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <div class="system-findings-banner__actions">
-            <button type="button" id="system-findings-banner-ignore-today" class="btn btn-secondary btn-sm">Ignore for today</button>
-            <button type="button" id="system-findings-banner-dismiss" class="btn btn-ghost btn-sm">Dismiss</button>
-          </div>
-        </div>
-        <div id="system-findings-banner-body" class="system-findings-banner__body" hidden>
-          <ul id="system-findings-list" class="system-findings-list"></ul>
-          <p class="system-findings-banner__hint">Review in Source Map or Inventory.</p>
-        </div>
-      </div>
+      {% include 'shared/system-findings-banner.html' %}
       
       <!-- Page Content -->
       <main class="page-content">
@@ -1545,14 +1511,8 @@
       const hasMoreThanThree = items.length > 3;
       const categoryId = `flows-category-${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
-      if (hasMoreThanThree) {
-        scrollContainer.style.maxHeight = '306px';
-        scrollContainer.style.overflowY = 'auto';
-        scrollContainer.dataset.originalMaxHeight = '306px';
-      } else {
-        scrollContainer.style.maxHeight = 'none';
-        scrollContainer.style.overflowY = 'visible';
-        scrollContainer.dataset.originalMaxHeight = 'none';
+      if (!hasMoreThanThree) {
+        scrollContainer.classList.add('expanded');
       }
       scrollContainer.appendChild(itemsContainer);
       
@@ -1734,10 +1694,9 @@
         card.style.overflow = 'hidden';
         card.dataset.isExpanded = 'false';
         if (scrollContainer) {
-          const originalMaxHeight = scrollContainer.dataset.originalMaxHeight;
-          if (originalMaxHeight) {
-            scrollContainer.style.maxHeight = originalMaxHeight;
-            scrollContainer.style.overflowY = originalMaxHeight === 'none' ? 'visible' : 'auto';
+          const categoryCard = scrollContainer.closest('.inventory-category-card');
+          if (categoryCard && categoryCard.dataset.isExpanded !== 'true') {
+            scrollContainer.classList.remove('expanded');
           }
         }
       } else {
@@ -1747,28 +1706,8 @@
         card.style.overflow = 'visible';
         card.dataset.isExpanded = 'true';
         if (scrollContainer) {
-          if (!scrollContainer.dataset.originalMaxHeight) {
-            scrollContainer.dataset.originalMaxHeight = scrollContainer.style.maxHeight || '306px';
-          }
-          setTimeout(() => {
-            const itemsContainer = scrollContainer.querySelector('.inventory-category-items');
-            if (!itemsContainer) return;
-            const allCards = Array.from(itemsContainer.children);
-            const cardIndex = allCards.indexOf(card);
-            if (cardIndex === -1) return;
-            let cardsHeightBefore = 0;
-            for (let i = 0; i < cardIndex; i++) {
-              const itemCard = allCards[i];
-              if (itemCard) cardsHeightBefore += (itemCard.offsetHeight || 90) + 12;
-            }
-            setTimeout(() => {
-              const expandedCardHeight = card.offsetHeight;
-              const heightNeeded = cardsHeightBefore + expandedCardHeight + 60;
-              scrollContainer.style.maxHeight = `${Math.max(heightNeeded, 500)}px`;
-              scrollContainer.style.overflowY = 'auto';
-              card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-            }, 50);
-          }, 100);
+          scrollContainer.classList.add('expanded');
+          card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
         }
       }
     }
@@ -1781,9 +1720,7 @@
       const toggleIcon = document.getElementById(`toggle-icon-${categoryId}`);
       const isExpanded = categoryCard.dataset.isExpanded === 'true';
       if (isExpanded) {
-        const originalMaxHeight = scrollContainer.dataset.originalMaxHeight || '306px';
-        scrollContainer.style.maxHeight = originalMaxHeight;
-        scrollContainer.style.overflowY = originalMaxHeight === 'none' ? 'visible' : 'auto';
+        scrollContainer.classList.remove('expanded');
         toggleButton.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
             <polyline points="6 9 12 15 18 9"/>
@@ -1792,9 +1729,7 @@
         `;
         categoryCard.dataset.isExpanded = 'false';
       } else {
-        scrollContainer.style.maxHeight = 'none';
-        scrollContainer.style.overflowY = 'visible';
-        const itemCount = parseInt(categoryCard.querySelector('.inventory-category-count').textContent);
+        scrollContainer.classList.add('expanded');
         toggleButton.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transform: rotate(180deg);" id="toggle-icon-${categoryId}">
             <polyline points="6 9 12 15 18 9"/>

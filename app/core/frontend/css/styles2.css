@@ -1657,6 +1657,17 @@
     color: hsl(142, 71%, 35%);
   }
 
+/* Inventory category scroll container – CSS-driven expand (no pixel math) */
+.inventory-items-scroll-container {
+  max-height: 306px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.inventory-items-scroll-container.expanded {
+  max-height: none;
+  overflow-y: visible;
+}
+
 /* System findings banner – per-finding expand/collapse */
 .system-findings-list {
   list-style: none;
