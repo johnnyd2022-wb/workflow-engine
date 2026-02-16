@@ -23,6 +23,23 @@
     .searchable-dropdown-list .dropdown-item.selected {
       background: var(--bg-hover, rgba(0, 0, 0, 0.05));
     }
+    .inventory-items-scroll-container {
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-default, #e5e7eb) transparent;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-thumb {
+      background-color: var(--border-default, #e5e7eb);
+      border-radius: 3px;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-thumb:hover {
+      background-color: var(--text-tertiary, #9ca3af);
+    }
   </style>
 </head>
 <body>
@@ -1450,7 +1467,7 @@
       }
     }
     
-    // Render inventory
+    // Render inventory (same expand/collapse layout as core2.html)
     function renderInventory(items) {
       const container = document.getElementById('inventory-container');
       if (!container) return;
@@ -1466,78 +1483,326 @@
         return;
       }
       
-      // Group by type
       const grouped = {
         raw_material: [],
         work_in_progress: [],
         final_product: []
       };
-      
       items.forEach(item => {
         const type = item.inventory_type || 'raw_material';
-        if (grouped[type]) {
-          grouped[type].push(item);
-        }
+        if (grouped[type]) grouped[type].push(item);
       });
       
-      // Render category cards
       if (grouped.raw_material.length > 0) {
-        container.appendChild(createInventoryCategoryCard('raw', 'Raw Materials', grouped.raw_material));
+        container.appendChild(createInventoryCategoryCard('raw', grouped.raw_material));
       }
       if (grouped.work_in_progress.length > 0) {
-        container.appendChild(createInventoryCategoryCard('intermediate', 'Intermediate Products', grouped.work_in_progress));
+        container.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
       }
       if (grouped.final_product.length > 0) {
-        container.appendChild(createInventoryCategoryCard('final', 'Final Products', grouped.final_product));
+        container.appendChild(createInventoryCategoryCard('final', grouped.final_product));
       }
     }
     
-    // Create inventory category card
-    function createInventoryCategoryCard(type, title, items) {
+    function createInventoryCategoryCard(type, items) {
       const card = document.createElement('div');
       card.className = `inventory-category-card ${type}`;
       
-      const iconSvg = '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>';
+      let iconSvg = '';
+      if (type === 'raw') {
+        iconSvg = '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>';
+      } else if (type === 'intermediate') {
+        iconSvg = '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>';
+      } else {
+        iconSvg = '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>';
+      }
+      const categoryTitle = type === 'raw' ? 'Raw Materials' : type === 'intermediate' ? 'Intermediate' : 'Final Products';
+      
+      const itemsContainer = document.createElement('div');
+      itemsContainer.className = 'inventory-category-items';
+      itemsContainer.style.display = 'flex';
+      itemsContainer.style.flexDirection = 'column';
+      itemsContainer.style.gap = '12px';
+      
+      const scrollContainer = document.createElement('div');
+      scrollContainer.className = 'inventory-items-scroll-container';
+      scrollContainer.style.overflowX = 'hidden';
+      
+      if (items.length > 0) {
+        items.forEach(item => {
+          itemsContainer.appendChild(createInventoryItemCardFlows(item));
+        });
+      } else {
+        const emptyMessage = document.createElement('div');
+        emptyMessage.style.padding = '16px';
+        emptyMessage.style.textAlign = 'center';
+        emptyMessage.style.color = 'var(--text-secondary, #6b7280)';
+        emptyMessage.style.fontSize = '14px';
+        emptyMessage.textContent = type === 'intermediate' ? 'Work in progress products will appear here until all process steps are completed' : type === 'final' ? 'Final products in stock will appear here when all process steps are completed' : 'No items yet';
+        itemsContainer.appendChild(emptyMessage);
+      }
+      
+      const hasMoreThanThree = items.length > 3;
+      const categoryId = `flows-category-${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      if (hasMoreThanThree) {
+        scrollContainer.style.maxHeight = '306px';
+        scrollContainer.style.overflowY = 'auto';
+        scrollContainer.dataset.originalMaxHeight = '306px';
+      } else {
+        scrollContainer.style.maxHeight = 'none';
+        scrollContainer.style.overflowY = 'visible';
+        scrollContainer.dataset.originalMaxHeight = 'none';
+      }
+      scrollContainer.appendChild(itemsContainer);
+      
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'inventory-category-header';
+      headerDiv.innerHTML = `
+        <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>
+        <span class="inventory-category-title">${categoryTitle}</span>
+      `;
+      const countP = document.createElement('p');
+      countP.className = 'inventory-category-count';
+      countP.textContent = `${items.length} items`;
+      
+      card.innerHTML = '';
+      card.appendChild(headerDiv);
+      card.appendChild(countP);
+      card.appendChild(scrollContainer);
+      card.dataset.categoryId = categoryId;
+      card.dataset.isExpanded = 'false';
+      
+      if (hasMoreThanThree) {
+        const expandButton = document.createElement('button');
+        expandButton.className = 'btn btn-secondary btn-sm';
+        expandButton.id = `toggle-${categoryId}`;
+        expandButton.style.cssText = 'margin-top: 12px; width: 100%; padding: 8px; font-size: 12px;';
+        expandButton.onclick = () => toggleInventoryCategory(categoryId);
+        expandButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show ${items.length - 3} more
+        `;
+        card.appendChild(expandButton);
+      }
+      return card;
+    }
+    
+    function createInventoryItemCardFlows(item) {
+      const card = document.createElement('div');
+      card.className = 'card card-interactive process-card';
+      card.dataset.inventoryId = item.id;
+      card.dataset.isExpanded = 'false';
+      card.style.marginBottom = '0';
+      card.style.wordWrap = 'break-word';
+      card.style.overflowWrap = 'break-word';
+      card.style.height = '90px';
+      card.style.display = 'flex';
+      card.style.flexDirection = 'column';
+      card.style.overflow = 'hidden';
+      card.style.padding = '12px 24px';
+      
+      const formatDate = (dateStr) => {
+        if (!dateStr) return 'N/A';
+        try {
+          const date = new Date(dateStr);
+          return date.toLocaleDateString();
+        } catch {
+          return dateStr;
+        }
+      };
+      const formatQuantity = (qtyStr) => {
+        if (!qtyStr) return '0';
+        try {
+          const qty = parseFloat(qtyStr);
+          if (isNaN(qty)) return qtyStr;
+          return parseFloat(qty.toFixed(4)).toString();
+        } catch {
+          return qtyStr;
+        }
+      };
+      const formattedQuantity = formatQuantity(item.quantity);
+      const titleContent = item.process_name
+        ? `<span style="color: var(--text-secondary); font-size: 12px; font-weight: 500;">Process: ${escapeHtml(item.process_name)}</span><br><span style="color: var(--text-primary);">${escapeHtml(item.name)}</span>`
+        : escapeHtml(item.name);
       
       card.innerHTML = `
-        <div class="inventory-category-header">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconSvg}</svg>
-          <span class="inventory-category-title">${title}</span>
-          <span class="inventory-category-count">${items.length}</span>
+        <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetailsFlows('${item.id}')">
+            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" onclick="toggleInventoryItemDetailsFlows('${item.id}')" id="arrow-flows-${item.id}">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </div>
         </div>
-        <div class="inventory-category-content">
-          ${items.map(item => {
-            // Prepend process name to product name for quick identification
-            const displayName = item.process_name ? `${escapeHtml(item.process_name)} - ${escapeHtml(item.name)}` : escapeHtml(item.name);
-            return `
-            <div class="inventory-category-item">
-              <div class="inventory-item-row">
-                <span class="inventory-item-name">${displayName}</span>
-                <span class="inventory-item-quantity">${item.quantity || '0'} ${item.unit || ''}</span>
-              </div>
-              ${item.supplier || item.source_execution_id || (item.extra_data && (item.extra_data.execution_prompts || item.extra_data.variable_inputs)) ? `
-                <div class="inventory-item-meta">
-                  ${item.supplier ? `Supplier: ${escapeHtml(item.supplier)}` : ''}
-                  ${item.source_execution_id ? `From: ${escapeHtml(item.source_step_name || 'Execution')}` : ''}
-                  ${item.extra_data && item.extra_data.execution_prompts && Object.keys(item.extra_data.execution_prompts).length > 0 ? `
-                    <div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">
-                      ${Object.entries(item.extra_data.execution_prompts).slice(0, 2).map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(String(value))}`).join(', ')}${Object.keys(item.extra_data.execution_prompts).length > 2 ? '...' : ''}
-                    </div>
-                  ` : ''}
-                  ${item.extra_data && item.extra_data.variable_inputs && item.extra_data.variable_inputs.length > 0 ? `
-                    <div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">
-                      Inputs: ${item.extra_data.variable_inputs.map(i => `${escapeHtml(i.name || 'Unknown')} (${i.quantity || '0'} ${i.unit || ''})`).join(', ')}
-                    </div>
-                  ` : ''}
-                </div>
-              ` : ''}
+        <div style="padding: 4px 24px; margin-top: 0; flex-shrink: 0; border-top: 1px solid var(--border-default, #e5e7eb);">
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+        </div>
+        <div class="inventory-item-details" id="details-flows-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Quantity</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formattedQuantity} ${item.unit || ''}</p>
             </div>
-          `;
-          }).join('')}
+            ${item.supplier ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Supplier</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${escapeHtml(item.supplier)}</p>
+            </div>
+            ` : ''}
+            ${item.purchase_date ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Purchase Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.purchase_date)}</p>
+            </div>
+            ` : ''}
+            ${item.supplier_batch_number ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Batch Number</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${escapeHtml(item.supplier_batch_number)}</p>
+            </div>
+            ` : ''}
+            ${item.expiry_date ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Expiry Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.expiry_date)}</p>
+            </div>
+            ` : ''}
+            ${item.created_at ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Created</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.created_at)}</p>
+            </div>
+            ` : ''}
+          </div>
+          ${item.extra_data && (item.extra_data.execution_prompts || item.extra_data.variable_inputs) ? `
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb);">
+            <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Execution Metadata</h4>
+            ${item.extra_data.execution_prompts && Object.keys(item.extra_data.execution_prompts).length > 0 ? `
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${Object.entries(item.extra_data.execution_prompts).map(([key, value]) => `
+                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 11px; font-weight: 500;">${escapeHtml(key)}</p>
+                    <p style="color: var(--text-primary); margin: 0; font-size: 13px; font-weight: 500;">${escapeHtml(String(value))}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+            ${item.extra_data.variable_inputs && item.extra_data.variable_inputs.length > 0 ? `
+            <div style="margin-bottom: 12px;">
+              <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; font-weight: 500;">Variable Inputs Used</p>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                ${item.extra_data.variable_inputs.map(input => {
+                  const inputFormattedQty = formatQuantity(input.quantity);
+                  return `
+                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-primary); margin: 0 0 4px 0; font-size: 13px; font-weight: 500;">${escapeHtml(input.name || 'Unknown')}</p>
+                    <p style="color: var(--text-secondary); margin: 0; font-size: 12px;">${inputFormattedQty} ${input.unit || ''}</p>
+                  </div>
+                `;
+                }).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+          ` : ''}
         </div>
       `;
-      
       return card;
+    }
+    
+    function toggleInventoryItemDetailsFlows(itemId) {
+      const card = document.querySelector(`[data-inventory-id="${itemId}"]`);
+      if (!card) return;
+      const details = document.getElementById(`details-flows-${itemId}`);
+      const arrow = document.getElementById(`arrow-flows-${itemId}`);
+      if (!details || !arrow) return;
+      const isExpanded = card.dataset.isExpanded === 'true';
+      const scrollContainer = card.closest('.inventory-items-scroll-container');
+      
+      if (isExpanded) {
+        details.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+        card.style.height = '90px';
+        card.style.overflow = 'hidden';
+        card.dataset.isExpanded = 'false';
+        if (scrollContainer) {
+          const originalMaxHeight = scrollContainer.dataset.originalMaxHeight;
+          if (originalMaxHeight) {
+            scrollContainer.style.maxHeight = originalMaxHeight;
+            scrollContainer.style.overflowY = originalMaxHeight === 'none' ? 'visible' : 'auto';
+          }
+        }
+      } else {
+        details.style.display = 'block';
+        arrow.style.transform = 'rotate(90deg)';
+        card.style.height = 'auto';
+        card.style.overflow = 'visible';
+        card.dataset.isExpanded = 'true';
+        if (scrollContainer) {
+          if (!scrollContainer.dataset.originalMaxHeight) {
+            scrollContainer.dataset.originalMaxHeight = scrollContainer.style.maxHeight || '306px';
+          }
+          setTimeout(() => {
+            const itemsContainer = scrollContainer.querySelector('.inventory-category-items');
+            if (!itemsContainer) return;
+            const allCards = Array.from(itemsContainer.children);
+            const cardIndex = allCards.indexOf(card);
+            if (cardIndex === -1) return;
+            let cardsHeightBefore = 0;
+            for (let i = 0; i < cardIndex; i++) {
+              const itemCard = allCards[i];
+              if (itemCard) cardsHeightBefore += (itemCard.offsetHeight || 90) + 12;
+            }
+            setTimeout(() => {
+              const expandedCardHeight = card.offsetHeight;
+              const heightNeeded = cardsHeightBefore + expandedCardHeight + 60;
+              scrollContainer.style.maxHeight = `${Math.max(heightNeeded, 500)}px`;
+              scrollContainer.style.overflowY = 'auto';
+              card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+            }, 50);
+          }, 100);
+        }
+      }
+    }
+    
+    function toggleInventoryCategory(categoryId) {
+      const categoryCard = document.querySelector(`[data-category-id="${categoryId}"]`);
+      if (!categoryCard) return;
+      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
+      const toggleButton = document.getElementById(`toggle-${categoryId}`);
+      const toggleIcon = document.getElementById(`toggle-icon-${categoryId}`);
+      const isExpanded = categoryCard.dataset.isExpanded === 'true';
+      if (isExpanded) {
+        const originalMaxHeight = scrollContainer.dataset.originalMaxHeight || '306px';
+        scrollContainer.style.maxHeight = originalMaxHeight;
+        scrollContainer.style.overflowY = originalMaxHeight === 'none' ? 'visible' : 'auto';
+        toggleButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transition: transform 0.2s;" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show ${Math.max(0, parseInt(categoryCard.querySelector('.inventory-category-count').textContent, 10) - 3)} more
+        `;
+        categoryCard.dataset.isExpanded = 'false';
+      } else {
+        scrollContainer.style.maxHeight = 'none';
+        scrollContainer.style.overflowY = 'visible';
+        const itemCount = parseInt(categoryCard.querySelector('.inventory-category-count').textContent);
+        toggleButton.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; display: inline-block; vertical-align: middle; transform: rotate(180deg);" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show less
+        `;
+        categoryCard.dataset.isExpanded = 'true';
+      }
     }
     
     // Start execution

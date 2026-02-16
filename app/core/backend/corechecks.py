@@ -155,9 +155,12 @@ def register_routes(bp):
         org_id = UUID(g.org_id)
         runner = CoreChecksRunner(org_id=org_id, session=db_session())
         results = runner.run_all_checks()
-        findings = [
-            {"text": r.message}
-            for r in results
-            if r.flagged and r.message
-        ]
+        findings = []
+        for r in results:
+            if not r.flagged or not r.message:
+                continue
+            finding = {"text": r.message, "check_id": r.check_id}
+            if r.data is not None:
+                finding["data"] = r.data
+            findings.append(finding)
         return jsonify({"findings": findings}), 200

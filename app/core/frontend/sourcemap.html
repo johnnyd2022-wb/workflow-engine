@@ -6244,6 +6244,21 @@
     document.addEventListener('DOMContentLoaded', async function() {
       await loadProcesses();
       
+      // If URL has ?show=check-needed (e.g. from banner "Review in Sourcemap"), enable expired materials trace view
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('show') === 'check-needed') {
+        showCheckNeededOnly = true;
+        var filterBtn = document.getElementById('check-needed-filter');
+        if (filterBtn) {
+          filterBtn.classList.add('active');
+          var checkIcon = filterBtn.querySelector('.toggle-indicator svg');
+          if (checkIcon) checkIcon.style.display = 'block';
+        }
+        var hint = document.getElementById('check-needed-hint');
+        if (hint) hint.classList.add('visible');
+        renderProcessFlowcharts(processDetailsForMapping);
+      }
+      
       // Update search inventory list
       if (allInventory && allInventory.length > 0) {
         allInventoryForSearch = allInventory;

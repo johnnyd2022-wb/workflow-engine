@@ -1328,19 +1328,24 @@
       const recordWastageSubmit = document.getElementById('record-wastage-submit');
       const recordWastageCardsContainer = document.getElementById('record-wastage-cards-container');
 
-      async function openRecordWastageModal() {
+      async function openRecordWastageModal(optionalFilterIds) {
         if (!recordWastageModal || !recordWastageCardsContainer) return;
         recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">Loading inventory...</p>';
         recordWastageModal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
+        const filterIds = Array.isArray(optionalFilterIds) ? optionalFilterIds.map(String) : null;
         try {
           const data = await CoreAPI.getInventory();
-          const items = (data.inventory_items || []).filter(function(item) {
+          let items = (data.inventory_items || []).filter(function(item) {
             const q = parseFloat(item.quantity);
             return !isNaN(q) && q > 0;
           });
+          if (filterIds && filterIds.length > 0) {
+            const idSet = new Set(filterIds);
+            items = items.filter(function(item) { return item && idSet.has(String(item.id)); });
+          }
           if (items.length === 0) {
-            recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">No inventory with quantity to record wastage.</p>';
+            recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">' + (filterIds ? 'No expired materials with quantity to record wastage.' : 'No inventory with quantity to record wastage.') + '</p>';
             return;
           }
           recordWastageCardsContainer.innerHTML = '';
@@ -1417,7 +1422,10 @@
         }
       }
 
-      if (recordWastageBtn) recordWastageBtn.addEventListener('click', openRecordWastageModal);
+      if (recordWastageBtn) recordWastageBtn.addEventListener('click', function() { openRecordWastageModal(); });
+      window.openRecordWastageModalForExpired = function(itemIds) {
+        openRecordWastageModal(itemIds);
+      };
       if (recordWastageClose) recordWastageClose.addEventListener('click', closeRecordWastageModal);
       if (recordWastageCancel) recordWastageCancel.addEventListener('click', closeRecordWastageModal);
       if (recordWastageSubmit) recordWastageSubmit.addEventListener('click', submitRecordWastage);
