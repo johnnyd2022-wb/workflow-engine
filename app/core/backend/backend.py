@@ -66,7 +66,7 @@ def sourcemap():
 
 
 @core_bp.route("/static/js/<filename>")
-@limiter.limit("10000 per minute")  # Very high limit to effectively exempt from rate limiting
+@limiter.exempt
 @requires_auth
 def serve_core_js(filename):
     """Serve JavaScript files from core frontend - requires authentication"""
@@ -112,7 +112,7 @@ def serve_core_js(filename):
 
 
 @core_bp.route("/static/css/<filename>")
-@limiter.limit("10000 per minute")  # Very high limit to effectively exempt from rate limiting
+@limiter.exempt
 @requires_auth
 def serve_core_css(filename):
     """Serve CSS files from core frontend - requires authentication"""

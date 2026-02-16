@@ -92,9 +92,8 @@ def get_rate_limit_key():
 
 
 # Create a limiter instance with custom key function (will be initialized with app in app_factory)
-# Increased default limit to 1000 per minute to prevent rate limiting on static files and general API usage
-# Specific endpoints (login, 2FA, etc.) have stricter limits applied individually
-limiter = Limiter(key_func=get_rate_limit_key, default_limits=["1000 per minute"])
+# No default limits: rate limiting is applied only to login and signup endpoints.
+limiter = Limiter(key_func=get_rate_limit_key)
 
 # Pending 2FA session expiry (Using 5 minutes as default)
 PENDING_2FA_EXPIRY_MINUTES = 5
@@ -121,8 +120,9 @@ def rotate_session():
 
 
 @auth_bp.route("/signup", methods=["POST"])
+@limiter.limit("1000 per minute" if IS_CI else "5 per 1 minute")
 def signup():
-    """Create a new organisation with an admin user"""
+    """Create a new organisation with an admin user. Rate limited to prevent abuse."""
     data = request.get_json()
 
     if not data:
@@ -549,16 +549,12 @@ def logout():
 
 
 @auth_bp.route("/me", methods=["GET"])
-@limiter.limit("120 per minute")  # Higher limit for activity tracking (2 per second max)
 def get_current_user():
     """
     Public endpoint.
     Returns authenticated user/org context if logged in.
     Returns user: null when logged out.
     Always HTTP 200.
-
-    Rate limited: 120 per minute (2 per second) to support activity tracking
-    while still preventing abuse.
     """
     from flask import g, jsonify
 
@@ -594,9 +590,6 @@ def get_current_user():
 
 
 @auth_bp.route("/verify-2fa", methods=["POST"])
-@limiter.limit(
-    "1000 per minute" if IS_CI else "5 per 5 minutes"
-)  # CRITICAL: Rate limit 2FA verification to prevent brute force (higher limit for CI)
 def verify_two_factor():
     """Verify TOTP token during login.
 
@@ -605,8 +598,6 @@ def verify_two_factor():
     If the pending session doesn't exist, the user must start the login process again.
     Session lifecycle: session clear/invalidation (e.g. logout, expiry) forces full re-login
     and 2FA again when enabled; no "skip 2FA" state is persisted in the session.
-
-    Rate limited: 5 attempts per 5 minutes per IP.
     """
     data = request.get_json()
 
@@ -1184,13 +1175,8 @@ def check_password_policy():
 
 @auth_bp.route("/change-password", methods=["POST"])
 @requires_auth
-@limiter.limit("1000 per minute" if IS_CI else "5 per 15 minutes")
 def change_password():
-    """Change user password
-
-    Requires authentication and current password verification.
-    Rate limited: 5 attempts per 15 minutes per IP.
-    """
+    """Change user password. Requires authentication and current password verification."""
     data = request.get_json()
 
     if not data:
