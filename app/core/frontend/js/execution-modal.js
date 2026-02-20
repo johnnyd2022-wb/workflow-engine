@@ -198,7 +198,7 @@
         // Check if no matching inventory is available
         const hasNoInventory = sortedInventory.length === 0;
         const errorStyle = hasNoInventory ? 'border: 2px solid var(--error, #ef4444);' : '';
-        const errorMessage = hasNoInventory ? `<p style="color: var(--error, #ef4444); font-size: 12px; margin-top: 4px; font-weight: 500;">⚠️ No matching inventory items found. Please add inventory before executing this step.</p>` : '';
+        const errorMessage = hasNoInventory ? `<p class="execute-input-no-inventory-warning" style="color: var(--error, #ef4444); font-size: 12px; margin-top: 4px; font-weight: 500;">⚠️ No matching inventory items found. Please add inventory before executing this step.</p>` : '';
         
         inputSection.innerHTML = `
           <div style="margin-bottom: 12px;">
@@ -502,38 +502,65 @@
     }
     
     // Render variable outputs (confirmation/override)
-    const variableOutputs = (stepDefinition.outputs || []).filter(output => 
+    const variableOutputs = (stepDefinition.outputs || []).filter(output =>
       output.requires_execution_confirmation !== false && output.is_variable !== false
     );
-    
+    const outputNameNorm = function(n) { return (n || '').trim().toLowerCase(); };
+    const unitNorm = function(u) { return (u || '').trim(); };
+
     if (variableOutputs.length > 0 && outputsContainer) {
       variableOutputs.forEach(output => {
         const outputSection = document.createElement('div');
         outputSection.className = 'execute-output-section';
         outputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
         const outputId = output.id != null ? escapeHtml(String(output.id)) : '';
+        const outName = output.name || '';
+        const outUnit = output.unit || 'units';
+        const matchingUntracked = (untrackedItems || []).filter(function(u) {
+          if (!u || !u.id) return false;
+          if (outputNameNorm(u.name) !== outputNameNorm(outName)) return false;
+          if (unitNorm(u.unit) !== unitNorm(outUnit)) return false;
+          const q = parseFloat(u.quantity);
+          return !isNaN(q) && q > 0;
+        });
+        function formatUntrackedOptionLabel(u) {
+          var parts = [u.name || 'Unknown', (u.quantity != null ? u.quantity : '') + ' ' + (u.unit || '')];
+          if (u.supplier_batch_number) parts.push('Batch: ' + u.supplier_batch_number);
+          if (u.supplier) parts.push(u.supplier);
+          if (u.created_at) {
+            try {
+              var d = new Date(u.created_at);
+              parts.push('Created: ' + d.toLocaleDateString());
+            } catch (e) {}
+          }
+          return parts.join(' · ');
+        }
+        const reconcileBlock = matchingUntracked.length === 0 ? '' : (function() {
+          var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
+          var optionsHtml = '<option value="">— None —</option>' + matchingUntracked.map(function(u) {
+            var id = String(u.id);
+            var label = formatUntrackedOptionLabel(u);
+            var selected = matchingUntracked.length === 1 ? ' selected' : '';
+            return '<option value="' + escapeHtml(id) + '"' + selected + '>' + escapeHtml(label) + '</option>';
+          }).join('');
+          return '<div style="margin-top: 12px; padding: 10px 12px; background: hsl(42, 93%, 94%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px;">' +
+            '<label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 6px;">Reconcile to untracked item (optional)</label>' +
+            '<p style="margin: 0 0 6px 0; color: #92400e; font-size: 12px;">This output matches untracked inventory. Choose an item to reconcile when you complete the step.</p>' +
+            '<select class="form-select execute-reconcile-untracked-select" data-output-name="' + escapeHtml(outName) + '" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-default); font-size: 13px; background: var(--bg-card);">' +
+            optionsHtml +
+            '</select></div>';
+        })();
         outputSection.innerHTML = `
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-              ${escapeHtml(output.name)} 
+              ${escapeHtml(output.name)}
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${output.quantity || '0'} ${output.unit || ''})</span>
             </label>
             <input type="number" class="form-input execute-output-quantity-input" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
-            <p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-untracked-output-btn" data-output-name="${escapeHtml(output.name)}" data-output-quantity="${output.quantity != null ? output.quantity : ''}" data-output-unit="${escapeHtml(output.unit || '')}" data-output-id="${outputId}" style="font-size: 12px;">Add as untracked output</button></p>
+            ${reconcileBlock}
           </div>
         `;
-        const addUntrackedBtn = outputSection.querySelector('.add-untracked-output-btn');
-        if (addUntrackedBtn) {
-          addUntrackedBtn.addEventListener('click', function() {
-            window.openAddUntrackedOutputModal && window.openAddUntrackedOutputModal({
-              name: this.dataset.outputName || '',
-              quantity: this.dataset.outputQuantity != null && this.dataset.outputQuantity !== '' ? this.dataset.outputQuantity : '',
-              unit: this.dataset.outputUnit || '',
-              id: this.dataset.outputId || null
-            }, modal.dataset.executionId, modal.dataset.executionStepId);
-          });
-        }
         outputsContainer.appendChild(outputSection);
       });
     } else if (outputsContainer) {
@@ -786,12 +813,15 @@
         const quantity = parseFloat(input.value);
         if (name && !isNaN(quantity)) {
           const outputDef = allStepOutputs.find(o => o.name === name);
-          
-          actualOutputs.push({
+          const reconcileSelect = Array.from(modal.querySelectorAll('.execute-reconcile-untracked-select')).find(function(el) { return (el.dataset.outputName || '') === name; });
+          const untrackedItemId = (reconcileSelect && reconcileSelect.value && reconcileSelect.value.trim()) ? reconcileSelect.value.trim() : null;
+          const outPayload = {
             name: name,
             quantity: quantity,
             unit: outputDef ? (outputDef.unit || 'units') : 'units'
-          });
+          };
+          if (untrackedItemId) outPayload.untracked_item_id = untrackedItemId;
+          actualOutputs.push(outPayload);
           variableOutputNames.add(name);
         }
       });
@@ -993,6 +1023,12 @@
               qtyInput.dataset.inventoryUnit = opt.dataset.unit || '';
             }
             if (unitDisplay) unitDisplay.textContent = opt.dataset.unit || '';
+            var noInvWarning = section.querySelector('.execute-input-no-inventory-warning');
+            if (noInvWarning) {
+              noInvWarning.style.display = 'none';
+            }
+            select.style.border = '';
+            select.style.boxShadow = '';
           }
           var submitBtn = modal.querySelector('#execute-step-submit-btn');
           if (submitBtn) {

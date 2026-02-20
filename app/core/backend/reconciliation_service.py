@@ -217,9 +217,10 @@ def reconcile_via_execution(
     output_date: str | None = None,
 ) -> dict[str, Any]:
     """
-    Path B: Map to Execution Output. Creates an execution, completes the given step
-    with one output, creates one inventory item from that output, and reduces
-    the untracked item by reconciliation_amount.
+    Path B (legacy): Map to Execution Output. Creates a new execution, completes the given step
+    with one output, creates one inventory item from that output, and reduces the untracked item.
+    Preferred approach: complete an execution step in the execution modal with optional
+    untracked_item_id per output; the complete_step flow uses reconcile_output_to_untracked.
     """
     inv_repo = InventoryRepository(session)
     exec_repo = ExecutionRepository(session)
@@ -353,4 +354,152 @@ def reconcile_via_execution(
         "reconciled_amount": str(reconciliation_amount),
         "surplus": str(surplus),
         "inventory_created": True,
+    }
+
+
+def reconcile_output_to_untracked_reduce_only(
+    org_id: UUID,
+    session: Session,
+    user_id: str | None,
+    user_email: str | None,
+    untracked_item_id: UUID,
+    output_quantity: Decimal,
+    output_unit: str,
+    output_name: str,
+    execution_id: UUID,
+    execution_step_id: UUID,
+) -> dict[str, Any]:
+    """
+    Reduce the untracked item by the reconciliation amount (min of output qty and untracked balance).
+    Does NOT create or update any output inventory item. Returns reconciled_amount and surplus.
+    Caller should create an output item only when surplus > 0, with quantity = surplus.
+    """
+    inv_repo = InventoryRepository(session)
+    untracked = inv_repo.get_inventory_item_by_id(untracked_item_id, org_id)
+    if not untracked:
+        return {"error": "Untracked item not found"}
+    if (untracked.extra_data or {}).get("untracked") is not True:
+        return {"error": "Item is not an untracked item"}
+    if (output_unit or "").strip() != (untracked.unit or "").strip():
+        return {"error": "Unit mismatch: output unit must match untracked item unit"}
+    if (output_name or "").strip().lower() != (untracked.name or "").strip().lower():
+        return {"error": "Name mismatch: output name must match untracked item name"}
+
+    untracked_balance = _parse_quantity(untracked.quantity)
+    if untracked_balance is None or untracked_balance <= 0:
+        return {"error": "Untracked item has no balance to reconcile"}
+    if output_quantity is None or output_quantity <= 0:
+        return {"error": "Output quantity must be positive"}
+
+    reconciliation_amount = min(output_quantity, untracked_balance)
+    surplus = output_quantity - reconciliation_amount
+    new_untracked_qty = untracked_balance - reconciliation_amount
+
+    history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
+    history.append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user_id": user_id,
+        "user_email": user_email,
+        "method": "map_to_untracked_at_completion",
+        "execution_id": str(execution_id),
+        "execution_step_id": str(execution_step_id),
+        "quantity_reconciled": str(reconciliation_amount),
+        "surplus_to_live": str(surplus),
+    })
+    new_extra = dict(untracked.extra_data or {})
+    new_extra["reconciliation_history"] = history
+    if new_untracked_qty <= 0:
+        new_extra["untracked"] = False
+    inv_repo.update_inventory_item(
+        item_id=untracked_item_id,
+        org_id=org_id,
+        quantity=str(new_untracked_qty) if new_untracked_qty > 0 else "0",
+        extra_data=new_extra,
+    )
+
+    return {
+        "reconciled_amount": str(reconciliation_amount),
+        "surplus": str(surplus),
+    }
+
+
+def reconcile_output_to_untracked(
+    org_id: UUID,
+    session: Session,
+    user_id: str | None,
+    user_email: str | None,
+    untracked_item_id: UUID,
+    output_quantity: Decimal,
+    output_unit: str,
+    output_name: str,
+    execution_id: UUID,
+    execution_step_id: UUID,
+    output_inventory_item_id: UUID,
+) -> dict[str, Any]:
+    """
+    Reconcile an existing execution output (already created inventory item) to an untracked item.
+    Legacy: reduces untracked and updates output item extra_data. Prefer using
+    reconcile_output_to_untracked_reduce_only and then creating output with quantity=surplus only.
+    """
+    inv_repo = InventoryRepository(session)
+    untracked = inv_repo.get_inventory_item_by_id(untracked_item_id, org_id)
+    if not untracked:
+        return {"error": "Untracked item not found"}
+    if (untracked.extra_data or {}).get("untracked") is not True:
+        return {"error": "Item is not an untracked item"}
+    if (output_unit or "").strip() != (untracked.unit or "").strip():
+        return {"error": "Unit mismatch: output unit must match untracked item unit"}
+    if (output_name or "").strip().lower() != (untracked.name or "").strip().lower():
+        return {"error": "Name mismatch: output name must match untracked item name"}
+
+    untracked_balance = _parse_quantity(untracked.quantity)
+    if untracked_balance is None or untracked_balance <= 0:
+        return {"error": "Untracked item has no balance to reconcile"}
+    if output_quantity is None or output_quantity <= 0:
+        return {"error": "Output quantity must be positive"}
+
+    reconciliation_amount = min(output_quantity, untracked_balance)
+    surplus = output_quantity - reconciliation_amount
+    new_untracked_qty = untracked_balance - reconciliation_amount
+
+    history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
+    history.append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user_id": user_id,
+        "user_email": user_email,
+        "method": "map_to_untracked_at_completion",
+        "execution_id": str(execution_id),
+        "execution_step_id": str(execution_step_id),
+        "output_inventory_item_id": str(output_inventory_item_id),
+        "quantity_reconciled": str(reconciliation_amount),
+        "surplus_to_live": str(surplus),
+    })
+    new_extra = dict(untracked.extra_data or {})
+    new_extra["reconciliation_history"] = history
+    if new_untracked_qty <= 0:
+        new_extra["untracked"] = False
+    inv_repo.update_inventory_item(
+        item_id=untracked_item_id,
+        org_id=org_id,
+        quantity=str(new_untracked_qty) if new_untracked_qty > 0 else "0",
+        extra_data=new_extra,
+    )
+
+    output_item = inv_repo.get_inventory_item_by_id(output_inventory_item_id, org_id)
+    if output_item and output_item.extra_data is not None:
+        out_extra = dict(output_item.extra_data)
+    else:
+        out_extra = {}
+    out_extra["reconciled_untracked_item_id"] = str(untracked_item_id)
+    out_extra["quantity_reconciled"] = str(reconciliation_amount)
+    out_extra["surplus_to_live"] = str(surplus)
+    inv_repo.update_inventory_item(
+        item_id=output_inventory_item_id,
+        org_id=org_id,
+        extra_data=out_extra,
+    )
+
+    return {
+        "reconciled_amount": str(reconciliation_amount),
+        "surplus": str(surplus),
     }

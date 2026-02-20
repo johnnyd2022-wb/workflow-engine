@@ -879,6 +879,17 @@ def complete_step(execution_id: str, execution_step_id: str):
                     if matching_output:
                         extra_data["variable_output"] = matching_output
 
+                # Optional: map this output to an untracked item (reconcile at completion)
+                untracked_item_id_raw = output.get("untracked_item_id")
+                untracked_item_id_uuid = None
+                if untracked_item_id_raw:
+                    try:
+                        untracked_item_id_uuid = UUID(untracked_item_id_raw)
+                    except (ValueError, TypeError):
+                        execution_warnings.append(
+                            f"Invalid untracked_item_id for output '{output_name}'; skipping reconciliation."
+                        )
+
                 # Store creation parameters for atomic commit
                 output_creations.append(
                     {
@@ -891,6 +902,8 @@ def complete_step(execution_id: str, execution_step_id: str):
                         "source_execution_step_id": execution_step_uuid,
                         "source_step_name": execution_step.step.name if execution_step.step else None,
                         "extra_data": extra_data if extra_data else None,
+                        "untracked_item_id": untracked_item_id_uuid,
+                        "quantity_decimal": quantity_decimal,
                     }
                 )
 
@@ -907,8 +920,47 @@ def complete_step(execution_id: str, execution_step_id: str):
             for inventory_item, new_quantity in inventory_updates:
                 inventory_item.quantity = new_quantity
 
-            # Create inventory items for outputs
+            # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
+            from app.core.backend.reconciliation_service import reconcile_output_to_untracked_reduce_only
+
             for output_params in output_creations:
+                untracked_item_id = output_params.pop("untracked_item_id", None)
+                quantity_decimal = output_params.pop("quantity_decimal", None)
+                output_name = output_params.get("name", "Unknown")
+                output_unit = output_params.get("unit", "units")
+
+                if untracked_item_id is not None and quantity_decimal is not None:
+                    rec_result = reconcile_output_to_untracked_reduce_only(
+                        org_id=org_id,
+                        session=db_session,
+                        user_id=getattr(g, "user_id", None) and str(g.user_id),
+                        user_email=user_email,
+                        untracked_item_id=untracked_item_id,
+                        output_quantity=quantity_decimal,
+                        output_unit=output_unit,
+                        output_name=output_name,
+                        execution_id=execution_uuid,
+                        execution_step_id=execution_step_uuid,
+                    )
+                    if rec_result.get("error"):
+                        execution_warnings.append(
+                            f"Reconciliation for output '{output_name}': {rec_result['error']}"
+                        )
+                        continue
+                    surplus = quantity_decimal
+                    try:
+                        surplus = Decimal(rec_result["surplus"])
+                    except (InvalidOperation, ValueError, TypeError):
+                        surplus = quantity_decimal
+                    if surplus <= 0 or abs(surplus) < Decimal("0.0001"):
+                        continue
+                    output_params["quantity"] = str(surplus)
+                    extra = dict(output_params.get("extra_data") or {})
+                    extra["reconciled_untracked_item_id"] = str(untracked_item_id)
+                    extra["quantity_reconciled"] = rec_result.get("reconciled_amount", "")
+                    extra["surplus_to_live"] = rec_result.get("surplus", "")
+                    output_params["extra_data"] = extra
+
                 inventory_repo.create_inventory_item(**output_params)
 
             # Single commit for all inventory operations

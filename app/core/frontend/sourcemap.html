@@ -1296,7 +1296,6 @@
   
   <!-- Backend Integration Scripts -->
   <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
-  <script src="{{ url_for('core.serve_core_js', filename='map-to-execution-reconciliation.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script>
     // Initialize account info component
@@ -1419,8 +1418,8 @@
             '</div>'
           : '';
         const isUntracked = checkNeededData && (checkNeededData.untracked_items || []).some(function(u) { return u && String(u.id) === String(it.id); });
-        const mapToExecBlock = isUntracked
-          ? '<div class="sourcemap-row-card-actions" style="margin-top: 8px;"><a href="#" class="map-to-execution-reconcile-btn" data-untracked-item="' + escapeHtml(JSON.stringify({ id: it.id, name: it.name, quantity: it.quantity, unit: it.unit })) + '">Map to Execution Output</a></div>'
+        const untrackedHint = isUntracked
+          ? '<div class="sourcemap-row-card-actions" style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">Reconcile when completing an execution that produces this output (Map to untracked item in the execution modal).</div>'
           : '';
         return '<div class="' + cardClass + '"' + titleAttr + '>' +
           '<div class="sourcemap-row-card-title">' + escapeHtml(name) + '</div>' +
@@ -1428,13 +1427,18 @@
           (gridHtml ? '<div class="sourcemap-row-card-grid">' + gridHtml + '</div>' : '') +
           metaBlock +
           checkReasonBlock +
-          mapToExecBlock +
+          untrackedHint +
           '</div>';
       }
       
       if (connections && connections.length > 0) {
         thead.innerHTML = '<tr><th>From</th><th></th><th>To</th></tr>';
         tbody.innerHTML = '';
+        const idsInConnections = new Set();
+        connections.forEach(conn => {
+          if (conn.from_id) idsInConnections.add(String(conn.from_id));
+          if (conn.to_id) idsInConnections.add(String(conn.to_id));
+        });
         connections.forEach(conn => {
           const fromItem = itemsMap.get(conn.from_id) || (conn.from_id && { name: String(conn.from_id), inventory_type: '' });
           const toItem = itemsMap.get(conn.to_id) || (conn.to_id && { name: String(conn.to_id), inventory_type: '' });
@@ -1442,6 +1446,14 @@
           const toCard = buildItemCardHtml(toItem);
           const tr = document.createElement('tr');
           tr.innerHTML = '<td>' + fromCard + '</td><td class="sourcemap-row-card-arrow">→</td><td>' + toCard + '</td>';
+          tbody.appendChild(tr);
+        });
+        // In check-needed mode, also show rows for items not in any connection (e.g. untracked items) so "Map to Execution Output" is visible
+        (items || []).forEach(item => {
+          if (!item || !item.id) return;
+          if (idsInConnections.has(String(item.id))) return;
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td colspan="3">' + buildItemCardHtml(item) + '</td>';
           tbody.appendChild(tr);
         });
       } else if (items && items.length > 0) {

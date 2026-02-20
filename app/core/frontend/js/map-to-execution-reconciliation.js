@@ -182,24 +182,37 @@
   }
 
   document.body.addEventListener('click', function (e) {
-    var btn = e.target.closest && e.target.closest('.map-to-execution-reconcile-btn');
+    var start = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
+    var btn = start && start.closest ? start.closest('.map-to-execution-reconcile-btn') : null;
     if (!btn) return;
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
     var raw = btn.getAttribute('data-untracked-item');
     if (raw) {
       try {
-        var item = JSON.parse(raw);
+        var textarea = document.createElement('textarea');
+        textarea.innerHTML = raw;
+        var decoded = textarea.value;
+        var item = JSON.parse(decoded);
         window.openMapToExecutionReconciliationModal(item);
-      } catch (err) {}
+      } catch (err) {
+        console.warn('Map to Execution: failed to parse data', err);
+      }
     }
-  });
+  }, true);
 
   window.openMapToExecutionReconciliationModal = function (untrackedItem) {
     if (!untrackedItem || !untrackedItem.id) return;
     currentUntracked = untrackedItem;
     var m = ensureModal();
     var desc = getEl('map-to-exec-untracked-desc');
-    if (desc) desc.textContent = 'Reconcile untracked item “‘ + escapeHtml(untrackedItem.name || '') + '” (' + escapeHtml(String(untrackedItem.quantity || '')) + ' ' + escapeHtml(untrackedItem.unit || '') + ') by mapping it to an execution output.';
+    if (desc) {
+      var _name = escapeHtml(untrackedItem.name || '');
+      var _qty = escapeHtml(String(untrackedItem.quantity || ''));
+      var _unit = escapeHtml(untrackedItem.unit || '');
+      desc.textContent = 'Reconcile untracked item "' + _name + '" (' + _qty + ' ' + _unit + ') by mapping it to an execution output.';
+    }
     getEl('map-to-exec-process').innerHTML = '<option value="">— Select process —</option>';
     getEl('map-to-exec-step').innerHTML = '<option value="">— Select step —</option>';
     getEl('map-to-exec-quantity').value = untrackedItem.quantity != null ? String(untrackedItem.quantity) : '';
