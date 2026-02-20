@@ -1434,6 +1434,8 @@ def list_out_of_stock_raw_materials():
 
 
 corechecks.register_routes(core_bp)
+from app.core.backend import reconciliation_routes
+reconciliation_routes.register_routes(core_bp)
 
 
 @core_bp.route("/api/core/reset-demo-db", methods=["POST"])

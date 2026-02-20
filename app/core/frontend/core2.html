@@ -295,6 +295,7 @@
     };
   </script>
   <script src="{{ url_for('core.serve_core_js', filename='execution-modal.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
   <script>
     // Global variable for notification timeout
     let notificationTimeout = null;
@@ -2034,6 +2035,21 @@
                 <option value="pcs">Pieces</option>
               </select>
             </div>
+          </div>
+          <div id="add-inventory-map-untracked-wrapper" style="display: none;">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Map to Untracked Item (optional)</label>
+            <select name="mapToUntrackedItemId" id="add-inventory-map-untracked-select" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="">— No mapping —</option>
+            </select>
+            <p id="add-inventory-untracked-hint" style="font-size: 12px; color: var(--text-secondary); margin-top: 6px; margin-bottom: 0;"></p>
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Category</label>
+            <select name="inventoryType" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="raw_material">Raw material</option>
+              <option value="work_in_progress">Intermediate</option>
+              <option value="final_product">Final product</option>
+            </select>
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Supplier (optional)</label>

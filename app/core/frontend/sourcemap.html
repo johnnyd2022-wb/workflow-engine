@@ -1296,6 +1296,7 @@
   
   <!-- Backend Integration Scripts -->
   <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='map-to-execution-reconciliation.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script>
     // Initialize account info component
@@ -1417,12 +1418,17 @@
             (locateId ? '<a href="#" class="sourcemap-locate-link" data-locate-id="' + escapeHtml(locateId) + '" title="Locate cause in map">Locate in map</a>' : '') +
             '</div>'
           : '';
+        const isUntracked = checkNeededData && (checkNeededData.untracked_items || []).some(function(u) { return u && String(u.id) === String(it.id); });
+        const mapToExecBlock = isUntracked
+          ? '<div class="sourcemap-row-card-actions" style="margin-top: 8px;"><a href="#" class="map-to-execution-reconcile-btn" data-untracked-item="' + escapeHtml(JSON.stringify({ id: it.id, name: it.name, quantity: it.quantity, unit: it.unit })) + '">Map to Execution Output</a></div>'
+          : '';
         return '<div class="' + cardClass + '"' + titleAttr + '>' +
           '<div class="sourcemap-row-card-title">' + escapeHtml(name) + '</div>' +
           '<span class="sourcemap-row-card-type ' + typeC + '">' + escapeHtml(type) + '</span>' +
           (gridHtml ? '<div class="sourcemap-row-card-grid">' + gridHtml + '</div>' : '') +
           metaBlock +
           checkReasonBlock +
+          mapToExecBlock +
           '</div>';
       }
       
