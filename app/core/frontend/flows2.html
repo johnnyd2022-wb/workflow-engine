@@ -3317,6 +3317,138 @@
     </div>
   </div>
   
+  <!-- Dispose of inventory item modal (system findings banner: "Dispose of inventory item") -->
+  <div class="modal-overlay" id="record-wastage-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 560px; width: 90%; padding: 24px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Dispose of inventory item</h2>
+        <button type="button" id="record-wastage-modal-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 16px 0; flex-shrink: 0;">Select item(s) and enter quantity to dispose. Quantity will be deducted from inventory; items at zero will no longer appear in stock.</p>
+      <div id="record-wastage-cards-container" class="guided-inventory-cards-stack" style="flex: 1; min-height: 0; max-height: 320px; overflow-y: auto; padding: 4px 0; display: flex; flex-direction: column; gap: 12px;">
+        <!-- Cards rendered by JS -->
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); flex-shrink: 0;">
+        <button type="button" class="btn btn-secondary" id="record-wastage-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="record-wastage-submit">Dispose of inventory item</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      function escapeHtml(text) {
+        if (text == null) return '';
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+      function initRecordWastageModal() {
+        var recordWastageModal = document.getElementById('record-wastage-modal');
+        var recordWastageCardsContainer = document.getElementById('record-wastage-cards-container');
+        var recordWastageClose = document.getElementById('record-wastage-modal-close');
+        var recordWastageCancel = document.getElementById('record-wastage-cancel');
+        var recordWastageSubmit = document.getElementById('record-wastage-submit');
+        if (!recordWastageModal || !recordWastageCardsContainer) return;
+        async function openRecordWastageModal(optionalFilterIds) {
+          recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">Loading inventory...</p>';
+          recordWastageModal.style.display = 'flex';
+          document.body.style.overflow = 'hidden';
+          var filterIds = Array.isArray(optionalFilterIds) ? optionalFilterIds.map(String) : null;
+          try {
+            var data = await window.CoreAPI.getInventory();
+            var items = (data.inventory_items || []).filter(function(item) {
+              var q = parseFloat(item.quantity);
+              return !isNaN(q) && q > 0;
+            });
+            if (filterIds && filterIds.length > 0) {
+              var idSet = new Set(filterIds);
+              items = items.filter(function(item) { return item && idSet.has(String(item.id)); });
+            }
+            if (items.length === 0) {
+              recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">' + (filterIds ? 'No expired materials with quantity to dispose.' : 'No inventory with quantity to dispose.') + '</p>';
+              return;
+            }
+            recordWastageCardsContainer.innerHTML = '';
+            items.forEach(function(item) {
+              var qtyNum = parseFloat(item.quantity);
+              var unit = item.unit || 'units';
+              var card = document.createElement('div');
+              card.className = 'wastage-card';
+              card.style.cssText = 'border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 14px; background: var(--bg-card); display: flex; flex-direction: column; gap: 10px;';
+              card.dataset.inventoryId = item.id;
+              card.dataset.maxQuantity = String(item.quantity);
+              var nameLine = (item.process_name ? item.process_name + ' – ' : '') + item.name;
+              card.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">' +
+                '<div><span style="font-weight: 600; color: var(--text-primary);">' + escapeHtml(nameLine) + '</span>' +
+                '<span style="font-size: 12px; color: var(--text-secondary); margin-left: 6px;">Available: ' + escapeHtml(String(item.quantity)) + ' ' + escapeHtml(unit) + '</span></div></div>' +
+                '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">' +
+                '<label style="font-size: 12px; color: var(--text-secondary);">Quantity to waste</label>' +
+                '<input type="number" class="wastage-qty-input" min="0" max="' + qtyNum + '" step="0.0001" placeholder="0" value="" style="width: 100px; padding: 8px 10px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">' +
+                '<span style="font-size: 13px; color: var(--text-secondary);">' + escapeHtml(unit) + '</span>' +
+                '<button type="button" class="btn btn-secondary btn-sm waste-entire-btn" style="font-size: 12px;">Waste entire item</button></div>';
+              var qtyInput = card.querySelector('.wastage-qty-input');
+              var wasteEntireBtn = card.querySelector('.waste-entire-btn');
+              if (wasteEntireBtn) wasteEntireBtn.addEventListener('click', function() { qtyInput.value = String(item.quantity); });
+              if (qtyInput) qtyInput.addEventListener('input', function() {
+                var v = parseFloat(this.value);
+                var max = parseFloat(card.dataset.maxQuantity);
+                if (!isNaN(v) && v > max) this.value = String(max);
+              });
+              recordWastageCardsContainer.appendChild(card);
+            });
+          } catch (e) {
+            console.error('Failed to load inventory for wastage', e);
+            recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--error, #ef4444);">Failed to load inventory.</p>';
+          }
+        }
+        function closeRecordWastageModal() {
+          recordWastageModal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+        }
+        async function submitRecordWastage() {
+          var cards = recordWastageCardsContainer.querySelectorAll('.wastage-card');
+          var entries = [];
+          cards.forEach(function(card) {
+            var id = card.dataset.inventoryId;
+            var input = card.querySelector('.wastage-qty-input');
+            var val = input && parseFloat(input.value);
+            if (id && !isNaN(val) && val > 0) {
+              var max = parseFloat(card.dataset.maxQuantity);
+              if (!isNaN(max) && val > max) { val = max; if (input) input.value = String(max); }
+              entries.push({ inventory_item_id: id, quantity_wasted: val });
+            }
+          });
+          if (entries.length === 0) {
+            if (typeof window.showNotification === 'function') window.showNotification('error', 'No quantity entered', 'Enter quantity to dispose for at least one item.');
+            return;
+          }
+          try {
+            var res = await window.CoreAPI.recordWastage(entries);
+            closeRecordWastageModal();
+            if (res && res.wastage_records && res.wastage_records.length && typeof window.showNotification === 'function') {
+              window.showNotification('success', 'Inventory disposed', res.wastage_records.length + ' item(s) disposed. Quantity deducted from inventory.');
+            }
+            if (typeof window.loadSystemFindingsBanner === 'function') window.loadSystemFindingsBanner();
+            if (typeof loadInventory === 'function') loadInventory();
+          } catch (e) {
+            if (typeof window.showNotification === 'function') window.showNotification('error', 'Failed to dispose of inventory', e.message || 'Could not dispose of inventory.');
+          }
+        }
+        window.openRecordWastageModalForExpired = function(itemIds) { openRecordWastageModal(itemIds); };
+        if (recordWastageClose) recordWastageClose.addEventListener('click', closeRecordWastageModal);
+        if (recordWastageCancel) recordWastageCancel.addEventListener('click', closeRecordWastageModal);
+        if (recordWastageSubmit) recordWastageSubmit.addEventListener('click', submitRecordWastage);
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initRecordWastageModal);
+      } else {
+        initRecordWastageModal();
+      }
+    })();
+  </script>
+  
   <!-- Create Process Guided Flow Modal -->
   {% include 'shared/create-process-modal.html' %}
   

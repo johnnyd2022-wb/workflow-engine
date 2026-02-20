@@ -51,7 +51,6 @@
     }
 
     var sourcemapUrl = '/core/sourcemap?show=check-needed';
-    var hasWastageModal = !!document.getElementById('record-wastage-modal');
     listEl.innerHTML = findings.map(function (f, index) {
       var text = (f && f.text != null) ? String(f.text) : '';
       var checkId = (f && f.check_id != null) ? String(f.check_id) : '';
@@ -76,7 +75,7 @@
         }
         var expiredIdsAttr = expiredIds.length ? " data-expired-ids='" + String(JSON.stringify(expiredIds)).replace(/'/g, "&#39;") + "'" : '';
         var menuItems = '<a href="' + sourcemapUrl + '" class="system-findings-item__menu-item" data-action="review-sourcemap">Review in Sourcemap</a>';
-        if (hasWastageModal && expiredIds.length > 0) {
+        if (expiredIds.length > 0) {
           menuItems += '<button type="button" class="system-findings-item__menu-item" data-action="dispose">Dispose of inventory item</button>';
         }
         actionBlock =
