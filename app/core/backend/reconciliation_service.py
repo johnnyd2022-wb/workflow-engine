@@ -18,9 +18,11 @@ from sqlalchemy.orm import Session
 
 from app.core.backend.checks.untracked_items import run_untracked_items_check
 from app.core.backend.corechecks import CoreChecksRunner
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
+from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
 
 _log = logging.getLogger(__name__)
 
@@ -34,17 +36,106 @@ def _parse_quantity(value: Any) -> Decimal | None:
         return None
 
 
+def _normalize_item_id(value: Any) -> str:
+    """Normalize inventory_item_id for comparison (UUID string, lowercase)."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    try:
+        return str(UUID(s)).lower()
+    except (ValueError, TypeError):
+        return s.lower()
+
+
+def _quantity_consumed_from_inputs_list(
+    inputs_list: list[dict[str, Any]],
+    inventory_item_id: UUID,
+    ref_unit: str,
+) -> Decimal:
+    """Sum quantity consumed from the given item in a single step's actual_inputs."""
+    ref_unit = (ref_unit or "").strip()
+    item_id_norm = _normalize_item_id(inventory_item_id)
+    total = Decimal("0")
+    for inp in inputs_list or []:
+        if _normalize_item_id(inp.get("inventory_item_id")) != item_id_norm:
+            continue
+        q = _parse_quantity(inp.get("quantity"))
+        if q is None or q <= 0:
+            continue
+        inp_unit = (inp.get("unit") or "").strip()
+        if inp_unit and ref_unit and inp_unit != ref_unit:
+            if are_units_compatible(inp_unit, ref_unit):
+                try:
+                    q = Decimal(str(convert_to_inventory_unit(float(q), inp_unit, ref_unit)))
+                except (ValueError, TypeError):
+                    pass
+            else:
+                continue
+        total += q
+    return total
+
+
+def _quantity_consumed_from_item_in_execution(
+    session: Session,
+    execution_id: UUID,
+    inventory_item_id: UUID,
+    ref_unit: str,
+    current_step_actual_inputs: list[dict[str, Any]] | None = None,
+    current_step_id: UUID | None = None,
+) -> Decimal:
+    """
+    Sum quantity consumed from the given inventory item across all steps of this execution.
+    If current_step_actual_inputs is provided, its consumption is counted first (so we don't
+    rely on the DB reflecting the just-committed step). Other steps are read from the DB;
+    current_step_id is excluded when summing from DB to avoid double-counting.
+    """
+    total = Decimal("0")
+    if current_step_actual_inputs:
+        total += _quantity_consumed_from_inputs_list(
+            current_step_actual_inputs, inventory_item_id, ref_unit
+        )
+    steps = (
+        session.query(ExecutionStep)
+        .filter(ExecutionStep.execution_id == execution_id, ExecutionStep.actual_inputs.isnot(None))
+        .all()
+    )
+    ref_unit = (ref_unit or "").strip()
+    item_id_norm = _normalize_item_id(inventory_item_id)
+    for step in steps:
+        if current_step_id is not None and step.id == current_step_id:
+            continue
+        for inp in step.actual_inputs or []:
+            if _normalize_item_id(inp.get("inventory_item_id")) != item_id_norm:
+                continue
+            q = _parse_quantity(inp.get("quantity"))
+            if q is None or q <= 0:
+                continue
+            inp_unit = (inp.get("unit") or "").strip()
+            if inp_unit and ref_unit and inp_unit != ref_unit:
+                if are_units_compatible(inp_unit, ref_unit):
+                    try:
+                        q = Decimal(str(convert_to_inventory_unit(float(q), inp_unit, ref_unit)))
+                    except (ValueError, TypeError):
+                        pass
+                else:
+                    continue
+            total += q
+    return total
+
+
 def get_matching_untracked(
     org_id: UUID,
     session: Session,
     name: str,
     unit: str,
     process_id: UUID | None = None,
+    execution_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
     """
     Return untracked inventory items matching name and unit (and optionally process scope).
-    Only includes items with quantity > 0. Process scope: when process_id is set,
-    only return untracked items whose source execution belongs to that process.
+    By default only includes items with quantity > 0. When execution_id is set, also
+    includes items with quantity 0 that were consumed in that execution (so user can
+    reconcile the producing step to the same untracked item).
     """
     runner = CoreChecksRunner(org_id=org_id, session=session)
     result = runner.run_check("untracked_items")
@@ -62,7 +153,19 @@ def get_matching_untracked(
         if (item.get("unit") or "").strip() != unit_clean:
             continue
         qty = _parse_quantity(item.get("quantity"))
-        if qty is None or qty <= 0:
+        if qty is None or qty < 0:
+            continue
+        if qty <= 0 and execution_id:
+            try:
+                item_uuid = UUID(item.get("id") or "")
+            except (ValueError, TypeError):
+                continue
+            consumed = _quantity_consumed_from_item_in_execution(
+                session, execution_id, item_uuid, unit_clean
+            )
+            if not consumed or consumed <= 0:
+                continue
+        elif qty <= 0:
             continue
         if process_id:
             # Filter by process: untracked item must have source_execution in this process
@@ -368,11 +471,14 @@ def reconcile_output_to_untracked_reduce_only(
     output_name: str,
     execution_id: UUID,
     execution_step_id: UUID,
+    current_step_actual_inputs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Reduce the untracked item by the reconciliation amount (min of output qty and untracked balance).
     Does NOT create or update any output inventory item. Returns reconciled_amount and surplus.
     Caller should create an output item only when surplus > 0, with quantity = surplus.
+    When current_step_actual_inputs is provided, consumption from this step is included when
+    computing effective balance (so we detect usage even before the DB reflects the commit).
     """
     inv_repo = InventoryRepository(session)
     untracked = inv_repo.get_inventory_item_by_id(untracked_item_id, org_id)
@@ -386,14 +492,36 @@ def reconcile_output_to_untracked_reduce_only(
         return {"error": "Name mismatch: output name must match untracked item name"}
 
     untracked_balance = _parse_quantity(untracked.quantity)
-    if untracked_balance is None or untracked_balance <= 0:
-        return {"error": "Untracked item has no balance to reconcile"}
+    if untracked_balance is None:
+        untracked_balance = Decimal("0")
     if output_quantity is None or output_quantity <= 0:
         return {"error": "Output quantity must be positive"}
 
-    reconciliation_amount = min(output_quantity, untracked_balance)
+    # When the untracked item was already consumed (balance 0), use the quantity consumed in
+    # this execution as the effective balance, or fall back to the output quantity so we can
+    # still offset (clear untracked, create no new item) when the user explicitly reconciles.
+    effective_balance = untracked_balance
+    if effective_balance <= 0:
+        consumed_in_execution = _quantity_consumed_from_item_in_execution(
+            session,
+            execution_id,
+            untracked_item_id,
+            untracked.unit or "",
+            current_step_actual_inputs=current_step_actual_inputs,
+            current_step_id=execution_step_id,
+        )
+        if consumed_in_execution and consumed_in_execution > 0:
+            effective_balance = consumed_in_execution
+        else:
+            # Fallback: user is reconciling this output to this untracked item (name/unit already
+            # validated). Treat output quantity as the amount to offset so we clear the untracked
+            # item and do not create a duplicate (surplus = 0).
+            effective_balance = output_quantity
+
+    reconciliation_amount = min(output_quantity, effective_balance)
     surplus = output_quantity - reconciliation_amount
-    new_untracked_qty = untracked_balance - reconciliation_amount
+    # Only reduce DB quantity if there was remaining balance; if already 0 (consumed earlier), leave 0
+    new_untracked_qty = max(Decimal("0"), untracked_balance - reconciliation_amount)
 
     history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
     history.append({

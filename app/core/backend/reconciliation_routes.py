@@ -25,7 +25,7 @@ def register_routes(bp):
     @bp.route("/api/core/inventory/reconcile/matching-untracked", methods=["GET"])
     @requires_auth
     def get_matching_untracked_for_add():
-        """Return untracked items matching query params name and unit (and optional process_id)."""
+        """Return untracked items matching query params name and unit (and optional process_id, execution_id)."""
         org_id = UUID(g.org_id)
         name = (request.args.get("name") or "").strip()
         unit = (request.args.get("unit") or "").strip()
@@ -36,11 +36,18 @@ def register_routes(bp):
                 process_id = UUID(process_id_str)
             except ValueError:
                 return jsonify({"error": "Invalid process_id"}), 400
+        execution_id_str = request.args.get("execution_id")
+        execution_id = None
+        if execution_id_str:
+            try:
+                execution_id = UUID(execution_id_str)
+            except ValueError:
+                pass
         if not name or not unit:
             return jsonify({"matching_untracked": []}), 200
         session = db_session()
         try:
-            items = get_matching_untracked(org_id, session, name, unit, process_id)
+            items = get_matching_untracked(org_id, session, name, unit, process_id, execution_id)
             return jsonify({"matching_untracked": items}), 200
         finally:
             session.close()

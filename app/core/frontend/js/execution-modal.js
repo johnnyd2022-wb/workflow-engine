@@ -516,40 +516,15 @@
         const outputId = output.id != null ? escapeHtml(String(output.id)) : '';
         const outName = output.name || '';
         const outUnit = output.unit || 'units';
+        // Include qty 0 so user can reconcile to an untracked item already consumed in this execution
         const matchingUntracked = (untrackedItems || []).filter(function(u) {
           if (!u || !u.id) return false;
           if (outputNameNorm(u.name) !== outputNameNorm(outName)) return false;
           if (unitNorm(u.unit) !== unitNorm(outUnit)) return false;
           const q = parseFloat(u.quantity);
-          return !isNaN(q) && q > 0;
+          return !isNaN(q) && q >= 0;
         });
-        function formatUntrackedOptionLabel(u) {
-          var parts = [u.name || 'Unknown', (u.quantity != null ? u.quantity : '') + ' ' + (u.unit || '')];
-          if (u.supplier_batch_number) parts.push('Batch: ' + u.supplier_batch_number);
-          if (u.supplier) parts.push(u.supplier);
-          if (u.created_at) {
-            try {
-              var d = new Date(u.created_at);
-              parts.push('Created: ' + d.toLocaleDateString());
-            } catch (e) {}
-          }
-          return parts.join(' · ');
-        }
-        const reconcileBlock = matchingUntracked.length === 0 ? '' : (function() {
-          var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
-          var optionsHtml = '<option value="">— None —</option>' + matchingUntracked.map(function(u) {
-            var id = String(u.id);
-            var label = formatUntrackedOptionLabel(u);
-            var selected = matchingUntracked.length === 1 ? ' selected' : '';
-            return '<option value="' + escapeHtml(id) + '"' + selected + '>' + escapeHtml(label) + '</option>';
-          }).join('');
-          return '<div style="margin-top: 12px; padding: 10px 12px; background: hsl(42, 93%, 94%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px;">' +
-            '<label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 6px;">Reconcile to untracked item (optional)</label>' +
-            '<p style="margin: 0 0 6px 0; color: #92400e; font-size: 12px;">This output matches untracked inventory. Choose an item to reconcile when you complete the step.</p>' +
-            '<select class="form-select execute-reconcile-untracked-select" data-output-name="' + escapeHtml(outName) + '" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-default); font-size: 13px; background: var(--bg-card);">' +
-            optionsHtml +
-            '</select></div>';
-        })();
+        var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
         outputSection.innerHTML = `
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
@@ -558,10 +533,137 @@
             </label>
             <input type="number" class="form-input execute-output-quantity-input" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
-            ${reconcileBlock}
+            <div class="execute-reconcile-untracked-wrapper" data-output-name="${escapeHtml(outName)}" style="display: ${matchingUntracked.length === 0 ? 'none' : 'block'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
+              <input type="hidden" class="execute-reconcile-untracked-value" data-output-name="${escapeHtml(outName)}" value="${escapeHtml(defaultId)}">
+              <label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 8px;">Reconcile to untracked item (optional)</label>
+              <p style="margin: 0 0 8px 0; color: #92400e; font-size: 12px;">Choose an item from the dropdown to reconcile when you complete the step.</p>
+              <div class="execute-reconcile-untracked-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
+                <span class="execute-reconcile-trigger-label" style="flex: 1; text-align: left;">— None —</span>
+                <svg class="execute-reconcile-trigger-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; margin-left: 8px; transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              <div class="execute-reconcile-untracked-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
+                <div class="execute-reconcile-untracked-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
+              </div>
+            </div>
           </div>
         `;
         outputsContainer.appendChild(outputSection);
+
+        if (matchingUntracked.length > 0) {
+          var wrapper = outputSection.querySelector('.execute-reconcile-untracked-wrapper');
+          var trigger = outputSection.querySelector('.execute-reconcile-untracked-trigger');
+          var triggerLabel = outputSection.querySelector('.execute-reconcile-trigger-label');
+          var triggerArrow = outputSection.querySelector('.execute-reconcile-trigger-arrow');
+          var dropdown = outputSection.querySelector('.execute-reconcile-untracked-dropdown');
+          var cardsContainer = outputSection.querySelector('.execute-reconcile-untracked-cards');
+          var hiddenInput = outputSection.querySelector('.execute-reconcile-untracked-value');
+          var safeId = function(s) { return String(s).replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 40); };
+          var detailId = function(uOrId) { var id = typeof uOrId === 'string' ? uOrId : (uOrId && uOrId.id); return 'execute-reconcile-details-' + safeId(outName) + '-' + id; };
+          var arrowId = function(uOrId) { var id = typeof uOrId === 'string' ? uOrId : (uOrId && uOrId.id); return 'execute-reconcile-arrow-' + safeId(outName) + '-' + id; };
+
+          function getSelectionLabel(id) {
+            if (!id) return '— None —';
+            var u = matchingUntracked.find(function(x) { return String(x.id) === id; });
+            if (!u) return '— None —';
+            return (u.name || 'Unknown') + ' · ' + (u.quantity != null ? u.quantity : '0') + ' ' + (u.unit || '');
+          }
+
+          function closeDropdown() {
+            dropdown.style.display = 'none';
+            if (triggerArrow) triggerArrow.style.transform = '';
+            document.removeEventListener('click', closeDropdownOutside);
+          }
+          function closeDropdownOutside(e) {
+            if (wrapper && !wrapper.contains(e.target)) closeDropdown();
+          }
+          function openDropdown() {
+            dropdown.style.display = 'block';
+            if (triggerArrow) triggerArrow.style.transform = 'rotate(180deg)';
+            setTimeout(function() { document.addEventListener('click', closeDropdownOutside); }, 0);
+          }
+          function toggleDropdown() {
+            var isOpen = dropdown.style.display === 'block';
+            if (isOpen) closeDropdown(); else openDropdown();
+          }
+          trigger.addEventListener('click', function(e) { e.stopPropagation(); toggleDropdown(); });
+          trigger.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDropdown(); } });
+          dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
+
+          function setSelection(selectedId) {
+            hiddenInput.value = selectedId || '';
+            triggerLabel.textContent = getSelectionLabel(selectedId);
+            wrapper.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
+              var id = c.dataset.untrackedId || '';
+              var selected = id === selectedId;
+              c.classList.toggle('execute-reconcile-card-selected', selected);
+              c.style.borderColor = selected ? 'var(--warning, #f59e0b)' : '';
+              c.style.boxShadow = selected ? '0 0 0 2px rgba(245, 158, 11, 0.25)' : '';
+            });
+            closeDropdown();
+          }
+
+          function toggleCardDetails(itemId) {
+            var details = outputSection.querySelector('#' + detailId(itemId));
+            var arrow = outputSection.querySelector('#' + arrowId(itemId));
+            if (!details || !arrow) return;
+            var isExpanded = details.style.display === 'block';
+            details.style.display = isExpanded ? 'none' : 'block';
+            arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
+          }
+
+          var noneCard = document.createElement('div');
+          noneCard.className = 'execute-reconcile-untracked-card' + (defaultId ? '' : ' execute-reconcile-card-selected');
+          noneCard.dataset.untrackedId = '';
+          noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
+          noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
+          noneCard.onclick = function(e) { e.stopPropagation(); setSelection(''); };
+          cardsContainer.appendChild(noneCard);
+
+          matchingUntracked.forEach(function(u) {
+            var id = String(u.id);
+            var card = document.createElement('div');
+            card.className = 'execute-reconcile-untracked-card card card-interactive' + (id === defaultId ? ' execute-reconcile-card-selected' : '');
+            card.dataset.untrackedId = id;
+            card.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; overflow: hidden;';
+            var createdStr = '';
+            if (u.created_at) {
+              try { createdStr = new Date(u.created_at).toLocaleDateString(); } catch (e) {}
+            }
+            var promptsHtml = '';
+            if (u.source_step_execution_prompts && typeof u.source_step_execution_prompts === 'object' && Object.keys(u.source_step_execution_prompts).length > 0) {
+              promptsHtml = '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);"><div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Step metadata</div><div style="display: flex; flex-direction: column; gap: 6px;">' +
+                Object.entries(u.source_step_execution_prompts).map(function(e) {
+                  return '<div style="padding: 6px 10px; background: var(--bg-secondary, #f9fafb); border-radius: 6px;"><span style="color: var(--text-secondary); font-size: 11px;">' + escapeHtml(e[0]) + '</span><br><span style="color: var(--text-primary); font-size: 13px;">' + escapeHtml(String(e[1])) + '</span></div>';
+                }).join('') + '</div></div>';
+            }
+            card.innerHTML =
+              '<div class="process-card-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; word-wrap: break-word; overflow-wrap: break-word;">' +
+                '<div style="flex: 1; min-width: 0; cursor: pointer;" data-expand-trigger="1">' +
+                  '<h4 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary);">' + escapeHtml(u.name || 'Unknown') + '</h4>' +
+                  '<p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + (u.quantity != null ? u.quantity : '0') + ' ' + (u.unit || '') + (u.source_step_completed_by ? ' · Completed by: ' + escapeHtml(u.source_step_completed_by) : '') + '</p>' +
+                '</div>' +
+                '<svg class="execute-reconcile-arrow" id="' + arrowId(u) + '" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-expand-trigger="1">' +
+                  '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>' +
+                '</svg>' +
+              '</div>' +
+              '<div class="execute-reconcile-details" id="' + detailId(u) + '" style="display: none; padding: 12px 16px; border-top: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); font-size: 13px;">' +
+                (u.supplier ? '<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(u.supplier) + '</p>' : '') +
+                (u.supplier_batch_number ? '<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(u.supplier_batch_number) + '</p>' : '') +
+                (createdStr ? '<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>' : '') +
+                promptsHtml +
+              '</div>';
+            card.onclick = function(e) {
+              if (e.target.closest('[data-expand-trigger="1"]')) {
+                e.stopPropagation();
+                toggleCardDetails(id);
+                return;
+              }
+              setSelection(id);
+            };
+            cardsContainer.appendChild(card);
+          });
+          setSelection(defaultId);
+        }
       });
     } else if (outputsContainer) {
       outputsContainer.innerHTML = '<p style="color: var(--text-secondary); font-size: 14px; padding: 16px;">No variable outputs for this step.</p>';
@@ -805,25 +907,31 @@
       const actualOutputs = [];
       const allStepOutputs = stepDefinitionForOutputs.outputs || [];
       
-      // First, collect variable outputs (user-entered quantities)
+      // First, collect variable outputs (user-entered quantities). Always include each variable output
+      // so reconciliation selection (untracked_item_id) is never dropped when quantity is empty.
       const outputInputs = modal.querySelectorAll('.execute-output-quantity-input');
       const variableOutputNames = new Set();
       outputInputs.forEach(input => {
-        const name = input.dataset.outputName;
-        const quantity = parseFloat(input.value);
-        if (name && !isNaN(quantity)) {
-          const outputDef = allStepOutputs.find(o => o.name === name);
-          const reconcileSelect = Array.from(modal.querySelectorAll('.execute-reconcile-untracked-select')).find(function(el) { return (el.dataset.outputName || '') === name; });
-          const untrackedItemId = (reconcileSelect && reconcileSelect.value && reconcileSelect.value.trim()) ? reconcileSelect.value.trim() : null;
-          const outPayload = {
-            name: name,
-            quantity: quantity,
-            unit: outputDef ? (outputDef.unit || 'units') : 'units'
-          };
-          if (untrackedItemId) outPayload.untracked_item_id = untrackedItemId;
-          actualOutputs.push(outPayload);
-          variableOutputNames.add(name);
+        const name = (input.dataset.outputName || '').trim();
+        if (!name) return;
+        const outputDef = allStepOutputs.find(o => o.name === name);
+        let quantity = parseFloat(input.value);
+        if (isNaN(quantity) || quantity < 0) {
+          quantity = outputDef && (outputDef.quantity != null) ? parseFloat(outputDef.quantity) : 0;
+          if (isNaN(quantity) || quantity < 0) quantity = 0;
         }
+        const reconcileInput = Array.from(modal.querySelectorAll('.execute-reconcile-untracked-value')).find(function(el) {
+          return (el.dataset.outputName || '').trim() === name;
+        });
+        const untrackedItemId = (reconcileInput && reconcileInput.value && reconcileInput.value.trim()) ? reconcileInput.value.trim() : null;
+        const outPayload = {
+          name: name,
+          quantity: quantity,
+          unit: outputDef ? (outputDef.unit || 'units') : 'units'
+        };
+        if (untrackedItemId) outPayload.untracked_item_id = untrackedItemId;
+        actualOutputs.push(outPayload);
+        variableOutputNames.add(name);
       });
       
       // Then, add static outputs (use step definition quantities)
@@ -845,7 +953,7 @@
       executionData.completed_at = new Date().toISOString();
 
       // Complete the step (expired/flagged items are highlighted in the Execute Step modal dropdowns; no separate modal)
-      await CoreAPI.completeStep(executionId, executionStepId, {
+      const completeResult = await CoreAPI.completeStep(executionId, executionStepId, {
         actual_inputs: actualInputs,
         actual_outputs: actualOutputs,
         execution_data: executionData
@@ -855,7 +963,12 @@
       modal.style.display = 'none';
       document.body.style.overflow = 'auto';
       
-      showNotification('success', 'Step Completed', 'Step has been completed successfully.');
+      var warnings = completeResult && completeResult.execution_warnings;
+      if (warnings && warnings.length > 0) {
+        showNotification('warning', 'Step completed with warnings', warnings.join(' '));
+      } else {
+        showNotification('success', 'Step Completed', 'Step has been completed successfully.');
+      }
       
       // Call configurable callback to reload data
       if (config.onStepCompleted) {

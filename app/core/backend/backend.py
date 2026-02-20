@@ -941,6 +941,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                         output_name=output_name,
                         execution_id=execution_uuid,
                         execution_step_id=execution_step_uuid,
+                        current_step_actual_inputs=actual_inputs,
                     )
                     if rec_result.get("error"):
                         execution_warnings.append(
@@ -973,16 +974,14 @@ def complete_step(execution_id: str, execution_step_id: str):
             db_session.rollback()
             return jsonify({"error": "Failed to update inventory", "details": str(e)}), 500
 
-        return (
-            jsonify(
-                {
-                    "id": str(execution_step.id),
-                    "status": execution_step.status.value,
-                    "completed_at": execution_step.completed_at.isoformat() if execution_step.completed_at else None,
-                }
-            ),
-            200,
-        )
+        response_data = {
+            "id": str(execution_step.id),
+            "status": execution_step.status.value,
+            "completed_at": execution_step.completed_at.isoformat() if execution_step.completed_at else None,
+        }
+        if execution_warnings:
+            response_data["execution_warnings"] = execution_warnings
+        return (jsonify(response_data), 200)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except ValueError as e:

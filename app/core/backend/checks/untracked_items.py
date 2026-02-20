@@ -13,12 +13,53 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.backend.corechecks import CheckResult
+from app.core.db.models.execution import Execution
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 
 _log = logging.getLogger(__name__)
 
 # JSONB contains: match rows where extra_data @> {"untracked": true}
 _UNTRACKED_FILTER = {"untracked": True}
+
+# Fields from execution_data we exclude from execution_prompts (shown separately or internal)
+_EXECUTION_PROMPTS_INTERNAL = {
+    "completed_by",
+    "completed_by_email",
+    "completed_by_user_id",
+    "completed_at",
+    "execution_errors",
+    "execution_warnings",
+}
+
+
+def _enrich_untracked_with_step_metadata(
+    session: Session, org_id: UUID, item: InventoryItem
+) -> dict[str, Any]:
+    """Attach completed_by and user execution metadata from the source execution step."""
+    out = {
+        "source_step_completed_by": None,
+        "source_step_execution_prompts": {},
+    }
+    step_id = item.source_execution_step_id
+    if not step_id:
+        return out
+    step = (
+        session.query(ExecutionStep)
+        .join(Execution, ExecutionStep.execution_id == Execution.id)
+        .filter(ExecutionStep.id == step_id, Execution.org_id == org_id)
+        .first()
+    )
+    if not step or not step.execution_data:
+        return out
+    ed = step.execution_data
+    out["source_step_completed_by"] = ed.get("completed_by") or ed.get("completed_by_email")
+    out["source_step_execution_prompts"] = {
+        k: v
+        for k, v in (ed or {}).items()
+        if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
+    }
+    return out
 
 
 def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
@@ -46,27 +87,29 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
 
     untracked_items: list[dict[str, Any]] = []
     for item in untracked_orm:
-        untracked_items.append(
-            {
-                "id": str(item.id),
-                "name": item.name,
-                "quantity": item.quantity,
-                "unit": item.unit,
-                "inventory_type": item.inventory_type,
-                "supplier": item.supplier,
-                "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
-                "supplier_batch_number": item.supplier_batch_number,
-                "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
-                "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
-                "source_execution_step_id": str(item.source_execution_step_id)
-                if item.source_execution_step_id
-                else None,
-                "created_at": item.created_at.isoformat() if item.created_at else None,
-                "extra_data": item.extra_data if item.extra_data else {},
-                "check_reason": "Untracked inventory item",
-                "reconciliation_required": True,
-            }
-        )
+        base = {
+            "id": str(item.id),
+            "name": item.name,
+            "quantity": item.quantity,
+            "unit": item.unit,
+            "inventory_type": item.inventory_type,
+            "supplier": item.supplier,
+            "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+            "supplier_batch_number": item.supplier_batch_number,
+            "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+            "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
+            "source_execution_step_id": str(item.source_execution_step_id)
+            if item.source_execution_step_id
+            else None,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "extra_data": item.extra_data if item.extra_data else {},
+            "check_reason": "Untracked inventory item",
+            "reconciliation_required": True,
+        }
+        step_meta = _enrich_untracked_with_step_metadata(session, org_id, item)
+        base["source_step_completed_by"] = step_meta["source_step_completed_by"]
+        base["source_step_execution_prompts"] = step_meta["source_step_execution_prompts"]
+        untracked_items.append(base)
 
     flagged = len(untracked_items) > 0
     message = None
