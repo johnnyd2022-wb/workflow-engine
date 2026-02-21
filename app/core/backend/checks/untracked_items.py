@@ -39,16 +39,12 @@ def _step_metadata_from_execution_data(ed: dict | None) -> dict[str, Any]:
     return {
         "source_step_completed_by": ed.get("completed_by") or ed.get("completed_by_email"),
         "source_step_execution_prompts": {
-            k: v
-            for k, v in (ed or {}).items()
-            if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
+            k: v for k, v in (ed or {}).items() if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
         },
     }
 
 
-def _batch_fetch_step_metadata(
-    session: Session, org_id: UUID, step_ids: list[UUID]
-) -> dict[UUID, dict[str, Any]]:
+def _batch_fetch_step_metadata(session: Session, org_id: UUID, step_ids: list[UUID]) -> dict[UUID, dict[str, Any]]:
     """Fetch execution_data for multiple execution steps in one query. Returns step_id -> metadata."""
     if not step_ids:
         return {}

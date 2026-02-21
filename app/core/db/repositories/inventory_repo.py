@@ -75,9 +75,7 @@ class InventoryRepository:
             query = query.filter(InventoryItem.org_id == org_id)
         return query.first()
 
-    def get_inventory_item_by_id_for_update(
-        self, item_id: UUID, org_id: UUID
-    ) -> InventoryItem | None:
+    def get_inventory_item_by_id_for_update(self, item_id: UUID, org_id: UUID) -> InventoryItem | None:
         """Get inventory item by ID with row-level lock (FOR UPDATE). Use for reconciliation to avoid race conditions."""
         return (
             self.db.query(InventoryItem)
@@ -111,9 +109,9 @@ class InventoryRepository:
         if unit is not None and unit != "":
             query = query.filter(InventoryItem.unit == unit.strip())
         if process_id is not None:
-            query = query.join(
-                Execution, InventoryItem.source_execution_id == Execution.id
-            ).filter(Execution.org_id == org_id, Execution.process_id == process_id)
+            query = query.join(Execution, InventoryItem.source_execution_id == Execution.id).filter(
+                Execution.org_id == org_id, Execution.process_id == process_id
+            )
         items = query.all()
         if quantity_gt_zero:
             items = [i for i in items if (_parse_quantity(i.quantity) or Decimal("0")) > 0]

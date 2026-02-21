@@ -132,7 +132,9 @@ def _untracked_item_to_dict(item: Any) -> dict[str, Any]:
         "supplier": getattr(item, "supplier", None),
         "purchase_date": item.purchase_date.isoformat() if getattr(item, "purchase_date", None) else None,
         "source_execution_id": str(item.source_execution_id) if getattr(item, "source_execution_id", None) else None,
-        "source_execution_step_id": str(item.source_execution_step_id) if getattr(item, "source_execution_step_id", None) else None,
+        "source_execution_step_id": str(item.source_execution_step_id)
+        if getattr(item, "source_execution_step_id", None)
+        else None,
         "extra_data": item.extra_data if item.extra_data else {},
     }
 
@@ -170,9 +172,7 @@ def get_matching_untracked(
         if qty is None or qty < 0:
             continue
         if qty <= 0 and execution_id:
-            consumed = _quantity_consumed_from_item_in_execution(
-                session, execution_id, item.id, unit_clean
-            )
+            consumed = _quantity_consumed_from_item_in_execution(session, execution_id, item.id, unit_clean)
             if not consumed or consumed <= 0:
                 continue
         elif qty <= 0:
