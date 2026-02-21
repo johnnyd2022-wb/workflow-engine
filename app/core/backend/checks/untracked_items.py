@@ -33,9 +33,7 @@ _EXECUTION_PROMPTS_INTERNAL = {
 }
 
 
-def _enrich_untracked_with_step_metadata(
-    session: Session, org_id: UUID, item: InventoryItem
-) -> dict[str, Any]:
+def _enrich_untracked_with_step_metadata(session: Session, org_id: UUID, item: InventoryItem) -> dict[str, Any]:
     """Attach completed_by and user execution metadata from the source execution step."""
     out = {
         "source_step_completed_by": None,
@@ -55,9 +53,7 @@ def _enrich_untracked_with_step_metadata(
     ed = step.execution_data
     out["source_step_completed_by"] = ed.get("completed_by") or ed.get("completed_by_email")
     out["source_step_execution_prompts"] = {
-        k: v
-        for k, v in (ed or {}).items()
-        if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
+        k: v for k, v in (ed or {}).items() if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
     }
     return out
 
@@ -98,9 +94,7 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
             "supplier_batch_number": item.supplier_batch_number,
             "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
             "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
-            "source_execution_step_id": str(item.source_execution_step_id)
-            if item.source_execution_step_id
-            else None,
+            "source_execution_step_id": str(item.source_execution_step_id) if item.source_execution_step_id else None,
             "created_at": item.created_at.isoformat() if item.created_at else None,
             "extra_data": item.extra_data if item.extra_data else {},
             "check_reason": "Untracked inventory item",

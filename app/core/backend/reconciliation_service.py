@@ -16,10 +16,9 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.backend.checks.untracked_items import run_untracked_items_check
 from app.core.backend.corechecks import CoreChecksRunner
 from app.core.db.models.execution_step import ExecutionStep
-from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
@@ -91,9 +90,7 @@ def _quantity_consumed_from_item_in_execution(
     """
     total = Decimal("0")
     if current_step_actual_inputs:
-        total += _quantity_consumed_from_inputs_list(
-            current_step_actual_inputs, inventory_item_id, ref_unit
-        )
+        total += _quantity_consumed_from_inputs_list(current_step_actual_inputs, inventory_item_id, ref_unit)
     steps = (
         session.query(ExecutionStep)
         .filter(ExecutionStep.execution_id == execution_id, ExecutionStep.actual_inputs.isnot(None))
@@ -160,9 +157,7 @@ def get_matching_untracked(
                 item_uuid = UUID(item.get("id") or "")
             except (ValueError, TypeError):
                 continue
-            consumed = _quantity_consumed_from_item_in_execution(
-                session, execution_id, item_uuid, unit_clean
-            )
+            consumed = _quantity_consumed_from_item_in_execution(session, execution_id, item_uuid, unit_clean)
             if not consumed or consumed <= 0:
                 continue
         elif qty <= 0:
@@ -178,11 +173,15 @@ def get_matching_untracked(
                 exec_uuid = UUID(src_exec_id)
             except ValueError:
                 continue
-            ex = session.query(Execution).filter(
-                Execution.id == exec_uuid,
-                Execution.org_id == org_id,
-                Execution.process_id == process_id,
-            ).first()
+            ex = (
+                session.query(Execution)
+                .filter(
+                    Execution.id == exec_uuid,
+                    Execution.org_id == org_id,
+                    Execution.process_id == process_id,
+                )
+                .first()
+            )
             if not ex:
                 continue
         matching.append(item)
@@ -245,14 +244,16 @@ def reconcile_via_addition(
 
         # Update untracked item: reduce quantity, append history, clear untracked if zero
         history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
-        history.append({
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "user_id": user_id,
-            "user_email": user_email,
-            "method": "add_to_inventory",
-            "quantity_reconciled": str(reconciliation_amount),
-            "surplus_to_live": str(surplus),
-        })
+        history.append(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "user_id": user_id,
+                "user_email": user_email,
+                "method": "add_to_inventory",
+                "quantity_reconciled": str(reconciliation_amount),
+                "surplus_to_live": str(surplus),
+            }
+        )
         new_extra = dict(untracked.extra_data or {})
         new_extra["reconciliation_history"] = history
         if new_untracked_qty <= 0:
@@ -279,7 +280,11 @@ def reconcile_via_addition(
             pass
 
     inv_type = inventory_type or InventoryType.RAW_MATERIAL.value
-    if inv_type not in (InventoryType.RAW_MATERIAL.value, InventoryType.WORK_IN_PROGRESS.value, InventoryType.FINAL_PRODUCT.value):
+    if inv_type not in (
+        InventoryType.RAW_MATERIAL.value,
+        InventoryType.WORK_IN_PROGRESS.value,
+        InventoryType.FINAL_PRODUCT.value,
+    ):
         inv_type = InventoryType.RAW_MATERIAL.value
 
     new_item = inv_repo.create_inventory_item(
@@ -388,11 +393,13 @@ def reconcile_via_execution(
         return {"error": "Execution step not found after completing prior steps"}
 
     # Complete the step with one output (no inputs for reconciliation flow)
-    actual_outputs = [{
-        "name": output_name,
-        "quantity": float(qty_produced),
-        "unit": output_unit,
-    }]
+    actual_outputs = [
+        {
+            "name": output_name,
+            "quantity": float(qty_produced),
+            "unit": output_unit,
+        }
+    ]
     execution_data = {
         "completed_by": user_email,
         "completed_by_user_id": user_id,
@@ -430,17 +437,19 @@ def reconcile_via_execution(
 
     # Reduce untracked item and append history
     history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
-    history.append({
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "user_id": user_id,
-        "user_email": user_email,
-        "method": "map_to_execution",
-        "process_id": str(process_id),
-        "step_id": str(step_id),
-        "execution_id": str(execution.id),
-        "quantity_reconciled": str(reconciliation_amount),
-        "surplus_to_live": str(surplus),
-    })
+    history.append(
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user_id": user_id,
+            "user_email": user_email,
+            "method": "map_to_execution",
+            "process_id": str(process_id),
+            "step_id": str(step_id),
+            "execution_id": str(execution.id),
+            "quantity_reconciled": str(reconciliation_amount),
+            "surplus_to_live": str(surplus),
+        }
+    )
     new_extra = dict(untracked.extra_data or {})
     new_extra["reconciliation_history"] = history
     if new_untracked_qty <= 0:
@@ -533,23 +542,23 @@ def reconcile_output_to_untracked_reduce_only(
     new_untracked_qty = max(Decimal("0"), untracked_balance - reconciliation_amount)
 
     history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
-    history.append({
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "user_id": user_id,
-        "user_email": user_email,
-        "method": "map_to_untracked_at_completion",
-        "execution_id": str(execution_id),
-        "execution_step_id": str(execution_step_id),
-        "quantity_reconciled": str(reconciliation_amount),
-        "surplus_to_live": str(surplus),
-    })
+    history.append(
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user_id": user_id,
+            "user_email": user_email,
+            "method": "map_to_untracked_at_completion",
+            "execution_id": str(execution_id),
+            "execution_step_id": str(execution_step_id),
+            "quantity_reconciled": str(reconciliation_amount),
+            "surplus_to_live": str(surplus),
+        }
+    )
     new_extra = dict(untracked.extra_data or {})
     new_extra["reconciliation_history"] = history
     # Persist remaining balance so SQL/UI can show correct "balance to reconcile" without
     # deriving from consumed/reconciled (which would wrongly treat reconciled qty as offsetting consumed).
-    new_extra["remaining_balance_to_reconcile"] = (
-        "0" if remaining_to_reconcile <= 0 else str(remaining_to_reconcile)
-    )
+    new_extra["remaining_balance_to_reconcile"] = "0" if remaining_to_reconcile <= 0 else str(remaining_to_reconcile)
     if remaining_to_reconcile <= 0 or abs(remaining_to_reconcile) < Decimal("0.0001"):
         new_extra["untracked"] = False
     inv_repo.update_inventory_item(
@@ -605,17 +614,19 @@ def reconcile_output_to_untracked(
     new_untracked_qty = untracked_balance - reconciliation_amount
 
     history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
-    history.append({
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "user_id": user_id,
-        "user_email": user_email,
-        "method": "map_to_untracked_at_completion",
-        "execution_id": str(execution_id),
-        "execution_step_id": str(execution_step_id),
-        "output_inventory_item_id": str(output_inventory_item_id),
-        "quantity_reconciled": str(reconciliation_amount),
-        "surplus_to_live": str(surplus),
-    })
+    history.append(
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user_id": user_id,
+            "user_email": user_email,
+            "method": "map_to_untracked_at_completion",
+            "execution_id": str(execution_id),
+            "execution_step_id": str(execution_step_id),
+            "output_inventory_item_id": str(output_inventory_item_id),
+            "quantity_reconciled": str(reconciliation_amount),
+            "surplus_to_live": str(surplus),
+        }
+    )
     new_extra = dict(untracked.extra_data or {})
     new_extra["reconciliation_history"] = history
     if new_untracked_qty <= 0:

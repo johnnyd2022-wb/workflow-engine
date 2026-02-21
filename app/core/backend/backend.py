@@ -944,9 +944,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                         current_step_actual_inputs=actual_inputs,
                     )
                     if rec_result.get("error"):
-                        execution_warnings.append(
-                            f"Reconciliation for output '{output_name}': {rec_result['error']}"
-                        )
+                        execution_warnings.append(f"Reconciliation for output '{output_name}': {rec_result['error']}")
                         continue
                     surplus = quantity_decimal
                     try:
@@ -1486,6 +1484,7 @@ def list_out_of_stock_raw_materials():
 
 corechecks.register_routes(core_bp)
 from app.core.backend import reconciliation_routes
+
 reconciliation_routes.register_routes(core_bp)
 
 
