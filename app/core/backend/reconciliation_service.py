@@ -16,7 +16,6 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.backend.corechecks import CoreChecksRunner
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
@@ -120,6 +119,24 @@ def _quantity_consumed_from_item_in_execution(
     return total
 
 
+def _untracked_item_to_dict(item: Any) -> dict[str, Any]:
+    """Convert InventoryItem (untracked) to API-style dict."""
+    if not hasattr(item, "id"):
+        return {}
+    return {
+        "id": str(item.id),
+        "name": item.name,
+        "quantity": item.quantity,
+        "unit": item.unit,
+        "inventory_type": getattr(item, "inventory_type", None),
+        "supplier": getattr(item, "supplier", None),
+        "purchase_date": item.purchase_date.isoformat() if getattr(item, "purchase_date", None) else None,
+        "source_execution_id": str(item.source_execution_id) if getattr(item, "source_execution_id", None) else None,
+        "source_execution_step_id": str(item.source_execution_step_id) if getattr(item, "source_execution_step_id", None) else None,
+        "extra_data": item.extra_data if item.extra_data else {},
+    }
+
+
 def get_matching_untracked(
     org_id: UUID,
     session: Session,
@@ -130,53 +147,49 @@ def get_matching_untracked(
 ) -> list[dict[str, Any]]:
     """
     Return untracked inventory items matching name and unit (and optionally process scope).
-    By default only includes items with quantity > 0. When execution_id is set, also
-    includes items with quantity 0 that were consumed in that execution (so user can
-    reconcile the producing step to the same untracked item).
+    Uses InventoryRepository.get_untracked_items (canonical inventory state). By default
+    only includes items with quantity > 0. When execution_id is set, also includes items
+    with quantity 0 that were consumed in that execution (so user can reconcile the
+    producing step to the same untracked item).
     """
-    runner = CoreChecksRunner(org_id=org_id, session=session)
-    result = runner.run_check("untracked_items")
-    if not result or not result.data or not result.data.get("untracked_items"):
-        return []
-
-    items = result.data["untracked_items"]
+    inv_repo = InventoryRepository(session)
+    quantity_gt_zero = execution_id is None
+    items = inv_repo.get_untracked_items(
+        org_id=org_id,
+        name=name.strip() if name else None,
+        unit=unit.strip() if unit else None,
+        process_id=process_id,
+        quantity_gt_zero=quantity_gt_zero,
+    )
     name_clean = (name or "").strip().lower()
     unit_clean = (unit or "").strip()
 
     matching = []
     for item in items:
-        if (item.get("name") or "").strip().lower() != name_clean:
+        if (item.name or "").strip().lower() != name_clean:
             continue
-        if (item.get("unit") or "").strip() != unit_clean:
+        if (item.unit or "").strip() != unit_clean:
             continue
-        qty = _parse_quantity(item.get("quantity"))
+        qty = _parse_quantity(item.quantity)
         if qty is None or qty < 0:
             continue
         if qty <= 0 and execution_id:
-            try:
-                item_uuid = UUID(item.get("id") or "")
-            except (ValueError, TypeError):
-                continue
-            consumed = _quantity_consumed_from_item_in_execution(session, execution_id, item_uuid, unit_clean)
+            consumed = _quantity_consumed_from_item_in_execution(
+                session, execution_id, item.id, unit_clean
+            )
             if not consumed or consumed <= 0:
                 continue
         elif qty <= 0:
             continue
         if process_id:
-            # Filter by process: untracked item must have source_execution in this process
+            if not item.source_execution_id:
+                continue
             from app.core.db.models.execution import Execution
 
-            src_exec_id = item.get("source_execution_id")
-            if not src_exec_id:
-                continue
-            try:
-                exec_uuid = UUID(src_exec_id)
-            except ValueError:
-                continue
             ex = (
                 session.query(Execution)
                 .filter(
-                    Execution.id == exec_uuid,
+                    Execution.id == item.source_execution_id,
                     Execution.org_id == org_id,
                     Execution.process_id == process_id,
                 )
@@ -184,7 +197,7 @@ def get_matching_untracked(
             )
             if not ex:
                 continue
-        matching.append(item)
+        matching.append(_untracked_item_to_dict(item))
     return matching
 
 
@@ -205,10 +218,8 @@ def reconcile_via_addition(
 ) -> dict[str, Any]:
     """
     Path A: Add to Inventory with optional mapping to an untracked item.
-
-    - If untracked_item_id is set: reconciliation_amount = min(added_quantity, untracked_balance);
-      reduce untracked balance, append reconciliation history, then add full quantity as live inventory.
-    - If no mapping: create standard inventory addition (no change to untracked).
+    Runs in a single atomic transaction with row-level lock on untracked item when mapping.
+    Does not auto-clear untracked flag; sets resolved/resolved_at for audit lineage.
     """
     from datetime import date as date_type
 
@@ -217,98 +228,103 @@ def reconcile_via_addition(
     if added_qty is None or added_qty <= 0:
         return {"error": "Invalid or non-positive quantity"}
 
-    # Optional: reduce untracked and record reconciliation
     reconciled_amount = Decimal("0")
     surplus = added_qty
-    if untracked_item_id:
-        untracked = inv_repo.get_inventory_item_by_id(untracked_item_id, org_id)
-        if not untracked:
-            return {"error": "Untracked item not found"}
-        if (untracked.extra_data or {}).get("untracked") is not True:
-            return {"error": "Item is not an untracked item"}
-        try:
-            untracked_balance = _parse_quantity(untracked.quantity)
-        except Exception:
-            untracked_balance = Decimal("0")
-        if untracked_balance is None or untracked_balance <= 0:
-            return {"error": "Untracked item has no balance to reconcile"}
+    remaining_untracked_balance = "0"
 
-        # Unit must match
-        if (unit or "").strip() != (untracked.unit or "").strip():
-            return {"error": "Unit mismatch: cannot reconcile with different unit"}
+    try:
+        if untracked_item_id:
+            untracked = inv_repo.get_inventory_item_by_id_for_update(untracked_item_id, org_id)
+            if not untracked:
+                return {"error": "Untracked item not found"}
+            if (untracked.extra_data or {}).get("untracked") is not True:
+                return {"error": "Item is not an untracked item"}
+            untracked_balance = _parse_quantity(untracked.quantity) or Decimal("0")
+            if untracked_balance <= 0:
+                return {"error": "Untracked item has no balance to reconcile"}
+            if (unit or "").strip() != (untracked.unit or "").strip():
+                return {"error": "Unit mismatch: cannot reconcile with different unit"}
 
-        reconciliation_amount = min(added_qty, untracked_balance)
-        new_untracked_qty = untracked_balance - reconciliation_amount
-        reconciled_amount = reconciliation_amount
-        surplus = added_qty - reconciliation_amount
+            reconciliation_amount = min(added_qty, untracked_balance)
+            new_untracked_qty = untracked_balance - reconciliation_amount
+            reconciled_amount = reconciliation_amount
+            surplus = added_qty - reconciliation_amount
+            remaining_untracked_balance = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
 
-        # Update untracked item: reduce quantity, append history, clear untracked if zero
-        history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
-        history.append(
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "user_id": user_id,
-                "user_email": user_email,
-                "method": "add_to_inventory",
-                "quantity_reconciled": str(reconciliation_amount),
-                "surplus_to_live": str(surplus),
-            }
-        )
-        new_extra = dict(untracked.extra_data or {})
-        new_extra["reconciliation_history"] = history
-        if new_untracked_qty <= 0:
-            new_extra["untracked"] = False
-        inv_repo.update_inventory_item(
-            item_id=untracked_item_id,
+            ts = datetime.now(timezone.utc).isoformat()
+            history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
+            history.append(
+                {
+                    "timestamp": ts,
+                    "user_id": user_id,
+                    "user_email": user_email,
+                    "method": "add_to_inventory",
+                    "quantity_reconciled": str(reconciliation_amount),
+                    "surplus_to_live": str(surplus),
+                }
+            )
+            new_extra = dict(untracked.extra_data or {})
+            new_extra["reconciliation_history"] = history
+            new_extra["untracked"] = True
+            new_extra["resolved"] = True
+            new_extra["resolved_at"] = ts
+            inv_repo.update_inventory_item(
+                item_id=untracked_item_id,
+                org_id=org_id,
+                quantity=remaining_untracked_balance,
+                extra_data=new_extra,
+                commit=False,
+            )
+
+        purchase_date_parsed = None
+        if purchase_date:
+            try:
+                purchase_date_parsed = date_type.fromisoformat(purchase_date.replace("Z", "").split("T")[0])
+            except (ValueError, TypeError):
+                pass
+        expiry_date_parsed = None
+        if expiry_date:
+            try:
+                expiry_date_parsed = date_type.fromisoformat(expiry_date.replace("Z", "").split("T")[0])
+            except (ValueError, TypeError):
+                pass
+
+        inv_type = inventory_type or InventoryType.RAW_MATERIAL.value
+        if inv_type not in (
+            InventoryType.RAW_MATERIAL.value,
+            InventoryType.WORK_IN_PROGRESS.value,
+            InventoryType.FINAL_PRODUCT.value,
+        ):
+            inv_type = InventoryType.RAW_MATERIAL.value
+
+        new_item = inv_repo.create_inventory_item(
             org_id=org_id,
-            quantity=str(new_untracked_qty) if new_untracked_qty > 0 else "0",
-            extra_data=new_extra,
+            name=name,
+            quantity=str(added_qty),
+            unit=unit,
+            inventory_type=inv_type,
+            supplier=supplier,
+            purchase_date=purchase_date_parsed,
+            supplier_batch_number=supplier_batch_number,
+            expiry_date=expiry_date_parsed,
+            extra_data={"reconciled_via_addition": True} if untracked_item_id else None,
+            commit=False,
         )
 
-    # Create new inventory item (live stock) with full added quantity
-    purchase_date_parsed = None
-    if purchase_date:
-        try:
-            purchase_date_parsed = date_type.fromisoformat(purchase_date.replace("Z", "").split("T")[0])
-        except (ValueError, TypeError):
-            pass
-    expiry_date_parsed = None
-    if expiry_date:
-        try:
-            expiry_date_parsed = date_type.fromisoformat(expiry_date.replace("Z", "").split("T")[0])
-        except (ValueError, TypeError):
-            pass
-
-    inv_type = inventory_type or InventoryType.RAW_MATERIAL.value
-    if inv_type not in (
-        InventoryType.RAW_MATERIAL.value,
-        InventoryType.WORK_IN_PROGRESS.value,
-        InventoryType.FINAL_PRODUCT.value,
-    ):
-        inv_type = InventoryType.RAW_MATERIAL.value
-
-    new_item = inv_repo.create_inventory_item(
-        org_id=org_id,
-        name=name,
-        quantity=str(added_qty),
-        unit=unit,
-        inventory_type=inv_type,
-        supplier=supplier,
-        purchase_date=purchase_date_parsed,
-        supplier_batch_number=supplier_batch_number,
-        expiry_date=expiry_date_parsed,
-        extra_data={"reconciled_via_addition": True} if untracked_item_id else None,
-    )
-
-    return {
-        "id": str(new_item.id),
-        "name": new_item.name,
-        "quantity": new_item.quantity,
-        "unit": new_item.unit,
-        "inventory_type": new_item.inventory_type,
-        "reconciled_amount": str(reconciled_amount),
-        "surplus": str(surplus),
-    }
+        session.commit()
+        return {
+            "id": str(new_item.id),
+            "name": new_item.name,
+            "quantity": new_item.quantity,
+            "unit": new_item.unit,
+            "inventory_type": new_item.inventory_type,
+            "reconciled_amount": str(reconciled_amount),
+            "surplus": str(surplus),
+            "remaining_untracked_balance": remaining_untracked_balance,
+        }
+    except Exception:
+        session.rollback()
+        raise
 
 
 def reconcile_via_execution(
@@ -325,148 +341,179 @@ def reconcile_via_execution(
     output_date: str | None = None,
 ) -> dict[str, Any]:
     """
-    Path B (legacy): Map to Execution Output. Creates a new execution, completes the given step
+    Path B: Map to Execution Output. Creates a new execution, completes the given step
     with one output, creates one inventory item from that output, and reduces the untracked item.
-    Preferred approach: complete an execution step in the execution modal with optional
-    untracked_item_id per output; the complete_step flow uses reconcile_output_to_untracked.
+    Atomic transaction with row-level lock; idempotency guard for same process/step; no float;
+    audit linkage on new inventory; does not auto-clear untracked (sets resolved/resolved_at).
     """
     inv_repo = InventoryRepository(session)
     exec_repo = ExecutionRepository(session)
 
-    untracked = inv_repo.get_inventory_item_by_id(untracked_item_id, org_id)
+    untracked = inv_repo.get_inventory_item_by_id_for_update(untracked_item_id, org_id)
     if not untracked:
         return {"error": "Untracked item not found"}
     if (untracked.extra_data or {}).get("untracked") is not True:
+        session.rollback()
         return {"error": "Item is not an untracked item"}
 
-    untracked_balance = _parse_quantity(untracked.quantity)
-    if untracked_balance is None or untracked_balance <= 0:
+    # Idempotency guard: block if already reconciled against this process step
+    history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
+    if any(
+        h.get("method") == "map_to_execution"
+        and h.get("process_id") == str(process_id)
+        and h.get("step_id") == str(step_id)
+        for h in history
+    ):
+        session.rollback()
+        return {"error": "This untracked item has already been reconciled against this process step."}
+
+    untracked_balance = _parse_quantity(untracked.quantity) or Decimal("0")
+    if untracked_balance <= 0:
+        session.rollback()
         return {"error": "Untracked item has no balance to reconcile"}
 
     qty_produced = _parse_quantity(output_quantity)
     if qty_produced is None or qty_produced <= 0:
+        session.rollback()
         return {"error": "Invalid or non-positive quantity produced"}
 
     if (output_unit or "").strip() != (untracked.unit or "").strip():
+        session.rollback()
         return {"error": "Unit mismatch: output unit must match untracked item unit"}
 
     reconciliation_amount = min(qty_produced, untracked_balance)
     surplus = qty_produced - reconciliation_amount
     new_untracked_qty = untracked_balance - reconciliation_amount
+    remaining_untracked_balance = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
 
-    # Create execution for the process
-    execution = exec_repo.create_execution(org_id=org_id, process_id=process_id)
-    session.refresh(execution)
+    try:
+        execution = exec_repo.create_execution(org_id=org_id, process_id=process_id, commit=False)
+        session.flush()
 
-    # Find execution step that corresponds to process step_id
-    from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
+        from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 
-    all_steps = (
-        session.query(ExecutionStep)
-        .filter(ExecutionStep.execution_id == execution.id)
-        .order_by(ExecutionStep.step_number)
-        .all()
-    )
-    exec_step = next((s for s in all_steps if s.step_id == step_id), None)
-    if not exec_step:
-        return {"error": "Step not found in this process"}
+        all_steps = (
+            session.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id)
+            .order_by(ExecutionStep.step_number)
+            .all()
+        )
+        exec_step = next((s for s in all_steps if s.step_id == step_id), None)
+        if not exec_step:
+            session.rollback()
+            return {"error": "Step not found in this process"}
 
-    # Complete any prior steps with empty outputs so we can complete the selected step
-    for prior in all_steps:
-        if prior.step_number >= exec_step.step_number:
-            break
-        if prior.status != ExecutionStepStatus.COMPLETED:
-            exec_repo.complete_step(
-                execution_step_id=prior.id,
-                org_id=org_id,
-                actual_inputs=[],
-                actual_outputs=[],
-                execution_data={"completed_by": user_email, "reconciliation_via_execution": True},
-            )
-    # Re-load exec_step after prior commits
-    exec_step = (
-        session.query(ExecutionStep)
-        .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step_id)
-        .first()
-    )
-    if not exec_step:
-        return {"error": "Execution step not found after completing prior steps"}
+        for prior in all_steps:
+            if prior.step_number >= exec_step.step_number:
+                break
+            if prior.status != ExecutionStepStatus.COMPLETED:
+                exec_repo.complete_step(
+                    execution_step_id=prior.id,
+                    org_id=org_id,
+                    actual_inputs=[],
+                    actual_outputs=[],
+                    execution_data={"completed_by": user_email, "reconciliation_via_execution": True},
+                    commit=False,
+                )
+        session.flush()
+        exec_step = (
+            session.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step_id)
+            .first()
+        )
+        if not exec_step:
+            session.rollback()
+            return {"error": "Execution step not found after completing prior steps"}
 
-    # Complete the step with one output (no inputs for reconciliation flow)
-    actual_outputs = [
-        {
-            "name": output_name,
-            "quantity": float(qty_produced),
-            "unit": output_unit,
+        # Quantity as string (no float) for precision
+        actual_outputs = [
+            {
+                "name": output_name,
+                "quantity": str(qty_produced),
+                "unit": output_unit,
+            }
+        ]
+        execution_data = {
+            "completed_by": user_email,
+            "completed_by_user_id": user_id,
+            "reconciliation_via_execution": True,
+            "untracked_item_id": str(untracked_item_id),
         }
-    ]
-    execution_data = {
-        "completed_by": user_email,
-        "completed_by_user_id": user_id,
-        "reconciliation_via_execution": True,
-        "untracked_item_id": str(untracked_item_id),
-    }
-    exec_repo.complete_step(
-        execution_step_id=exec_step.id,
-        org_id=org_id,
-        actual_inputs=[],
-        actual_outputs=actual_outputs,
-        execution_data=execution_data,
-    )
-    exec_step = (
-        session.query(ExecutionStep)
-        .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step_id)
-        .first()
-    )
+        exec_repo.complete_step(
+            execution_step_id=exec_step.id,
+            org_id=org_id,
+            actual_inputs=[],
+            actual_outputs=actual_outputs,
+            execution_data=execution_data,
+            commit=False,
+        )
+        session.flush()
+        exec_step = (
+            session.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step_id)
+            .first()
+        )
 
-    # Create one inventory item from the execution output (tracked)
-    inventory_type = InventoryType.FINAL_PRODUCT.value
-    if exec_step and getattr(exec_step, "is_terminal_step", None) is False:
-        inventory_type = InventoryType.WORK_IN_PROGRESS.value
-    inv_repo.create_inventory_item(
-        org_id=org_id,
-        name=output_name,
-        quantity=str(qty_produced),
-        unit=output_unit,
-        inventory_type=inventory_type,
-        source_execution_id=execution.id,
-        source_execution_step_id=exec_step.id,
-        source_step_name=exec_step.step.name if exec_step.step else None,
-        extra_data={"reconciled_via_execution": True, "untracked_item_id": str(untracked_item_id)},
-    )
+        inventory_type = InventoryType.FINAL_PRODUCT.value
+        if exec_step and getattr(exec_step, "is_terminal_step", None) is False:
+            inventory_type = InventoryType.WORK_IN_PROGRESS.value
+        inv_repo.create_inventory_item(
+            org_id=org_id,
+            name=output_name,
+            quantity=str(qty_produced),
+            unit=output_unit,
+            inventory_type=inventory_type,
+            source_execution_id=execution.id,
+            source_execution_step_id=exec_step.id,
+            source_step_name=exec_step.step.name if exec_step.step else None,
+            extra_data={
+                "reconciled_via_execution": True,
+                "untracked_item_id": str(untracked_item_id),
+                "reconciliation_amount": str(reconciliation_amount),
+                "surplus_from_reconciliation": str(surplus),
+            },
+            commit=False,
+        )
 
-    # Reduce untracked item and append history
-    history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
-    history.append(
-        {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "user_id": user_id,
-            "user_email": user_email,
-            "method": "map_to_execution",
-            "process_id": str(process_id),
-            "step_id": str(step_id),
+        ts = datetime.now(timezone.utc).isoformat()
+        history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
+        history.append(
+            {
+                "timestamp": ts,
+                "user_id": user_id,
+                "user_email": user_email,
+                "method": "map_to_execution",
+                "process_id": str(process_id),
+                "step_id": str(step_id),
+                "execution_id": str(execution.id),
+                "quantity_reconciled": str(reconciliation_amount),
+                "surplus_to_live": str(surplus),
+            }
+        )
+        new_extra = dict(untracked.extra_data or {})
+        new_extra["reconciliation_history"] = history
+        new_extra["untracked"] = True
+        new_extra["resolved"] = True
+        new_extra["resolved_at"] = ts
+        inv_repo.update_inventory_item(
+            item_id=untracked_item_id,
+            org_id=org_id,
+            quantity=remaining_untracked_balance,
+            extra_data=new_extra,
+            commit=False,
+        )
+
+        session.commit()
+        return {
             "execution_id": str(execution.id),
-            "quantity_reconciled": str(reconciliation_amount),
-            "surplus_to_live": str(surplus),
+            "reconciled_amount": str(reconciliation_amount),
+            "surplus": str(surplus),
+            "remaining_untracked_balance": remaining_untracked_balance,
+            "inventory_created": True,
         }
-    )
-    new_extra = dict(untracked.extra_data or {})
-    new_extra["reconciliation_history"] = history
-    if new_untracked_qty <= 0:
-        new_extra["untracked"] = False
-    inv_repo.update_inventory_item(
-        item_id=untracked_item_id,
-        org_id=org_id,
-        quantity=str(new_untracked_qty) if new_untracked_qty > 0 else "0",
-        extra_data=new_extra,
-    )
-
-    return {
-        "execution_id": str(execution.id),
-        "reconciled_amount": str(reconciliation_amount),
-        "surplus": str(surplus),
-        "inventory_created": True,
-    }
+    except Exception:
+        session.rollback()
+        raise
 
 
 def reconcile_output_to_untracked_reduce_only(
@@ -559,8 +606,11 @@ def reconcile_output_to_untracked_reduce_only(
     # Persist remaining balance so SQL/UI can show correct "balance to reconcile" without
     # deriving from consumed/reconciled (which would wrongly treat reconciled qty as offsetting consumed).
     new_extra["remaining_balance_to_reconcile"] = "0" if remaining_to_reconcile <= 0 else str(remaining_to_reconcile)
+    new_extra["untracked"] = True
     if remaining_to_reconcile <= 0 or abs(remaining_to_reconcile) < Decimal("0.0001"):
-        new_extra["untracked"] = False
+        ts = datetime.now(timezone.utc).isoformat()
+        new_extra["resolved"] = True
+        new_extra["resolved_at"] = ts
     inv_repo.update_inventory_item(
         item_id=untracked_item_id,
         org_id=org_id,
@@ -629,8 +679,11 @@ def reconcile_output_to_untracked(
     )
     new_extra = dict(untracked.extra_data or {})
     new_extra["reconciliation_history"] = history
+    new_extra["untracked"] = True
     if new_untracked_qty <= 0:
-        new_extra["untracked"] = False
+        ts = datetime.now(timezone.utc).isoformat()
+        new_extra["resolved"] = True
+        new_extra["resolved_at"] = ts
     inv_repo.update_inventory_item(
         item_id=untracked_item_id,
         org_id=org_id,

@@ -1,11 +1,23 @@
 """Inventory repository with tenancy enforcement"""
 
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem
+
+_UNTRACKED_EXTRA_FILTER = {"untracked": True}
+
+
+def _parse_quantity(value: str | None) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
 
 
 class InventoryRepository:
@@ -30,8 +42,9 @@ class InventoryRepository:
         source_output_id: UUID | None = None,
         source_step_name: str | None = None,
         extra_data: dict | None = None,
+        commit: bool = True,
     ) -> InventoryItem:
-        """Create a new inventory item"""
+        """Create a new inventory item. If commit=False, caller is responsible for commit (e.g. atomic reconciliation)."""
         item = InventoryItem(
             org_id=org_id,
             name=name,
@@ -51,7 +64,8 @@ class InventoryRepository:
         self.db.add(item)
         self.db.flush()
         _ = item.id
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return item
 
     def get_inventory_item_by_id(self, item_id: UUID, org_id: UUID | None = None) -> InventoryItem | None:
@@ -60,6 +74,50 @@ class InventoryRepository:
         if org_id:
             query = query.filter(InventoryItem.org_id == org_id)
         return query.first()
+
+    def get_inventory_item_by_id_for_update(
+        self, item_id: UUID, org_id: UUID
+    ) -> InventoryItem | None:
+        """Get inventory item by ID with row-level lock (FOR UPDATE). Use for reconciliation to avoid race conditions."""
+        return (
+            self.db.query(InventoryItem)
+            .filter(InventoryItem.id == item_id, InventoryItem.org_id == org_id)
+            .with_for_update()
+            .one_or_none()
+        )
+
+    def get_untracked_items(
+        self,
+        org_id: UUID,
+        name: str | None = None,
+        unit: str | None = None,
+        process_id: UUID | None = None,
+        quantity_gt_zero: bool = True,
+    ) -> list[InventoryItem]:
+        """
+        Query untracked inventory items: extra_data.untracked == True, optionally filtered by name, unit, process.
+        When quantity_gt_zero is True (default), only returns items with quantity > 0 (for checks and matching).
+        """
+        from app.core.db.models.execution import Execution
+
+        query = (
+            self.db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id)
+            .filter(InventoryItem.extra_data.isnot(None))
+            .filter(InventoryItem.extra_data.contains(_UNTRACKED_EXTRA_FILTER))
+        )
+        if name is not None and name != "":
+            query = query.filter(InventoryItem.name.ilike(name.strip()))
+        if unit is not None and unit != "":
+            query = query.filter(InventoryItem.unit == unit.strip())
+        if process_id is not None:
+            query = query.join(
+                Execution, InventoryItem.source_execution_id == Execution.id
+            ).filter(Execution.org_id == org_id, Execution.process_id == process_id)
+        items = query.all()
+        if quantity_gt_zero:
+            items = [i for i in items if (_parse_quantity(i.quantity) or Decimal("0")) > 0]
+        return items
 
     def list_inventory_items(
         self, org_id: UUID, inventory_type: str | None = None, process_id: UUID | None = None
@@ -85,8 +143,9 @@ class InventoryRepository:
         quantity: str | None = None,
         unit: str | None = None,
         extra_data: dict | None = None,
+        commit: bool = True,
     ) -> InventoryItem | None:
-        """Update inventory item (must belong to org)"""
+        """Update inventory item (must belong to org). If commit=False, caller is responsible for commit."""
         item = self.get_inventory_item_by_id(item_id, org_id)
         if not item:
             return None
@@ -100,7 +159,8 @@ class InventoryRepository:
         if extra_data is not None:
             item.extra_data = extra_data
 
-        self.db.commit()
+        if commit:
+            self.db.commit()
         self.db.expire(item, ["updated_at"])
         _ = item.updated_at
         return item

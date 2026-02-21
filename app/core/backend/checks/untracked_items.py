@@ -1,7 +1,8 @@
 """
-Untracked items check: inventory items with extra_data.untracked = True (recorded in-flow
-without full upstream traceability). Surfaces in banners, sourcemap "Check needed", and
-execution dropdowns. Reconciliation (clearing untracked) updates alerts in real time.
+Untracked items check: inventory items with extra_data.untracked = True and quantity > 0
+(recorded in-flow without full upstream traceability). Surfaces in banners, sourcemap
+"Check needed", and execution dropdowns. Uses InventoryRepository.get_untracked_items
+so canonical inventory state drives the check (projection layer only).
 """
 
 from __future__ import annotations
@@ -16,11 +17,9 @@ from app.core.backend.corechecks import CheckResult
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.repositories.inventory_repo import InventoryRepository
 
 _log = logging.getLogger(__name__)
-
-# JSONB contains: match rows where extra_data @> {"untracked": true}
-_UNTRACKED_FILTER = {"untracked": True}
 
 # Fields from execution_data we exclude from execution_prompts (shown separately or internal)
 _EXECUTION_PROMPTS_INTERNAL = {
@@ -60,26 +59,37 @@ def _enrich_untracked_with_step_metadata(session: Session, org_id: UUID, item: I
 
 def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
     """
-    Find inventory items flagged as untracked (no upstream source / reconciliation required).
-    Uses same pattern as expired_materials: return list for banners and sourcemap "Check needed".
+    Find inventory items flagged as untracked with quantity > 0 (reconciliation required).
+    Uses InventoryRepository.get_untracked_items for canonical state; check remains projection only.
     """
     try:
-        q = (
-            session.query(InventoryItem)
-            .filter(InventoryItem.org_id == org_id)
-            .filter(InventoryItem.extra_data.isnot(None))
-            .filter(InventoryItem.extra_data.contains(_UNTRACKED_FILTER))
+        untracked_orm = InventoryRepository(session).get_untracked_items(
+            org_id=org_id,
+            quantity_gt_zero=True,
         )
-        untracked_orm = q.all()
     except Exception as e:
-        _log.warning("JSONB untracked filter not supported, falling back to in-memory filter: %s", e)
+        _log.warning("get_untracked_items failed, falling back to direct query: %s", e)
         untracked_orm = (
             session.query(InventoryItem)
-            .filter(InventoryItem.org_id == org_id)
-            .filter(InventoryItem.extra_data.isnot(None))
+            .filter(
+                InventoryItem.org_id == org_id,
+                InventoryItem.extra_data.isnot(None),
+            )
             .all()
         )
-        untracked_orm = [i for i in untracked_orm if (i.extra_data or {}).get("untracked") is True]
+        from decimal import Decimal
+
+        def _qty(v):
+            try:
+                return Decimal(str(v)) if v is not None else None
+            except Exception:
+                return None
+
+        untracked_orm = [
+            i
+            for i in untracked_orm
+            if (i.extra_data or {}).get("untracked") is True and (_qty(i.quantity) or Decimal("0")) > 0
+        ]
 
     untracked_items: list[dict[str, Any]] = []
     for item in untracked_orm:
