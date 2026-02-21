@@ -1554,6 +1554,11 @@ def create_inventory_item():
         extra_data = dict(data.get("metadata") or {})
         if data.get("untracked"):
             extra_data["untracked"] = True  # Flag for reconciliation/sourcemap banners
+            try:
+                qty_val = float(quantity) if quantity is not None else 0
+                extra_data["remaining_balance_to_reconcile"] = str(qty_val) if qty_val > 0 else "0"
+            except (TypeError, ValueError):
+                extra_data["remaining_balance_to_reconcile"] = str(quantity) if quantity else "0"
 
         item = repo.create_inventory_item(
             org_id=org_id,

@@ -497,9 +497,14 @@ def reconcile_output_to_untracked_reduce_only(
     if output_quantity is None or output_quantity <= 0:
         return {"error": "Output quantity must be positive"}
 
-    # When the untracked item was already consumed (balance 0), use the quantity consumed in
-    # this execution as the effective balance, or fall back to the output quantity so we can
-    # still offset (clear untracked, create no new item) when the user explicitly reconciles.
+    # Authoritative "balance still to reconcile" (set when creating untracked or after each reconcile).
+    # Use it so partial reconciliations don't get confused with consumption (e.g. 4 kg created,
+    # 1 kg consumed, reconcile 1 kg -> remaining should be 3 kg, not 2).
+    stored_remaining = _parse_quantity((untracked.extra_data or {}).get("remaining_balance_to_reconcile"))
+    if stored_remaining is not None and stored_remaining < 0:
+        stored_remaining = Decimal("0")
+
+    # Cap for this operation: we can only reconcile up to on-hand (or consumed in this execution if 0 on hand).
     effective_balance = untracked_balance
     if effective_balance <= 0:
         consumed_in_execution = _quantity_consumed_from_item_in_execution(
@@ -513,12 +518,16 @@ def reconcile_output_to_untracked_reduce_only(
         if consumed_in_execution and consumed_in_execution > 0:
             effective_balance = consumed_in_execution
         else:
-            # Fallback: user is reconciling this output to this untracked item (name/unit already
-            # validated). Treat output quantity as the amount to offset so we clear the untracked
-            # item and do not create a duplicate (surplus = 0).
             effective_balance = output_quantity
 
-    reconciliation_amount = min(output_quantity, effective_balance)
+    # How much we can reconcile this time: min of output qty, cap from on-hand/consumed, and stored remaining.
+    if stored_remaining is not None and stored_remaining >= 0:
+        reconciliation_amount = min(output_quantity, effective_balance, stored_remaining)
+        remaining_to_reconcile = stored_remaining - reconciliation_amount
+    else:
+        reconciliation_amount = min(output_quantity, effective_balance)
+        remaining_to_reconcile = effective_balance - reconciliation_amount
+
     surplus = output_quantity - reconciliation_amount
     # Only reduce DB quantity if there was remaining balance; if already 0 (consumed earlier), leave 0
     new_untracked_qty = max(Decimal("0"), untracked_balance - reconciliation_amount)
@@ -536,7 +545,12 @@ def reconcile_output_to_untracked_reduce_only(
     })
     new_extra = dict(untracked.extra_data or {})
     new_extra["reconciliation_history"] = history
-    if new_untracked_qty <= 0:
+    # Persist remaining balance so SQL/UI can show correct "balance to reconcile" without
+    # deriving from consumed/reconciled (which would wrongly treat reconciled qty as offsetting consumed).
+    new_extra["remaining_balance_to_reconcile"] = (
+        "0" if remaining_to_reconcile <= 0 else str(remaining_to_reconcile)
+    )
+    if remaining_to_reconcile <= 0 or abs(remaining_to_reconcile) < Decimal("0.0001"):
         new_extra["untracked"] = False
     inv_repo.update_inventory_item(
         item_id=untracked_item_id,
