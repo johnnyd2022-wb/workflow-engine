@@ -508,23 +508,46 @@
     const outputNameNorm = function(n) { return (n || '').trim().toLowerCase(); };
     const unitNorm = function(u) { return (u || '').trim(); };
 
+    // Fetch matching untracked per output from backend (includes qty>0 and qty 0 consumed in this execution).
+    // Do not pass process_id so untracked items without source_execution (e.g. manually added) are included.
+    let matchingUntrackedPerOutput = [];
+    const currentExecutionId = modal.dataset.executionId;
+    if (variableOutputs.length > 0 && currentExecutionId && typeof CoreAPI.getMatchingUntracked === 'function') {
+      try {
+        const results = await Promise.all(
+          variableOutputs.map(function(o) {
+            var name = (o.name && String(o.name).trim()) || '';
+            var unit = (o.unit && String(o.unit).trim()) || 'units';
+            return CoreAPI.getMatchingUntracked(name, unit, null, currentExecutionId);
+          })
+        );
+        matchingUntrackedPerOutput = results.map(function(r) { return (r && r.matching_untracked) ? r.matching_untracked : []; });
+      } catch (e) {
+        console.warn('Could not fetch matching untracked per output', e);
+      }
+    }
+
     if (variableOutputs.length > 0 && outputsContainer) {
-      variableOutputs.forEach(output => {
+      variableOutputs.forEach((output, index) => {
         const outputSection = document.createElement('div');
         outputSection.className = 'execute-output-section';
         outputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
         const outputId = output.id != null ? escapeHtml(String(output.id)) : '';
         const outName = output.name || '';
         const outUnit = output.unit || 'units';
-        // Include qty 0 so user can reconcile to an untracked item already consumed in this execution
-        const matchingUntracked = (untrackedItems || []).filter(function(u) {
-          if (!u || !u.id) return false;
-          if (outputNameNorm(u.name) !== outputNameNorm(outName)) return false;
-          if (unitNorm(u.unit) !== unitNorm(outUnit)) return false;
-          const q = parseFloat(u.quantity);
-          return !isNaN(q) && q >= 0;
-        });
+        // Match = backend semantics: name case-insensitive (ilike), unit exact after trim. Use API result when available.
+        const matchingFromApi = matchingUntrackedPerOutput[index];
+        const matchingUntracked = (matchingFromApi != null && Array.isArray(matchingFromApi))
+          ? matchingFromApi
+          : (untrackedItems || []).filter(function(u) {
+              if (!u || !u.id) return false;
+              if (outputNameNorm(u.name) !== outputNameNorm(outName)) return false;
+              if (unitNorm(u.unit) !== unitNorm(outUnit)) return false;
+              var q = parseFloat(u.quantity);
+              return !isNaN(q) && q >= 0;
+            });
         var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
+        var hasMatch = matchingUntracked.length > 0;
         outputSection.innerHTML = `
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
@@ -533,7 +556,7 @@
             </label>
             <input type="number" class="form-input execute-output-quantity-input" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
-            <div class="execute-reconcile-untracked-wrapper" data-output-name="${escapeHtml(outName)}" style="display: ${matchingUntracked.length === 0 ? 'none' : 'block'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
+            <div class="execute-reconcile-untracked-wrapper" data-output-name="${escapeHtml(outName)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
               <input type="hidden" class="execute-reconcile-untracked-value" data-output-name="${escapeHtml(outName)}" value="${escapeHtml(defaultId)}">
               <label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 8px;">Reconcile to untracked item (optional)</label>
               <p style="margin: 0 0 8px 0; color: #92400e; font-size: 12px;">Choose an item from the dropdown to reconcile when you complete the step.</p>
@@ -549,7 +572,7 @@
         `;
         outputsContainer.appendChild(outputSection);
 
-        if (matchingUntracked.length > 0) {
+        if (hasMatch) {
           var wrapper = outputSection.querySelector('.execute-reconcile-untracked-wrapper');
           var trigger = outputSection.querySelector('.execute-reconcile-untracked-trigger');
           var triggerLabel = outputSection.querySelector('.execute-reconcile-trigger-label');
@@ -565,7 +588,8 @@
             if (!id) return '— None —';
             var u = matchingUntracked.find(function(x) { return String(x.id) === id; });
             if (!u) return '— None —';
-            return (u.name || 'Unknown') + ' · ' + (u.quantity != null ? u.quantity : '0') + ' ' + (u.unit || '');
+            var qtyLabel = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? 'Unreconciled: ' + u.remaining_balance_to_reconcile : (u.quantity != null ? u.quantity : '0');
+            return (u.name || 'Unknown') + ' · ' + qtyLabel + ' ' + (u.unit || '');
           }
 
           function closeDropdown() {
@@ -629,6 +653,19 @@
             if (u.created_at) {
               try { createdStr = new Date(u.created_at).toLocaleDateString(); } catch (e) {}
             }
+            var unreconciledQty = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? String(u.remaining_balance_to_reconcile).trim() : null;
+            var subtitleParts = [];
+            if (unreconciledQty !== null) {
+              subtitleParts.push('Unreconciled: ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || ''));
+            } else {
+              subtitleParts.push(escapeHtml(u.quantity != null ? String(u.quantity) : '0') + ' ' + escapeHtml(u.unit || ''));
+            }
+            if (u.process_name || u.step_name) {
+              var ps = [u.process_name, u.step_name].filter(Boolean).map(function(x) { return escapeHtml(x); }).join(' · ');
+              if (ps) subtitleParts.push(ps);
+            }
+            if (u.source_step_completed_by) subtitleParts.push('Completed by: ' + escapeHtml(u.source_step_completed_by));
+            var subtitleLine = subtitleParts.join(' · ');
             var promptsHtml = '';
             if (u.source_step_execution_prompts && typeof u.source_step_execution_prompts === 'object' && Object.keys(u.source_step_execution_prompts).length > 0) {
               promptsHtml = '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);"><div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Step metadata</div><div style="display: flex; flex-direction: column; gap: 6px;">' +
@@ -636,20 +673,27 @@
                   return '<div style="padding: 6px 10px; background: var(--bg-secondary, #f9fafb); border-radius: 6px;"><span style="color: var(--text-secondary); font-size: 11px;">' + escapeHtml(e[0]) + '</span><br><span style="color: var(--text-primary); font-size: 13px;">' + escapeHtml(String(e[1])) + '</span></div>';
                 }).join('') + '</div></div>';
             }
+            var detailsParts = [];
+            if (unreconciledQty !== null) {
+              detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Unreconciled quantity</span> ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || '') + '</p>');
+            }
+            if (u.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
+            if (u.step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
+            if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
+            if (u.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(u.supplier) + '</p>');
+            if (u.supplier_batch_number) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(u.supplier_batch_number) + '</p>');
             card.innerHTML =
               '<div class="process-card-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; word-wrap: break-word; overflow-wrap: break-word;">' +
                 '<div style="flex: 1; min-width: 0; cursor: pointer;" data-expand-trigger="1">' +
                   '<h4 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary);">' + escapeHtml(u.name || 'Unknown') + '</h4>' +
-                  '<p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + (u.quantity != null ? u.quantity : '0') + ' ' + (u.unit || '') + (u.source_step_completed_by ? ' · Completed by: ' + escapeHtml(u.source_step_completed_by) : '') + '</p>' +
+                  '<p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + subtitleLine + '</p>' +
                 '</div>' +
                 '<svg class="execute-reconcile-arrow" id="' + arrowId(u) + '" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-expand-trigger="1">' +
                   '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>' +
                 '</svg>' +
               '</div>' +
               '<div class="execute-reconcile-details" id="' + detailId(u) + '" style="display: none; padding: 12px 16px; border-top: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); font-size: 13px;">' +
-                (u.supplier ? '<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(u.supplier) + '</p>' : '') +
-                (u.supplier_batch_number ? '<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(u.supplier_batch_number) + '</p>' : '') +
-                (createdStr ? '<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>' : '') +
+                detailsParts.join('') +
                 promptsHtml +
               '</div>';
             card.onclick = function(e) {

@@ -133,10 +133,12 @@ const CoreAPI = {
         return this.request('/inventory/untracked-items');
     },
 
-    /** Get untracked items matching name and unit (for Add to Inventory reconciliation). */
-    async getMatchingUntracked(name, unit, processId = null) {
+    /** Get untracked items matching name and unit (for Add to Inventory and execution modal reconciliation).
+     * When executionId is provided, includes items with qty 0 that were consumed in that execution. */
+    async getMatchingUntracked(name, unit, processId = null, executionId = null) {
         const params = new URLSearchParams({ name: name || '', unit: unit || '' });
         if (processId) params.set('process_id', processId);
+        if (executionId) params.set('execution_id', executionId);
         return this.request(`/inventory/reconcile/matching-untracked?${params.toString()}`);
     },
 

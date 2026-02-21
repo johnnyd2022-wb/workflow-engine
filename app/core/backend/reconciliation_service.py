@@ -26,6 +26,16 @@ _log = logging.getLogger(__name__)
 
 _UNTRACKED_FILTER = {"untracked": True}
 
+# Keys from execution_data we exclude from source_step_execution_prompts (internal only)
+_EXECUTION_PROMPTS_INTERNAL = {
+    "completed_by",
+    "completed_by_email",
+    "completed_by_user_id",
+    "completed_at",
+    "execution_errors",
+    "execution_warnings",
+}
+
 
 def _parse_quantity(value: Any) -> Decimal | None:
     try:
@@ -120,9 +130,11 @@ def _quantity_consumed_from_item_in_execution(
 
 
 def _untracked_item_to_dict(item: Any) -> dict[str, Any]:
-    """Convert InventoryItem (untracked) to API-style dict."""
+    """Convert InventoryItem (untracked) to API-style dict with created_at and remaining_balance_to_reconcile."""
     if not hasattr(item, "id"):
         return {}
+    extra = item.extra_data or {}
+    remaining = extra.get("remaining_balance_to_reconcile")
     return {
         "id": str(item.id),
         "name": item.name,
@@ -135,8 +147,73 @@ def _untracked_item_to_dict(item: Any) -> dict[str, Any]:
         "source_execution_step_id": str(item.source_execution_step_id)
         if getattr(item, "source_execution_step_id", None)
         else None,
-        "extra_data": item.extra_data if item.extra_data else {},
+        "created_at": item.created_at.isoformat() if getattr(item, "created_at", None) else None,
+        "remaining_balance_to_reconcile": str(remaining) if remaining is not None else None,
+        "extra_data": extra,
     }
+
+
+def _enrich_matching_untracked_with_step_metadata(
+    session: Session, org_id: UUID, matching: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Add process_name, step_name, source_step_completed_by, source_step_execution_prompts to each item."""
+    from app.core.db.models.execution import Execution
+
+    step_ids = []
+    for m in matching:
+        sid = m.get("source_execution_step_id")
+        if sid:
+            try:
+                step_ids.append(UUID(sid))
+            except (ValueError, TypeError):
+                pass
+    if not step_ids:
+        for m in matching:
+            m.setdefault("process_name", None)
+            m.setdefault("step_name", None)
+            m.setdefault("source_step_completed_by", None)
+            m.setdefault("source_step_execution_prompts", {})
+        return matching
+
+    from sqlalchemy.orm import joinedload
+
+    steps = (
+        session.query(ExecutionStep)
+        .join(Execution, ExecutionStep.execution_id == Execution.id)
+        .filter(ExecutionStep.id.in_(step_ids), Execution.org_id == org_id)
+        .options(
+            joinedload(ExecutionStep.step),
+            joinedload(ExecutionStep.execution).joinedload(Execution.process),
+        )
+        .all()
+    )
+    meta_by_id: dict[UUID, dict[str, Any]] = {}
+    for es in steps:
+        ed = es.execution_data or {}
+        meta_by_id[es.id] = {
+            "process_name": es.execution.process.name if es.execution and getattr(es.execution, "process", None) else None,
+            "step_name": es.step.name if es.step else None,
+            "source_step_completed_by": ed.get("completed_by") or ed.get("completed_by_email"),
+            "source_step_execution_prompts": {
+                k: v
+                for k, v in ed.items()
+                if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
+            },
+        }
+    for m in matching:
+        sid = m.get("source_execution_step_id")
+        if sid:
+            try:
+                meta = meta_by_id.get(UUID(sid)) or {}
+            except (ValueError, TypeError):
+                meta = {}
+        else:
+            meta = {}
+        m["process_name"] = meta.get("process_name")
+        m["step_name"] = meta.get("step_name")
+        m["source_step_completed_by"] = meta.get("source_step_completed_by")
+        m["source_step_execution_prompts"] = meta.get("source_step_execution_prompts") or {}
+    return matching
 
 
 def get_matching_untracked(
@@ -172,9 +249,14 @@ def get_matching_untracked(
         if qty is None or qty < 0:
             continue
         if qty <= 0 and execution_id:
-            consumed = _quantity_consumed_from_item_in_execution(session, execution_id, item.id, unit_clean)
-            if not consumed or consumed <= 0:
-                continue
+            # Include qty 0 when: consumed in this execution, OR still has remaining_balance_to_reconcile (e.g. partial reconcile)
+            remaining = _parse_quantity((item.extra_data or {}).get("remaining_balance_to_reconcile"))
+            if (remaining is not None and remaining > 0):
+                pass  # include
+            else:
+                consumed = _quantity_consumed_from_item_in_execution(session, execution_id, item.id, unit_clean)
+                if not consumed or consumed <= 0:
+                    continue
         elif qty <= 0:
             continue
         if process_id:
@@ -194,6 +276,9 @@ def get_matching_untracked(
             if not ex:
                 continue
         matching.append(_untracked_item_to_dict(item))
+
+    # Enrich with process name, step name, and step metadata (completed_by, execution_prompts)
+    matching = _enrich_matching_untracked_with_step_metadata(session, org_id, matching)
     return matching
 
 
