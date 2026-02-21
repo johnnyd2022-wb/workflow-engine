@@ -32,29 +32,33 @@ _EXECUTION_PROMPTS_INTERNAL = {
 }
 
 
-def _enrich_untracked_with_step_metadata(session: Session, org_id: UUID, item: InventoryItem) -> dict[str, Any]:
-    """Attach completed_by and user execution metadata from the source execution step."""
-    out = {
-        "source_step_completed_by": None,
-        "source_step_execution_prompts": {},
+def _step_metadata_from_execution_data(ed: dict | None) -> dict[str, Any]:
+    """Build source_step_completed_by and source_step_execution_prompts from execution_data."""
+    if not ed:
+        return {"source_step_completed_by": None, "source_step_execution_prompts": {}}
+    return {
+        "source_step_completed_by": ed.get("completed_by") or ed.get("completed_by_email"),
+        "source_step_execution_prompts": {
+            k: v
+            for k, v in (ed or {}).items()
+            if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
+        },
     }
-    step_id = item.source_execution_step_id
-    if not step_id:
-        return out
-    step = (
+
+
+def _batch_fetch_step_metadata(
+    session: Session, org_id: UUID, step_ids: list[UUID]
+) -> dict[UUID, dict[str, Any]]:
+    """Fetch execution_data for multiple execution steps in one query. Returns step_id -> metadata."""
+    if not step_ids:
+        return {}
+    steps = (
         session.query(ExecutionStep)
         .join(Execution, ExecutionStep.execution_id == Execution.id)
-        .filter(ExecutionStep.id == step_id, Execution.org_id == org_id)
-        .first()
+        .filter(ExecutionStep.id.in_(step_ids), Execution.org_id == org_id)
+        .all()
     )
-    if not step or not step.execution_data:
-        return out
-    ed = step.execution_data
-    out["source_step_completed_by"] = ed.get("completed_by") or ed.get("completed_by_email")
-    out["source_step_execution_prompts"] = {
-        k: v for k, v in (ed or {}).items() if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
-    }
-    return out
+    return {s.id: _step_metadata_from_execution_data(s.execution_data) for s in steps}
 
 
 def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
@@ -91,6 +95,10 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
             if (i.extra_data or {}).get("untracked") is True and (_qty(i.quantity) or Decimal("0")) > 0
         ]
 
+    # Batch fetch execution step metadata to avoid N+1 queries
+    step_ids = list({i.source_execution_step_id for i in untracked_orm if i.source_execution_step_id})
+    step_meta_by_id = _batch_fetch_step_metadata(session, org_id, step_ids)
+
     untracked_items: list[dict[str, Any]] = []
     for item in untracked_orm:
         base = {
@@ -110,7 +118,10 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
             "check_reason": "Untracked inventory item",
             "reconciliation_required": True,
         }
-        step_meta = _enrich_untracked_with_step_metadata(session, org_id, item)
+        step_meta = step_meta_by_id.get(item.source_execution_step_id) or {
+            "source_step_completed_by": None,
+            "source_step_execution_prompts": {},
+        }
         base["source_step_completed_by"] = step_meta["source_step_completed_by"]
         base["source_step_execution_prompts"] = step_meta["source_step_execution_prompts"]
         untracked_items.append(base)

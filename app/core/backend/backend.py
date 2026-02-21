@@ -1552,6 +1552,7 @@ def create_inventory_item():
 
         extra_data = dict(data.get("metadata") or {})
         if data.get("untracked"):
+            # Invariant: untracked items must always have remaining_balance_to_reconcile for reduce_only logic.
             extra_data["untracked"] = True  # Flag for reconciliation/sourcemap banners
             try:
                 qty_val = float(quantity) if quantity is not None else 0

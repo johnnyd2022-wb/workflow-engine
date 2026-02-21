@@ -161,15 +161,11 @@ def get_matching_untracked(
         process_id=process_id,
         quantity_gt_zero=quantity_gt_zero,
     )
-    name_clean = (name or "").strip().lower()
     unit_clean = (unit or "").strip()
 
     matching = []
     for item in items:
-        if (item.name or "").strip().lower() != name_clean:
-            continue
-        if (item.unit or "").strip() != unit_clean:
-            continue
+        # Repo already filtered by name/unit; only filter by qty, execution consumption, process
         qty = _parse_quantity(item.quantity)
         if qty is None or qty < 0:
             continue
@@ -266,8 +262,9 @@ def reconcile_via_addition(
             new_extra = dict(untracked.extra_data or {})
             new_extra["reconciliation_history"] = history
             new_extra["untracked"] = True
-            new_extra["resolved"] = True
-            new_extra["resolved_at"] = ts
+            if new_untracked_qty <= 0:
+                new_extra["resolved"] = True
+                new_extra["resolved_at"] = ts
             inv_repo.update_inventory_item(
                 item_id=untracked_item_id,
                 org_id=org_id,
@@ -416,14 +413,7 @@ def reconcile_via_execution(
                     commit=False,
                 )
         session.flush()
-        exec_step = (
-            session.query(ExecutionStep)
-            .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step_id)
-            .first()
-        )
-        if not exec_step:
-            session.rollback()
-            return {"error": "Execution step not found after completing prior steps"}
+        session.refresh(exec_step)
 
         # Quantity as string (no float) for precision
         actual_outputs = [
@@ -448,6 +438,7 @@ def reconcile_via_execution(
             commit=False,
         )
         session.flush()
+        # Single re-query for updated step (actual_outputs, etc.) for create_inventory_item
         exec_step = (
             session.query(ExecutionStep)
             .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step_id)
@@ -493,8 +484,9 @@ def reconcile_via_execution(
         new_extra = dict(untracked.extra_data or {})
         new_extra["reconciliation_history"] = history
         new_extra["untracked"] = True
-        new_extra["resolved"] = True
-        new_extra["resolved_at"] = ts
+        if new_untracked_qty <= 0:
+            new_extra["resolved"] = True
+            new_extra["resolved_at"] = ts
         inv_repo.update_inventory_item(
             item_id=untracked_item_id,
             org_id=org_id,
@@ -533,11 +525,12 @@ def reconcile_output_to_untracked_reduce_only(
     Reduce the untracked item by the reconciliation amount (min of output qty and untracked balance).
     Does NOT create or update any output inventory item. Returns reconciled_amount and surplus.
     Caller should create an output item only when surplus > 0, with quantity = surplus.
+    Uses row-level lock (FOR UPDATE) for concurrency safety when two completions hit the same untracked item.
     When current_step_actual_inputs is provided, consumption from this step is included when
     computing effective balance (so we detect usage even before the DB reflects the commit).
     """
     inv_repo = InventoryRepository(session)
-    untracked = inv_repo.get_inventory_item_by_id(untracked_item_id, org_id)
+    untracked = inv_repo.get_inventory_item_by_id_for_update(untracked_item_id, org_id)
     if not untracked:
         return {"error": "Untracked item not found"}
     if (untracked.extra_data or {}).get("untracked") is not True:
@@ -639,11 +632,13 @@ def reconcile_output_to_untracked(
 ) -> dict[str, Any]:
     """
     Reconcile an existing execution output (already created inventory item) to an untracked item.
-    Legacy: reduces untracked and updates output item extra_data. Prefer using
-    reconcile_output_to_untracked_reduce_only and then creating output with quantity=surplus only.
+
+    DEPRECATED: Prefer the completion flow that uses reconcile_output_to_untracked_reduce_only
+    and creates output with quantity=surplus only. This legacy path is hardened for consistency
+    (row lock, conditional resolved, remaining_balance_to_reconcile) but should not be used for new code.
     """
     inv_repo = InventoryRepository(session)
-    untracked = inv_repo.get_inventory_item_by_id(untracked_item_id, org_id)
+    untracked = inv_repo.get_inventory_item_by_id_for_update(untracked_item_id, org_id)
     if not untracked:
         return {"error": "Untracked item not found"}
     if (untracked.extra_data or {}).get("untracked") is not True:
@@ -662,6 +657,7 @@ def reconcile_output_to_untracked(
     reconciliation_amount = min(output_quantity, untracked_balance)
     surplus = output_quantity - reconciliation_amount
     new_untracked_qty = untracked_balance - reconciliation_amount
+    remaining_balance = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
 
     history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
     history.append(
@@ -680,6 +676,7 @@ def reconcile_output_to_untracked(
     new_extra = dict(untracked.extra_data or {})
     new_extra["reconciliation_history"] = history
     new_extra["untracked"] = True
+    new_extra["remaining_balance_to_reconcile"] = remaining_balance
     if new_untracked_qty <= 0:
         ts = datetime.now(timezone.utc).isoformat()
         new_extra["resolved"] = True
@@ -687,7 +684,7 @@ def reconcile_output_to_untracked(
     inv_repo.update_inventory_item(
         item_id=untracked_item_id,
         org_id=org_id,
-        quantity=str(new_untracked_qty) if new_untracked_qty > 0 else "0",
+        quantity=remaining_balance,
         extra_data=new_extra,
     )
 
