@@ -130,11 +130,12 @@ def _quantity_consumed_from_item_in_execution(
 
 
 def _untracked_item_to_dict(item: Any) -> dict[str, Any]:
-    """Convert InventoryItem (untracked) to API-style dict with created_at and remaining_balance_to_reconcile."""
+    """Convert InventoryItem (untracked) to API-style dict with created_at, remaining_balance_to_reconcile, and notes."""
     if not hasattr(item, "id"):
         return {}
     extra = item.extra_data or {}
     remaining = extra.get("remaining_balance_to_reconcile")
+    notes = extra.get("notes")
     return {
         "id": str(item.id),
         "name": item.name,
@@ -149,6 +150,7 @@ def _untracked_item_to_dict(item: Any) -> dict[str, Any]:
         else None,
         "created_at": item.created_at.isoformat() if getattr(item, "created_at", None) else None,
         "remaining_balance_to_reconcile": str(remaining) if remaining is not None else None,
+        "notes": notes if notes is not None else None,
         "extra_data": extra,
     }
 

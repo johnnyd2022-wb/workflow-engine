@@ -134,6 +134,7 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
     for item in untracked_orm:
         extra = item.extra_data or {}
         remaining = extra.get("remaining_balance_to_reconcile")
+        notes = extra.get("notes")
         base = {
             "id": str(item.id),
             "name": item.name,
@@ -148,6 +149,7 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
             "source_execution_step_id": str(item.source_execution_step_id) if item.source_execution_step_id else None,
             "created_at": item.created_at.isoformat() if item.created_at else None,
             "remaining_balance_to_reconcile": str(remaining) if remaining is not None else None,
+            "notes": notes if notes is not None else None,
             "extra_data": extra,
             "check_reason": "Untracked inventory item",
             "reconciliation_required": True,

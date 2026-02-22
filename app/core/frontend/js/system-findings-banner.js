@@ -191,6 +191,7 @@
           if (u.process_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
           if (u.step_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
           if (u.created_at) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(u.created_at) + '</p>');
+          if (u.notes) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Notes</span> ' + escapeHtml(u.notes) + '</p>');
           if (u.source_step_completed_by) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Completed by</span> ' + escapeHtml(u.source_step_completed_by) + '</p>');
           var promptsHtml = '';
           if (u.source_step_execution_prompts && typeof u.source_step_execution_prompts === 'object' && Object.keys(u.source_step_execution_prompts).length > 0) {

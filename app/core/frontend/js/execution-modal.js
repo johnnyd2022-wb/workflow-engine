@@ -680,6 +680,7 @@
             if (u.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
             if (u.step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
             if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
+            if (u.notes) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Notes</span> ' + escapeHtml(u.notes) + '</p>');
             if (u.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(u.supplier) + '</p>');
             if (u.supplier_batch_number) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(u.supplier_batch_number) + '</p>');
             card.innerHTML =
@@ -1067,6 +1068,8 @@
       var today = new Date();
       dateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
     }
+    var notesEl = document.getElementById('untracked-output-notes');
+    if (notesEl) notesEl.value = '';
     window.untrackedOutputContext = {
       executionId: executionId,
       executionStepId: executionStepId,
@@ -1088,13 +1091,21 @@
       var quantity = parseFloat((form.querySelector('[name="quantity"]') || {}).value);
       var unit = (form.querySelector('[name="unit"]') || {}).value;
       var inventoryType = (form.querySelector('[name="inventory_type"]') || {}).value || 'work_in_progress';
+      var notesEl = form.querySelector('[name="notes"]');
+      var notes = notesEl ? String(notesEl.value || '').trim() : '';
       var dateEl = document.getElementById('untracked-output-date');
       var recordedDate = dateEl ? dateEl.value : null;
       if (!name || !unit || isNaN(quantity) || quantity < 0) {
         if (typeof showNotification === 'function') showNotification('error', 'Validation error', 'Please provide a valid name, unit, and non-negative quantity.');
         return;
       }
+      if (!notes) {
+        if (typeof showNotification === 'function') showNotification('error', 'Notes required', 'Please provide notes explaining why this item is being added as untracked.');
+        return;
+      }
       var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      var metadata = recordedDate ? { recorded_date: recordedDate } : {};
+      metadata.notes = notes;
       var payload = {
         name: name,
         quantity: quantity,
@@ -1103,7 +1114,7 @@
         source_execution_id: ctx.executionId || undefined,
         source_execution_step_id: ctx.executionStepId || undefined,
         untracked: true,
-        metadata: recordedDate ? { recorded_date: recordedDate } : {}
+        metadata: metadata
       };
       if (ctx.outputId && uuidRe.test(String(ctx.outputId))) payload.source_output_id = ctx.outputId;
       try {

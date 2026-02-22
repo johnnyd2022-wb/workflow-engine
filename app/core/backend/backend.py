@@ -1550,6 +1550,10 @@ def create_inventory_item():
 
         extra_data = dict(data.get("metadata") or {})
         if data.get("untracked"):
+            notes = (extra_data.get("notes") or data.get("notes") or "").strip()
+            if not notes:
+                return jsonify({"error": "notes are required when adding an untracked item"}), 400
+            extra_data["notes"] = notes
             # Invariant: untracked items must always have remaining_balance_to_reconcile for reduce_only logic.
             extra_data["untracked"] = True  # Flag for reconciliation/sourcemap banners
             try:
