@@ -373,13 +373,21 @@ def reconcile_via_addition(
             untracked_balance = _parse_quantity(untracked.quantity) or Decimal("0")
             if untracked_balance <= 0:
                 return {"error": "Untracked item has no balance to reconcile"}
-            if (unit or "").strip() != (untracked.unit or "").strip():
+            added_unit = (unit or "").strip() or "units"
+            untracked_unit = (untracked.unit or "").strip() or "units"
+            if not are_units_compatible(added_unit, untracked_unit):
                 return {"error": "Unit mismatch: cannot reconcile with different unit"}
 
-            reconciliation_amount = min(added_qty, untracked_balance)
+            added_qty_in_untracked_unit = Decimal(
+                str(convert_to_inventory_unit(float(added_qty), added_unit, untracked_unit))
+            )
+            reconciliation_amount = min(added_qty_in_untracked_unit, untracked_balance)
             new_untracked_qty = untracked_balance - reconciliation_amount
             reconciled_amount = reconciliation_amount
-            surplus = added_qty - reconciliation_amount
+            reconv_in_added_unit = convert_to_inventory_unit(
+                float(reconciliation_amount), untracked_unit, added_unit
+            )
+            surplus = added_qty - reconv_in_added_unit
             remaining_untracked_balance = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
 
             ts = datetime.now(timezone.utc).isoformat()
@@ -509,12 +517,20 @@ def reconcile_via_execution(
         session.rollback()
         return {"error": "Invalid or non-positive quantity produced"}
 
-    if (output_unit or "").strip() != (untracked.unit or "").strip():
+    out_unit = (output_unit or "").strip() or "units"
+    untracked_unit = (untracked.unit or "").strip() or "units"
+    if not are_units_compatible(out_unit, untracked_unit):
         session.rollback()
-        return {"error": "Unit mismatch: output unit must match untracked item unit"}
+        return {"error": "Unit mismatch: output unit must be compatible with untracked item unit"}
 
-    reconciliation_amount = min(qty_produced, untracked_balance)
-    surplus = qty_produced - reconciliation_amount
+    qty_in_untracked_unit = Decimal(
+        str(convert_to_inventory_unit(float(qty_produced), out_unit, untracked_unit))
+    )
+    reconciliation_amount = min(qty_in_untracked_unit, untracked_balance)
+    reconv_in_output_unit = convert_to_inventory_unit(
+        float(reconciliation_amount), untracked_unit, out_unit
+    )
+    surplus = qty_produced - Decimal(str(reconv_in_output_unit))
     new_untracked_qty = untracked_balance - reconciliation_amount
     remaining_untracked_balance = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
 
@@ -548,7 +564,6 @@ def reconcile_via_execution(
                     commit=False,
                 )
         session.flush()
-        session.refresh(exec_step)
 
         # Quantity as string (no float) for precision
         actual_outputs = [
@@ -573,12 +588,8 @@ def reconcile_via_execution(
             commit=False,
         )
         session.flush()
-        # Single re-query for updated step (actual_outputs, etc.) for create_inventory_item
-        exec_step = (
-            session.query(ExecutionStep)
-            .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_id == step_id)
-            .first()
-        )
+        # Expire so next access reloads from DB (avoids race window from re-query pattern)
+        session.expire(exec_step)
 
         inventory_type = InventoryType.FINAL_PRODUCT.value
         if exec_step and getattr(exec_step, "is_terminal_step", None) is False:
@@ -670,8 +681,10 @@ def reconcile_output_to_untracked_reduce_only(
         return {"error": "Untracked item not found"}
     if (untracked.extra_data or {}).get("untracked") is not True:
         return {"error": "Item is not an untracked item"}
-    if (output_unit or "").strip() != (untracked.unit or "").strip():
-        return {"error": "Unit mismatch: output unit must match untracked item unit"}
+    out_unit = (output_unit or "").strip() or "units"
+    untracked_unit = (untracked.unit or "").strip() or "units"
+    if not are_units_compatible(out_unit, untracked_unit):
+        return {"error": "Unit mismatch: output unit must be compatible with untracked item unit"}
     if (output_name or "").strip().lower() != (untracked.name or "").strip().lower():
         return {"error": "Name mismatch: output name must match untracked item name"}
 
@@ -681,9 +694,11 @@ def reconcile_output_to_untracked_reduce_only(
     if output_quantity is None or output_quantity <= 0:
         return {"error": "Output quantity must be positive"}
 
+    output_in_untracked_unit = Decimal(
+        str(convert_to_inventory_unit(float(output_quantity), out_unit, untracked_unit))
+    )
+
     # Authoritative "balance still to reconcile" (set when creating untracked or after each reconcile).
-    # Use it so partial reconciliations don't get confused with consumption (e.g. 4 kg created,
-    # 1 kg consumed, reconcile 1 kg -> remaining should be 3 kg, not 2).
     stored_remaining = _parse_quantity((untracked.extra_data or {}).get("remaining_balance_to_reconcile"))
     if stored_remaining is not None and stored_remaining < 0:
         stored_remaining = Decimal("0")
@@ -702,17 +717,20 @@ def reconcile_output_to_untracked_reduce_only(
         if consumed_in_execution and consumed_in_execution > 0:
             effective_balance = consumed_in_execution
         else:
-            effective_balance = output_quantity
+            effective_balance = output_in_untracked_unit
 
-    # How much we can reconcile this time: min of output qty, cap from on-hand/consumed, and stored remaining.
+    # All amounts in untracked unit for reconciliation math.
     if stored_remaining is not None and stored_remaining >= 0:
-        reconciliation_amount = min(output_quantity, effective_balance, stored_remaining)
+        reconciliation_amount = min(output_in_untracked_unit, effective_balance, stored_remaining)
         remaining_to_reconcile = stored_remaining - reconciliation_amount
     else:
-        reconciliation_amount = min(output_quantity, effective_balance)
+        reconciliation_amount = min(output_in_untracked_unit, effective_balance)
         remaining_to_reconcile = effective_balance - reconciliation_amount
 
-    surplus = output_quantity - reconciliation_amount
+    surplus_in_output_unit = float(output_quantity) - convert_to_inventory_unit(
+        float(reconciliation_amount), untracked_unit, out_unit
+    )
+    surplus = Decimal(str(surplus_in_output_unit))
     # Only reduce DB quantity if there was remaining balance; if already 0 (consumed earlier), leave 0
     new_untracked_qty = max(Decimal("0"), untracked_balance - reconciliation_amount)
 
@@ -778,8 +796,10 @@ def reconcile_output_to_untracked(
         return {"error": "Untracked item not found"}
     if (untracked.extra_data or {}).get("untracked") is not True:
         return {"error": "Item is not an untracked item"}
-    if (output_unit or "").strip() != (untracked.unit or "").strip():
-        return {"error": "Unit mismatch: output unit must match untracked item unit"}
+    out_unit = (output_unit or "").strip() or "units"
+    untracked_unit = (untracked.unit or "").strip() or "units"
+    if not are_units_compatible(out_unit, untracked_unit):
+        return {"error": "Unit mismatch: output unit must be compatible with untracked item unit"}
     if (output_name or "").strip().lower() != (untracked.name or "").strip().lower():
         return {"error": "Name mismatch: output name must match untracked item name"}
 
@@ -789,8 +809,14 @@ def reconcile_output_to_untracked(
     if output_quantity is None or output_quantity <= 0:
         return {"error": "Output quantity must be positive"}
 
-    reconciliation_amount = min(output_quantity, untracked_balance)
-    surplus = output_quantity - reconciliation_amount
+    output_in_untracked_unit = Decimal(
+        str(convert_to_inventory_unit(float(output_quantity), out_unit, untracked_unit))
+    )
+    reconciliation_amount = min(output_in_untracked_unit, untracked_balance)
+    surplus_in_output_unit = float(output_quantity) - convert_to_inventory_unit(
+        float(reconciliation_amount), untracked_unit, out_unit
+    )
+    surplus = Decimal(str(surplus_in_output_unit))
     new_untracked_qty = untracked_balance - reconciliation_amount
     remaining_balance = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
 
