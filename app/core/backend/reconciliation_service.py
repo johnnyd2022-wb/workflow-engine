@@ -191,13 +191,13 @@ def _enrich_matching_untracked_with_step_metadata(
     for es in steps:
         ed = es.execution_data or {}
         meta_by_id[es.id] = {
-            "process_name": es.execution.process.name if es.execution and getattr(es.execution, "process", None) else None,
+            "process_name": es.execution.process.name
+            if es.execution and getattr(es.execution, "process", None)
+            else None,
             "step_name": es.step.name if es.step else None,
             "source_step_completed_by": ed.get("completed_by") or ed.get("completed_by_email"),
             "source_step_execution_prompts": {
-                k: v
-                for k, v in ed.items()
-                if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
+                k: v for k, v in ed.items() if k not in _EXECUTION_PROMPTS_INTERNAL and v is not None and v != ""
             },
         }
     for m in matching:
@@ -251,7 +251,7 @@ def get_matching_untracked(
         if qty <= 0 and execution_id:
             # Include qty 0 when: consumed in this execution, OR still has remaining_balance_to_reconcile (e.g. partial reconcile)
             remaining = _parse_quantity((item.extra_data or {}).get("remaining_balance_to_reconcile"))
-            if (remaining is not None and remaining > 0):
+            if remaining is not None and remaining > 0:
                 pass  # include
             else:
                 consumed = _quantity_consumed_from_item_in_execution(session, execution_id, item.id, unit_clean)

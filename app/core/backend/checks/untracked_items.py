@@ -123,9 +123,7 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
             .all()
         )
         untracked_orm = [
-            i
-            for i in untracked_orm
-            if (i.extra_data or {}).get("untracked") is True and _needs_reconciliation(i)
+            i for i in untracked_orm if (i.extra_data or {}).get("untracked") is True and _needs_reconciliation(i)
         ]
 
     # Batch fetch execution step metadata to avoid N+1 queries
