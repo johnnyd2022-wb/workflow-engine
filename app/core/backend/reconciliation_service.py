@@ -72,16 +72,19 @@ def _assert_reconciliation_invariants(
     """
     Defensive guard: after reconciliation, stored_quantity and remaining_balance_to_reconcile
     must be >= 0. Catches logic bugs or future code paths that mutate state incorrectly.
+    Raises ValueError so enforcement is guaranteed regardless of runtime flags (e.g. python -O).
     """
     qty = _parse_quantity(quantity)
-    assert qty is not None and qty >= 0, f"reconciliation invariant: stored_quantity must be >= 0, got {quantity!r}"
+    if not (qty is not None and qty >= 0):
+        raise ValueError(f"reconciliation invariant: stored_quantity must be >= 0, got {quantity!r}")
     extra = extra_data or {}
     remaining = extra.get("remaining_balance_to_reconcile")
     if remaining is not None:
         rem = _parse_quantity(remaining)
-        assert (
-            rem is not None and rem >= 0
-        ), f"reconciliation invariant: remaining_balance_to_reconcile must be >= 0, got {remaining!r}"
+        if not (rem is not None and rem >= 0):
+            raise ValueError(
+                f"reconciliation invariant: remaining_balance_to_reconcile must be >= 0, got {remaining!r}"
+            )
 
 
 def _normalize_item_id(value: Any) -> str:
