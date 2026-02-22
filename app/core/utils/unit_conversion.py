@@ -136,9 +136,7 @@ def convert_to_inventory_unit(quantity: float, quantity_unit: str, inventory_uni
     return convert_quantity(quantity, quantity_unit, inventory_unit)
 
 
-def convert_quantity_decimal(
-    quantity: Decimal, from_unit: str, to_unit: str
-) -> Decimal:
+def convert_quantity_decimal(quantity: Decimal, from_unit: str, to_unit: str) -> Decimal:
     """
     Convert a quantity from one unit to another using Decimal-only math.
     Use this for reconciliation, compliance, and audited inventory to avoid
@@ -182,9 +180,7 @@ def convert_quantity_decimal(
     return converted_quantity
 
 
-def convert_to_inventory_unit_decimal(
-    quantity: Decimal, quantity_unit: str, inventory_unit: str
-) -> Decimal:
+def convert_to_inventory_unit_decimal(quantity: Decimal, quantity_unit: str, inventory_unit: str) -> Decimal:
     """
     Convert a quantity to the inventory item's unit using Decimal-only math.
     Use for reconciliation and anywhere precision must be preserved.
