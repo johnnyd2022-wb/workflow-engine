@@ -1,8 +1,8 @@
 """
-Untracked items check: inventory items with extra_data.untracked = True and quantity > 0
-(recorded in-flow without full upstream traceability). Surfaces in banners, sourcemap
-"Check needed", and execution dropdowns. Uses InventoryRepository.get_untracked_items
-so canonical inventory state drives the check (projection layer only).
+Untracked items check: inventory items with extra_data.untracked = True that still need reconciliation.
+Uses the same criteria as the execution modal (matching-untracked): include if quantity > 0 OR
+remaining_balance_to_reconcile > 0. Surfaces in banners, sourcemap "Check needed", and lists.
+Uses InventoryRepository.get_untracked_items so canonical inventory state drives the check.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.backend.corechecks import CheckResult
 from app.core.db.models.execution import Execution
@@ -45,28 +45,73 @@ def _step_metadata_from_execution_data(ed: dict | None) -> dict[str, Any]:
 
 
 def _batch_fetch_step_metadata(session: Session, org_id: UUID, step_ids: list[UUID]) -> dict[UUID, dict[str, Any]]:
-    """Fetch execution_data for multiple execution steps in one query. Returns step_id -> metadata."""
+    """Fetch process_name, step_name, and execution_data for multiple execution steps in one query.
+    Returns step_id -> { process_name, step_name, source_step_completed_by, source_step_execution_prompts }.
+    Same shape as execution modal card expand."""
     if not step_ids:
         return {}
     steps = (
         session.query(ExecutionStep)
         .join(Execution, ExecutionStep.execution_id == Execution.id)
         .filter(ExecutionStep.id.in_(step_ids), Execution.org_id == org_id)
+        .options(
+            joinedload(ExecutionStep.step),
+            joinedload(ExecutionStep.execution).joinedload(Execution.process),
+        )
         .all()
     )
-    return {s.id: _step_metadata_from_execution_data(s.execution_data) for s in steps}
+    result: dict[UUID, dict[str, Any]] = {}
+    for s in steps:
+        ed_meta = _step_metadata_from_execution_data(s.execution_data)
+        process = s.execution.process if s.execution and getattr(s.execution, "process", None) else None
+        result[s.id] = {
+            "process_id": str(s.execution.process_id) if s.execution else None,
+            "process_name": process.name if process else None,
+            "step_name": s.step.name if s.step else None,
+            "source_step_completed_by": ed_meta["source_step_completed_by"],
+            "source_step_execution_prompts": ed_meta["source_step_execution_prompts"],
+        }
+    return result
+
+
+def _needs_reconciliation(item: InventoryItem) -> bool:
+    """Same logic as execution modal: include if qty > 0 or remaining_balance_to_reconcile > 0."""
+    from decimal import Decimal
+
+    def _qty(v):
+        try:
+            return Decimal(str(v)) if v is not None else None
+        except Exception:
+            return None
+
+    qty = _qty(item.quantity) or Decimal("0")
+    if qty > 0:
+        return True
+    remaining = _qty((item.extra_data or {}).get("remaining_balance_to_reconcile")) or Decimal("0")
+    return remaining > 0
 
 
 def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
     """
-    Find inventory items flagged as untracked with quantity > 0 (reconciliation required).
+    Find inventory items flagged as untracked that still need reconciliation (same criteria as
+    execution modal: quantity > 0 OR remaining_balance_to_reconcile > 0).
     Uses InventoryRepository.get_untracked_items for canonical state; check remains projection only.
     """
+    from decimal import Decimal
+
+    def _qty(v):
+        try:
+            return Decimal(str(v)) if v is not None else None
+        except Exception:
+            return None
+
     try:
+        # Fetch all untracked (qty 0 and qty > 0), then filter by same "needs reconciliation" rule as modal
         untracked_orm = InventoryRepository(session).get_untracked_items(
             org_id=org_id,
-            quantity_gt_zero=True,
+            quantity_gt_zero=False,
         )
+        untracked_orm = [i for i in untracked_orm if _needs_reconciliation(i)]
     except Exception as e:
         _log.warning("get_untracked_items failed, falling back to direct query: %s", e)
         untracked_orm = (
@@ -77,18 +122,10 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
             )
             .all()
         )
-        from decimal import Decimal
-
-        def _qty(v):
-            try:
-                return Decimal(str(v)) if v is not None else None
-            except Exception:
-                return None
-
         untracked_orm = [
             i
             for i in untracked_orm
-            if (i.extra_data or {}).get("untracked") is True and (_qty(i.quantity) or Decimal("0")) > 0
+            if (i.extra_data or {}).get("untracked") is True and _needs_reconciliation(i)
         ]
 
     # Batch fetch execution step metadata to avoid N+1 queries
@@ -97,6 +134,8 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
 
     untracked_items: list[dict[str, Any]] = []
     for item in untracked_orm:
+        extra = item.extra_data or {}
+        remaining = extra.get("remaining_balance_to_reconcile")
         base = {
             "id": str(item.id),
             "name": item.name,
@@ -110,14 +149,21 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
             "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
             "source_execution_step_id": str(item.source_execution_step_id) if item.source_execution_step_id else None,
             "created_at": item.created_at.isoformat() if item.created_at else None,
-            "extra_data": item.extra_data if item.extra_data else {},
+            "remaining_balance_to_reconcile": str(remaining) if remaining is not None else None,
+            "extra_data": extra,
             "check_reason": "Untracked inventory item",
             "reconciliation_required": True,
         }
         step_meta = step_meta_by_id.get(item.source_execution_step_id) or {
+            "process_id": None,
+            "process_name": None,
+            "step_name": None,
             "source_step_completed_by": None,
             "source_step_execution_prompts": {},
         }
+        base["process_id"] = step_meta.get("process_id")
+        base["process_name"] = step_meta.get("process_name")
+        base["step_name"] = step_meta.get("step_name")
         base["source_step_completed_by"] = step_meta["source_step_completed_by"]
         base["source_step_execution_prompts"] = step_meta["source_step_execution_prompts"]
         untracked_items.append(base)
