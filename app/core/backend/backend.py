@@ -1012,6 +1012,9 @@ def list_inventory():
     repo = InventoryRepository(db_session)
     items = repo.list_inventory_items(org_id=org_id, inventory_type=inventory_type, process_id=process_id)
 
+    # System findings per item (all checks) for UI: red border + reasons in dropdown
+    findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
+
     # Import ExecutionStep and InventoryItem models for lookups
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
@@ -1317,6 +1320,7 @@ def list_inventory():
                 "producing_step_name": producing_step_name,
                 "created_at": item.created_at.isoformat() if item.created_at else None,
                 "extra_data": extra_data,
+                "system_findings": findings_by_id.get(str(item.id), []),
             }
         )
 

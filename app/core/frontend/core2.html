@@ -786,9 +786,15 @@
     }
     
     function createInventoryItemCardV2(item) {
-      const isUntracked = item.extra_data && item.extra_data.untracked === true;
+      // Any system check finding: red border and reasons in dropdown (scales for future checks)
+      const systemFindings = Array.isArray(item.system_findings) ? item.system_findings : [];
+      const hasFindings = systemFindings.length > 0;
+      // Backward compat: if API didn't send system_findings but item is untracked, show one reason
+      const effectiveFindings = hasFindings ? systemFindings : (item.extra_data && item.extra_data.untracked === true ? [{ check_id: 'untracked_items', reason: 'Untracked item — reconciliation required' }] : []);
+      const hasAnyFindings = effectiveFindings.length > 0;
+
       const card = document.createElement('div');
-      card.className = 'card card-interactive process-card inventory-card-collapsed' + (isUntracked ? ' inventory-card-untracked' : '');
+      card.className = 'card card-interactive process-card inventory-card-collapsed' + (hasAnyFindings ? ' inventory-card-untracked' : '');
       card.dataset.inventoryId = item.id;
       card.dataset.isExpanded = 'false';
       card.style.marginBottom = '0';
@@ -797,11 +803,11 @@
       card.style.display = 'flex';
       card.style.flexDirection = 'column';
       card.style.padding = '12px 24px';
-      
-      const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' : 
-                       item.inventory_type === 'work_in_progress' ? 'Work in Progress' : 
+
+      const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' :
+                       item.inventory_type === 'work_in_progress' ? 'Work in Progress' :
                        'Final Product';
-      
+
       // Format dates
       const formatDate = (dateStr) => {
         if (!dateStr) return 'N/A';
@@ -812,33 +818,35 @@
           return dateStr;
         }
       };
-      
+
       // Format quantity to 4 decimal places for accuracy, but only show decimals when needed
-      // e.g., 78 → "78", 42.1 → "42.1", 1.0062 → "1.0062"
       const formatQuantity = (qtyStr) => {
         if (!qtyStr) return '0';
         try {
           const qty = parseFloat(qtyStr);
           if (isNaN(qty)) return qtyStr;
-          // Round to 4 decimal places first for accuracy
           const rounded = qty.toFixed(4);
-          // Remove trailing zeros, but keep up to 4 decimal places if they're significant
           return parseFloat(rounded).toString();
         } catch {
           return qtyStr;
         }
       };
-      
+
       const formattedQuantity = formatQuantity(item.quantity);
-      
+
       // Format display name: if process_name exists, show "Process: name" on one line and "Output name" on next
-      const titleContent = item.process_name 
+      const titleContent = item.process_name
         ? `<span style="color: var(--text-secondary); font-size: 12px; font-weight: 500;">Process: ${escapeHtml(item.process_name)}</span><br><span style="color: var(--text-primary);">${escapeHtml(item.name)}</span>`
         : escapeHtml(item.name);
-      
-      const checkReasonText = (item.check_reason && String(item.check_reason).trim()) ? String(item.check_reason).trim() : 'Untracked item — reconciliation required';
-      const checkReasonBlock = isUntracked
-        ? `<div style="margin-bottom: 12px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" title="Reconcile when completing an execution that produces this output (Reconcile untracked output in the execution modal).">Check reason: ${escapeHtml(checkReasonText)}</div>`
+
+      // System findings block: one red box listing all reasons (no hardcoding by check_id)
+      const checkReasonBlock = hasAnyFindings
+        ? `<div style="margin-bottom: 12px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px;">
+            <p style="margin: 0 0 6px 0; font-weight: 600;">System findings</p>
+            <ul style="margin: 0; padding-left: 18px;">
+              ${effectiveFindings.map(f => '<li style="margin: 2px 0;">' + escapeHtml(f.reason || 'Check failed') + '</li>').join('')}
+            </ul>
+          </div>`
         : '';
       card.innerHTML = `
         <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
