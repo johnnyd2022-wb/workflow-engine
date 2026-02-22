@@ -836,11 +836,11 @@
         ? `<span style="color: var(--text-secondary); font-size: 12px; font-weight: 500;">Process: ${escapeHtml(item.process_name)}</span><br><span style="color: var(--text-primary);">${escapeHtml(item.name)}</span>`
         : escapeHtml(item.name);
       
-      const untrackedReasonBlock = isUntracked
-        ? `<div style="margin-bottom: 8px; padding: 8px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 12px; font-weight: 500;" title="Reconcile when completing an execution that produces this output (Reconcile untracked output in the execution modal).">Check reason: Untracked item — reconciliation required</div>`
+      const checkReasonText = (item.check_reason && String(item.check_reason).trim()) ? String(item.check_reason).trim() : 'Untracked item — reconciliation required';
+      const checkReasonBlock = isUntracked
+        ? `<div style="margin-bottom: 12px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" title="Reconcile when completing an execution that produces this output (Reconcile untracked output in the execution modal).">Check reason: ${escapeHtml(checkReasonText)}</div>`
         : '';
       card.innerHTML = `
-        ${untrackedReasonBlock}
         <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
           <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetails('${item.id}')">
             <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
@@ -867,7 +867,7 @@
         ${item.source_execution_id ? `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 20px 4px 24px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 0; flex-shrink: 0;">
           <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
-          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); executeNextStepFromInventory('${item.source_execution_id}')" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; border: none; box-shadow: none; line-height: 1.2; height: 18px;">
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); executeNextStepFromInventory('${item.source_execution_id}', '${(item.producing_step_id || "").replace(/'/g, "\\'")}')" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; border: none; box-shadow: none; line-height: 1.2; height: 18px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: middle;">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
@@ -880,6 +880,7 @@
         </div>
         `}
         <div class="inventory-item-details" id="details-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
+          ${checkReasonBlock}
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
             <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
               <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Quantity</p>
@@ -1801,37 +1802,42 @@
     }
     
     // Execute next step from inventory item
-    window.executeNextStepFromInventory = async function(sourceExecutionId) {
+    // When producingStepId is set (e.g. for untracked items), open that step instead of the "ready" step
+    window.executeNextStepFromInventory = async function(sourceExecutionId, producingStepId) {
       try {
-        // Get full execution details to find the ready step
         const executionData = await CoreAPI.getExecution(sourceExecutionId);
         const executionSteps = executionData.execution_steps || [];
-        
-        // Find the ready step (current step to complete)
-        const readyStep = executionSteps.find(es => es.status === 'ready' || es.status === 'READY');
-        
-        if (!readyStep) {
+        let targetStep = null;
+
+        if (producingStepId && producingStepId.trim()) {
+          // Untracked/failed-check item: open the step that produces this output (normalize UUID comparison)
+          const wantId = String(producingStepId).trim().toLowerCase();
+          targetStep = executionSteps.find(es => String(es.step_id || '').trim().toLowerCase() === wantId);
+        }
+        if (!targetStep) {
+          // Default: current step to complete (ready step)
+          targetStep = executionSteps.find(es => es.status === 'ready' || es.status === 'READY');
+        }
+
+        if (!targetStep) {
           showNotification('error', 'No Ready Step', 'There is no step ready to complete for this execution.');
           return;
         }
-        
-        // Get the step definition from the process
+
         const processData = await CoreAPI.getProcess(executionData.process_id);
-        const stepDefinition = processData.steps.find(s => s.id === readyStep.step_id);
-        
+        const stepDefinition = processData.steps.find(s => s.id === targetStep.step_id);
+
         if (!stepDefinition) {
           showNotification('error', 'Step Not Found', 'Step definition not found.');
           return;
         }
-        
-        // Open execution modal
+
         if (typeof window.openExecutionModal === 'function') {
-          await window.openExecutionModal(sourceExecutionId, readyStep, stepDefinition);
+          await window.openExecutionModal(sourceExecutionId, targetStep, stepDefinition);
         } else {
           showNotification('error', 'Modal Not Loaded', 'Execution modal functions are not available. Please refresh the page.');
           console.error('openExecutionModal is not defined. Make sure execution-modal.js is loaded.');
         }
-        
       } catch (error) {
         console.error('Failed to open execution modal:', error);
         showNotification('error', 'Failed to Open Execution Modal', error.message || 'Failed to open execution modal. Please try again.');

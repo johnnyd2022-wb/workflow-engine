@@ -9,6 +9,7 @@ from flask import Blueprint, g, jsonify, render_template, request, send_from_dir
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks, reconciliation_routes
+from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -1266,6 +1267,35 @@ def list_inventory():
                 # If lookup fails, just continue without process name
                 pass
 
+        # For untracked items, resolve producing step (step that defines this output) for "Execute next step" button
+        producing_step_id = None
+        producing_step_name = None
+        if extra_data.get("untracked") and item.source_execution_id:
+            try:
+                from app.core.db.models.execution import Execution
+
+                execution = db_session.query(Execution).filter(Execution.id == item.source_execution_id).first()
+                if execution and execution.process_id:
+                    process_repo = ProcessRepository(db_session)
+                    process_with_steps = process_repo.get_process_with_steps(execution.process_id, org_id)
+                    if process_with_steps:
+                        producing_step_id, producing_step_name = _find_producing_step(
+                            process_with_steps, item.name, item.unit
+                        )
+                    # Fallback: if no output match (e.g. name/unit mismatch), use the step where item was added
+                    if not producing_step_id and item.source_execution_step_id:
+                        execution_step = (
+                            db_session.query(ExecutionStep)
+                            .filter(ExecutionStep.id == item.source_execution_step_id)
+                            .first()
+                        )
+                        if execution_step:
+                            producing_step_id = execution_step.step_id
+                            if execution_step.step:
+                                producing_step_name = execution_step.step.name
+            except Exception:
+                pass
+
         result.append(
             {
                 "id": str(item.id),
@@ -1283,6 +1313,8 @@ def list_inventory():
                 else None,
                 "source_step_name": item.source_step_name,
                 "process_name": process_name,
+                "producing_step_id": str(producing_step_id) if producing_step_id else None,
+                "producing_step_name": producing_step_name,
                 "created_at": item.created_at.isoformat() if item.created_at else None,
                 "extra_data": extra_data,
             }
