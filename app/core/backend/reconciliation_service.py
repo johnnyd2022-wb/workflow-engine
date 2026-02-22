@@ -79,9 +79,9 @@ def _assert_reconciliation_invariants(
     remaining = extra.get("remaining_balance_to_reconcile")
     if remaining is not None:
         rem = _parse_quantity(remaining)
-        assert rem is not None and rem >= 0, (
-            f"reconciliation invariant: remaining_balance_to_reconcile must be >= 0, got {remaining!r}"
-        )
+        assert (
+            rem is not None and rem >= 0
+        ), f"reconciliation invariant: remaining_balance_to_reconcile must be >= 0, got {remaining!r}"
 
 
 def _normalize_item_id(value: Any) -> str:
