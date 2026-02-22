@@ -65,6 +65,25 @@ def _parse_quantity(value: Any) -> Decimal | None:
         return None
 
 
+def _assert_reconciliation_invariants(
+    quantity: str | Decimal,
+    extra_data: dict[str, Any] | None,
+) -> None:
+    """
+    Defensive guard: after reconciliation, stored_quantity and remaining_balance_to_reconcile
+    must be >= 0. Catches logic bugs or future code paths that mutate state incorrectly.
+    """
+    qty = _parse_quantity(quantity)
+    assert qty is not None and qty >= 0, f"reconciliation invariant: stored_quantity must be >= 0, got {quantity!r}"
+    extra = extra_data or {}
+    remaining = extra.get("remaining_balance_to_reconcile")
+    if remaining is not None:
+        rem = _parse_quantity(remaining)
+        assert rem is not None and rem >= 0, (
+            f"reconciliation invariant: remaining_balance_to_reconcile must be >= 0, got {remaining!r}"
+        )
+
+
 def _normalize_item_id(value: Any) -> str:
     """Normalize inventory_item_id for comparison (UUID string, lowercase)."""
     if value is None:
@@ -405,6 +424,7 @@ def reconcile_via_addition(
             if new_untracked_qty <= 0:
                 new_extra["resolved"] = True
                 new_extra["resolved_at"] = ts
+            _assert_reconciliation_invariants(remaining_untracked_balance, new_extra)
             inv_repo.update_inventory_item(
                 item_id=untracked_item_id,
                 org_id=org_id,
@@ -626,6 +646,7 @@ def reconcile_via_execution(
         if new_untracked_qty <= 0:
             new_extra["resolved"] = True
             new_extra["resolved_at"] = ts
+        _assert_reconciliation_invariants(remaining_untracked_balance, new_extra)
         inv_repo.update_inventory_item(
             item_id=untracked_item_id,
             org_id=org_id,
@@ -745,10 +766,12 @@ def reconcile_output_to_untracked_reduce_only(
         ts = datetime.now(timezone.utc).isoformat()
         new_extra["resolved"] = True
         new_extra["resolved_at"] = ts
+    qty_str = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
+    _assert_reconciliation_invariants(qty_str, new_extra)
     inv_repo.update_inventory_item(
         item_id=untracked_item_id,
         org_id=org_id,
-        quantity=str(new_untracked_qty) if new_untracked_qty > 0 else "0",
+        quantity=qty_str,
         extra_data=new_extra,
     )
 
@@ -825,6 +848,7 @@ def reconcile_output_to_untracked(
         ts = datetime.now(timezone.utc).isoformat()
         new_extra["resolved"] = True
         new_extra["resolved_at"] = ts
+    _assert_reconciliation_invariants(remaining_balance, new_extra)
     inv_repo.update_inventory_item(
         item_id=untracked_item_id,
         org_id=org_id,
