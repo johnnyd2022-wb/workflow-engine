@@ -18,8 +18,28 @@ from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.repositories.inventory_repo import InventoryRepository
+from app.core.db.repositories.process_repo import ProcessRepository
 
 _log = logging.getLogger(__name__)
+
+
+def _normalize(s: str | None) -> str:
+    return ((s or "").strip()).lower()
+
+
+def _find_producing_step(process: Any, item_name: str | None, item_unit: str | None) -> tuple[Any, str | None]:
+    """Return (step_id, step_name) for the step that has an output matching (item_name, item_unit), or (None, None)."""
+    if not process or not getattr(process, "steps", None):
+        return (None, None)
+    n_name = _normalize(item_name)
+    n_unit = _normalize(item_unit)
+    for step in process.steps:
+        for out in (step.outputs or []):
+            if not isinstance(out, dict):
+                continue
+            if _normalize(out.get("name")) == n_name and _normalize(out.get("unit")) == n_unit:
+                return (step.id, step.name)
+    return (None, None)
 
 # Fields from execution_data we exclude from execution_prompts (shown separately or internal)
 _EXECUTION_PROMPTS_INTERNAL = {
@@ -130,6 +150,18 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
     step_ids = list({i.source_execution_step_id for i in untracked_orm if i.source_execution_step_id})
     step_meta_by_id = _batch_fetch_step_metadata(session, org_id, step_ids)
 
+    # Resolve producing step (step that defines the output) per item for reconcile guidance
+    process_ids = list({step_meta.get("process_id") for step_meta in step_meta_by_id.values() if step_meta.get("process_id")})
+    process_repo = ProcessRepository(session)
+    processes_by_id: dict[str, Any] = {}
+    for pid in process_ids:
+        try:
+            p = process_repo.get_process_with_steps(UUID(pid), org_id)
+            if p:
+                processes_by_id[pid] = p
+        except Exception:
+            pass
+
     untracked_items: list[dict[str, Any]] = []
     for item in untracked_orm:
         extra = item.extra_data or {}
@@ -166,6 +198,14 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
         base["step_name"] = step_meta.get("step_name")
         base["source_step_completed_by"] = step_meta["source_step_completed_by"]
         base["source_step_execution_prompts"] = step_meta["source_step_execution_prompts"]
+        # Producing step = step that defines the output (for reconcile: "execute this step"); fallback to step_name
+        producing_step_id: Any = None
+        producing_step_name: str | None = None
+        if base.get("process_id"):
+            process = processes_by_id.get(base["process_id"])
+            producing_step_id, producing_step_name = _find_producing_step(process, item.name, item.unit)
+        base["producing_step_id"] = str(producing_step_id) if producing_step_id else None
+        base["producing_step_name"] = producing_step_name
         untracked_items.append(base)
 
     flagged = len(untracked_items) > 0

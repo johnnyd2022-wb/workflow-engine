@@ -20,9 +20,29 @@ from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
+from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
 
 _log = logging.getLogger(__name__)
+
+
+def _normalize_str(s: str | None) -> str:
+    return ((s or "").strip()).lower()
+
+
+def _find_producing_step(process: Any, item_name: str | None, item_unit: str | None) -> tuple[Any, str | None]:
+    """Return (step_id, step_name) for the step that has an output matching (item_name, item_unit), or (None, None)."""
+    if not process or not getattr(process, "steps", None):
+        return (None, None)
+    n_name = _normalize_str(item_name)
+    n_unit = _normalize_str(item_unit)
+    for step in process.steps:
+        for out in step.outputs or []:
+            if not isinstance(out, dict):
+                continue
+            if _normalize_str(out.get("name")) == n_name and _normalize_str(out.get("unit")) == n_unit:
+                return (step.id, step.name)
+    return (None, None)
 
 _UNTRACKED_FILTER = {"untracked": True}
 
@@ -193,6 +213,7 @@ def _enrich_matching_untracked_with_step_metadata(
     for es in steps:
         ed = es.execution_data or {}
         meta_by_id[es.id] = {
+            "process_id": str(es.execution.process_id) if es.execution else None,
             "process_name": es.execution.process.name
             if es.execution and getattr(es.execution, "process", None)
             else None,
@@ -211,10 +232,38 @@ def _enrich_matching_untracked_with_step_metadata(
                 meta = {}
         else:
             meta = {}
+        m["process_id"] = meta.get("process_id")
         m["process_name"] = meta.get("process_name")
         m["step_name"] = meta.get("step_name")
         m["source_step_completed_by"] = meta.get("source_step_completed_by")
         m["source_step_execution_prompts"] = meta.get("source_step_execution_prompts") or {}
+    return matching
+
+
+def _enrich_producing_step_name(
+    session: Session, org_id: UUID, matching: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Set producing_step_name (step that defines the output) for reconcile guidance; fallback to step_name."""
+    if not matching:
+        return matching
+    process_ids = list({m.get("process_id") for m in matching if m.get("process_id")})
+    process_repo = ProcessRepository(session)
+    processes_by_id: dict[str, Any] = {}
+    for pid in process_ids:
+        try:
+            p = process_repo.get_process_with_steps(UUID(pid), org_id)
+            if p:
+                processes_by_id[pid] = p
+        except Exception:
+            pass
+    for m in matching:
+        pid = m.get("process_id")
+        process = processes_by_id.get(pid) if pid else None
+        producing_step_id, producing_step_name = _find_producing_step(
+            process, m.get("name"), m.get("unit")
+        )
+        m["producing_step_id"] = str(producing_step_id) if producing_step_id else None
+        m["producing_step_name"] = producing_step_name
     return matching
 
 
@@ -281,6 +330,8 @@ def get_matching_untracked(
 
     # Enrich with process name, step name, and step metadata (completed_by, execution_prompts)
     matching = _enrich_matching_untracked_with_step_metadata(session, org_id, matching)
+    # Producing step = step that defines the output (for "execute this step" in reconcile guidance)
+    matching = _enrich_producing_step_name(session, org_id, matching)
     return matching
 
 

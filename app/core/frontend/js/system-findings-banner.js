@@ -189,7 +189,8 @@
             detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Unreconciled quantity</span> ' + escapeHtml(unreconciled) + ' ' + escapeHtml(u.unit || '') + '</p>');
           }
           if (u.process_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
-          if (u.step_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
+          if (u.producing_step_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step to execute to reconcile</span> ' + escapeHtml(u.producing_step_name) + '</p>');
+          else if (u.step_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
           if (u.created_at) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(u.created_at) + '</p>');
           if (u.notes) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Notes</span> ' + escapeHtml(u.notes) + '</p>');
           if (u.source_step_completed_by) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Completed by</span> ' + escapeHtml(u.source_step_completed_by) + '</p>');
@@ -202,7 +203,7 @@
           }
           var processId = u.process_id || '';
           var processName = u.process_name || '';
-          var stepName = u.step_name || '';
+          var stepName = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : (u.step_name || '');
           var reconcileAttrs = '';
           if (processId) {
             reconcileAttrs = ' data-reconcile-process-id="' + escapeHtml(processId) + '" data-reconcile-process-name="' + escapeHtml(processName) + '" data-reconcile-step-name="' + escapeHtml(stepName) + '"';

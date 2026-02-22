@@ -210,9 +210,11 @@
             </label>
             <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-required="true" data-quantity="" data-unit="" data-expired-reason="" value="">
             <div class="execute-inventory-picker-wrapper" style="position: relative;" data-input-name="${escapeHtml(input.name)}">
-              <div class="execute-inventory-picker-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-lg); ${errorStyle} background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
-                <span class="execute-inventory-picker-label" style="flex: 1; text-align: left;">Select inventory item...</span>
-                <svg class="execute-inventory-picker-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; margin-left: 8px; transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+              <div class="execute-inventory-picker-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); ${errorStyle} background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
+                <span class="execute-inventory-picker-label" style="flex: 1; text-align: left; min-width: 0;">Select inventory item...</span>
+                <span class="execute-inventory-picker-arrow-box" style="flex-shrink: 0; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-md, 6px); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); color: var(--text-secondary);">
+                  <svg class="execute-inventory-picker-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
               </div>
               <div class="execute-inventory-picker-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
                 <div class="execute-inventory-picker-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
@@ -613,8 +615,10 @@
               <label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 8px;">Reconcile to untracked item (optional)</label>
               <p style="margin: 0 0 8px 0; color: #92400e; font-size: 12px;">Choose an item from the dropdown to reconcile when you complete the step.</p>
               <div class="execute-reconcile-untracked-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
-                <span class="execute-reconcile-trigger-label" style="flex: 1; text-align: left;">— None —</span>
-                <svg class="execute-reconcile-trigger-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; margin-left: 8px; transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="execute-reconcile-trigger-label" style="flex: 1; text-align: left; min-width: 0;">— None —</span>
+                <span class="execute-reconcile-trigger-arrow-box" style="flex-shrink: 0; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-md, 6px); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); color: var(--text-secondary);">
+                  <svg class="execute-reconcile-trigger-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
               </div>
               <div class="execute-reconcile-untracked-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
                 <div class="execute-reconcile-untracked-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
@@ -712,8 +716,9 @@
             } else {
               subtitleParts.push(escapeHtml(u.quantity != null ? String(u.quantity) : '0') + ' ' + escapeHtml(u.unit || ''));
             }
-            if (u.process_name || u.step_name) {
-              var ps = [u.process_name, u.step_name].filter(Boolean).map(function(x) { return escapeHtml(x); }).join(' · ');
+            if (u.process_name || u.producing_step_name || u.step_name) {
+              var stepLabel = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : u.step_name;
+              var ps = [u.process_name, stepLabel].filter(Boolean).map(function(x) { return escapeHtml(x); }).join(' · ');
               if (ps) subtitleParts.push(ps);
             }
             if (u.source_step_completed_by) subtitleParts.push('Completed by: ' + escapeHtml(u.source_step_completed_by));
@@ -730,7 +735,8 @@
               detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Unreconciled quantity</span> ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || '') + '</p>');
             }
             if (u.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
-            if (u.step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
+            if (u.producing_step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step to execute to reconcile</span> ' + escapeHtml(u.producing_step_name) + '</p>');
+            else if (u.step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
             if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
             if (u.notes) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Notes</span> ' + escapeHtml(u.notes) + '</p>');
             if (u.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(u.supplier) + '</p>');
