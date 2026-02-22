@@ -44,6 +44,7 @@ def _find_producing_step(process: Any, item_name: str | None, item_unit: str | N
                 return (step.id, step.name)
     return (None, None)
 
+
 _UNTRACKED_FILTER = {"untracked": True}
 
 # Keys from execution_data we exclude from source_step_execution_prompts (internal only)
@@ -240,9 +241,7 @@ def _enrich_matching_untracked_with_step_metadata(
     return matching
 
 
-def _enrich_producing_step_name(
-    session: Session, org_id: UUID, matching: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
+def _enrich_producing_step_name(session: Session, org_id: UUID, matching: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Set producing_step_name (step that defines the output) for reconcile guidance; fallback to step_name."""
     if not matching:
         return matching
@@ -259,9 +258,7 @@ def _enrich_producing_step_name(
     for m in matching:
         pid = m.get("process_id")
         process = processes_by_id.get(pid) if pid else None
-        producing_step_id, producing_step_name = _find_producing_step(
-            process, m.get("name"), m.get("unit")
-        )
+        producing_step_id, producing_step_name = _find_producing_step(process, m.get("name"), m.get("unit"))
         m["producing_step_id"] = str(producing_step_id) if producing_step_id else None
         m["producing_step_name"] = producing_step_name
     return matching

@@ -34,12 +34,13 @@ def _find_producing_step(process: Any, item_name: str | None, item_unit: str | N
     n_name = _normalize(item_name)
     n_unit = _normalize(item_unit)
     for step in process.steps:
-        for out in (step.outputs or []):
+        for out in step.outputs or []:
             if not isinstance(out, dict):
                 continue
             if _normalize(out.get("name")) == n_name and _normalize(out.get("unit")) == n_unit:
                 return (step.id, step.name)
     return (None, None)
+
 
 # Fields from execution_data we exclude from execution_prompts (shown separately or internal)
 _EXECUTION_PROMPTS_INTERNAL = {
@@ -151,7 +152,9 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
     step_meta_by_id = _batch_fetch_step_metadata(session, org_id, step_ids)
 
     # Resolve producing step (step that defines the output) per item for reconcile guidance
-    process_ids = list({step_meta.get("process_id") for step_meta in step_meta_by_id.values() if step_meta.get("process_id")})
+    process_ids = list(
+        {step_meta.get("process_id") for step_meta in step_meta_by_id.values() if step_meta.get("process_id")}
+    )
     process_repo = ProcessRepository(session)
     processes_by_id: dict[str, Any] = {}
     for pid in process_ids:
