@@ -90,6 +90,78 @@
     font-size: 12px;
     color: var(--text-secondary, #6b7280);
   }
+  .system-findings-untracked-item__reconcile-link:hover {
+    text-decoration: underline;
+  }
+  /* Reconcile modal: centered, compact (square-ish), responsive */
+  .system-findings-reconcile-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    box-sizing: border-box;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    overflow-y: auto;
+    align-items: center;
+    justify-content: center;
+  }
+  .system-findings-reconcile-modal__card {
+    width: 100%;
+    max-width: 360px;
+    max-height: 85vh;
+    margin: auto;
+    background: var(--bg-primary, #fff);
+    border-radius: 12px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    padding: 20px;
+    box-sizing: border-box;
+    flex-shrink: 0;
+  }
+  .system-findings-reconcile-modal__title {
+    margin: 0 0 12px 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary, #1a1a1a);
+    line-height: 1.3;
+  }
+  .system-findings-reconcile-modal__body {
+    margin: 0 0 20px 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-secondary, #6b7280);
+  }
+  .system-findings-reconcile-modal__actions {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .system-findings-reconcile-modal__actions .btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 18px;
+    font-size: 15px;
+    border-radius: 8px;
+  }
+  @media (min-width: 480px) {
+    .system-findings-reconcile-modal {
+      padding: 24px;
+    }
+    .system-findings-reconcile-modal__card {
+      max-width: 400px;
+      padding: 24px;
+    }
+    .system-findings-reconcile-modal__title {
+      font-size: 1.25rem;
+      margin-bottom: 14px;
+    }
+    .system-findings-reconcile-modal__body {
+      font-size: 15px;
+      margin-bottom: 24px;
+    }
+  }
   @media (min-width: 600px) {
     .system-findings-banner__header {
       padding: 12px 24px 12px 24px;
@@ -120,5 +192,16 @@
   <div id="system-findings-banner-body" class="system-findings-banner__body" hidden>
     <ul id="system-findings-list" class="system-findings-list"></ul>
     <p class="system-findings-banner__hint">Review in Source Map or Inventory.</p>
+  </div>
+</div>
+<!-- Reconcile untracked item modal: shown when user clicks "Click here to reconcile untracked item" -->
+<div id="system-findings-reconcile-modal" class="system-findings-reconcile-modal" role="dialog" aria-labelledby="system-findings-reconcile-modal-title" aria-modal="true" style="display: none;">
+  <div class="system-findings-reconcile-modal__card">
+    <h3 id="system-findings-reconcile-modal-title" class="system-findings-reconcile-modal__title">Reconcile untracked item</h3>
+    <p id="system-findings-reconcile-modal-body" class="system-findings-reconcile-modal__body"></p>
+    <div class="system-findings-reconcile-modal__actions">
+      <button type="button" id="system-findings-reconcile-modal-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+      <button type="button" id="system-findings-reconcile-modal-go" class="btn btn-primary btn-sm">Go to process</button>
+    </div>
   </div>
 </div>

@@ -8,7 +8,8 @@ from uuid import UUID
 from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
 
 from app.api.routes.auth_routes import limiter
-from app.core.backend import corechecks
+from app.core.backend import corechecks, reconciliation_routes
+from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -20,7 +21,7 @@ from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.mock_data import DEMO_USER_EMAIL
-from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
+from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.utils.config_loader import config
 
 # Create core blueprint
@@ -747,15 +748,11 @@ def complete_step(execution_id: str, execution_step_id: str):
                                 )
                                 continue
 
-                            # Convert consumed quantity to inventory unit
+                            # Convert consumed quantity to inventory unit (Decimal-only for precision)
                             try:
                                 quantity_consumed_decimal = Decimal(str(quantity_consumed))
-                                quantity_consumed_converted = Decimal(
-                                    str(
-                                        convert_to_inventory_unit(
-                                            float(quantity_consumed_decimal), consumed_unit, inventory_unit
-                                        )
-                                    )
+                                quantity_consumed_converted = convert_to_inventory_unit_decimal(
+                                    quantity_consumed_decimal, consumed_unit, inventory_unit
                                 )
                             except (ValueError, InvalidOperation) as conv_error:
                                 execution_errors.append(
@@ -879,6 +876,17 @@ def complete_step(execution_id: str, execution_step_id: str):
                     if matching_output:
                         extra_data["variable_output"] = matching_output
 
+                # Optional: map this output to an untracked item (reconcile at completion)
+                untracked_item_id_raw = output.get("untracked_item_id")
+                untracked_item_id_uuid = None
+                if untracked_item_id_raw:
+                    try:
+                        untracked_item_id_uuid = UUID(untracked_item_id_raw)
+                    except (ValueError, TypeError):
+                        execution_warnings.append(
+                            f"Invalid untracked_item_id for output '{output_name}'; skipping reconciliation."
+                        )
+
                 # Store creation parameters for atomic commit
                 output_creations.append(
                     {
@@ -891,6 +899,8 @@ def complete_step(execution_id: str, execution_step_id: str):
                         "source_execution_step_id": execution_step_uuid,
                         "source_step_name": execution_step.step.name if execution_step.step else None,
                         "extra_data": extra_data if extra_data else None,
+                        "untracked_item_id": untracked_item_id_uuid,
+                        "quantity_decimal": quantity_decimal,
                     }
                 )
 
@@ -907,8 +917,46 @@ def complete_step(execution_id: str, execution_step_id: str):
             for inventory_item, new_quantity in inventory_updates:
                 inventory_item.quantity = new_quantity
 
-            # Create inventory items for outputs
+            # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
+            from app.core.backend.reconciliation_service import reconcile_output_to_untracked_reduce_only
+
             for output_params in output_creations:
+                untracked_item_id = output_params.pop("untracked_item_id", None)
+                quantity_decimal = output_params.pop("quantity_decimal", None)
+                output_name = output_params.get("name", "Unknown")
+                output_unit = output_params.get("unit", "units")
+
+                if untracked_item_id is not None and quantity_decimal is not None:
+                    rec_result = reconcile_output_to_untracked_reduce_only(
+                        org_id=org_id,
+                        session=db_session,
+                        user_id=getattr(g, "user_id", None) and str(g.user_id),
+                        user_email=user_email,
+                        untracked_item_id=untracked_item_id,
+                        output_quantity=quantity_decimal,
+                        output_unit=output_unit,
+                        output_name=output_name,
+                        execution_id=execution_uuid,
+                        execution_step_id=execution_step_uuid,
+                        current_step_actual_inputs=actual_inputs,
+                    )
+                    if rec_result.get("error"):
+                        execution_warnings.append(f"Reconciliation for output '{output_name}': {rec_result['error']}")
+                        continue
+                    surplus = quantity_decimal
+                    try:
+                        surplus = Decimal(rec_result["surplus"])
+                    except (InvalidOperation, ValueError, TypeError):
+                        surplus = quantity_decimal
+                    if surplus <= 0 or abs(surplus) < Decimal("0.0001"):
+                        continue
+                    output_params["quantity"] = str(surplus)
+                    extra = dict(output_params.get("extra_data") or {})
+                    extra["reconciled_untracked_item_id"] = str(untracked_item_id)
+                    extra["quantity_reconciled"] = rec_result.get("reconciled_amount", "")
+                    extra["surplus_to_live"] = rec_result.get("surplus", "")
+                    output_params["extra_data"] = extra
+
                 inventory_repo.create_inventory_item(**output_params)
 
             # Single commit for all inventory operations
@@ -921,16 +969,14 @@ def complete_step(execution_id: str, execution_step_id: str):
             db_session.rollback()
             return jsonify({"error": "Failed to update inventory", "details": str(e)}), 500
 
-        return (
-            jsonify(
-                {
-                    "id": str(execution_step.id),
-                    "status": execution_step.status.value,
-                    "completed_at": execution_step.completed_at.isoformat() if execution_step.completed_at else None,
-                }
-            ),
-            200,
-        )
+        response_data = {
+            "id": str(execution_step.id),
+            "status": execution_step.status.value,
+            "completed_at": execution_step.completed_at.isoformat() if execution_step.completed_at else None,
+        }
+        if execution_warnings:
+            response_data["execution_warnings"] = execution_warnings
+        return (jsonify(response_data), 200)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except ValueError as e:
@@ -961,6 +1007,9 @@ def list_inventory():
 
     repo = InventoryRepository(db_session)
     items = repo.list_inventory_items(org_id=org_id, inventory_type=inventory_type, process_id=process_id)
+
+    # System findings per item (all checks) for UI: red border + reasons in dropdown
+    findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
 
     # Import ExecutionStep and InventoryItem models for lookups
     from app.core.db.models.execution_step import ExecutionStep
@@ -1217,6 +1266,35 @@ def list_inventory():
                 # If lookup fails, just continue without process name
                 pass
 
+        # For untracked items, resolve producing step (step that defines this output) for "Execute next step" button
+        producing_step_id = None
+        producing_step_name = None
+        if extra_data.get("untracked") and item.source_execution_id:
+            try:
+                from app.core.db.models.execution import Execution
+
+                execution = db_session.query(Execution).filter(Execution.id == item.source_execution_id).first()
+                if execution and execution.process_id:
+                    process_repo = ProcessRepository(db_session)
+                    process_with_steps = process_repo.get_process_with_steps(execution.process_id, org_id)
+                    if process_with_steps:
+                        producing_step_id, producing_step_name = _find_producing_step(
+                            process_with_steps, item.name, item.unit
+                        )
+                    # Fallback: if no output match (e.g. name/unit mismatch), use the step where item was added
+                    if not producing_step_id and item.source_execution_step_id:
+                        execution_step = (
+                            db_session.query(ExecutionStep)
+                            .filter(ExecutionStep.id == item.source_execution_step_id)
+                            .first()
+                        )
+                        if execution_step:
+                            producing_step_id = execution_step.step_id
+                            if execution_step.step:
+                                producing_step_name = execution_step.step.name
+            except Exception:
+                pass
+
         result.append(
             {
                 "id": str(item.id),
@@ -1234,8 +1312,11 @@ def list_inventory():
                 else None,
                 "source_step_name": item.source_step_name,
                 "process_name": process_name,
+                "producing_step_id": str(producing_step_id) if producing_step_id else None,
+                "producing_step_name": producing_step_name,
                 "created_at": item.created_at.isoformat() if item.created_at else None,
                 "extra_data": extra_data,
+                "system_findings": findings_by_id.get(str(item.id), []),
             }
         )
 
@@ -1434,6 +1515,7 @@ def list_out_of_stock_raw_materials():
 
 
 corechecks.register_routes(core_bp)
+reconciliation_routes.register_routes(core_bp)
 
 
 @core_bp.route("/api/core/reset-demo-db", methods=["POST"])
@@ -1500,7 +1582,17 @@ def create_inventory_item():
 
         extra_data = dict(data.get("metadata") or {})
         if data.get("untracked"):
+            notes = (extra_data.get("notes") or data.get("notes") or "").strip()
+            if not notes:
+                return jsonify({"error": "notes are required when adding an untracked item"}), 400
+            extra_data["notes"] = notes
+            # Invariant: untracked items must always have remaining_balance_to_reconcile for reduce_only logic.
             extra_data["untracked"] = True  # Flag for reconciliation/sourcemap banners
+            try:
+                qty_val = float(quantity) if quantity is not None else 0
+                extra_data["remaining_balance_to_reconcile"] = str(qty_val) if qty_val > 0 else "0"
+            except (TypeError, ValueError):
+                extra_data["remaining_balance_to_reconcile"] = str(quantity) if quantity else "0"
 
         item = repo.create_inventory_item(
             org_id=org_id,

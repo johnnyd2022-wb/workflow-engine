@@ -51,7 +51,6 @@
     }
 
     var sourcemapUrl = '/core/sourcemap?show=check-needed';
-    var hasWastageModal = !!document.getElementById('record-wastage-modal');
     listEl.innerHTML = findings.map(function (f, index) {
       var text = (f && f.text != null) ? String(f.text) : '';
       var checkId = (f && f.check_id != null) ? String(f.check_id) : '';
@@ -76,7 +75,7 @@
         }
         var expiredIdsAttr = expiredIds.length ? " data-expired-ids='" + String(JSON.stringify(expiredIds)).replace(/'/g, "&#39;") + "'" : '';
         var menuItems = '<a href="' + sourcemapUrl + '" class="system-findings-item__menu-item" data-action="review-sourcemap">Review in Sourcemap</a>';
-        if (hasWastageModal && expiredIds.length > 0) {
+        if (expiredIds.length > 0) {
           menuItems += '<button type="button" class="system-findings-item__menu-item" data-action="dispose">Dispose of inventory item</button>';
         }
         actionBlock =
@@ -172,8 +171,64 @@
     } else if (checkId === 'untracked_items') {
       var untracked = data.untracked_items;
       if (Array.isArray(untracked) && untracked.length > 0) {
-        parts.push('<p class="system-findings-item__detail-section"><strong>Untracked item(s):</strong> ' +
-          untracked.map(function (x) { return escapeHtml(x && x.name ? x.name : x.id || '—'); }).join(', ') + '</p>');
+        parts.push('<p class="system-findings-item__detail-section"><strong>Untracked item(s):</strong></p>');
+        untracked.forEach(function (u, itemIndex) {
+          var name = escapeHtml(u && u.name ? u.name : u.id || '—');
+          var detailsId = 'system-finding-untracked-details-' + itemIndex;
+          var subtitleParts = [];
+          if (u.process_name || u.step_name) {
+            subtitleParts.push([u.process_name, u.step_name].filter(Boolean).map(function (x) { return escapeHtml(x); }).join(' · '));
+          }
+          var unreconciled = u.remaining_balance_to_reconcile != null ? String(u.remaining_balance_to_reconcile) : null;
+          if (unreconciled !== null) {
+            subtitleParts.push(escapeHtml(unreconciled) + ' ' + escapeHtml(u.unit || '') + ' unreconciled');
+          }
+          var subtitle = subtitleParts.length ? ('<p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + subtitleParts.join(' · ') + '</p>') : '';
+          var detailParts = [];
+          if (unreconciled !== null) {
+            detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Unreconciled quantity</span> ' + escapeHtml(unreconciled) + ' ' + escapeHtml(u.unit || '') + '</p>');
+          }
+          if (u.process_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
+          if (u.producing_step_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step to execute to reconcile</span> ' + escapeHtml(u.producing_step_name) + '</p>');
+          else if (u.step_name) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
+          if (u.created_at) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(u.created_at) + '</p>');
+          if (u.notes) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Notes</span> ' + escapeHtml(u.notes) + '</p>');
+          if (u.source_step_completed_by) detailParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Completed by</span> ' + escapeHtml(u.source_step_completed_by) + '</p>');
+          var promptsHtml = '';
+          if (u.source_step_execution_prompts && typeof u.source_step_execution_prompts === 'object' && Object.keys(u.source_step_execution_prompts).length > 0) {
+            promptsHtml = '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-default);"><div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">Step metadata</div><div style="display: flex; flex-direction: column; gap: 4px;">' +
+              Object.entries(u.source_step_execution_prompts).map(function (e) {
+                return '<div style="padding: 4px 8px; background: var(--bg-secondary, #f9fafb); border-radius: 4px;"><span style="color: var(--text-secondary); font-size: 11px;">' + escapeHtml(e[0]) + '</span><br><span style="font-size: 12px;">' + escapeHtml(String(e[1])) + '</span></div>';
+              }).join('') + '</div></div>';
+          }
+          var processId = u.process_id || '';
+          var processName = u.process_name || '';
+          var stepName = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : (u.step_name || '');
+          var reconcileAttrs = '';
+          if (processId) {
+            reconcileAttrs = ' data-reconcile-process-id="' + escapeHtml(processId) + '" data-reconcile-process-name="' + escapeHtml(processName) + '" data-reconcile-step-name="' + escapeHtml(stepName) + '"';
+          }
+          var reconcileLink = processId
+            ? '<a href="#" class="system-findings-untracked-item__reconcile-link"' + reconcileAttrs + ' style="flex-shrink: 0; font-size: 12px; color: var(--link-color, #2563eb); text-decoration: none;">Click here to reconcile untracked item</a>'
+            : '';
+          parts.push(
+            '<div class="system-findings-untracked-item" style="margin-bottom: 8px; border: 1px solid var(--border-default); border-radius: 6px; overflow: hidden;">' +
+              '<div style="display: flex; align-items: center; padding: 10px 12px; background: var(--bg-secondary, #f9fafb); gap: 8px;">' +
+                '<button type="button" class="system-findings-untracked-item__summary" aria-expanded="false" aria-controls="' + escapeHtml(detailsId) + '" style="flex: 1; text-align: left; padding: 0; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; gap: 8px; font: inherit; min-width: 0;">' +
+                  '<svg class="system-findings-untracked-item__chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>' +
+                  '<div style="flex: 1; min-width: 0;">' +
+                    '<p style="margin: 0; font-weight: 600;">' + name + '</p>' +
+                    subtitle +
+                  '</div>' +
+                '</button>' +
+                reconcileLink +
+              '</div>' +
+              '<div id="' + escapeHtml(detailsId) + '" class="system-findings-untracked-item__details" hidden style="padding: 10px 12px; border-top: 1px solid var(--border-default); background: #fff; font-size: 13px;">' +
+                detailParts.join('') + promptsHtml +
+              '</div>' +
+            '</div>'
+          );
+        });
       }
     } else if (data && Object.keys(data).length > 0) {
       parts.push('<pre class="system-findings-item__detail-raw">' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>');
@@ -190,6 +245,60 @@
     var expanded = btn.getAttribute('aria-expanded') !== 'true';
     btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     details.hidden = !expanded;
+  }
+
+  function onUntrackedItemSummaryClick(ev) {
+    var btn = ev.target && ev.target.closest && ev.target.closest('.system-findings-untracked-item__summary');
+    if (!btn || btn.getAttribute('aria-controls') == null) return;
+    var detailsId = btn.getAttribute('aria-controls');
+    var details = document.getElementById(detailsId);
+    if (!details) return;
+    var expanded = btn.getAttribute('aria-expanded') !== 'true';
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    details.hidden = !expanded;
+    var chevron = btn.querySelector('.system-findings-untracked-item__chevron');
+    if (chevron) chevron.style.transform = expanded ? 'rotate(180deg)' : 'rotate(0deg)';
+  }
+
+  function openReconcileModal(processId, processName, stepName) {
+    var modal = document.getElementById('system-findings-reconcile-modal');
+    var bodyEl = document.getElementById('system-findings-reconcile-modal-body');
+    if (!modal || !bodyEl) return;
+    var stepDisplay = stepName ? escapeHtml(stepName) : 'the step that produced this output';
+    var processDisplay = processName ? escapeHtml(processName) : 'the process';
+    bodyEl.innerHTML = 'This untracked item was produced as an output. To reconcile it, go to the process <strong>' + processDisplay + '</strong> and execute the step <strong>' + stepDisplay + '</strong>. You can then link the output to existing inventory or record it there.';
+    modal.setAttribute('data-reconcile-process-id', processId || '');
+    modal.style.display = 'flex';
+  }
+
+  function closeReconcileModal() {
+    var modal = document.getElementById('system-findings-reconcile-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function onReconcileLinkClick(ev) {
+    var link = ev.target && ev.target.closest && ev.target.closest('.system-findings-untracked-item__reconcile-link');
+    if (!link) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    var processId = link.getAttribute('data-reconcile-process-id');
+    var processName = link.getAttribute('data-reconcile-process-name') || '';
+    var stepName = link.getAttribute('data-reconcile-step-name') || '';
+    if (processId) openReconcileModal(processId, processName, stepName);
+  }
+
+  function onReconcileModalGo(ev) {
+    var modal = document.getElementById('system-findings-reconcile-modal');
+    if (!modal) return;
+    var processId = modal.getAttribute('data-reconcile-process-id');
+    closeReconcileModal();
+    if (processId) {
+      window.location.href = '/core/flows?id=' + encodeURIComponent(processId);
+    }
+  }
+
+  function onReconcileModalCancel(ev) {
+    closeReconcileModal();
   }
 
   function escapeHtml(text) {
@@ -209,8 +318,20 @@
 
     if (listEl) {
       listEl.addEventListener('click', onFindingSummaryClick);
+      listEl.addEventListener('click', onUntrackedItemSummaryClick);
+      listEl.addEventListener('click', onReconcileLinkClick);
       listEl.addEventListener('click', onFindingActionClick);
     }
+    var reconcileModal = document.getElementById('system-findings-reconcile-modal');
+    if (reconcileModal) {
+      reconcileModal.addEventListener('click', function (ev) {
+        if (ev.target === reconcileModal) closeReconcileModal();
+      });
+    }
+    var reconcileModalCancel = document.getElementById('system-findings-reconcile-modal-cancel');
+    if (reconcileModalCancel) reconcileModalCancel.addEventListener('click', onReconcileModalCancel);
+    var reconcileModalGo = document.getElementById('system-findings-reconcile-modal-go');
+    if (reconcileModalGo) reconcileModalGo.addEventListener('click', onReconcileModalGo);
     document.addEventListener('click', function (ev) {
       if (ev.target && !ev.target.closest('.system-findings-item__action-dropdown')) {
         closeAllFindingDropdowns();

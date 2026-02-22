@@ -16,11 +16,12 @@ class ExecutionRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_execution(self, org_id: UUID, process_id: UUID) -> Execution:
-        """Create a new execution and initialize execution steps
+    def create_execution(self, org_id: UUID, process_id: UUID, commit: bool = True) -> Execution:
+        """Create a new execution and initialize execution steps.
 
         This operation is fully transactional - either all execution steps are created
         or none are (prevents partial execution state under concurrent requests).
+        If commit=False, caller is responsible for commit (e.g. atomic reconciliation).
         """
         from sqlalchemy.exc import IntegrityError
 
@@ -65,7 +66,8 @@ class ExecutionRepository:
                 execution_steps[0].status = ExecutionStepStatus.READY
 
             execution.status = ExecutionStatus.IN_PROGRESS
-            self.db.commit()
+            if commit:
+                self.db.commit()
             return execution
         except IntegrityError:
             # Rollback on any integrity error to prevent partial state
@@ -125,10 +127,12 @@ class ExecutionRepository:
         actual_inputs: list | None = None,
         actual_outputs: list | None = None,
         execution_data: dict | None = None,
+        commit: bool = True,
     ) -> ExecutionStep | None:
-        """Complete an execution step and advance execution
+        """Complete an execution step and advance execution.
 
         Enforces step order: all prior steps must be completed before this step can be completed.
+        If commit=False, caller is responsible for commit (e.g. atomic reconciliation).
         """
         from datetime import datetime
 
@@ -175,7 +179,8 @@ class ExecutionRepository:
         execution = execution_step.execution
         self._advance_execution(execution)
 
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return execution_step
 
     def _advance_execution(self, execution: Execution) -> None:

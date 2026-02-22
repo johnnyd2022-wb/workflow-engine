@@ -101,6 +101,40 @@ class CoreChecksRunner:
         return results
 
 
+def get_system_findings_by_item(org_id: UUID, session: Session) -> dict[str, list[dict[str, Any]]]:
+    """
+    Run all registered checks and return a map: inventory_item_id -> list of { check_id, reason }.
+    Used to enrich the inventory list API so each item has system_findings for UI (red border + reasons).
+    New checks: add an extractor below for the check's result.data shape; no change to check implementations.
+    """
+    runner = CoreChecksRunner(org_id=org_id, session=session)
+    results = runner.run_all_checks()
+    out: dict[str, list[dict[str, Any]]] = {}
+
+    def add(item_id: str, check_id: str, reason: str) -> None:
+        if not item_id:
+            return
+        out.setdefault(item_id, []).append({"check_id": check_id, "reason": reason})
+
+    for r in results:
+        if r.data is None:
+            continue
+        if r.check_id == "untracked_items":
+            for it in r.data.get("untracked_items") or []:
+                iid = it.get("id") if isinstance(it, dict) else None
+                reason = it.get("check_reason") if isinstance(it, dict) else "Untracked inventory item"
+                add(str(iid) if iid else "", r.check_id, reason or "Untracked inventory item")
+        elif r.check_id == "expired_materials":
+            for it in r.data.get("expired_raw_materials") or []:
+                iid = it.get("id") if isinstance(it, dict) else None
+                add(str(iid) if iid else "", r.check_id, "Expired raw material with stock")
+            for it in r.data.get("impacted_items") or []:
+                iid = it.get("id") if isinstance(it, dict) else None
+                add(str(iid) if iid else "", r.check_id, "Produced using expired raw material")
+
+    return out
+
+
 # ---------------------------------------------------------------------------
 # API route registration (called from backend.py to avoid circular imports)
 # ---------------------------------------------------------------------------

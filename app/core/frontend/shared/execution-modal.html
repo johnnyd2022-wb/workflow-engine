@@ -104,6 +104,10 @@
             <option value="final_product">Final product</option>
           </select>
         </div>
+        <div>
+          <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Notes <span style="color: var(--error, #ef4444);">*</span></label>
+          <textarea id="untracked-output-notes" name="notes" required rows="3" placeholder="e.g. why this item was added without full traceability" style="width: 100%; padding: 10px 14px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; resize: vertical; min-height: 72px;"></textarea>
+        </div>
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button type="button" class="btn btn-secondary" onclick="document.getElementById('add-untracked-output-modal').style.display='none'; document.body.style.overflow='auto';">Cancel</button>
