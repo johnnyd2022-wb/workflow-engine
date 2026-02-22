@@ -1,5 +1,7 @@
 """Unit conversion utilities for inventory and execution quantities"""
 
+from decimal import Decimal
+
 # Unit conversion factors to base units
 # Base units: kg (mass), L (volume), m (length), units (count)
 # All keys are lowercase for case-insensitive matching
@@ -132,3 +134,70 @@ def convert_to_inventory_unit(quantity: float, quantity_unit: str, inventory_uni
         ValueError: If units are not compatible
     """
     return convert_quantity(quantity, quantity_unit, inventory_unit)
+
+
+def convert_quantity_decimal(
+    quantity: Decimal, from_unit: str, to_unit: str
+) -> Decimal:
+    """
+    Convert a quantity from one unit to another using Decimal-only math.
+    Use this for reconciliation, compliance, and audited inventory to avoid
+    floating-point boundary issues.
+
+    Args:
+        quantity: The quantity to convert (Decimal)
+        from_unit: Source unit
+        to_unit: Target unit
+
+    Returns:
+        Converted quantity (Decimal)
+
+    Raises:
+        ValueError: If units are not compatible or conversion is not possible
+    """
+    from_unit_norm = normalize_unit(from_unit)
+    to_unit_norm = normalize_unit(to_unit)
+
+    if from_unit_norm == to_unit_norm:
+        return quantity
+
+    if not are_units_compatible(from_unit, to_unit):
+        raise ValueError(f"Cannot convert between incompatible units: {from_unit} and {to_unit}")
+
+    if from_unit_norm in COUNT_UNITS:
+        if from_unit_norm != to_unit_norm:
+            raise ValueError(f"Count units must match exactly: {from_unit} != {to_unit}")
+        return quantity
+
+    from_factor = CONVERSION_FACTORS.get(from_unit_norm)
+    to_factor = CONVERSION_FACTORS.get(to_unit_norm)
+    if from_factor is None or to_factor is None:
+        raise ValueError(f"Unknown unit(s): {from_unit} or {to_unit}")
+
+    # Decimal-only path: factors as Decimal to avoid float boundary
+    from_f = Decimal(str(from_factor))
+    to_f = Decimal(str(to_factor))
+    base_quantity = quantity * from_f
+    converted_quantity = base_quantity / to_f
+    return converted_quantity
+
+
+def convert_to_inventory_unit_decimal(
+    quantity: Decimal, quantity_unit: str, inventory_unit: str
+) -> Decimal:
+    """
+    Convert a quantity to the inventory item's unit using Decimal-only math.
+    Use for reconciliation and anywhere precision must be preserved.
+
+    Args:
+        quantity: The quantity to convert (Decimal)
+        quantity_unit: Unit of the quantity
+        inventory_unit: Unit of the inventory item
+
+    Returns:
+        Converted quantity in inventory_unit (Decimal)
+
+    Raises:
+        ValueError: If units are not compatible
+    """
+    return convert_quantity_decimal(quantity, quantity_unit, inventory_unit)

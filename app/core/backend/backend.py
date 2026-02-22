@@ -21,7 +21,7 @@ from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.mock_data import DEMO_USER_EMAIL
-from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit
+from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.utils.config_loader import config
 
 # Create core blueprint
@@ -748,15 +748,11 @@ def complete_step(execution_id: str, execution_step_id: str):
                                 )
                                 continue
 
-                            # Convert consumed quantity to inventory unit
+                            # Convert consumed quantity to inventory unit (Decimal-only for precision)
                             try:
                                 quantity_consumed_decimal = Decimal(str(quantity_consumed))
-                                quantity_consumed_converted = Decimal(
-                                    str(
-                                        convert_to_inventory_unit(
-                                            float(quantity_consumed_decimal), consumed_unit, inventory_unit
-                                        )
-                                    )
+                                quantity_consumed_converted = convert_to_inventory_unit_decimal(
+                                    quantity_consumed_decimal, consumed_unit, inventory_unit
                                 )
                             except (ValueError, InvalidOperation) as conv_error:
                                 execution_errors.append(
