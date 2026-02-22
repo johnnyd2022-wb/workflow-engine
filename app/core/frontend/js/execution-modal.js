@@ -199,7 +199,8 @@
         const hasNoInventory = sortedInventory.length === 0;
         const errorStyle = hasNoInventory ? 'border: 2px solid var(--error, #ef4444);' : '';
         const errorMessage = hasNoInventory ? `<p class="execute-input-no-inventory-warning" style="color: var(--error, #ef4444); font-size: 12px; margin-top: 4px; font-weight: 500;">⚠️ No matching inventory items found. Please add inventory before executing this step.</p>` : '';
-        
+        const safeInputName = (input.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+
         inputSection.innerHTML = `
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
@@ -207,66 +208,16 @@
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${input.quantity || '0'} ${input.unit || ''})</span>
               <span style="color: var(--error, #ef4444);">*</span>
             </label>
-            <select class="form-select execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-required="true" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); ${errorStyle} background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="">Select inventory item...</option>
-              ${sortedInventory.map(inv => {
-                // Build metadata display string
-                const metadataParts = [];
-                
-                // Add created date if available
-                if (inv.created_at) {
-                  try {
-                    const date = new Date(inv.created_at);
-                    const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-                    metadataParts.push(`Created: ${formattedDate}`);
-                  } catch (e) {
-                    // Ignore date parsing errors
-                  }
-                }
-                
-                // Add execution prompts/metadata if available
-                if (inv.extra_data && inv.extra_data.execution_prompts) {
-                  const prompts = inv.extra_data.execution_prompts;
-                  const promptEntries = Object.entries(prompts).slice(0, 2); // Show first 2 prompts
-                  if (promptEntries.length > 0) {
-                    const promptStr = promptEntries.map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(String(value))}`).join(', ');
-                    metadataParts.push(promptStr);
-                  }
-                }
-                
-                // Add process name if available
-                if (inv.process_name) {
-                  metadataParts.push(`Process: ${escapeHtml(inv.process_name)}`);
-                }
-                
-                // Build the display text - prepend process name to product name
-                const productName = inv.process_name ? `${escapeHtml(inv.process_name)} - ${escapeHtml(inv.name)}` : escapeHtml(inv.name);
-                let displayText = `${productName} - ${inv.quantity} ${inv.unit}`;
-                
-                // Add supplier/batch info if available (for raw materials)
-                if (inv.supplier) {
-                  displayText += ` (${escapeHtml(inv.supplier)})`;
-                }
-                if (inv.supplier_batch_number) {
-                  displayText += ` - Batch: ${escapeHtml(inv.supplier_batch_number)}`;
-                }
-                
-                // Add metadata if available
-                if (metadataParts.length > 0) {
-                  displayText += ` | ${metadataParts.join(' | ')}`;
-                }
-                
-                // Highlight expired/flagged items (same concept as sourcemap check-needed)
-                const reason = getExpiredReason(inv.id);
-                const prefix = reason ? '⚠ ' + reason + ': ' : '';
-                
-                return `
-                  <option value="${inv.id}" data-quantity="${inv.quantity}" data-unit="${inv.unit}" data-expired-reason="${reason ? escapeHtml(reason) : ''}" title="${escapeHtml(displayText)}">
-                    ${prefix}${displayText}
-                  </option>
-                `;
-              }).join('')}
-            </select>
+            <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-required="true" data-quantity="" data-unit="" data-expired-reason="" value="">
+            <div class="execute-inventory-picker-wrapper" style="position: relative;" data-input-name="${escapeHtml(input.name)}">
+              <div class="execute-inventory-picker-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-lg); ${errorStyle} background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
+                <span class="execute-inventory-picker-label" style="flex: 1; text-align: left;">Select inventory item...</span>
+                <svg class="execute-inventory-picker-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; margin-left: 8px; transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+              <div class="execute-inventory-picker-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
+                <div class="execute-inventory-picker-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
+              </div>
+            </div>
             <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
             ${errorMessage}
             ${hasNoInventory ? `<p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-source-step-id="${input.source_step_id ? escapeHtml(String(input.source_step_id)) : ''}" data-source-process-id="${input.source_process_id ? escapeHtml(String(input.source_process_id)) : ''}" style="font-size: 13px;">Add Missing Item</button></p>` : ''}
@@ -280,85 +231,186 @@
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">When you select an inventory item, quantity updates to that item's total. You can edit to consume less.</p>
           </div>
         `;
-        
-        // Add event listeners to clear error styling when user fixes issues
-        const select = inputSection.querySelector('.execute-inventory-select');
+
+        const hiddenInput = inputSection.querySelector('.execute-inventory-select');
         const quantityInput = inputSection.querySelector('.execute-quantity-input');
         const unitDisplay = inputSection.querySelector('.execute-quantity-unit-display');
-        
-        if (select) {
-          const expiredWarningEl = inputSection.querySelector('.execute-input-expired-warning');
-          select.addEventListener('change', function() {
-            if (this.value) {
-              // Show/hide expired warning (step-specific: only items in this step's dropdown)
-              const option = this.options[this.selectedIndex];
-              const reason = option && option.dataset.expiredReason;
-              if (reason) {
-                if (expiredWarningEl) {
-                  expiredWarningEl.textContent = 'Check: ' + reason;
-                  expiredWarningEl.style.display = 'block';
-                }
-                this.style.border = '2px solid var(--error, #ef4444)';
-                this.style.boxShadow = '0 0 0 1px var(--error, #ef4444)';
-              } else {
-                if (expiredWarningEl) {
-                  expiredWarningEl.style.display = 'none';
-                  expiredWarningEl.textContent = '';
-                }
-                this.style.border = '';
-                this.style.boxShadow = '';
-              }
-              // When user selects an inventory item: set quantity to that item's total (for confirmation)
-              // User can edit down if consuming less. DAG traces via execution_id; no need to assume previous-step usage.
-              if (option && unitDisplay && quantityInput) {
-                const inventoryUnit = option.dataset.unit || '';
-                const inventoryQuantity = option.dataset.quantity != null && option.dataset.quantity !== '' ? option.dataset.quantity : quantityInput.value;
-                quantityInput.value = inventoryQuantity;
-                quantityInput.dataset.originalQuantity = inventoryQuantity;
-                unitDisplay.textContent = inventoryUnit;
-                quantityInput.dataset.inventoryUnit = inventoryUnit;
-              }
-              // Clear quantity error if inventory is selected
-              if (quantityInput) {
-                quantityInput.style.border = '';
-              }
-              // Re-enable submit button if it was disabled
-              const submitBtn = modal.querySelector('#execute-step-submit-btn');
-              if (submitBtn && submitBtn.disabled) {
-                // Check if all required inputs now have inventory
-                const allRequiredSelects = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
-                let allHaveInventory = true;
-                allRequiredSelects.forEach(s => {
-                  if (!s.value || s.value === '') {
-                    allHaveInventory = false;
-                  }
-                });
-                if (allHaveInventory) {
-                  submitBtn.disabled = false;
-                  submitBtn.style.opacity = '1';
-                  submitBtn.style.cursor = 'pointer';
-                  submitBtn.title = '';
-                }
-              }
-            } else {
-              // No inventory selected: hide expired warning and clear border
-              if (expiredWarningEl) {
-                expiredWarningEl.style.display = 'none';
-                expiredWarningEl.textContent = '';
-              }
-              this.style.border = '';
-              this.style.boxShadow = '';
-              if (unitDisplay && quantityInput) {
-                // Reset to step definition when no inventory is selected
-                unitDisplay.textContent = quantityInput.dataset.stepUnit || input.unit || '';
-                quantityInput.value = input.quantity || '';
-                quantityInput.dataset.originalQuantity = input.quantity || '';
-                quantityInput.dataset.inventoryUnit = '';
-              }
-            }
-          });
+        const wrapper = inputSection.querySelector('.execute-inventory-picker-wrapper');
+        const trigger = inputSection.querySelector('.execute-inventory-picker-trigger');
+        const triggerLabel = inputSection.querySelector('.execute-inventory-picker-label');
+        const triggerArrow = inputSection.querySelector('.execute-inventory-picker-arrow');
+        const dropdown = inputSection.querySelector('.execute-inventory-picker-dropdown');
+        const cardsContainer = inputSection.querySelector('.execute-inventory-picker-cards');
+        const expiredWarningEl = inputSection.querySelector('.execute-input-expired-warning');
+
+        function getInventorySelectionLabel(invId) {
+          if (!invId) return 'Select inventory item...';
+          const inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
+          if (!inv) return 'Select inventory item...';
+          const productName = inv.process_name ? escapeHtml(inv.process_name) + ' - ' + escapeHtml(inv.name) : escapeHtml(inv.name);
+          return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
         }
-        
+
+        function closeInventoryDropdown() {
+          if (dropdown) dropdown.style.display = 'none';
+          if (triggerArrow) triggerArrow.style.transform = 'rotate(0deg)';
+          document.removeEventListener('click', closeInventoryDropdownOutside);
+        }
+        function closeInventoryDropdownOutside(e) {
+          if (wrapper && !wrapper.contains(e.target)) closeInventoryDropdown();
+        }
+        function openInventoryDropdown() {
+          if (dropdown) dropdown.style.display = 'block';
+          if (triggerArrow) triggerArrow.style.transform = 'rotate(180deg)';
+          setTimeout(function() { document.addEventListener('click', closeInventoryDropdownOutside); }, 0);
+        }
+        function setInventorySelection(invId) {
+          hiddenInput.value = invId || '';
+          hiddenInput.dataset.quantity = '';
+          hiddenInput.dataset.unit = '';
+          hiddenInput.dataset.expiredReason = '';
+          if (triggerLabel) triggerLabel.textContent = getInventorySelectionLabel(invId);
+          if (wrapper) {
+            wrapper.querySelectorAll('.execute-inventory-input-card').forEach(function(c) {
+              var id = c.dataset.inventoryId || '';
+              var selected = id === (invId || '');
+              c.classList.toggle('execute-reconcile-card-selected', selected);
+              c.style.borderColor = selected ? 'var(--primary, #2563eb)' : '';
+              c.style.boxShadow = selected ? '0 0 0 2px rgba(37, 99, 235, 0.25)' : '';
+            });
+          }
+          if (trigger) {
+            trigger.style.border = '';
+            trigger.style.boxShadow = '';
+          }
+          if (expiredWarningEl) {
+            expiredWarningEl.style.display = 'none';
+            expiredWarningEl.textContent = '';
+          }
+          if (!invId) {
+            if (unitDisplay && quantityInput) {
+              unitDisplay.textContent = quantityInput.dataset.stepUnit || input.unit || '';
+              quantityInput.value = input.quantity || '';
+              quantityInput.dataset.originalQuantity = input.quantity || '';
+              quantityInput.dataset.inventoryUnit = '';
+            }
+            closeInventoryDropdown();
+            return;
+          }
+          const inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
+          if (inv && unitDisplay && quantityInput) {
+            quantityInput.value = inv.quantity != null && inv.quantity !== '' ? inv.quantity : quantityInput.value;
+            quantityInput.dataset.originalQuantity = inv.quantity != null ? String(inv.quantity) : '';
+            unitDisplay.textContent = inv.unit || '';
+            quantityInput.dataset.inventoryUnit = inv.unit || '';
+          }
+          if (inv) {
+            hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
+            hiddenInput.dataset.unit = inv.unit || '';
+            const reason = getExpiredReason(inv.id);
+            hiddenInput.dataset.expiredReason = reason || '';
+            if (reason && expiredWarningEl) {
+              expiredWarningEl.textContent = 'Check: ' + reason;
+              expiredWarningEl.style.display = 'block';
+            }
+            if (trigger) {
+              trigger.style.border = reason ? '2px solid var(--error, #ef4444)' : '';
+              trigger.style.boxShadow = reason ? '0 0 0 1px var(--error, #ef4444)' : '';
+            }
+          }
+          if (quantityInput) quantityInput.style.border = '';
+          const submitBtn = modal.querySelector('#execute-step-submit-btn');
+          if (submitBtn && submitBtn.disabled) {
+            const allRequired = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
+            let allHave = true;
+            allRequired.forEach(function(s) { if (!s.value || s.value === '') allHave = false; });
+            if (allHave) {
+              submitBtn.disabled = false;
+              submitBtn.style.opacity = '1';
+              submitBtn.style.cursor = 'pointer';
+              submitBtn.title = '';
+            }
+          }
+          closeInventoryDropdown();
+        }
+
+        function toggleInventoryCardDetails(cardId) {
+          var details = inputSection.querySelector('#execute-inv-details-' + safeInputName + '-' + cardId);
+          var arrow = inputSection.querySelector('#execute-inv-arrow-' + safeInputName + '-' + cardId);
+          if (!details || !arrow) return;
+          var isExpanded = details.style.display === 'block';
+          details.style.display = isExpanded ? 'none' : 'block';
+          arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
+        }
+
+        if (trigger) {
+          trigger.addEventListener('click', function(e) { e.stopPropagation(); if (dropdown.style.display === 'block') closeInventoryDropdown(); else openInventoryDropdown(); });
+          trigger.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (dropdown.style.display === 'block') closeInventoryDropdown(); else openInventoryDropdown(); } });
+        }
+        if (dropdown) dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
+
+        var noneCard = document.createElement('div');
+        noneCard.className = 'execute-inventory-input-card execute-reconcile-untracked-card' + (sortedInventory.length > 0 ? '' : ' execute-reconcile-card-selected');
+        noneCard.dataset.inventoryId = '';
+        noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
+        noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
+        noneCard.onclick = function(e) { e.stopPropagation(); setInventorySelection(''); };
+        cardsContainer.appendChild(noneCard);
+
+        sortedInventory.forEach(function(inv) {
+          var id = String(inv.id);
+          var card = document.createElement('div');
+          card.className = 'execute-inventory-input-card card card-interactive execute-reconcile-untracked-card';
+          card.dataset.inventoryId = id;
+          card.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; overflow: hidden;';
+          var createdStr = '';
+          if (inv.created_at) {
+            try { createdStr = new Date(inv.created_at).toLocaleDateString(); } catch (e) {}
+          }
+          var subtitleParts = [];
+          subtitleParts.push(escapeHtml(inv.quantity != null ? String(inv.quantity) : '0') + ' ' + escapeHtml(inv.unit || ''));
+          if (inv.process_name) subtitleParts.push(escapeHtml(inv.process_name));
+          var subtitleLine = subtitleParts.join(' · ');
+          var detailsParts = [];
+          if (inv.quantity != null) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Quantity</span> ' + escapeHtml(String(inv.quantity)) + ' ' + escapeHtml(inv.unit || '') + '</p>');
+          if (inv.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(inv.process_name) + '</p>');
+          if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
+          if (inv.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(inv.supplier) + '</p>');
+          if (inv.supplier_batch_number) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(inv.supplier_batch_number) + '</p>');
+          var promptsHtml = '';
+          if (inv.extra_data && inv.extra_data.execution_prompts && typeof inv.extra_data.execution_prompts === 'object') {
+            var prompts = inv.extra_data.execution_prompts;
+            promptsHtml = '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);"><div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Step metadata</div><div style="display: flex; flex-direction: column; gap: 6px;">' +
+              Object.entries(prompts).map(function(e) {
+                return '<div style="padding: 6px 10px; background: var(--bg-secondary, #f9fafb); border-radius: 6px;"><span style="color: var(--text-secondary); font-size: 11px;">' + escapeHtml(e[0]) + '</span><br><span style="color: var(--text-primary); font-size: 13px;">' + escapeHtml(String(e[1])) + '</span></div>';
+              }).join('') + '</div></div>';
+          }
+          var reason = getExpiredReason(inv.id);
+          var titlePrefix = reason ? '⚠ ' + escapeHtml(reason) + ': ' : '';
+          card.innerHTML =
+            '<div class="process-card-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; word-wrap: break-word; overflow-wrap: break-word;">' +
+              '<div style="flex: 1; min-width: 0; cursor: pointer;" data-expand-trigger="1">' +
+                '<h4 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary);">' + titlePrefix + escapeHtml(inv.name || 'Unknown') + '</h4>' +
+                '<p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + subtitleLine + '</p>' +
+              '</div>' +
+              '<svg class="execute-reconcile-arrow" id="execute-inv-arrow-' + safeInputName + '-' + id + '" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-expand-trigger="1">' +
+                '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>' +
+              '</svg>' +
+            '</div>' +
+            '<div class="execute-reconcile-details" id="execute-inv-details-' + safeInputName + '-' + id + '" style="display: none; padding: 12px 16px; border-top: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); font-size: 13px;">' +
+              detailsParts.join('') + promptsHtml +
+            '</div>';
+          card.onclick = function(e) {
+            if (e.target.closest('[data-expand-trigger="1"]')) {
+              e.stopPropagation();
+              toggleInventoryCardDetails(id);
+              return;
+            }
+            setInventorySelection(id);
+          };
+          cardsContainer.appendChild(card);
+        });
+
         if (quantityInput) {
           if (!quantityInput.dataset.originalQuantity || quantityInput.dataset.originalQuantity === '' || quantityInput.dataset.originalQuantity === 'undefined') {
             quantityInput.dataset.originalQuantity = input.quantity || quantityInput.value || '0';
@@ -719,14 +771,14 @@
     const missingInventoryInputs = [];
     const allInputSections = inputsContainer.querySelectorAll('.execute-input-section');
     allInputSections.forEach(section => {
-      const select = section.querySelector('.execute-inventory-select');
-      if (select && select.dataset.required === 'true') {
-        // Get all options and filter out empty values (CSS doesn't support != in selectors)
-        const allOptions = select.querySelectorAll('option');
-        const validOptions = Array.from(allOptions).filter(opt => opt.value && opt.value !== '');
-        if (validOptions.length === 0) {
+      const hiddenInput = section.querySelector('.execute-inventory-select');
+      if (hiddenInput && hiddenInput.dataset.required === 'true') {
+        const cardsContainer = section.querySelector('.execute-inventory-picker-cards');
+        const allCards = cardsContainer ? cardsContainer.querySelectorAll('.execute-inventory-input-card') : [];
+        const validCards = Array.from(allCards).filter(function(c) { return (c.dataset.inventoryId || '') !== ''; });
+        if (validCards.length === 0) {
           hasMissingInventory = true;
-          const inputName = select.dataset.inputName;
+          const inputName = hiddenInput.dataset.inputName;
           missingInventoryInputs.push(inputName);
         }
       }
@@ -784,10 +836,14 @@
       // Check if inventory is selected
       if (!inventoryId || inventoryId === '') {
         validationErrors.push(`Please select inventory for "${inputName}"`);
-        // Highlight the field
-        select.style.border = '2px solid var(--error, #ef4444)';
+        const triggerEl = select.closest('.execute-input-section') && select.closest('.execute-input-section').querySelector('.execute-inventory-picker-trigger');
+        if (triggerEl) triggerEl.style.border = '2px solid var(--error, #ef4444)';
       } else {
-        select.style.border = '';
+        const triggerEl = select.closest('.execute-input-section') && select.closest('.execute-input-section').querySelector('.execute-inventory-picker-trigger');
+        if (triggerEl) {
+          triggerEl.style.border = '';
+          triggerEl.style.boxShadow = '';
+        }
         
         // Check quantity
         const quantityInput = modal.querySelector(`.execute-quantity-input[data-input-name="${inputName}"]`);
@@ -799,16 +855,11 @@
           } else {
             quantityInput.style.border = '';
             
-            // Check if quantity exceeds available inventory
-            // Note: Quantity is assumed to be in the inventory item's unit
-            const option = select.options[select.selectedIndex];
-            if (option && option.dataset.quantity) {
-              const availableQty = parseFloat(option.dataset.quantity);
-              const inventoryUnit = option.dataset.unit || '';
+            // Check if quantity exceeds available inventory (use data on hidden input)
+            const availableQty = parseFloat(select.dataset.quantity);
+            if (!isNaN(availableQty)) {
+              const inventoryUnit = select.dataset.unit || '';
               const quantityUnit = quantityInput.dataset.inventoryUnit || inventoryUnit;
-              
-              // Since the quantity is entered in the inventory item's unit (shown in the unit display),
-              // we can compare directly. The backend will handle any unit conversion if needed.
               if (quantity > availableQty) {
                 validationErrors.push(`Quantity for "${inputName}" (${quantity} ${quantityUnit}) exceeds available inventory (${availableQty} ${inventoryUnit})`);
                 quantityInput.style.border = '2px solid var(--error, #ef4444)';
@@ -876,17 +927,21 @@
     for (const select of requiredSelects) {
       if (!select.value || select.value === '') {
         missingSelections.push(select.dataset.inputName);
-        select.style.border = '2px solid var(--error, #ef4444)';
+        const triggerEl = select.closest('.execute-input-section') && select.closest('.execute-input-section').querySelector('.execute-inventory-picker-trigger');
+        if (triggerEl) triggerEl.style.border = '2px solid var(--error, #ef4444)';
       }
     }
     
     if (missingSelections.length > 0) {
       const missingList = missingSelections.map(name => `"${name}"`).join(', ');
       showNotification('error', 'Validation Error', `Please select inventory for all required inputs: ${missingList}.`);
-      const firstMissing = modal.querySelector('.execute-inventory-select[data-required="true"]:not([value])');
-      if (firstMissing) {
-        firstMissing.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        firstMissing.focus();
+      const firstMissing = modal.querySelector('.execute-inventory-select[data-required="true"]');
+      if (firstMissing && (!firstMissing.value || firstMissing.value === '')) {
+        const trigger = firstMissing.closest('.execute-input-section') && firstMissing.closest('.execute-input-section').querySelector('.execute-inventory-picker-trigger');
+        if (trigger) {
+          trigger.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          trigger.focus();
+        }
       }
       return;
     }
@@ -899,8 +954,7 @@
         if (inventoryId) {
           const quantityInput = modal.querySelector(`.execute-quantity-input[data-input-name="${select.dataset.inputName}"]`);
           const quantity = quantityInput ? parseFloat(quantityInput.value) : 0;
-          const option = select.options[select.selectedIndex];
-          const unit = option ? option.dataset.unit : '';
+          const unit = select.dataset.unit || '';
           
           actualInputs.push({
             name: select.dataset.inputName,
@@ -1153,9 +1207,13 @@
 
     var selects = modal.querySelectorAll('.execute-inventory-select');
     for (var i = 0; i < selects.length; i++) {
-      var select = selects[i];
-      var inputName = select.dataset.inputName;
+      var hiddenInput = selects[i];
+      var inputName = hiddenInput.dataset.inputName;
       if (!inputName) continue;
+      var section = hiddenInput.closest('.execute-input-section');
+      var cardsContainer = section ? section.querySelector('.execute-inventory-picker-cards') : null;
+      var triggerLabel = section ? section.querySelector('.execute-inventory-picker-label') : null;
+      var currentValue = (hiddenInput.value || '').trim();
       var matching = allInventory.filter(function(inv) {
         return inv.name.toLowerCase().indexOf(inputName.toLowerCase()) !== -1 ||
           inputName.toLowerCase().indexOf(inv.name.toLowerCase()) !== -1;
@@ -1171,44 +1229,122 @@
         }
         return 0;
       });
-      var optionsHtml = matching.map(function(inv) {
-        var displayText = (inv.process_name ? inv.process_name + ' - ' : '') + inv.name + ' - ' + inv.quantity + ' ' + inv.unit;
-        if (inv.supplier) displayText += ' (' + (inv.supplier || '') + ')';
-        return '<option value="' + inv.id + '" data-quantity="' + (inv.quantity || '') + '" data-unit="' + (inv.unit || '') + '">' + escapeHtml(displayText) + '</option>';
-      }).join('');
-      select.innerHTML = '<option value="">Select inventory item...</option>' + optionsHtml;
-      if (newItem && ctx.inputName && inputName === ctx.inputName) {
-        var newId = (newItem.id != null) ? String(newItem.id) : '';
-        select.value = newId;
-        var opt = select.options[select.selectedIndex];
-        if (opt && opt.value) {
-          var section = select.closest('.execute-input-section');
-          if (section) {
-            var qtyInput = section.querySelector('.execute-quantity-input');
-            var unitDisplay = section.querySelector('.execute-quantity-unit-display');
-            if (qtyInput) {
-              qtyInput.value = opt.dataset.quantity != null ? opt.dataset.quantity : qtyInput.value;
-              qtyInput.dataset.inventoryUnit = opt.dataset.unit || '';
-            }
-            if (unitDisplay) unitDisplay.textContent = opt.dataset.unit || '';
-            var noInvWarning = section.querySelector('.execute-input-no-inventory-warning');
-            if (noInvWarning) {
-              noInvWarning.style.display = 'none';
-            }
-            select.style.border = '';
-            select.style.boxShadow = '';
+      if (cardsContainer) {
+        cardsContainer.innerHTML = '';
+        var noneCard = document.createElement('div');
+        noneCard.className = 'execute-inventory-input-card execute-reconcile-untracked-card';
+        noneCard.dataset.inventoryId = '';
+        noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer;';
+        noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
+        noneCard.onclick = function() {
+          hiddenInput.value = '';
+          hiddenInput.dataset.quantity = '';
+          hiddenInput.dataset.unit = '';
+          if (triggerLabel) triggerLabel.textContent = 'Select inventory item...';
+          var q = section.querySelector('.execute-quantity-input');
+          var u = section.querySelector('.execute-quantity-unit-display');
+          if (q && u) {
+            u.textContent = q.dataset.stepUnit || '';
+            q.value = q.dataset.originalQuantity || '';
+            q.dataset.inventoryUnit = '';
           }
-          var submitBtn = modal.querySelector('#execute-step-submit-btn');
-          if (submitBtn) {
-            var allRequired = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
-            var allHave = true;
-            allRequired.forEach(function(s) { if (!s.value) allHave = false; });
-            if (allHave) {
-              submitBtn.disabled = false;
-              submitBtn.style.opacity = '1';
-              submitBtn.style.cursor = 'pointer';
-              submitBtn.title = '';
+          cardsContainer.querySelectorAll('.execute-inventory-input-card').forEach(function(c) {
+            c.classList.remove('execute-reconcile-card-selected');
+            c.style.borderColor = '';
+            c.style.boxShadow = '';
+          });
+          noneCard.classList.add('execute-reconcile-card-selected');
+          var drop = section.querySelector('.execute-inventory-picker-dropdown');
+          if (drop) drop.style.display = 'none';
+          var arrow = section.querySelector('.execute-inventory-picker-arrow');
+          if (arrow) arrow.style.transform = 'rotate(0deg)';
+        };
+        cardsContainer.appendChild(noneCard);
+        var safeInputName = (inputName || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+        matching.forEach(function(inv) {
+          var id = String(inv.id);
+          var card = document.createElement('div');
+          card.className = 'execute-inventory-input-card card card-interactive execute-reconcile-untracked-card';
+          card.dataset.inventoryId = id;
+          card.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; overflow: hidden;';
+          var createdStr = inv.created_at ? (function() { try { return new Date(inv.created_at).toLocaleDateString(); } catch (e) { return ''; } })() : '';
+          var subtitleParts = [(inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || ''), inv.process_name].filter(Boolean);
+          var subtitleLine = subtitleParts.map(function(x) { return escapeHtml(x); }).join(' · ');
+          var detailsParts = [];
+          if (inv.quantity != null) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Quantity</span> ' + escapeHtml(String(inv.quantity)) + ' ' + escapeHtml(inv.unit || '') + '</p>');
+          if (inv.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(inv.process_name) + '</p>');
+          if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
+          if (inv.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(inv.supplier) + '</p>');
+          if (inv.supplier_batch_number) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(inv.supplier_batch_number) + '</p>');
+          card.innerHTML = '<div class="process-card-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;"><div style="flex: 1; min-width: 0;"><h4 style="margin: 0; font-size: 14px; font-weight: 600;">' + escapeHtml(inv.name || '') + '</h4><p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + subtitleLine + '</p></div></div><div class="execute-reconcile-details" style="padding: 12px 16px; border-top: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); font-size: 13px;">' + detailsParts.join('') + '</div>';
+          card.onclick = function() {
+            hiddenInput.value = id;
+            hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
+            hiddenInput.dataset.unit = inv.unit || '';
+            if (triggerLabel) triggerLabel.textContent = (inv.process_name ? escapeHtml(inv.process_name) + ' - ' : '') + escapeHtml(inv.name) + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+            var q = section.querySelector('.execute-quantity-input');
+            var u = section.querySelector('.execute-quantity-unit-display');
+            if (q && u) {
+              q.value = inv.quantity != null ? inv.quantity : q.value;
+              q.dataset.inventoryUnit = inv.unit || '';
+              u.textContent = inv.unit || '';
             }
+            cardsContainer.querySelectorAll('.execute-inventory-input-card').forEach(function(c) {
+              var sel = (c.dataset.inventoryId || '') === id;
+              c.classList.toggle('execute-reconcile-card-selected', sel);
+              c.style.borderColor = sel ? 'var(--primary, #2563eb)' : '';
+              c.style.boxShadow = sel ? '0 0 0 2px rgba(37, 99, 235, 0.25)' : '';
+            });
+            var drop = section.querySelector('.execute-inventory-picker-dropdown');
+            if (drop) drop.style.display = 'none';
+            var arrow = section.querySelector('.execute-inventory-picker-arrow');
+            if (arrow) arrow.style.transform = 'rotate(0deg)';
+          };
+          cardsContainer.appendChild(card);
+        });
+        var selectedId = (newItem && ctx.inputName && inputName === ctx.inputName && newItem.id != null) ? String(newItem.id) : (matching.some(function(inv) { return String(inv.id) === currentValue; }) ? currentValue : '');
+        if (!selectedId && noneCard) noneCard.classList.add('execute-reconcile-card-selected');
+      }
+      var selectedId = (newItem && ctx.inputName && inputName === ctx.inputName && newItem.id != null) ? String(newItem.id) : (matching.some(function(inv) { return String(inv.id) === currentValue; }) ? currentValue : '');
+      if (selectedId && matching.some(function(inv) { return String(inv.id) === selectedId; })) {
+        var inv = matching.find(function(inv) { return String(inv.id) === selectedId; });
+        hiddenInput.value = selectedId;
+        hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
+        hiddenInput.dataset.unit = inv.unit || '';
+        if (triggerLabel) triggerLabel.textContent = (inv.process_name ? escapeHtml(inv.process_name) + ' - ' : '') + escapeHtml(inv.name) + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+        var qtyInput = section ? section.querySelector('.execute-quantity-input') : null;
+        var unitDisplay = section ? section.querySelector('.execute-quantity-unit-display') : null;
+        if (qtyInput && unitDisplay) {
+          qtyInput.value = inv.quantity != null ? inv.quantity : qtyInput.value;
+          qtyInput.dataset.inventoryUnit = inv.unit || '';
+          unitDisplay.textContent = inv.unit || '';
+        }
+        var noInvWarning = section ? section.querySelector('.execute-input-no-inventory-warning') : null;
+        if (noInvWarning) noInvWarning.style.display = 'none';
+        var triggerEl = section ? section.querySelector('.execute-inventory-picker-trigger') : null;
+        if (triggerEl) { triggerEl.style.border = ''; triggerEl.style.boxShadow = ''; }
+        if (cardsContainer) {
+          cardsContainer.querySelectorAll('.execute-inventory-input-card').forEach(function(c) {
+            var sel = (c.dataset.inventoryId || '') === selectedId;
+            c.classList.toggle('execute-reconcile-card-selected', sel);
+            c.style.borderColor = sel ? 'var(--primary, #2563eb)' : '';
+            c.style.boxShadow = sel ? '0 0 0 2px rgba(37, 99, 235, 0.25)' : '';
+          });
+        }
+        var drop = section ? section.querySelector('.execute-inventory-picker-dropdown') : null;
+        if (drop) drop.style.display = 'none';
+        var arr = section ? section.querySelector('.execute-inventory-picker-arrow') : null;
+        if (arr) arr.style.transform = 'rotate(0deg)';
+        var submitBtn = modal.querySelector('#execute-step-submit-btn');
+        if (submitBtn) {
+          var allRequired = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
+          var allHave = true;
+          allRequired.forEach(function(s) { if (!s.value) allHave = false; });
+          if (allHave) {
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = '1';
+            submitBtn.style.cursor = 'pointer';
+            submitBtn.title = '';
           }
         }
       }
