@@ -8,7 +8,7 @@ from uuid import UUID
 from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
 
 from app.api.routes.auth_routes import limiter
-from app.core.backend import corechecks
+from app.core.backend import corechecks, reconciliation_routes
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -1483,8 +1483,6 @@ def list_out_of_stock_raw_materials():
 
 
 corechecks.register_routes(core_bp)
-from app.core.backend import reconciliation_routes
-
 reconciliation_routes.register_routes(core_bp)
 
 
