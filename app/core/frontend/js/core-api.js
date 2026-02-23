@@ -11,8 +11,10 @@ const CoreAPI = {
             },
             ...options,
         };
-        
-        if (options.body && typeof options.body === 'object') {
+        if (options.body instanceof FormData) {
+            delete config.headers['Content-Type'];
+            config.body = options.body;
+        } else if (options.body && typeof options.body === 'object') {
             config.body = JSON.stringify(options.body);
         }
         
@@ -172,6 +174,31 @@ const CoreAPI = {
         return this.request('/inventory', {
             method: 'POST',
             body: data,
+        });
+    },
+
+    async getConfigUnits() {
+        return this.request('/config/units');
+    },
+
+    async inventoryCsvValidate(formData) {
+        return this.request('/inventory/csv-validate', {
+            method: 'POST',
+            body: formData,
+        });
+    },
+
+    async inventoryCsvCommit(payload) {
+        return this.request('/inventory/csv-commit', {
+            method: 'POST',
+            body: payload,
+        });
+    },
+
+    async decodeBarcode(formData) {
+        return this.request('/inventory/decode-barcode', {
+            method: 'POST',
+            body: formData,
         });
     },
     
