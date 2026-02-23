@@ -1,4 +1,10 @@
-"""Routes for inventory upload: config/units, CSV validate/commit, barcode decode."""
+"""Routes for inventory upload: config/units, CSV validate/commit, barcode decode.
+
+Design (no float, single unit path, preserve quantity string):
+- Quantity: validated with Decimal only; sanitized original string is stored (no str(float(...))).
+- Unit: single gate _unit_to_canonical(); no separate allowed-unit predicate.
+- Validation: _validate_row() used for both preview and commit; returns (status, message, canonical_unit, quantity_str_for_storage).
+"""
 
 import csv
 import io
@@ -15,7 +21,7 @@ from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.permissions import requires_auth
-from app.core.utils.unit_conversion import CONVERSION_FACTORS
+from app.core.utils.unit_conversion import CONVERSION_FACTORS, UNIT_DISPLAY_LABELS
 
 logger = logging.getLogger(__name__)
 
@@ -24,44 +30,15 @@ CSV_MAX_BYTES = 2 * 1024 * 1024
 # Max rows per CSV (validation and commit)
 CSV_MAX_ROWS = 500
 
-# Display labels for dropdown (value -> label); keys match CONVERSION_FACTORS where applicable
-UNIT_LABELS = {
-    "kg": "Kilograms (kg)",
-    "g": "Grams (g)",
-    "mg": "Milligrams (mg)",
-    "lb": "Pounds (lb)",
-    "oz": "Ounces (oz)",
-    "ton": "Ton (ton)",
-    "tonne": "Tonne",
-    "L": "Liters (L)",
-    "l": "Liters (L)",
-    "mL": "Milliliters (mL)",
-    "ml": "Milliliters (mL)",
-    "gal": "Gallons (gal)",
-    "m3": "Cubic meters (m³)",
-    "ft3": "Cubic feet (ft³)",
-    "m": "Meters (m)",
-    "cm": "Centimeters (cm)",
-    "mm": "Millimeters (mm)",
-    "ft": "Feet (ft)",
-    "in": "Inches (in)",
-    "units": "Units",
-    "pcs": "Pieces",
-    "pieces": "Pieces",
-    "boxes": "Boxes",
-    "pallets": "Pallets",
-    "containers": "Containers",
-}
-
 
 def _allowed_units_list():
-    """Return list of { value, label } for dropdown from CONVERSION_FACTORS (unit_conversion.py)."""
+    """Return list of { value, label } for dropdown from unit_conversion (single source of truth)."""
     # Prefer display form for common units (L, mL)
     display_prefer = {"l": "L", "ml": "mL"}
     out = []
     for key in sorted(CONVERSION_FACTORS.keys()):
         value = display_prefer.get(key, key)
-        label = UNIT_LABELS.get(value) or UNIT_LABELS.get(key) or value
+        label = UNIT_DISPLAY_LABELS.get(key, value)
         out.append({"value": value, "label": label})
     return out
 

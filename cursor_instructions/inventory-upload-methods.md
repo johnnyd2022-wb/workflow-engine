@@ -1,84 +1,140 @@
-Remaining Recommendations — Quick Summary
-1. Single Source of Truth for Unit Validation
+1. ❗ Float Parsing Still Exists (Highest Priority)
+Problem
 
-The pipeline currently validates units using multiple helper paths. This should be consolidated so that canonical unit mapping is the only validation gate.
+Despite the design notes, the code still contains:
 
-Recommended approach:
-
-Normalize input → resolve canonical unit → reject if mapping fails.
-
-Remove redundant checks such as separate allowed-unit predicates.
-
-This reduces regression risk and ensures storage semantics always match validation semantics.
-
-2. Use Decimal Arithmetic for Quantity Validation
-
-Floating-point parsing is still used during validation.
-
-Replace this with arbitrary precision numeric validation using decimal arithmetic.
-
-Key goals:
-
-Avoid representation drift.
-
-Improve audit consistency.
-
-Ensure deterministic ingestion behaviour.
-
-If quantities are stored as strings, validate numerically but preserve the sanitized original numeric representation.
-
-3. Avoid Numeric Reconstruction Drift
-
-The current pipeline converts:
-
-input string → float → string storage
+qty = float(qty_str)
 
 
-This can subtly change formatting.
+This defeats the decimal safety objective.
 
-Preferred pattern:
+Floating point parsing is still occurring in:
 
-sanitize → validate → store original numeric form
+Preview validation phase
+
+Commit phase
+
+Fix
+
+Replace all numeric parsing with decimal arithmetic.
+
+Example pattern:
+
+from decimal import Decimal, InvalidOperation
+
+try:
+    qty = Decimal(qty_str)
+    if qty <= 0:
+        raise ValidationError
+except InvalidOperation:
+    reject
+
+Why This Matters
+
+Floating point parsing can introduce:
+
+Representation drift
+
+Audit mismatch
+
+Compliance uncertainty
+
+This is especially relevant if inventory data feeds reporting pipelines.
+
+2. ❗ _is_allowed_unit() Is Now Redundant
+
+You have achieved single-source canonicalisation via:
+
+_unit_to_canonical()
 
 
-Do not reformat numeric strings after parsing.
+But validation still checks:
 
-4. Add Structured Logging for Batch Operations
+_is_allowed_unit(unit_raw)
 
-Commit failures currently return generic error responses.
 
-Introduce server-side structured logging for:
+This creates two semantic validation paths.
 
-Batch start events
+Fix
 
-Batch success events
+Remove _is_allowed_unit() entirely.
 
-Batch rollback events
+Replace validation logic with:
 
-Exception stack traces
+canonical_unit = _unit_to_canonical(unit_raw)
 
-This improves operational observability and debugging efficiency.
+if canonical_unit is None:
+    error
 
-5. Reduce Validation Logic Duplication
 
-Validation occurs in both preview and commit phases.
+This guarantees rule consistency.
 
-While this is architecturally correct, shared validation logic should be extracted into a reusable function to prevent divergence over time.
+3. ⚠ Quantity Reconstruction Drift Risk
 
-Suggested abstraction:
+You still reconstruct quantity via:
 
-validate_csv_row(row) → validation result object
+quantity=str(qty)
 
-6. Improve Transaction Boundary Visibility
 
-Although batch commits are atomic, transaction lifecycle signals are not explicitly logged.
+Combined with float parsing, this can cause formatting drift.
 
-Optional but recommended:
+Example risk:
 
-Log batch ingestion size
+"1.000" → float → 1.0 → "1.0"
 
-Log tenant ID
+Correct Pattern
 
-Log source method metadata
+If quantities are stored as strings:
 
-This is particularly valuable for multi-tenant SaaS monitoring.
+sanitize → validate → preserve original numeric representation
+
+
+Do not regenerate numeric strings after parsing.
+
+4. ⚠ Exception Variable Is Unused
+
+You have:
+
+except Exception as e:
+
+
+But e is not used.
+
+Either:
+
+Remove as e, or
+
+Add structured logging.
+
+Recommended:
+
+logger.exception("CSV batch commit failed", extra={"org_id": org_id})
+
+
+Silent exception swallowing is operationally dangerous.
+
+5. ⚠ Validation Logic Duplication Still Exists
+
+You have improved architecture by introducing _validate_row() conceptually.
+
+However, duplication still exists between:
+
+Preview validation path
+
+Commit Phase 1 validation path
+
+The only remaining divergence risk is numeric parsing.
+
+Recommendation
+
+Extract:
+
+validate_row(name, qty_str, unit_raw)
+
+
+Return:
+
+(status, message, canonical_unit, quantity_storage_value)
+
+
+This eliminates future drift risk.
