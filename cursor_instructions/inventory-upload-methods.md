@@ -1,145 +1,186 @@
-2️⃣ Critical Issues & Improvements for csv upload to inventory
-🚨 Issue 1: No Transaction Wrapping in csv_commit
+1. Remove Duplicate Unit Validation Path
+Issue
 
-You are doing:
+Unit validation currently occurs through multiple logic paths:
 
-for r in rows:
-    repo.create_inventory_item(...)
+_is_allowed_unit()
 
+_unit_to_canonical()
 
-If:
+This introduces the risk of divergence between validation rules and storage rules.
 
-Row 1 succeeds
+Fix
 
-Row 2 succeeds
+Make _unit_to_canonical() the single authoritative validator.
 
-Row 3 throws
+Implementation:
 
-Row 4 succeeds
+Remove redundant unit checks.
 
-You will commit partial state.
+Replace all unit validation logic with canonical mapping resolution.
 
-Risk:
+Desired behaviour:
 
-Operational inconsistency
+raw unit → normalize → canonical mapping OR reject
 
-Audit trail confusion
+2. Replace Floating-Point Parsing with Decimal Validation
+Issue
 
-Broken expectation of “bulk commit”
+Quantities are validated using:
 
-Recommended Fix
-
-Wrap entire batch in a DB transaction:
-
-with db_session.begin():
-    for r in rows:
-        ...
+float(qty_str)
 
 
-Or:
+This introduces potential precision drift due to floating-point representation.
 
-try:
-    ...
-    db_session.commit()
-except:
-    db_session.rollback()
+Fix
 
+Use arbitrary precision numeric parsing.
 
-Decide explicitly:
+Recommended approach:
 
-Atomic batch? (all-or-nothing)
+Python Decimal for validation.
 
-Partial commit allowed? (current behavior)
+Reject malformed numeric input explicitly.
 
-Right now it is implicitly partial.
+Avoid:
 
-That should be explicit.
+Intermediate float conversion.
 
-🚨 Issue 2: Duplicate Batch Race Condition
+3. Preserve Original Quantity String After Sanitization
+Issue
 
-This check is unsafe:
-
-existing = db_session.query(...).first()
-
-
-Two uploads in parallel could pass this check simultaneously.
-
-Correct solution:
-
-Enforce unique constraint at DB level:
-
-UNIQUE (org_id, name, supplier_batch_number)
-
-
-Then catch IntegrityError on insert.
-
-Application-layer checks are not safe for uniqueness.
-
-⚠ Issue 3: Unit Normalization Inconsistency
-
-In validate:
-
-ul = _normalize_unit(unit_raw)
-
-
-But in commit:
-
-if not _is_allowed_unit(unit):
-
-
-If frontend changes casing to Kg or similar, normalization is weaker in commit phase.
-
-Recommendation:
-
-Normalize on commit explicitly:
-
-unit = _normalize_unit(unit)
-
-
-Then map to canonical value.
-
-Never trust the frontend normalization.
-
-⚠ Issue 4: Quantity Stored as str(qty)
-
-You pass:
+Quantities are validated numerically but then stored as:
 
 quantity=str(qty)
 
 
-This is suspicious.
+This may alter user-provided formatting semantics.
 
-Inventory quantities should be numeric types:
+Example drift:
 
-Decimal
+"1.000" → float → 1.0 → "1.0"
 
-Numeric
+Fix
 
-Float (if you're okay with precision risk)
+If quantities are stored as strings:
 
-If DB column is string:
-That is a design flaw for financial/compliance-grade systems.
+Validate using Decimal
 
-If DB column is numeric and repo casts:
-Fine.
+Store sanitized original input string
 
-But verify that.
+This preserves precision fidelity.
 
-⚠ Issue 5: Missing CSV Row Count Limit on Validation
+4. Add Structured Logging for Commit Failures
+Issue
 
-You limit commit to 500 rows:
+System exceptions during commit are currently swallowed:
 
-if len(rows) > 500:
-
-
-But validation does not enforce row count.
-
-Someone could upload 50k rows → heavy memory usage during validation.
-
-Add:
-
-if i > 500:
-    break
+except Exception:
+    rollback()
+    return 500
 
 
-Or hard error if > 500.
+No diagnostic information is captured.
+
+Fix
+
+Add server-side exception logging.
+
+Recommended pattern:
+
+logger.exception("CSV commit failed")
+
+
+Do not expose internal exception details to API clients.
+
+5. Consolidate Validation Logic Into Single Canonical Path
+Issue
+
+Validation occurs:
+
+During preview validation
+
+During commit validation
+
+However, logic duplication exists between phases.
+
+Fix
+
+Extract shared validation into a reusable function.
+
+Benefits:
+
+Reduces regression risk
+
+Ensures parity between preview and commit behaviour
+
+Simplifies future rule changes
+
+6. Improve Unique Constraint Enforcement Feedback
+Issue
+
+Duplicate batch conflicts are handled via IntegrityError.
+
+However:
+
+Row-level error reporting is not available.
+
+Users receive a generic conflict response.
+
+Fix
+
+Consider optional pre-commit duplicate detection for user experience improvement.
+
+Required constraint remains database-level uniqueness enforcement.
+
+7. Improve CSV Truncation Contract
+Issue
+
+Frontend infers truncation message using row count heuristics.
+
+Fix
+
+Backend should explicitly return:
+
+validated_count
+
+truncated_flag
+
+max_rows_allowed
+
+This removes ambiguity in client rendering.
+
+8. Add Structured Transaction Boundary Logging (Optional but Recommended)
+Issue
+
+Transaction boundaries are currently implicit.
+
+Fix
+
+Consider logging:
+
+Batch start
+
+Batch success
+
+Batch failure
+
+This improves operational observability during ingestion events.
+
+9. Remove Dead Exception Variable
+
+Current code captures:
+
+except Exception as e:
+
+
+But does not use e.
+
+Fix
+
+Either:
+
+Log exception
+
+Or remove variable binding.

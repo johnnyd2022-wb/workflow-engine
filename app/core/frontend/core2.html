@@ -1314,7 +1314,11 @@
       const okCount = (res.validation || []).filter(function(v) { return v.status === 'ok'; }).length;
       const errCount = (res.validation || []).filter(function(v) { return v.status === 'error'; }).length;
       var summary = okCount + ' row(s) valid' + (errCount ? ', ' + errCount + ' with errors (fix and confirm)' : '') + '. Edit any field then confirm.';
-      if (res.truncated) summary += ' Only first ' + (res.rows && res.rows.length ? res.rows.length : 500) + ' rows validated; maximum 500 rows per file.';
+      if (res.truncated && res.validated_count != null && res.max_rows_allowed != null) {
+        summary += ' Only first ' + res.validated_count + ' rows validated; maximum ' + res.max_rows_allowed + ' rows per file.';
+      } else if (res.truncated) {
+        summary += ' Only first ' + (res.rows && res.rows.length ? res.rows.length : 500) + ' rows validated; maximum 500 rows per file.';
+      }
       document.getElementById('csv-preview-summary').textContent = summary;
     }
 
