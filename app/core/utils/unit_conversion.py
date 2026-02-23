@@ -35,6 +35,42 @@ CONVERSION_FACTORS = {
     "containers": None,
 }
 
+# Display labels for UI (dropdowns, etc.). Keys must match CONVERSION_FACTORS.
+# Single source of truth: add new units here and in CONVERSION_FACTORS together.
+UNIT_DISPLAY_LABELS = {
+    "kg": "Kilograms (kg)",
+    "g": "Grams (g)",
+    "mg": "Milligrams (mg)",
+    "lb": "Pounds (lb)",
+    "oz": "Ounces (oz)",
+    "ton": "Ton (ton)",
+    "tonne": "Tonne",
+    "l": "Liters (L)",
+    "ml": "Milliliters (mL)",
+    "gal": "Gallons (gal)",
+    "m3": "Cubic meters (m³)",
+    "ft3": "Cubic feet (ft³)",
+    "m": "Meters (m)",
+    "cm": "Centimeters (cm)",
+    "mm": "Millimeters (mm)",
+    "ft": "Feet (ft)",
+    "in": "Inches (in)",
+    "units": "Units",
+    "pcs": "Pieces",
+    "pieces": "Pieces",
+    "boxes": "Boxes",
+    "pallets": "Pallets",
+    "containers": "Containers",
+}
+
+# Ensure units and labels stay in sync (fail fast if someone adds a unit but forgets a label).
+# Use explicit check instead of assert so it is not stripped by python -O.
+if set(UNIT_DISPLAY_LABELS) != set(CONVERSION_FACTORS):
+    raise RuntimeError(
+        "UNIT_DISPLAY_LABELS and CONVERSION_FACTORS must have the same keys. "
+        "Missing or extra keys in UNIT_DISPLAY_LABELS."
+    )
+
 # Unit categories (all lowercase for case-insensitive matching)
 MASS_UNITS = {"kg", "g", "mg", "lb", "oz", "ton", "tonne"}
 VOLUME_UNITS = {"l", "ml", "gal", "m3", "ft3"}

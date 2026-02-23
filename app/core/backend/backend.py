@@ -8,7 +8,7 @@ from uuid import UUID
 from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
 
 from app.api.routes.auth_routes import limiter
-from app.core.backend import corechecks, reconciliation_routes
+from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
@@ -1516,6 +1516,7 @@ def list_out_of_stock_raw_materials():
 
 corechecks.register_routes(core_bp)
 reconciliation_routes.register_routes(core_bp)
+inventory_upload_routes.register_routes(core_bp)
 
 
 @core_bp.route("/api/core/reset-demo-db", methods=["POST"])
@@ -1557,6 +1558,12 @@ def create_inventory_item():
 
     if not all([name, quantity, unit]):
         return jsonify({"error": "name, quantity, and unit are required"}), 400
+    try:
+        qty_val = float(quantity)
+        if qty_val <= 0:
+            return jsonify({"error": "quantity must be greater than 0"}), 400
+    except (TypeError, ValueError):
+        return jsonify({"error": "quantity must be a valid number"}), 400
 
     repo = InventoryRepository(db_session)
     try:
@@ -1581,6 +1588,17 @@ def create_inventory_item():
             source_output_id = UUID(data["source_output_id"])
 
         extra_data = dict(data.get("metadata") or {})
+        source_method = (data.get("source_method") or "manual").strip()
+        if source_method not in ("manual", "csv_upload", "barcode_scan"):
+            source_method = "manual"
+        audit_entry = {
+            "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
+            "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source_method": source_method,
+        }
+        history = list(extra_data.get("inventory_audit_history") or [])
+        history.append(audit_entry)
+        extra_data["inventory_audit_history"] = history
         if data.get("untracked"):
             notes = (extra_data.get("notes") or data.get("notes") or "").strip()
             if not notes:

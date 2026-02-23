@@ -88,6 +88,27 @@
     .dopamine-line p { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); line-height: 1.5; }
     @media (min-width: 600px) { .dopamine-line { padding: 16px 20px; } .dopamine-line p { font-size: 0.95rem; } }
     @media (min-width: 1024px) { .dopamine-line { padding: 18px 22px; } .dopamine-line p { font-size: 1rem; } }
+    .inventory-entry-hub-btn:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.05)); }
+    .csv-preview-table thead th { position: sticky; top: 0; background: var(--bg-card); z-index: 10; box-shadow: 0 1px 0 var(--border-default); }
+    .csv-preview-wrap { max-height: 280px; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .csv-preview-table { table-layout: fixed; width: 100%; }
+    .csv-preview-table th:nth-child(1), .csv-preview-table td:nth-child(1) { width: 12%; }
+    .csv-preview-table th:nth-child(2), .csv-preview-table td:nth-child(2) { width: 28%; }
+    .csv-preview-table th:nth-child(3), .csv-preview-table td:nth-child(3) { width: 14%; }
+    .csv-preview-table th:nth-child(4), .csv-preview-table td:nth-child(4) { width: 18%; }
+    .csv-preview-table th:nth-child(5), .csv-preview-table td:nth-child(5) { width: 28%; }
+    .csv-preview-table td { overflow: hidden; }
+    .csv-preview-table .csv-preview-input,
+    .csv-preview-table .csv-preview-select { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); }
+    .csv-upload-modal-card { width: calc(100vw - 24px); max-width: 96vw; }
+    @media (min-width: 600px) {
+      .csv-preview-wrap { max-height: 320px; }
+      .csv-upload-modal-card { width: 92%; max-width: 720px; }
+    }
+    @media (min-width: 1024px) {
+      .csv-preview-wrap { max-height: 400px; }
+      .csv-upload-modal-card { width: 90%; max-width: 880px; }
+    }
   </style>
 </head>
 <body>
@@ -234,7 +255,7 @@
                 <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Monitor your inventory with real-time visibility across your entire supply chain.</p>
               </div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" style="margin-top: 0;">
+                <button class="btn btn-secondary btn-sm" data-modal-open="inventory-entry-hub-modal" style="margin-top: 0; min-height: 44px;">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"/>
                     <line x1="5" y1="12" x2="19" y2="12"/>
@@ -1162,6 +1183,7 @@
       }
       if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
       setupModalHandlers();
+      setupInventoryEntryHub();
     });
     
     // Modal handlers
@@ -1209,7 +1231,342 @@
         document.body.style.overflow = 'auto';
       }
     };
-    
+
+    function setupInventoryEntryHub() {
+      const hubModal = document.getElementById('inventory-entry-hub-modal');
+      const addInventoryModal = document.getElementById('add-inventory-modal');
+      if (!hubModal) return;
+      document.getElementById('inventory-entry-manual-btn')?.addEventListener('click', function() {
+      if (hubModal) hubModal.style.display = 'none';
+      if (addInventoryModal) { addInventoryModal.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+    });
+    document.getElementById('inventory-entry-csv-btn')?.addEventListener('click', function() {
+      if (hubModal) hubModal.style.display = 'none';
+      openCsvUploadModal();
+    });
+    document.getElementById('inventory-entry-scan-btn')?.addEventListener('click', function() {
+      if (hubModal) hubModal.style.display = 'none';
+      openBarcodeScanModal();
+    });
+
+    // --- CSV Upload Modal ---
+    const CSV_TEMPLATE_HEADERS = 'Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date';
+    let csvValidatedData = null;
+
+    function openCsvUploadModal() {
+      const modal = document.getElementById('csv-upload-modal');
+      if (!modal) return;
+      csvValidatedData = null;
+      document.getElementById('csv-preview-section').style.display = 'none';
+      document.getElementById('csv-drop-zone').style.display = 'flex';
+      document.getElementById('csv-file-input').value = '';
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeCsvUploadModal() {
+      const modal = document.getElementById('csv-upload-modal');
+      if (modal) { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
+    }
+
+    document.getElementById('csv-download-template')?.addEventListener('click', function(e) {
+      const blob = new Blob([CSV_TEMPLATE_HEADERS + '\nExample Item,10,kg,ACME Ltd,2024-01-15,BATCH-001,2025-12-31'], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      this.href = url;
+      this.download = 'inventory_template.csv';
+      setTimeout(function() { URL.revokeObjectURL(url); }, 100);
+    });
+
+    function handleCsvFile(file) {
+      if (!file || !file.name) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      document.getElementById('csv-drop-zone').style.display = 'none';
+      document.getElementById('csv-preview-section').style.display = 'flex';
+      document.getElementById('csv-preview-tbody').innerHTML = '<tr><td colspan="5" style="padding: 16px; color: var(--text-secondary);">Validating...</td></tr>';
+      CoreAPI.inventoryCsvValidate(formData).then(function(res) {
+        csvValidatedData = res;
+        renderCsvPreview(res);
+      }).catch(function(err) {
+        document.getElementById('csv-preview-tbody').innerHTML = '<tr><td colspan="5" style="padding: 16px; color: var(--error);">' + (err.message || 'Validation failed') + '</td></tr>';
+        document.getElementById('csv-preview-summary').textContent = '';
+      });
+    }
+
+    function renderCsvPreview(res) {
+      const tbody = document.getElementById('csv-preview-tbody');
+      const units = res.allowed_units || [];
+      tbody.innerHTML = '';
+      (res.rows || []).forEach(function(row, idx) {
+        const v = res.validation && res.validation[idx];
+        const status = v && v.status === 'error' ? 'error' : 'ok';
+        const ri = row.row_index;
+        const unitSelect = '<select class="csv-preview-select csv-row-unit" data-row-index="' + ri + '">' +
+          units.map(function(u) { return '<option value="' + (u.value || '') + '"' + (row.unit === u.value ? ' selected' : '') + '>' + (u.label || u.value) + '</option>'; }).join('') + '</select>';
+        const nameInput = '<input type="text" class="csv-preview-input csv-row-name" data-row-index="' + ri + '" value="' + escapeHtml(row.name || '') + '" placeholder="Item name">';
+        const qtyInput = '<input type="text" inputmode="decimal" class="csv-preview-input csv-row-quantity" data-row-index="' + ri + '" value="' + escapeHtml(row.quantity || '') + '" placeholder="0">';
+        const supplierInput = '<input type="text" class="csv-preview-input csv-row-supplier" data-row-index="' + ri + '" value="' + escapeHtml(row.supplier || '') + '" placeholder="Supplier">';
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--border-default)';
+        tr.innerHTML = '<td style="padding: 8px;">' + (status === 'ok' ? '✓' : '⚠') + (v && v.message ? ' ' + escapeHtml(v.message) : '') + '</td><td style="padding: 8px;">' + nameInput + '</td><td style="padding: 8px;">' + qtyInput + '</td><td style="padding: 8px;">' + unitSelect + '</td><td style="padding: 8px;">' + supplierInput + '</td>';
+        tbody.appendChild(tr);
+      });
+      const okCount = (res.validation || []).filter(function(v) { return v.status === 'ok'; }).length;
+      const errCount = (res.validation || []).filter(function(v) { return v.status === 'error'; }).length;
+      var summary = okCount + ' row(s) valid' + (errCount ? ', ' + errCount + ' with errors (fix and confirm)' : '') + '. Edit any field then confirm.';
+      if (res.truncated && res.validated_count != null && res.max_rows_allowed != null) {
+        summary += ' Only first ' + res.validated_count + ' rows validated; maximum ' + res.max_rows_allowed + ' rows per file.';
+      } else if (res.truncated) {
+        summary += ' Only first ' + (res.rows && res.rows.length ? res.rows.length : 500) + ' rows validated; maximum 500 rows per file.';
+      }
+      document.getElementById('csv-preview-summary').textContent = summary;
+    }
+
+    document.getElementById('csv-back-btn')?.addEventListener('click', function() {
+      document.getElementById('csv-preview-section').style.display = 'none';
+      document.getElementById('csv-drop-zone').style.display = 'flex';
+      csvValidatedData = null;
+    });
+
+    document.getElementById('csv-commit-btn')?.addEventListener('click', function() {
+      if (!csvValidatedData || !csvValidatedData.rows) return;
+      const tbody = document.getElementById('csv-preview-tbody');
+      const rows = csvValidatedData.rows.map(function(row) {
+        const ri = row.row_index;
+        const nameEl = tbody.querySelector('.csv-row-name[data-row-index="' + ri + '"]');
+        const qtyEl = tbody.querySelector('.csv-row-quantity[data-row-index="' + ri + '"]');
+        const unitEl = tbody.querySelector('.csv-row-unit[data-row-index="' + ri + '"]');
+        const supplierEl = tbody.querySelector('.csv-row-supplier[data-row-index="' + ri + '"]');
+        return Object.assign({}, row, {
+          name: nameEl ? (nameEl.value || '').trim() : row.name,
+          quantity: qtyEl ? (qtyEl.value || '').trim() : row.quantity,
+          unit: unitEl ? unitEl.value : row.unit,
+          supplier: supplierEl ? (supplierEl.value || '').trim() || null : row.supplier,
+        });
+      });
+      this.disabled = true;
+      CoreAPI.inventoryCsvCommit({ rows: rows }).then(function(res) {
+        closeCsvUploadModal();
+        if (res.created && res.created.length) {
+          showNotification('success', 'Inventory added', res.created.length + ' item(s) added from CSV.');
+          if (typeof loadInventoryV2 === 'function') loadInventoryV2();
+        }
+        if (res.errors && res.errors.length) {
+          showNotification('warning', 'Some rows failed', res.errors.length + ' row(s) could not be added.');
+        }
+      }).catch(function(err) {
+        showNotification('error', 'Upload failed', err.message || 'Could not add inventory.');
+      }).finally(function() {
+        document.getElementById('csv-commit-btn').disabled = false;
+      });
+    });
+
+    document.getElementById('csv-drop-zone')?.addEventListener('click', function() { document.getElementById('csv-file-input').click(); });
+    document.getElementById('csv-file-input')?.addEventListener('change', function() { if (this.files && this.files[0]) handleCsvFile(this.files[0]); });
+    document.getElementById('csv-drop-zone')?.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); this.style.background = 'var(--bg-hover, rgba(0,0,0,0.03))'; });
+    document.getElementById('csv-drop-zone')?.addEventListener('dragleave', function(e) { e.preventDefault(); this.style.background = ''; });
+    document.getElementById('csv-drop-zone')?.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.style.background = '';
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) handleCsvFile(e.dataTransfer.files[0]);
+    });
+    document.getElementById('csv-browse-btn')?.addEventListener('click', function(e) { e.stopPropagation(); document.getElementById('csv-file-input').click(); });
+    document.getElementById('csv-upload-modal-close')?.addEventListener('click', closeCsvUploadModal);
+
+    // --- Barcode Scan Modal ---
+    let barcodeStream = null;
+    let lastBarcodeValue = null;
+    let barcodeScanLoopId = null;
+
+    function stopBarcodeScanLoop() {
+      if (barcodeScanLoopId != null) {
+        clearInterval(barcodeScanLoopId);
+        barcodeScanLoopId = null;
+      }
+    }
+
+    function startBarcodeScanLoop() {
+      stopBarcodeScanLoop();
+      var video = document.getElementById('barcode-video');
+      var statusEl = document.getElementById('barcode-capture-status');
+      if (!video || !statusEl) return;
+      var decodeInProgress = false;
+      barcodeScanLoopId = setInterval(function() {
+        if (decodeInProgress || lastBarcodeValue || !video.videoWidth || !video.readyState || video.readyState < 2) return;
+        decodeInProgress = true;
+        var canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        decodeBarcodeFromCanvas(canvas).then(function(value) {
+          decodeInProgress = false;
+          if (value && !lastBarcodeValue) {
+            lastBarcodeValue = value;
+            document.getElementById('barcode-result-value').textContent = value;
+            document.getElementById('barcode-result-preview').style.display = 'block';
+            document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
+            statusEl.textContent = 'Barcode found.';
+            stopBarcodeScanLoop();
+          }
+        }).catch(function() { decodeInProgress = false; });
+      }, 450);
+    }
+
+    function openBarcodeScanModal() {
+      var modal = document.getElementById('barcode-scan-modal');
+      if (!modal) return;
+      lastBarcodeValue = null;
+      stopBarcodeScanLoop();
+      document.getElementById('barcode-result-preview').style.display = 'none';
+      document.getElementById('barcode-add-to-inventory-btn').style.display = 'none';
+      document.getElementById('barcode-manual-input').value = '';
+      var statusEl = document.getElementById('barcode-capture-status');
+      if (statusEl) statusEl.textContent = 'Point at barcode — scanning automatically';
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      var cam = document.getElementById('barcode-camera-viewport');
+      var video = document.getElementById('barcode-video');
+      cam.style.display = 'block';
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        var constraints = { video: { facingMode: 'environment', width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 } }, audio: false };
+        navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+          barcodeStream = stream;
+          video.srcObject = stream;
+          video.onloadedmetadata = function() {
+            video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
+          };
+        }).catch(function() {
+          navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }).then(function(stream) {
+            barcodeStream = stream;
+            video.srcObject = stream;
+            video.onloadedmetadata = function() {
+              video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
+            };
+          }).catch(function() {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(function(stream) {
+              barcodeStream = stream;
+              video.srcObject = stream;
+              video.onloadedmetadata = function() {
+                video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
+              };
+            }).catch(function() { cam.style.display = 'none'; });
+          });
+        });
+      } else {
+        cam.style.display = 'none';
+      }
+    }
+
+    function closeBarcodeScanModal() {
+      stopBarcodeScanLoop();
+      if (barcodeStream) {
+        barcodeStream.getTracks().forEach(function(t) { t.stop(); });
+        barcodeStream = null;
+      }
+      document.getElementById('barcode-video').srcObject = null;
+      const modal = document.getElementById('barcode-scan-modal');
+      if (modal) { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
+    }
+
+    function decodeBarcodeFromCanvas(canvas) {
+      var formats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'upc_a', 'upc_e', 'itf', 'codabar', 'pdf417', 'aztec', 'data_matrix'];
+      function tryBarcodeDetector() {
+        if (typeof BarcodeDetector === 'undefined') return Promise.resolve(null);
+        var detector;
+        try {
+          detector = new BarcodeDetector({ formats: formats });
+        } catch (e) {
+          try { detector = new BarcodeDetector(); } catch (e2) { return Promise.resolve(null); }
+        }
+        return detector.detect(canvas).then(function(results) {
+          return results.length ? results[0].rawValue : null;
+        }).catch(function() { return null; });
+      }
+      function tryZxing() {
+        return new Promise(function(resolve, reject) {
+          canvas.toBlob(function(blob) {
+            if (!blob) { resolve(null); return; }
+            var url = URL.createObjectURL(blob);
+            var img = new Image();
+            img.onload = function() {
+              URL.revokeObjectURL(url);
+              import('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/+esm').then(function(zxing) {
+                var reader = new zxing.BrowserMultiFormatReader();
+                reader.decodeFromImageElement(img).then(function(result) {
+                  resolve(result ? result.getText() : null);
+                }).catch(function() { resolve(null); });
+              }).catch(function() { resolve(null); });
+            };
+            img.onerror = function() { URL.revokeObjectURL(url); resolve(null); };
+            img.src = url;
+          }, 'image/png');
+        });
+      }
+      return tryBarcodeDetector().then(function(value) {
+        if (value) return value;
+        return tryZxing();
+      });
+    }
+
+    document.getElementById('barcode-capture-btn')?.addEventListener('click', function() {
+      if (lastBarcodeValue) return;
+      const video = document.getElementById('barcode-video');
+      if (!video || !video.videoWidth) return;
+      document.getElementById('barcode-capture-status').textContent = 'Decoding…';
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      decodeBarcodeFromCanvas(canvas).then(function(value) {
+        document.getElementById('barcode-capture-status').textContent = value ? 'Barcode found.' : 'Point at barcode — scanning automatically';
+        if (value) {
+          lastBarcodeValue = value;
+          document.getElementById('barcode-result-value').textContent = value;
+          document.getElementById('barcode-result-preview').style.display = 'block';
+          document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
+          stopBarcodeScanLoop();
+        } else {
+          showNotification('info', 'No barcode in shot', 'Hold the barcode in view or tap Capture again.');
+        }
+      }).catch(function(err) {
+        document.getElementById('barcode-capture-status').textContent = 'Point at barcode — scanning automatically';
+        showNotification('error', 'Decode failed', err && err.message ? err.message : 'Try manual entry.');
+      });
+    });
+
+    document.getElementById('barcode-manual-input')?.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var v = (this.value || '').trim();
+        if (v) {
+          lastBarcodeValue = v;
+          document.getElementById('barcode-result-value').textContent = v;
+          document.getElementById('barcode-result-preview').style.display = 'block';
+          document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
+        }
+      }
+    });
+
+    document.getElementById('barcode-add-to-inventory-btn')?.addEventListener('click', function() {
+      closeBarcodeScanModal();
+      if (!addInventoryModal) return;
+      addInventoryModal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      const form = addInventoryModal.querySelector('form');
+      if (form) {
+        form.querySelector('[name="name"]').value = lastBarcodeValue || '';
+        form.querySelector('[name="quantity"]').focus();
+      }
+      window._addInventorySourceMethod = 'barcode_scan';
+    });
+
+    document.getElementById('barcode-scan-modal-close')?.addEventListener('click', closeBarcodeScanModal);
+    document.getElementById('barcode-scan-back-btn')?.addEventListener('click', function() { closeBarcodeScanModal(); if (hubModal) { hubModal.style.display = 'flex'; document.body.style.overflow = 'hidden'; } });
+    window.openCsvUploadModal = openCsvUploadModal;
+    window.openBarcodeScanModal = openBarcodeScanModal;
+    }
+
     // Attach the Create Process Form Handler Once + help tooltips
     document.addEventListener('DOMContentLoaded', () => {
       const form = document.querySelector('#create-process-modal form') || document.getElementById('create-process-guided-form');
@@ -1575,8 +1932,8 @@
         return false;
       }
 
-      if (!quantity || isNaN(quantity)) {
-        showNotification('error', 'Validation Error', 'Please enter a valid quantity');
+      if (!quantity || isNaN(quantity) || quantity <= 0) {
+        showNotification('error', 'Validation Error', 'Please enter a quantity greater than 0');
         return false;
       }
 
@@ -1615,15 +1972,18 @@
       // Persist asynchronously
       (async () => {
         try {
+          const sourceMethod = window._addInventorySourceMethod || 'manual';
+          if (window._addInventorySourceMethod) window._addInventorySourceMethod = null;
           const saved = await CoreAPI.createInventoryItem({
             name,
             quantity,
             unit,
-            inventory_type: 'raw_material', // Always raw_material for manually added items
+            inventory_type: 'raw_material',
             supplier,
             purchase_date: purchaseDate,
             supplier_batch_number: batchNumber,
             expiry_date: expiryDate,
+            source_method: sourceMethod,
           });
 
           replaceOptimisticInventoryV2(tempId, saved);
@@ -2030,9 +2390,36 @@
     </div>
   </div>
   
-  <!-- Add Inventory Modal -->
-  <div class="modal-overlay" id="add-inventory-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+  <!-- Inventory Entry Hub: choose Manual / CSV / Barcode -->
+  <div class="modal-overlay" id="inventory-entry-hub-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card inventory-entry-hub-card" style="max-width: 420px; width: 95vw; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Add to Inventory</h2>
+        <button type="button" data-modal-close class="btn-icon-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 20px 0;">Choose how you want to add inventory.</p>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <button type="button" id="inventory-entry-manual-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
+          <span style="flex: 1;">Manual Entry</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <button type="button" id="inventory-entry-csv-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
+          <span style="flex: 1;">Upload CSV Template</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <button type="button" id="inventory-entry-scan-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
+          <span style="flex: 1;">Scan Barcode / Camera</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Inventory Modal (Manual Entry) -->
+  <div class="modal-overlay" id="add-inventory-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card" style="max-width: 500px; width: 95vw; padding: 24px; max-height: 90vh; overflow-y: auto;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
         <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Add Inventory Item</h2>
         <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
@@ -2100,10 +2487,85 @@
           </div>
         </div>
         <div style="display: flex; gap: 12px; justify-content: flex-end;">
-          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
-          <button type="submit" class="btn btn-primary">Add Inventory Item</button>
+          <button type="button" class="btn btn-secondary" data-modal-close style="min-height: 44px;">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="min-height: 44px;">Add Inventory Item</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- CSV Bulk Upload Inventory Modal -->
+  <div class="modal-overlay" id="csv-upload-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card csv-upload-modal-card" style="max-height: 90vh; display: flex; flex-direction: column; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Upload CSV</h2>
+        <button type="button" id="csv-upload-modal-close" data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px;">
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 4px 0; line-height: 1.5;">Keep the column headers in your file. The template includes an example row for reference—replace it with your own data or remove it before uploading.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+          <a id="csv-download-template" href="#" download="inventory_template.csv" class="btn btn-secondary" style="min-height: 44px;">Download Template</a>
+        </div>
+        <div id="csv-drop-zone" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 24px; text-align: center; background: var(--bg-subtle, #f9fafb); cursor: pointer; min-height: 80px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;">
+          <span style="color: var(--text-secondary); font-size: 14px;">Drop CSV here or</span>
+          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="csv-browse-btn" style="min-height: 44px;">Browse</button>
+        </div>
+        <div id="csv-preview-section" style="display: none; flex: 1; min-height: 0; flex-direction: column;">
+          <div class="csv-preview-wrap" style="border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: auto;">
+            <table class="csv-preview-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border-default);">
+                  <th style="text-align: left; padding: 10px 8px;">Status</th>
+                  <th style="text-align: left; padding: 10px 8px;">Item Name</th>
+                  <th style="text-align: left; padding: 10px 8px;">Quantity</th>
+                  <th style="text-align: left; padding: 10px 8px;">Unit</th>
+                  <th style="text-align: left; padding: 10px 8px;">Supplier</th>
+                </tr>
+              </thead>
+              <tbody id="csv-preview-tbody"></tbody>
+            </table>
+          </div>
+          <p id="csv-preview-summary" style="font-size: 13px; color: var(--text-secondary); margin: 8px 0 0 0;"></p>
+          <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px;">
+            <button type="button" class="btn btn-secondary" id="csv-back-btn" style="min-height: 44px;">Back</button>
+            <button type="button" class="btn btn-primary" id="csv-commit-btn" style="min-height: 44px;">Confirm Add to Inventory</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Barcode / Camera Scan Modal -->
+  <div class="modal-overlay" id="barcode-scan-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card" style="max-width: 520px; width: 95vw; max-height: 90vh; display: flex; flex-direction: column; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Scan Barcode</h2>
+        <button type="button" id="barcode-scan-modal-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="barcode-camera-viewport" style="width: 100%; aspect-ratio: 4/3; background: #000; border-radius: var(--radius-md); overflow: hidden; position: relative; display: none;">
+        <video id="barcode-video" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 12px;">
+        <button type="button" class="btn btn-primary" id="barcode-capture-btn" style="min-height: 44px; flex: 1;">Capture snapshot</button>
+      </div>
+      <p id="barcode-capture-status" style="font-size: 13px; color: var(--text-secondary); margin: 6px 0 0 0; min-height: 20px;">Point at barcode — scanning automatically</p>
+      <div style="margin-top: 16px;">
+        <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Or enter barcode manually</label>
+        <input type="text" id="barcode-manual-input" placeholder="Enter barcode" style="width: 100%; padding: 12px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; min-height: 44px;">
+      </div>
+      <div id="barcode-result-preview" style="display: none; margin-top: 16px; padding: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-subtle, #f9fafb);">
+        <p style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Scanned: <span id="barcode-result-value"></span></p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Use the form below to add this item to inventory.</p>
+      </div>
+      <div style="margin-top: 16px; display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" id="barcode-scan-back-btn" style="min-height: 44px;">Back</button>
+        <button type="button" class="btn btn-primary" id="barcode-add-to-inventory-btn" style="min-height: 44px; display: none;">Add to Inventory</button>
+      </div>
     </div>
   </div>
 
