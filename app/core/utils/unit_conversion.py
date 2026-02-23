@@ -63,11 +63,13 @@ UNIT_DISPLAY_LABELS = {
     "containers": "Containers",
 }
 
-# Ensure units and labels stay in sync (fail fast if someone adds a unit but forgets a label)
-assert set(UNIT_DISPLAY_LABELS) == set(CONVERSION_FACTORS), (
-    "UNIT_DISPLAY_LABELS and CONVERSION_FACTORS must have the same keys. "
-    "Missing or extra keys in UNIT_DISPLAY_LABELS."
-)
+# Ensure units and labels stay in sync (fail fast if someone adds a unit but forgets a label).
+# Use explicit check instead of assert so it is not stripped by python -O.
+if set(UNIT_DISPLAY_LABELS) != set(CONVERSION_FACTORS):
+    raise RuntimeError(
+        "UNIT_DISPLAY_LABELS and CONVERSION_FACTORS must have the same keys. "
+        "Missing or extra keys in UNIT_DISPLAY_LABELS."
+    )
 
 # Unit categories (all lowercase for case-insensitive matching)
 MASS_UNITS = {"kg", "g", "mg", "lb", "oz", "ton", "tonne"}

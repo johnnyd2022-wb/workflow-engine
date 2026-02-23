@@ -1,140 +1,68 @@
-1. ❗ Float Parsing Still Exists (Highest Priority)
-Problem
+⚠ Remaining Risk #1 — Pre-Commit Duplicate Detection Race Window (Medium)
 
-Despite the design notes, the code still contains:
+You added:
 
-qty = float(qty_str)
-
-
-This defeats the decimal safety objective.
-
-Floating point parsing is still occurring in:
-
-Preview validation phase
-
-Commit phase
-
-Fix
-
-Replace all numeric parsing with decimal arithmetic.
-
-Example pattern:
-
-from decimal import Decimal, InvalidOperation
-
-try:
-    qty = Decimal(qty_str)
-    if qty <= 0:
-        raise ValidationError
-except InvalidOperation:
-    reject
-
-Why This Matters
-
-Floating point parsing can introduce:
-
-Representation drift
-
-Audit mismatch
-
-Compliance uncertainty
-
-This is especially relevant if inventory data feeds reporting pipelines.
-
-2. ❗ _is_allowed_unit() Is Now Redundant
-
-You have achieved single-source canonicalisation via:
-
-_unit_to_canonical()
+SELECT EXISTS check
 
 
-But validation still checks:
+But uniqueness enforcement is still database-level.
 
-_is_allowed_unit(unit_raw)
+This is correct.
 
+However:
 
-This creates two semantic validation paths.
+There is a classical race window:
 
-Fix
-
-Remove _is_allowed_unit() entirely.
-
-Replace validation logic with:
-
-canonical_unit = _unit_to_canonical(unit_raw)
-
-if canonical_unit is None:
-    error
+Thread A → passes pre-check
+Thread B → passes pre-check
+Both commit → IntegrityError
 
 
-This guarantees rule consistency.
+You already handle IntegrityError rollback.
 
-3. ⚠ Quantity Reconstruction Drift Risk
+So this is acceptable.
 
-You still reconstruct quantity via:
+I would not prioritise fixing this.
 
-quantity=str(qty)
+This is expected behaviour in high concurrency SaaS pipelines.
 
-
-Combined with float parsing, this can cause formatting drift.
-
-Example risk:
-
-"1.000" → float → 1.0 → "1.0"
-
-Correct Pattern
-
-If quantities are stored as strings:
-
-sanitize → validate → preserve original numeric representation
-
-
-Do not regenerate numeric strings after parsing.
-
-4. ⚠ Exception Variable Is Unused
+⚠ Remaining Risk #2 — Assertion in Runtime Module (Medium)
 
 You have:
 
-except Exception as e:
+assert set(UNIT_DISPLAY_LABELS) == set(CONVERSION_FACTORS)
 
 
-But e is not used.
+This is dangerous in production Python services.
 
-Either:
+Why
 
-Remove as e, or
+Python may disable asserts with:
 
-Add structured logging.
-
-Recommended:
-
-logger.exception("CSV batch commit failed", extra={"org_id": org_id})
+python -O
 
 
-Silent exception swallowing is operationally dangerous.
+If that happens:
 
-5. ⚠ Validation Logic Duplication Still Exists
+You lose fail-fast safety.
 
-You have improved architecture by introducing _validate_row() conceptually.
+Recommendation (Very Important)
 
-However, duplication still exists between:
+Replace with explicit runtime validation:
 
-Preview validation path
-
-Commit Phase 1 validation path
-
-The only remaining divergence risk is numeric parsing.
-
-Recommendation
-
-Extract:
-
-validate_row(name, qty_str, unit_raw)
+if set(UNIT_DISPLAY_LABELS) != set(CONVERSION_FACTORS):
+    raise RuntimeError("Unit configuration mismatch")
 
 
-Return:
+This is platform-safe.
 
-(status, message, canonical_unit, quantity_storage_value)
+Do this.
+
+Remove Float Parsing Entirely
+
+Even though Decimal validation is done, I still see:
+
+float() is completely gone except? (Confirm)
 
 
-This eliminates future drift risk.
+If there is any float usage left anywhere in ingestion path, remove it.
