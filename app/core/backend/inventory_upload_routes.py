@@ -161,7 +161,7 @@ def register_routes(bp):
             "expiry date": "expiry_date",
         }
         col_map = {}
-        for h in (reader.fieldnames or []):
+        for h in reader.fieldnames or []:
             key = (h or "").strip().lower()
             if key in required:
                 col_map[required[key]] = h
@@ -192,25 +192,29 @@ def register_routes(bp):
             unit = canonical_unit if canonical_unit else unit_raw
 
             validation.append({"row_index": row_index, "status": status, "message": message})
-            rows.append({
-                "row_index": row_index,
-                "name": name,
-                "quantity": quantity_str_for_storage or qty_str,
-                "unit": unit,
-                "supplier": supplier,
-                "purchase_date": purchase_date.isoformat() if purchase_date else None,
-                "batch_number": batch_number,
-                "expiry_date": expiry_date.isoformat() if expiry_date else None,
-            })
+            rows.append(
+                {
+                    "row_index": row_index,
+                    "name": name,
+                    "quantity": quantity_str_for_storage or qty_str,
+                    "unit": unit,
+                    "supplier": supplier,
+                    "purchase_date": purchase_date.isoformat() if purchase_date else None,
+                    "batch_number": batch_number,
+                    "expiry_date": expiry_date.isoformat() if expiry_date else None,
+                }
+            )
 
-        return jsonify({
-            "rows": rows,
-            "validation": validation,
-            "allowed_units": _allowed_units_list(),
-            "validated_count": len(rows),
-            "truncated": truncated,
-            "max_rows_allowed": CSV_MAX_ROWS,
-        })
+        return jsonify(
+            {
+                "rows": rows,
+                "validation": validation,
+                "allowed_units": _allowed_units_list(),
+                "validated_count": len(rows),
+                "truncated": truncated,
+                "max_rows_allowed": CSV_MAX_ROWS,
+            }
+        )
 
     @bp.route("/api/core/inventory/csv-commit", methods=["POST"])
     @requires_auth
@@ -237,12 +241,14 @@ def register_routes(bp):
             if status != "ok":
                 errors.append({"row_index": r.get("row_index"), "error": message or "Validation failed"})
                 continue
-            validated.append({
-                "row": r,
-                "name": name,
-                "quantity_str": quantity_str_for_storage,
-                "canonical_unit": canonical_unit,
-            })
+            validated.append(
+                {
+                    "row": r,
+                    "name": name,
+                    "quantity_str": quantity_str_for_storage,
+                    "canonical_unit": canonical_unit,
+                }
+            )
 
         if errors:
             return jsonify({"error": "Validation failed.", "created": [], "errors": errors}), 400
@@ -262,15 +268,23 @@ def register_routes(bp):
                     .first()
                 )
                 if exists:
-                    return jsonify({
-                        "error": "Duplicate batch number (org + name + batch already exists). No rows committed.",
-                        "created": [],
-                        "errors": [{"row_index": v["row"].get("row_index"), "error": "Duplicate batch (org + name + batch already exists)"}],
-                    }), 409
+                    return jsonify(
+                        {
+                            "error": "Duplicate batch number (org + name + batch already exists). No rows committed.",
+                            "created": [],
+                            "errors": [
+                                {
+                                    "row_index": v["row"].get("row_index"),
+                                    "error": "Duplicate batch (org + name + batch already exists)",
+                                }
+                            ],
+                        }
+                    ), 409
 
         logger.info(
             "CSV commit batch start org_id=%s source=csv_upload rows=%d",
-            org_id, len(validated),
+            org_id,
+            len(validated),
         )
         created = []
         for v in validated:
@@ -307,19 +321,22 @@ def register_routes(bp):
                 extra_data=extra_data,
                 commit=False,
             )
-            created.append({
-                "id": str(item.id),
-                "name": item.name,
-                "quantity": item.quantity,
-                "unit": item.unit,
-                "row_index": r.get("row_index"),
-            })
+            created.append(
+                {
+                    "id": str(item.id),
+                    "name": item.name,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "row_index": r.get("row_index"),
+                }
+            )
 
         try:
             db_session.commit()
             logger.info(
                 "CSV commit batch success org_id=%s source=csv_upload created=%d",
-                org_id, len(created),
+                org_id,
+                len(created),
             )
         except IntegrityError:
             db_session.rollback()
@@ -327,11 +344,13 @@ def register_routes(bp):
                 "CSV commit batch rollback (duplicate) org_id=%s source=csv_upload",
                 org_id,
             )
-            return jsonify({
-                "error": "Duplicate batch number (org + name + batch already exists). No rows committed.",
-                "created": [],
-                "errors": [{"error": "Duplicate batch (unique constraint)"}],
-            }), 409
+            return jsonify(
+                {
+                    "error": "Duplicate batch number (org + name + batch already exists). No rows committed.",
+                    "created": [],
+                    "errors": [{"error": "Duplicate batch (unique constraint)"}],
+                }
+            ), 409
         except Exception:
             db_session.rollback()
             logger.exception("CSV commit batch rollback (exception) org_id=%s source=csv_upload", org_id)
@@ -344,8 +363,10 @@ def register_routes(bp):
     def decode_barcode():
         """Barcode decoding is done in the browser (BarcodeDetector + ZXing). This endpoint is deprecated."""
         return (
-            jsonify({
-                "error": "Barcode decoding is performed in the browser. Use the scanner UI; no server-side decoding.",
-            }),
+            jsonify(
+                {
+                    "error": "Barcode decoding is performed in the browser. Use the scanner UI; no server-side decoding.",
+                }
+            ),
             410,
         )
