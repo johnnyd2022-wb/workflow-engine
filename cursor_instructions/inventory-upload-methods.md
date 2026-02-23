@@ -1,306 +1,145 @@
-# Inventory Addition Enhancements — Implementation Guide
+2️⃣ Critical Issues & Improvements for csv upload to inventory
+🚨 Issue 1: No Transaction Wrapping in csv_commit
 
-## Goal
+You are doing:
 
-Extend the existing **`core2.html` centralized inventory panel** to support **three inventory entry methods**:
+for r in rows:
+    repo.create_inventory_item(...)
 
-1. Manual Add Inventory (existing "+ Add to Inventory" modal)
-2. CSV Bulk Upload Inventory
-3. Barcode / Camera Scan Inventory (Python + raw HTML/CSS/JS)
 
-All implementations must be:
+If:
 
-- Responsive across **mobile, laptop, and desktop**
-- Non-blocking UX (streaming confirmations preferred)
-- Trustworthy — inventory must never silently mutate without user visibility
+Row 1 succeeds
 
----
+Row 2 succeeds
 
-## 1. Central Inventory Entry Hub
+Row 3 throws
 
-### On `core2.html`
+Row 4 succeeds
 
-Modify the **+ Add to Inventory** button flow to open a selection modal first.
+You will commit partial state.
 
-Add three entry paths:
+Risk:
 
-[ Manual Entry ]
-[ Upload CSV Template ]
-[ Scan Barcode / Camera ]
+Operational inconsistency
 
+Audit trail confusion
 
-Do NOT auto-switch methods.
+Broken expectation of “bulk commit”
 
-User must explicitly choose.
+Recommended Fix
 
----
+Wrap entire batch in a DB transaction:
 
-## 2. Manual Inventory Entry Modal (Existing Flow)
+with db_session.begin():
+    for r in rows:
+        ...
 
-Reuse the modal structure.
 
-### Required Fields
+Or:
 
-| Field | Requirement |
-|---|---|
-| Item Name | Required |
-| Quantity | Required |
-| Unit | Required |
-| Category | Required (default Raw material) |
-| Supplier Name | Optional |
-| Purchase Date | Optional |
-| Batch Number | Optional |
-| Expiry Date | Optional |
+try:
+    ...
+    db_session.commit()
+except:
+    db_session.rollback()
 
----
 
-### Business Rules
+Decide explicitly:
 
-- Quantity must be > 0
-- Unit must be from allowed unit list
-- Store inventory type:
-  - Raw Material
-  - Work In Progress
-  - Final Product
+Atomic batch? (all-or-nothing)
 
----
+Partial commit allowed? (current behavior)
 
-## 3. CSV Bulk Upload Inventory (New Feature)
+Right now it is implicitly partial.
 
-### 3.1 CSV Template Download
+That should be explicit.
 
-Add **Download Template Button**.
+🚨 Issue 2: Duplicate Batch Race Condition
 
-Generate template with headers:
+This check is unsafe:
 
-Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date
+existing = db_session.query(...).first()
 
 
-### Rules
+Two uploads in parallel could pass this check simultaneously.
 
-- Required columns:
-  - Item Name
-  - Quantity
-  - Unit
+Correct solution:
 
-- Optional columns:
-  - Supplier Name
-  - Purchase Date
-  - Batch Number
-  - Expiry Date
+Enforce unique constraint at DB level:
 
----
+UNIQUE (org_id, name, supplier_batch_number)
 
-### 3.2 UI Requirements
 
-Upload interface must show:
+Then catch IntegrityError on insert.
 
-- Drag and drop area
-- File picker button
-- Live validation preview
+Application-layer checks are not safe for uniqueness.
 
-Do NOT immediately commit inventory.
+⚠ Issue 3: Unit Normalization Inconsistency
 
-Instead:
+In validate:
 
-1. Parse CSV
-2. Validate rows
-3. Show streaming preview list:
+ul = _normalize_unit(unit_raw)
 
-✓ Row 1 validated
-✓ Row 2 validated
-⚠ Row 3 unit mismatch
 
+But in commit:
 
-User must confirm before commit.
+if not _is_allowed_unit(unit):
 
----
 
-### 3.3 CSV Parsing Backend Strategy
+If frontend changes casing to Kg or similar, normalization is weaker in commit phase.
 
-Implement streaming-style processing:
+Recommendation:
 
-Upload → Parse → Validate → Preview → Confirm → Commit Inventory
+Normalize on commit explicitly:
 
+unit = _normalize_unit(unit)
 
-Do NOT batch commit without preview.
 
----
+Then map to canonical value.
 
-### 3.4 Column Header Protection
+Never trust the frontend normalization.
 
-Attempt to enforce:
+⚠ Issue 4: Quantity Stored as str(qty)
 
-- Frozen header row in preview table
-- Unit dropdown suggestion list
+You pass:
 
-Frontend implementation:
+quantity=str(qty)
 
-- Use CSS sticky header:
 
-```css
-thead th {
-    position: sticky;
-    top: 0;
-    background: var(--bg-card);
-    z-index: 10;
-}
-3.5 Unit Dropdown Enforcement
-In preview grid:
+This is suspicious.
 
-Replace Unit text with selectable dropdown.
+Inventory quantities should be numeric types:
 
-Allowed units should come from backend configuration.
+Decimal
 
-Autocomplete preferred.
+Numeric
 
-Prevent invalid unit submission.
+Float (if you're okay with precision risk)
 
-4. Barcode / Camera Inventory Scan
-Implement using Python backend + raw HTML/JS frontend.
+If DB column is string:
+That is a design flaw for financial/compliance-grade systems.
 
-Do not introduce heavy frameworks.
+If DB column is numeric and repo casts:
+Fine.
 
-4.1 Frontend Scanner UI
-Create scanner panel:
+But verify that.
 
-[ Camera Viewport ]
-[ Capture Button ]
-[ Manual Fallback Input ]
-[ Scan Result Preview ]
-[ Add To Inventory ]
-4.2 Browser Camera Access
-Use native browser APIs:
+⚠ Issue 5: Missing CSV Row Count Limit on Validation
 
-navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment" }
-});
-Prefer rear camera on mobile.
+You limit commit to 500 rows:
 
-4.3 Barcode Detection Strategy
-Backend Python should handle decoding.
+if len(rows) > 500:
 
-Suggested libraries:
 
-python-zxing or pyzbar
+But validation does not enforce row count.
 
-Flow:
+Someone could upload 50k rows → heavy memory usage during validation.
 
-Capture Frame → Send Image → Backend Decode → Return Item Metadata
-4.4 Scan Result Behaviour
-When barcode is decoded:
+Add:
 
-Lookup inventory item
+if i > 500:
+    break
 
-Populate modal fields automatically
 
-Show confirmation card
-
-Never auto-add inventory.
-
-User must confirm.
-
-5. Streaming Confirmation UX (Critical)
-For all three methods:
-
-Inventory must be added only after explicit confirmation.
-
-Show confirmation summary:
-
-Item: Steel Rods
-Quantity: 50 kg
-Supplier: ABC Ltd
-Source: CSV Upload (Row 12)
-Then show:
-
-[ Confirm Add to Inventory ]
-6. Backend Validation Layer
-Before inventory commit:
-
-Check:
-
-Unit consistency
-
-Quantity numeric validity
-
-Positive stock rule
-
-Duplicate batch detection (if batch number provided)
-
-7. Mobile UX Priority
-Ensure:
-
-Modal width = 95vw max on mobile
-
-Tables scroll vertically
-
-Scanner camera defaults to fullscreen viewport
-
-Buttons are touch-friendly (minimum 44px height)
-
-8. Audit Logging (Platform Requirement)
-Every inventory mutation must record:
-
-User ID
-
-Timestamp UTC
-
-Source method:
-
-manual
-
-csv_upload
-
-barcode_scan
-
-Store in:
-
-extra_data.inventory_audit_history
-Append only.
-
-Never overwrite.
-
-9. Performance Expectations
-CSV processing must be incremental.
-
-Scanner decoding should not block UI thread.
-
-Inventory commit should be transactional.
-
-10. Non-Goals (Explicit)
-Do NOT implement:
-
-Background auto-stock inference
-
-Phantom inventory creation
-
-Silent reconciliation
-
-11. Security Notes
-Validate uploaded CSV size.
-
-Reject malformed rows.
-
-Sanitize all string inputs.
-
-Backend must revalidate all previewed data before commit.
-
-12. Future Extension Ready
-Design code so that you can later add:
-
-Supplier portal uploads
-
-IoT inventory feeds
-
-Multi-execution reconciliation
-
-Priority Implementation Order
-CSV Upload Pipeline
-
-Streaming Preview Validation
-
-Barcode Scanner UI
-
-Backend Decoder Endpoint
-
-Audit Trail Logging
+Or hard error if > 500.

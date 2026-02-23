@@ -1313,7 +1313,9 @@
       });
       const okCount = (res.validation || []).filter(function(v) { return v.status === 'ok'; }).length;
       const errCount = (res.validation || []).filter(function(v) { return v.status === 'error'; }).length;
-      document.getElementById('csv-preview-summary').textContent = okCount + ' row(s) valid' + (errCount ? ', ' + errCount + ' with errors (fix and confirm)' : '') + '. Edit any field then confirm.';
+      var summary = okCount + ' row(s) valid' + (errCount ? ', ' + errCount + ' with errors (fix and confirm)' : '') + '. Edit any field then confirm.';
+      if (res.truncated) summary += ' Only first ' + (res.rows && res.rows.length ? res.rows.length : 500) + ' rows validated; maximum 500 rows per file.';
+      document.getElementById('csv-preview-summary').textContent = summary;
     }
 
     document.getElementById('csv-back-btn')?.addEventListener('click', function() {

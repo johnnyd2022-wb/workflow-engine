@@ -7,15 +7,18 @@ from datetime import datetime
 from uuid import UUID
 
 from flask import g, jsonify, request
+from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
-from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.unit_conversion import CONVERSION_FACTORS
 
 # Max CSV file size (2MB)
 CSV_MAX_BYTES = 2 * 1024 * 1024
+# Max rows per CSV (validation and commit)
+CSV_MAX_ROWS = 500
 
 # Display labels for dropdown (value -> label); keys match CONVERSION_FACTORS where applicable
 UNIT_LABELS = {
@@ -72,6 +75,17 @@ def _normalize_unit(u: str) -> str:
     if not u:
         return ""
     return (u or "").strip().lower()
+
+
+def _unit_to_canonical(unit: str) -> str | None:
+    """Map normalized unit to a canonical display value from allowed list, or None if not allowed."""
+    u = _normalize_unit(unit)
+    if not u or u not in CONVERSION_FACTORS:
+        if unit and unit.strip() in ("L", "mL"):
+            return unit.strip()
+        return None
+    display_prefer = {"l": "L", "ml": "mL"}
+    return display_prefer.get(u, u)
 
 
 def _parse_date(s):
@@ -158,7 +172,11 @@ def register_routes(bp):
 
         rows = []
         validation = []
+        truncated = False
         for i, row in enumerate(reader):
+            if i >= CSV_MAX_ROWS:
+                truncated = True
+                break
             row_index = i + 2  # 1-based + header
             name = _sanitize(row.get(col_map["name"], ""), 255)
             qty_str = (row.get(col_map["qty"], "") or "").strip()
@@ -215,6 +233,7 @@ def register_routes(bp):
             "rows": rows,
             "validation": validation,
             "allowed_units": _allowed_units_list(),
+            "truncated": truncated,
         })
 
     @bp.route("/api/core/inventory/csv-commit", methods=["POST"])
@@ -227,20 +246,21 @@ def register_routes(bp):
             return jsonify({"error": "Expected JSON body with 'rows' array."}), 400
 
         rows = data["rows"]
-        if len(rows) > 500:
-            return jsonify({"error": "Maximum 500 rows per upload."}), 400
+        if len(rows) > CSV_MAX_ROWS:
+            return jsonify({"error": f"Maximum {CSV_MAX_ROWS} rows per upload."}), 400
 
         repo = InventoryRepository(db_session)
-        created = []
         errors = []
+        # Phase 1: validate all rows; do not create yet
         for r in rows:
             name = _sanitize(r.get("name"), 255)
             qty_str = (r.get("quantity") or "").strip()
-            unit = (r.get("unit") or "").strip()
-            if not name or not unit:
+            unit_raw = (r.get("unit") or "").strip()
+            if not name or not unit_raw:
                 errors.append({"row_index": r.get("row_index"), "error": "Missing name or unit"})
                 continue
-            if not _is_allowed_unit(unit):
+            canonical_unit = _unit_to_canonical(unit_raw)
+            if not _is_allowed_unit(unit_raw) or canonical_unit is None:
                 errors.append({"row_index": r.get("row_index"), "error": "Invalid unit"})
                 continue
             try:
@@ -252,25 +272,26 @@ def register_routes(bp):
                 errors.append({"row_index": r.get("row_index"), "error": "Invalid quantity"})
                 continue
 
+        if errors:
+            return jsonify({"error": "Validation failed.", "created": [], "errors": errors}), 400
+
+        # Phase 2: all rows valid — create all in one transaction (atomic batch)
+        created = []
+        for r in rows:
+            name = _sanitize(r.get("name"), 255)
+            qty_str = (r.get("quantity") or "").strip()
+            unit_raw = (r.get("unit") or "").strip()
+            canonical_unit = _unit_to_canonical(unit_raw)
+            try:
+                qty = float(qty_str)
+            except (TypeError, ValueError):
+                qty = 0
             purchase_date = _parse_date(r.get("purchase_date") or "")
             expiry_date = _parse_date(r.get("expiry_date") or "")
             supplier = _sanitize(r.get("supplier"), 255) or None
             batch_number = _sanitize(r.get("batch_number"), 255) or None
 
-            if batch_number:
-                existing = (
-                    db_session.query(InventoryItem)
-                    .filter(
-                        InventoryItem.org_id == org_id,
-                        InventoryItem.name == name,
-                        InventoryItem.supplier_batch_number == batch_number,
-                    )
-                    .first()
-                )
-                if existing:
-                    errors.append({"row_index": r.get("row_index"), "error": "Duplicate batch number"})
-                    continue
-
+            # Quantity stored as string per InventoryItem model (preserves precision).
             extra_data = {
                 "inventory_audit_history": [
                     {
@@ -282,30 +303,41 @@ def register_routes(bp):
                 ]
             }
 
-            try:
-                item = repo.create_inventory_item(
-                    org_id=org_id,
-                    name=name,
-                    quantity=str(qty),
-                    unit=unit,
-                    inventory_type=InventoryType.RAW_MATERIAL.value,
-                    supplier=supplier,
-                    purchase_date=purchase_date,
-                    supplier_batch_number=batch_number,
-                    expiry_date=expiry_date,
-                    extra_data=extra_data,
-                )
-                created.append({
-                    "id": str(item.id),
-                    "name": item.name,
-                    "quantity": item.quantity,
-                    "unit": item.unit,
-                    "row_index": r.get("row_index"),
-                })
-            except Exception as e:
-                errors.append({"row_index": r.get("row_index"), "error": str(e)})
+            item = repo.create_inventory_item(
+                org_id=org_id,
+                name=name,
+                quantity=str(qty),
+                unit=canonical_unit,
+                inventory_type=InventoryType.RAW_MATERIAL.value,
+                supplier=supplier,
+                purchase_date=purchase_date,
+                supplier_batch_number=batch_number,
+                expiry_date=expiry_date,
+                extra_data=extra_data,
+                commit=False,
+            )
+            created.append({
+                "id": str(item.id),
+                "name": item.name,
+                "quantity": item.quantity,
+                "unit": item.unit,
+                "row_index": r.get("row_index"),
+            })
 
-        return jsonify({"created": created, "errors": errors})
+        try:
+            db_session.commit()
+        except IntegrityError:
+            db_session.rollback()
+            return jsonify({
+                "error": "Duplicate batch number (org + name + batch already exists). No rows committed.",
+                "created": [],
+                "errors": [{"error": "Duplicate batch (unique constraint)"}],
+            }), 409
+        except Exception as e:
+            db_session.rollback()
+            return jsonify({"error": "Commit failed; no rows committed.", "created": [], "errors": []}), 500
+
+        return jsonify({"created": created, "errors": []})
 
     @bp.route("/api/core/inventory/decode-barcode", methods=["POST"])
     @requires_auth
