@@ -1,186 +1,84 @@
-1. Remove Duplicate Unit Validation Path
-Issue
+Remaining Recommendations — Quick Summary
+1. Single Source of Truth for Unit Validation
 
-Unit validation currently occurs through multiple logic paths:
-
-_is_allowed_unit()
-
-_unit_to_canonical()
-
-This introduces the risk of divergence between validation rules and storage rules.
-
-Fix
-
-Make _unit_to_canonical() the single authoritative validator.
-
-Implementation:
-
-Remove redundant unit checks.
-
-Replace all unit validation logic with canonical mapping resolution.
-
-Desired behaviour:
-
-raw unit → normalize → canonical mapping OR reject
-
-2. Replace Floating-Point Parsing with Decimal Validation
-Issue
-
-Quantities are validated using:
-
-float(qty_str)
-
-
-This introduces potential precision drift due to floating-point representation.
-
-Fix
-
-Use arbitrary precision numeric parsing.
+The pipeline currently validates units using multiple helper paths. This should be consolidated so that canonical unit mapping is the only validation gate.
 
 Recommended approach:
 
-Python Decimal for validation.
+Normalize input → resolve canonical unit → reject if mapping fails.
 
-Reject malformed numeric input explicitly.
+Remove redundant checks such as separate allowed-unit predicates.
 
-Avoid:
+This reduces regression risk and ensures storage semantics always match validation semantics.
 
-Intermediate float conversion.
+2. Use Decimal Arithmetic for Quantity Validation
 
-3. Preserve Original Quantity String After Sanitization
-Issue
+Floating-point parsing is still used during validation.
 
-Quantities are validated numerically but then stored as:
+Replace this with arbitrary precision numeric validation using decimal arithmetic.
 
-quantity=str(qty)
+Key goals:
 
+Avoid representation drift.
 
-This may alter user-provided formatting semantics.
+Improve audit consistency.
 
-Example drift:
+Ensure deterministic ingestion behaviour.
 
-"1.000" → float → 1.0 → "1.0"
+If quantities are stored as strings, validate numerically but preserve the sanitized original numeric representation.
 
-Fix
+3. Avoid Numeric Reconstruction Drift
 
-If quantities are stored as strings:
+The current pipeline converts:
 
-Validate using Decimal
+input string → float → string storage
 
-Store sanitized original input string
 
-This preserves precision fidelity.
+This can subtly change formatting.
 
-4. Add Structured Logging for Commit Failures
-Issue
+Preferred pattern:
 
-System exceptions during commit are currently swallowed:
+sanitize → validate → store original numeric form
 
-except Exception:
-    rollback()
-    return 500
 
+Do not reformat numeric strings after parsing.
 
-No diagnostic information is captured.
+4. Add Structured Logging for Batch Operations
 
-Fix
+Commit failures currently return generic error responses.
 
-Add server-side exception logging.
+Introduce server-side structured logging for:
 
-Recommended pattern:
+Batch start events
 
-logger.exception("CSV commit failed")
+Batch success events
 
+Batch rollback events
 
-Do not expose internal exception details to API clients.
+Exception stack traces
 
-5. Consolidate Validation Logic Into Single Canonical Path
-Issue
+This improves operational observability and debugging efficiency.
 
-Validation occurs:
+5. Reduce Validation Logic Duplication
 
-During preview validation
+Validation occurs in both preview and commit phases.
 
-During commit validation
+While this is architecturally correct, shared validation logic should be extracted into a reusable function to prevent divergence over time.
 
-However, logic duplication exists between phases.
+Suggested abstraction:
 
-Fix
+validate_csv_row(row) → validation result object
 
-Extract shared validation into a reusable function.
+6. Improve Transaction Boundary Visibility
 
-Benefits:
+Although batch commits are atomic, transaction lifecycle signals are not explicitly logged.
 
-Reduces regression risk
+Optional but recommended:
 
-Ensures parity between preview and commit behaviour
+Log batch ingestion size
 
-Simplifies future rule changes
+Log tenant ID
 
-6. Improve Unique Constraint Enforcement Feedback
-Issue
+Log source method metadata
 
-Duplicate batch conflicts are handled via IntegrityError.
-
-However:
-
-Row-level error reporting is not available.
-
-Users receive a generic conflict response.
-
-Fix
-
-Consider optional pre-commit duplicate detection for user experience improvement.
-
-Required constraint remains database-level uniqueness enforcement.
-
-7. Improve CSV Truncation Contract
-Issue
-
-Frontend infers truncation message using row count heuristics.
-
-Fix
-
-Backend should explicitly return:
-
-validated_count
-
-truncated_flag
-
-max_rows_allowed
-
-This removes ambiguity in client rendering.
-
-8. Add Structured Transaction Boundary Logging (Optional but Recommended)
-Issue
-
-Transaction boundaries are currently implicit.
-
-Fix
-
-Consider logging:
-
-Batch start
-
-Batch success
-
-Batch failure
-
-This improves operational observability during ingestion events.
-
-9. Remove Dead Exception Variable
-
-Current code captures:
-
-except Exception as e:
-
-
-But does not use e.
-
-Fix
-
-Either:
-
-Log exception
-
-Or remove variable binding.
+This is particularly valuable for multi-tenant SaaS monitoring.

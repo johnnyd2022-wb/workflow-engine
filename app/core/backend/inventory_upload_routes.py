@@ -175,7 +175,6 @@ def register_routes(bp):
             return jsonify({"error": "Provide 'file' (multipart) or request body as CSV text."}), 400
 
         reader = csv.DictReader(io.StringIO(text))
-        fieldnames = reader.fieldnames or []
         # Normalize headers: strip and case-insensitive match
         required = {"item name": "name", "quantity": "qty", "unit": "unit"}
         optional = {
@@ -185,7 +184,7 @@ def register_routes(bp):
             "expiry date": "expiry_date",
         }
         col_map = {}
-        for h in fieldnames:
+        for h in (reader.fieldnames or []):
             key = (h or "").strip().lower()
             if key in required:
                 col_map[required[key]] = h
@@ -292,7 +291,10 @@ def register_routes(bp):
                         "errors": [{"row_index": v["row"].get("row_index"), "error": "Duplicate batch (org + name + batch already exists)"}],
                     }), 409
 
-        logger.info("CSV commit batch start org_id=%s rows=%d", org_id, len(validated))
+        logger.info(
+            "CSV commit batch start org_id=%s source=csv_upload rows=%d",
+            org_id, len(validated),
+        )
         created = []
         for v in validated:
             r = v["row"]
@@ -338,10 +340,16 @@ def register_routes(bp):
 
         try:
             db_session.commit()
-            logger.info("CSV commit batch success org_id=%s created=%d", org_id, len(created))
+            logger.info(
+                "CSV commit batch success org_id=%s source=csv_upload created=%d",
+                org_id, len(created),
+            )
         except IntegrityError:
             db_session.rollback()
-            logger.warning("CSV commit batch duplicate (IntegrityError) org_id=%s", org_id)
+            logger.warning(
+                "CSV commit batch rollback (duplicate) org_id=%s source=csv_upload",
+                org_id,
+            )
             return jsonify({
                 "error": "Duplicate batch number (org + name + batch already exists). No rows committed.",
                 "created": [],
@@ -349,7 +357,7 @@ def register_routes(bp):
             }), 409
         except Exception:
             db_session.rollback()
-            logger.exception("CSV commit failed")
+            logger.exception("CSV commit batch rollback (exception) org_id=%s source=csv_upload", org_id)
             return jsonify({"error": "Commit failed; no rows committed.", "created": [], "errors": []}), 500
 
         return jsonify({"created": created, "errors": []})
