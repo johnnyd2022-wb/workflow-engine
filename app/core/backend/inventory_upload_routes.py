@@ -135,7 +135,6 @@ def register_routes(bp):
         - Dates: parsed as YYYY-MM-DD, DD/MM/YYYY, or MM/DD/YYYY; invalid dates left empty.
         - On commit (csv_commit): same checks re-applied; duplicate batch (same org + name + batch number) rejected.
         """
-        org_id = UUID(g.org_id)
         file = request.files.get("file")
         raw = request.get_data(as_text=True) if not file else None
         if file:
