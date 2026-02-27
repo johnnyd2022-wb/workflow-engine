@@ -1248,19 +1248,26 @@
           settled = true;
           resolve(false);
         }, CAMERA_CHECK_TIMEOUT_MS);
-        navigator.mediaDevices.enumerateDevices()
-          .then(function(devices) {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            resolve(devices.some(function(d) { return d && d.kind === 'videoinput'; }));
-          })
-          .catch(function() {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            resolve(false);
-          });
+        try {
+          navigator.mediaDevices.enumerateDevices()
+            .then(function(devices) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(devices.some(function(d) { return d && d.kind === 'videoinput'; }));
+            })
+            .catch(function() {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(false);
+            });
+        } catch (e) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
+        }
       });
       return barcodeCameraCheckPromise;
     }
