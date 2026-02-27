@@ -1385,6 +1385,24 @@
     let lastBarcodeDecodeTime = 0;
     const BARCODE_SCAN_INTERVAL_MS = 450;
     const DECODE_TIMEOUT_MS = 800;
+    const BARCODE_QUALITY_MIN_VARIANCE = 30;
+
+    function getFrameQualityScore(canvas) {
+      var ctx = canvas.getContext('2d');
+      var w = Math.min(canvas.width, 160);
+      var h = Math.min(canvas.height, 120);
+      var data = ctx.getImageData(0, 0, w, h).data;
+      var sum = 0, sumSq = 0, n = 0;
+      for (var i = 0; i < data.length; i += 4) {
+        var g = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        sum += g;
+        sumSq += g * g;
+        n++;
+      }
+      if (n === 0) return 0;
+      var mean = sum / n;
+      return (sumSq / n) - (mean * mean);
+    }
 
     function stopBarcodeScanLoop() {
       if (barcodeScanLoopId != null) {
@@ -1403,7 +1421,7 @@
       var video = document.getElementById('barcode-video');
       var statusEl = document.getElementById('barcode-capture-status');
       if (!video || !statusEl) return;
-      setBarcodeStatus('Scanning automatically…');
+      setBarcodeStatus('Scanning…');
       function tick() {
         if (lastBarcodeValue) return;
         if (!video.videoWidth || !video.readyState || video.readyState < 2) {
@@ -1420,17 +1438,21 @@
           return;
         }
         lastBarcodeDecodeTime = now;
-        decodeInProgress = true;
         var canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
+        if (getFrameQualityScore(canvas) <= BARCODE_QUALITY_MIN_VARIANCE) {
+          barcodeScanLoopId = requestAnimationFrame(tick);
+          return;
+        }
+        decodeInProgress = true;
         decodeBarcodeFromCanvas(canvas).then(function(value) {
           decodeInProgress = false;
           if (value && !lastBarcodeValue) {
             if (value === lastCandidateBarcode) {
               barcodeConfidenceCounter++;
-              if (barcodeConfidenceCounter >= 2) {
+              if (barcodeConfidenceCounter >= 3) {
                 lastBarcodeValue = value;
                 lastCandidateBarcode = null;
                 barcodeConfidenceCounter = 0;
@@ -1438,15 +1460,15 @@
                 document.getElementById('barcode-result-value').textContent = value;
                 document.getElementById('barcode-result-preview').style.display = 'block';
                 document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
-                setBarcodeStatus('Barcode found.');
+                setBarcodeStatus('Barcode confirmed.');
                 stopBarcodeScanLoop();
               } else {
-                setBarcodeStatus('Hold still — verifying…');
+                setBarcodeStatus('Verifying barcode');
               }
             } else {
               lastCandidateBarcode = value;
               barcodeConfidenceCounter = 1;
-              setBarcodeStatus('Hold still — verifying…');
+              setBarcodeStatus('Verifying barcode');
             }
           } else {
             lastCandidateBarcode = null;
@@ -1455,13 +1477,14 @@
             else {
               barcodeConsecutiveFailures++;
               if (barcodeConsecutiveFailures >= 8) {
-                setBarcodeStatus('Move barcode into brighter light');
+                setBarcodeStatus('Move to brighter area');
                 var hint = document.getElementById('barcode-low-light-hint');
                 if (hint) hint.style.display = 'block';
               } else {
-                setBarcodeStatus('Scanning automatically…');
+                setBarcodeStatus('Scanning…');
               }
             }
+          }
         }).catch(function() {
           decodeInProgress = false;
           barcodeConsecutiveFailures++;
@@ -1613,7 +1636,7 @@
       if (lastBarcodeValue) return;
       const video = document.getElementById('barcode-video');
       if (!video || !video.videoWidth) return;
-      setBarcodeStatus('Scanning automatically…');
+      setBarcodeStatus('Scanning…');
       var canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -1624,7 +1647,7 @@
           document.getElementById('barcode-result-value').textContent = value;
           document.getElementById('barcode-result-preview').style.display = 'block';
           document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
-          setBarcodeStatus('Barcode found.');
+          setBarcodeStatus('Barcode confirmed.');
           stopBarcodeScanLoop();
         } else {
           setBarcodeStatus('Point camera at barcode');
