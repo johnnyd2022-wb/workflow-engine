@@ -1232,22 +1232,62 @@
       }
     };
 
+    let barcodeCameraCheckPromise = null;
+
+    function isBarcodeCameraAvailable() {
+      if (barcodeCameraCheckPromise) return barcodeCameraCheckPromise;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        barcodeCameraCheckPromise = Promise.resolve(false);
+        return barcodeCameraCheckPromise;
+      }
+      barcodeCameraCheckPromise = navigator.mediaDevices.enumerateDevices()
+        .then(function(devices) {
+          return devices.some(function(d) { return d && d.kind === 'videoinput'; });
+        })
+        .catch(function() { return false; });
+      return barcodeCameraCheckPromise;
+    }
+
     function setupInventoryEntryHub() {
       const hubModal = document.getElementById('inventory-entry-hub-modal');
       const addInventoryModal = document.getElementById('add-inventory-modal');
       if (!hubModal) return;
-      document.getElementById('inventory-entry-manual-btn')?.addEventListener('click', function() {
-      if (hubModal) hubModal.style.display = 'none';
-      if (addInventoryModal) { addInventoryModal.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
-    });
-    document.getElementById('inventory-entry-csv-btn')?.addEventListener('click', function() {
-      if (hubModal) hubModal.style.display = 'none';
-      openCsvUploadModal();
-    });
-    document.getElementById('inventory-entry-scan-btn')?.addEventListener('click', function() {
-      if (hubModal) hubModal.style.display = 'none';
-      openBarcodeScanModal();
-    });
+
+      const manualBtn = document.getElementById('inventory-entry-manual-btn');
+      if (manualBtn) {
+        manualBtn.addEventListener('click', function() {
+          hubModal.style.display = 'none';
+          if (addInventoryModal) {
+            addInventoryModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+          }
+        });
+      }
+
+      const csvBtn = document.getElementById('inventory-entry-csv-btn');
+      if (csvBtn) {
+        csvBtn.addEventListener('click', function() {
+          hubModal.style.display = 'none';
+          openCsvUploadModal();
+        });
+      }
+
+      const scanBtn = document.getElementById('inventory-entry-scan-btn');
+      if (scanBtn) {
+        isBarcodeCameraAvailable().then(function(hasCamera) {
+          if (!hasCamera) {
+            scanBtn.style.display = 'none';
+          } else {
+            scanBtn.addEventListener('click', function() {
+              hubModal.style.display = 'none';
+              openBarcodeScanModal();
+            });
+          }
+        }).catch(function() {
+          scanBtn.style.display = 'none';
+        });
+      }
+    }
 
     // --- CSV Upload Modal ---
     const CSV_TEMPLATE_HEADERS = 'Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date';
