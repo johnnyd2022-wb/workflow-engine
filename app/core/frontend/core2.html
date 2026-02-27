@@ -1761,7 +1761,6 @@
     document.getElementById('barcode-scan-back-btn')?.addEventListener('click', function() { closeBarcodeScanModal(); if (hubModal) { hubModal.style.display = 'flex'; document.body.style.overflow = 'hidden'; } });
     window.openCsvUploadModal = openCsvUploadModal;
     window.openBarcodeScanModal = openBarcodeScanModal;
-    }
 
     // Attach the Create Process Form Handler Once + help tooltips
     document.addEventListener('DOMContentLoaded', () => {
@@ -2111,7 +2110,7 @@
         notificationTimeout = null;
       }
     }
-    
+
     // Add inventory handler with optimistic UI
     window.addInventoryItem = function (form) {
       const formData = new FormData(form);
