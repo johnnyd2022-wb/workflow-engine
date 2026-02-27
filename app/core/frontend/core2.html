@@ -1233,6 +1233,7 @@
     };
 
     let barcodeCameraCheckPromise = null;
+    const CAMERA_CHECK_TIMEOUT_MS = 3000;
 
     function isBarcodeCameraAvailable() {
       if (barcodeCameraCheckPromise) return barcodeCameraCheckPromise;
@@ -1240,11 +1241,27 @@
         barcodeCameraCheckPromise = Promise.resolve(false);
         return barcodeCameraCheckPromise;
       }
-      barcodeCameraCheckPromise = navigator.mediaDevices.enumerateDevices()
-        .then(function(devices) {
-          return devices.some(function(d) { return d && d.kind === 'videoinput'; });
-        })
-        .catch(function() { return false; });
+      barcodeCameraCheckPromise = new Promise(function(resolve) {
+        var settled = false;
+        var timer = setTimeout(function() {
+          if (settled) return;
+          settled = true;
+          resolve(false);
+        }, CAMERA_CHECK_TIMEOUT_MS);
+        navigator.mediaDevices.enumerateDevices()
+          .then(function(devices) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(devices.some(function(d) { return d && d.kind === 'videoinput'; }));
+          })
+          .catch(function() {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(false);
+          });
+      });
       return barcodeCameraCheckPromise;
     }
 
