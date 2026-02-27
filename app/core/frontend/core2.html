@@ -1395,7 +1395,8 @@
     const BARCODE_EXPOSURE_STABILITY_MAX = 60;
     const BARCODE_HISTORY_LENGTH = 10;
     const BARCODE_VOTE_QUORUM = 5;
-    const BARCODE_EDGE_FLUCTUATION_THRESHOLD = 8;
+    const BARCODE_EDGE_VOLATILITY_MAX = 0.45;
+    const BARCODE_CENTER_BORDER_MAX = 90;
     let lastFrameEdgeScore = null;
 
     function getFrameQualityScore(canvas) {
@@ -1447,6 +1448,37 @@
       var mean = brightnessSamples.reduce(function(a, b) { return a + b; }, 0) / brightnessSamples.length;
       var variance = brightnessSamples.reduce(function(a, b) { return a + (b - mean) * (b - mean); }, 0) / brightnessSamples.length;
       return Math.sqrt(variance);
+    }
+
+    function centerBorderLuminanceDiff(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var w = canvas.width;
+      var h = canvas.height;
+      var margin = Math.floor(Math.min(w, h) * 0.15);
+      var cx1 = margin;
+      var cx2 = w - margin;
+      var cy1 = margin;
+      var cy2 = h - margin;
+      var centerSum = 0, centerN = 0;
+      var borderSum = 0, borderN = 0;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          var idx = (y * w + x) * 4;
+          var g = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+          if (x >= cx1 && x < cx2 && y >= cy1 && y < cy2) {
+            centerSum += g;
+            centerN++;
+          } else {
+            borderSum += g;
+            borderN++;
+          }
+        }
+      }
+      var centerMean = centerN ? centerSum / centerN : 128;
+      var borderMean = borderN ? borderSum / borderN : 128;
+      return Math.abs(centerMean - borderMean);
     }
 
     function sobelEdgeDensity(canvas) {
@@ -1532,9 +1564,16 @@
           scheduleNext();
           return;
         }
+        if (centerBorderLuminanceDiff(canvas) > BARCODE_CENTER_BORDER_MAX) {
+          scheduleNext();
+          return;
+        }
 
         var currentEdge = sobelEdgeDensity(canvas);
-        if (lastFrameEdgeScore != null && Math.abs(currentEdge - lastFrameEdgeScore) > BARCODE_EDGE_FLUCTUATION_THRESHOLD) {
+        var edgeVolatility = lastFrameEdgeScore != null
+          ? Math.abs(currentEdge - lastFrameEdgeScore) / (lastFrameEdgeScore + 1)
+          : 0;
+        if (edgeVolatility > BARCODE_EDGE_VOLATILITY_MAX) {
           lastFrameEdgeScore = currentEdge;
           scheduleNext();
           return;
