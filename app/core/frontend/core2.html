@@ -1385,10 +1385,13 @@
     let lastBarcodeDecodeTime = 0;
     let barcodeCandidateHistory = [];
     let lastFrameQualityScore = null;
+    let lastFrameStabilityScore = null;
     const BARCODE_SCAN_INTERVAL_MS = 450;
     const DECODE_TIMEOUT_MS = 800;
     const BARCODE_QUALITY_MIN_VARIANCE = 30;
     const BARCODE_MOTION_DIFF_THRESHOLD = 600;
+    const BARCODE_STABILITY_DIFF_THRESHOLD = 40;
+    const BARCODE_CONFIDENCE_THRESHOLD = 0.5;
 
     function getFrameQualityScore(canvas) {
       var ctx = canvas.getContext('2d');
@@ -1407,6 +1410,26 @@
       return (sumSq / n) - (mean * mean);
     }
 
+    function frameStabilityScore(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var cx = 0, cy = 0, total = 0;
+      for (var y = 0; y < canvas.height; y++) {
+        for (var x = 0; x < canvas.width; x++) {
+          var idx = (y * canvas.width + x) * 4;
+          var g = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+          cx += x * g;
+          cy += y * g;
+          total += g;
+        }
+      }
+      if (!total) return 0;
+      cx /= total;
+      cy /= total;
+      return Math.sqrt(cx * cx + cy * cy);
+    }
+
     function stopBarcodeScanLoop() {
       if (barcodeScanLoopId != null) {
         cancelAnimationFrame(barcodeScanLoopId);
@@ -1414,9 +1437,13 @@
       }
     }
 
+    function safeSet(id, value) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+
     function setBarcodeStatus(msg) {
-      var el = document.getElementById('barcode-capture-status');
-      if (el) el.textContent = msg;
+      safeSet('barcode-capture-status', msg);
     }
 
     function startBarcodeScanLoop() {
@@ -1453,10 +1480,19 @@
         }
         lastFrameQualityScore = currentQuality;
 
+        var currentStability = frameStabilityScore(canvas);
+        if (lastFrameStabilityScore != null && Math.abs(currentStability - lastFrameStabilityScore) > BARCODE_STABILITY_DIFF_THRESHOLD) {
+          lastFrameStabilityScore = currentStability;
+          scheduleNext();
+          return;
+        }
+        lastFrameStabilityScore = currentStability;
+
         var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
         if (currentQuality <= qualityThreshold) { scheduleNext(); return; }
 
         decodeInProgress = true;
+        var frameQualityForConfidence = currentQuality;
         decodeBarcodeFromCanvas(canvas).then(function(value) {
           decodeInProgress = false;
           if (value && !lastBarcodeValue) {
@@ -1470,14 +1506,24 @@
             var accepted = null;
             for (var k in counts) { if (counts[k] >= 3) { accepted = k; break; } }
             if (accepted) {
-              lastBarcodeValue = accepted;
-              barcodeCandidateHistory = [];
-              barcodeConsecutiveFailures = 0;
-              document.getElementById('barcode-result-value').textContent = accepted;
-              document.getElementById('barcode-result-preview').style.display = 'block';
-              document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
-              setBarcodeStatus('Barcode confirmed.');
-              stopBarcodeScanLoop();
+              var voteRatio = counts[accepted] / barcodeCandidateHistory.length;
+              var qualityComponent = Math.max(0, Math.min(1, frameQualityForConfidence / 100));
+              var motionComponent = 1;
+              var confidenceScore = voteRatio * qualityComponent * motionComponent;
+              if (confidenceScore >= BARCODE_CONFIDENCE_THRESHOLD) {
+                lastBarcodeValue = accepted;
+                barcodeCandidateHistory = [];
+                barcodeConsecutiveFailures = 0;
+                safeSet('barcode-result-value', accepted);
+                var preview = document.getElementById('barcode-result-preview');
+                if (preview) preview.style.display = 'block';
+                var addBtn = document.getElementById('barcode-add-to-inventory-btn');
+                if (addBtn) addBtn.style.display = 'inline-block';
+                setBarcodeStatus('Barcode confirmed.');
+                stopBarcodeScanLoop();
+              } else {
+                setBarcodeStatus('Verifying barcode');
+              }
             } else {
               setBarcodeStatus('Verifying barcode');
             }
@@ -1488,8 +1534,8 @@
               barcodeConsecutiveFailures++;
               if (barcodeConsecutiveFailures >= 8) {
                 setBarcodeStatus('Move to brighter area');
-                var hint = document.getElementById('barcode-low-light-hint');
-                if (hint) hint.style.display = 'block';
+                var hintEl = document.getElementById('barcode-low-light-hint');
+                if (hintEl) hintEl.style.display = 'block';
               } else {
                 setBarcodeStatus('Scanning…');
               }
@@ -1513,12 +1559,16 @@
       barcodeConsecutiveFailures = 0;
       barcodeCandidateHistory = [];
       lastFrameQualityScore = null;
+      lastFrameStabilityScore = null;
       stopBarcodeScanLoop();
-      document.getElementById('barcode-result-preview').style.display = 'none';
-      document.getElementById('barcode-add-to-inventory-btn').style.display = 'none';
-      document.getElementById('barcode-manual-input').value = '';
-      var hint = document.getElementById('barcode-low-light-hint');
-      if (hint) hint.style.display = 'none';
+      var resultPreview = document.getElementById('barcode-result-preview');
+      if (resultPreview) resultPreview.style.display = 'none';
+      var addInvBtn = document.getElementById('barcode-add-to-inventory-btn');
+      if (addInvBtn) addInvBtn.style.display = 'none';
+      var manualInput = document.getElementById('barcode-manual-input');
+      if (manualInput) manualInput.value = '';
+      var lowLightHint = document.getElementById('barcode-low-light-hint');
+      if (lowLightHint) lowLightHint.style.display = 'none';
       setBarcodeStatus('Point camera at barcode');
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
@@ -1561,7 +1611,8 @@
         barcodeStream.getTracks().forEach(function(t) { t.stop(); });
         barcodeStream = null;
       }
-      document.getElementById('barcode-video').srcObject = null;
+      var vid = document.getElementById('barcode-video');
+      if (vid) vid.srcObject = null;
       const modal = document.getElementById('barcode-scan-modal');
       if (modal) { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
     }
@@ -1574,27 +1625,47 @@
       return temp;
     }
 
-    function normalizeContrast(canvas) {
+    function adaptiveContrastEnhance(canvas) {
       var ctx = canvas.getContext('2d');
       var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var data = img.data;
-      var sum = 0;
-      for (var i = 0; i < data.length; i += 4) {
-        sum += (data[i] + data[i + 1] + data[i + 2]) / 3;
+      var d = img.data;
+      var block = 32;
+      var w = canvas.width;
+      var h = canvas.height;
+
+      function blockMean(x, y) {
+        var sum = 0, n = 0;
+        for (var yy = y; yy < Math.min(y + block, h); yy++) {
+          for (var xx = x; xx < Math.min(x + block, w); xx++) {
+            var idx = (yy * w + xx) * 4;
+            sum += (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+            n++;
+          }
+        }
+        return n ? sum / n : 128;
       }
-      var mean = sum / (data.length / 4);
-      var factor = 128 / (mean + 1);
-      for (var i = 0; i < data.length; i += 4) {
-        data[i] = Math.min(255, data[i] * factor);
-        data[i + 1] = Math.min(255, data[i + 1] * factor);
-        data[i + 2] = Math.min(255, data[i + 2] * factor);
+
+      for (var y = 0; y < h; y += block) {
+        for (var x = 0; x < w; x += block) {
+          var localMean = blockMean(x, y);
+          var gain = 128 / (localMean + 1);
+          for (var yy2 = y; yy2 < Math.min(y + block, h); yy2++) {
+            for (var xx2 = x; xx2 < Math.min(x + block, w); xx2++) {
+              var i = (yy2 * w + xx2) * 4;
+              d[i] = Math.min(255, d[i] * gain);
+              d[i + 1] = Math.min(255, d[i + 1] * gain);
+              d[i + 2] = Math.min(255, d[i + 2] * gain);
+            }
+          }
+        }
       }
+
       ctx.putImageData(img, 0, 0);
       return canvas;
     }
 
     function decodeBarcodeFromCanvas(canvas) {
-      canvas = normalizeContrast(canvas);
+      canvas = adaptiveContrastEnhance(canvas);
       var formats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'upc_a', 'upc_e', 'itf', 'codabar', 'pdf417', 'aztec', 'data_matrix'];
       function tryBarcodeDetector(targetCanvas) {
         if (typeof BarcodeDetector === 'undefined') return Promise.resolve(null);
@@ -1676,9 +1747,11 @@
       decodeBarcodeFromCanvas(canvas).then(function(value) {
         if (value) {
           lastBarcodeValue = value;
-          document.getElementById('barcode-result-value').textContent = value;
-          document.getElementById('barcode-result-preview').style.display = 'block';
-          document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
+          safeSet('barcode-result-value', value);
+          var prev = document.getElementById('barcode-result-preview');
+          if (prev) prev.style.display = 'block';
+          var addB = document.getElementById('barcode-add-to-inventory-btn');
+          if (addB) addB.style.display = 'inline-block';
           setBarcodeStatus('Barcode confirmed.');
           stopBarcodeScanLoop();
         } else {
@@ -1697,9 +1770,11 @@
         var v = (this.value || '').trim();
         if (v) {
           lastBarcodeValue = v;
-          document.getElementById('barcode-result-value').textContent = v;
-          document.getElementById('barcode-result-preview').style.display = 'block';
-          document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
+          safeSet('barcode-result-value', v);
+          var resPrev = document.getElementById('barcode-result-preview');
+          if (resPrev) resPrev.style.display = 'block';
+          var addBtn2 = document.getElementById('barcode-add-to-inventory-btn');
+          if (addBtn2) addBtn2.style.display = 'inline-block';
         }
       }
     });
