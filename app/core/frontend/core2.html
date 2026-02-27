@@ -1402,13 +1402,21 @@
     let motionViolationCounter = 0;
     const HYSTERESIS_LIMIT = 5;
     let lastBarcodeStatusMessage = '';
+    let scannerStateEnterTime = Date.now();
+    const STATE_MIN_DWELL_MS = 900;
 
     var SCANNER_STATE = { SCANNING: 0, VERIFYING: 1, LOW_LIGHT_WARNING: 2, HOLD_STEADY: 3, CONFIRMED: 4 };
     var scannerState = SCANNER_STATE.SCANNING;
 
     function transitionScannerState(newState, message) {
       if (scannerState === newState) return;
+      var now = Date.now();
+      // Prevent rapid oscillation between states
+      if (now - scannerStateEnterTime < STATE_MIN_DWELL_MS) {
+        return;
+      }
       scannerState = newState;
+      scannerStateEnterTime = now;
       setBarcodeStatusDebounced(message);
     }
 
@@ -1578,19 +1586,19 @@
         var currentQuality = getFrameQualityScore(canvas);
 
         if (lastFrameQualityScore != null && Math.abs(currentQuality - lastFrameQualityScore) > BARCODE_MOTION_DIFF_THRESHOLD) {
-          motionViolationCounter += 0.5;
+          motionViolationCounter += 0.2;
           if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
         } else {
-          motionViolationCounter = Math.max(0, motionViolationCounter - 1);
+          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
         }
         lastFrameQualityScore = currentQuality;
 
         var currentStability = frameStabilityScore(canvas);
         if (lastFrameStabilityScore != null && Math.abs(currentStability - lastFrameStabilityScore) > BARCODE_STABILITY_DIFF_THRESHOLD) {
-          motionViolationCounter += 0.5;
+          motionViolationCounter += 0.2;
           if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
         } else {
-          motionViolationCounter = Math.max(0, motionViolationCounter - 1);
+          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
         }
         lastFrameStabilityScore = currentStability;
 
@@ -1608,7 +1616,7 @@
         }
 
         // State transition only after hysteresis stabilization
-        if (lowLightViolationCounter >= HYSTERESIS_LIMIT) {
+        if (lowLightViolationCounter >= HYSTERESIS_LIMIT && scannerState !== SCANNER_STATE.LOW_LIGHT_WARNING) {
           transitionScannerState(
             SCANNER_STATE.LOW_LIGHT_WARNING,
             'Move to brighter area'
@@ -1618,7 +1626,7 @@
         }
         if (centerBorderLuminanceDiff(canvas) > BARCODE_CENTER_BORDER_MAX) {
           lowLightViolationCounter++;
-          if (lowLightViolationCounter >= HYSTERESIS_LIMIT) {
+          if (lowLightViolationCounter >= HYSTERESIS_LIMIT && scannerState !== SCANNER_STATE.LOW_LIGHT_WARNING) {
             transitionScannerState(SCANNER_STATE.LOW_LIGHT_WARNING, 'Move to brighter area');
             var hintEl2 = document.getElementById('barcode-low-light-hint');
             if (hintEl2) hintEl2.style.display = 'block';
@@ -1631,10 +1639,10 @@
           ? Math.abs(currentEdge - lastFrameEdgeScore) / (lastFrameEdgeScore + 1)
           : 0;
         if (edgeVolatility > BARCODE_EDGE_VOLATILITY_MAX) {
-          motionViolationCounter += 0.5;
+          motionViolationCounter += 0.2;
           if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
         } else {
-          motionViolationCounter = Math.max(0, motionViolationCounter - 1);
+          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
         }
         lastFrameEdgeScore = currentEdge;
 
