@@ -1463,10 +1463,44 @@
     let lastBarcodeDecodeTime = 0;
     let barcodeCandidateHistory = [];
     let lastFrameQualityScore = null;
-    const BARCODE_SCAN_INTERVAL_MS = 450;
+    let lastFrameStabilityScore = null;
+    const BARCODE_SCAN_INTERVAL_MS = 250;
     const DECODE_TIMEOUT_MS = 800;
     const BARCODE_QUALITY_MIN_VARIANCE = 30;
     const BARCODE_MOTION_DIFF_THRESHOLD = 600;
+    const BARCODE_STABILITY_DIFF_THRESHOLD = 40;
+    const BARCODE_CONFIDENCE_THRESHOLD = 0.5;
+    const BARCODE_EXPOSURE_STABILITY_MAX = 60;
+    const BARCODE_HISTORY_LENGTH = 10;
+    const BARCODE_VOTE_QUORUM = 5;
+    const BARCODE_EDGE_VOLATILITY_MAX = 0.45;
+    const BARCODE_CENTER_BORDER_MAX = 90;
+    let lastFrameEdgeScore = null;
+    let lowLightViolationCounter = 0;
+    let motionViolationCounter = 0;
+    const HYSTERESIS_LIMIT = 5;
+    let lastBarcodeStatusMessage = '';
+    let scannerStateEnterTime = Date.now();
+    const STATE_MIN_DWELL_MS = 900;
+
+    var SCANNER_STATE = { SCANNING: 0, VERIFYING: 1, LOW_LIGHT_WARNING: 2, HOLD_STEADY: 3, CONFIRMED: 4 };
+    var scannerState = SCANNER_STATE.SCANNING;
+
+    function transitionScannerState(newState, message) {
+      if (scannerState === newState) return;
+      var now = Date.now();
+      // Prevent rapid oscillation between states
+      if (now - scannerStateEnterTime < STATE_MIN_DWELL_MS) {
+        return;
+      }
+      scannerState = newState;
+      scannerStateEnterTime = now;
+      setBarcodeStatusDebounced(message);
+    }
+
+    function clampConfidence(score) {
+      return Math.max(0.15, Math.min(1, score));
+    }
 
     function getFrameQualityScore(canvas) {
       var ctx = canvas.getContext('2d');
@@ -1485,6 +1519,92 @@
       return (sumSq / n) - (mean * mean);
     }
 
+    function frameStabilityScore(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var cx = 0, cy = 0, total = 0;
+      for (var y = 0; y < canvas.height; y++) {
+        for (var x = 0; x < canvas.width; x++) {
+          var idx = (y * canvas.width + x) * 4;
+          var g = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+          cx += x * g;
+          cy += y * g;
+          total += g;
+        }
+      }
+      if (!total) return 0;
+      cx /= total;
+      cy /= total;
+      return Math.sqrt(cx * cx + cy * cy);
+    }
+
+    function exposureStabilityScore(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var brightnessSamples = [];
+      for (var i = 0; i < d.length; i += 4) {
+        brightnessSamples.push((d[i] + d[i + 1] + d[i + 2]) / 3);
+      }
+      if (!brightnessSamples.length) return 0;
+      var mean = brightnessSamples.reduce(function(a, b) { return a + b; }, 0) / brightnessSamples.length;
+      var variance = brightnessSamples.reduce(function(a, b) { return a + (b - mean) * (b - mean); }, 0) / brightnessSamples.length;
+      return Math.sqrt(variance);
+    }
+
+    function centerBorderLuminanceDiff(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var w = canvas.width;
+      var h = canvas.height;
+      var margin = Math.floor(Math.min(w, h) * 0.15);
+      var cx1 = margin;
+      var cx2 = w - margin;
+      var cy1 = margin;
+      var cy2 = h - margin;
+      var centerSum = 0, centerN = 0;
+      var borderSum = 0, borderN = 0;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          var idx = (y * w + x) * 4;
+          var g = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+          if (x >= cx1 && x < cx2 && y >= cy1 && y < cy2) {
+            centerSum += g;
+            centerN++;
+          } else {
+            borderSum += g;
+            borderN++;
+          }
+        }
+      }
+      var centerMean = centerN ? centerSum / centerN : 128;
+      var borderMean = borderN ? borderSum / borderN : 128;
+      return Math.abs(centerMean - borderMean);
+    }
+
+    function sobelEdgeDensity(canvas) {
+      var ctx = canvas.getContext('2d');
+      var w = canvas.width;
+      var h = canvas.height;
+      var img = ctx.getImageData(0, 0, w, h);
+      var d = img.data;
+      var step = 4;
+      var sum = 0, n = 0;
+      for (var y = 1; y < h - 1; y += step) {
+        for (var x = 1; x < w - 1; x += step) {
+          var idx = (y * w + x) * 4;
+          var g = function(xx, yy) { var i = (yy * w + xx) * 4; return (d[i] + d[i + 1] + d[i + 2]) / 3; };
+          var gx = g(x + 1, y) - g(x - 1, y);
+          var gy = g(x, y + 1) - g(x, y - 1);
+          sum += Math.sqrt(gx * gx + gy * gy);
+          n++;
+        }
+      }
+      return n ? sum / n : 0;
+    }
+
     function stopBarcodeScanLoop() {
       if (barcodeScanLoopId != null) {
         cancelAnimationFrame(barcodeScanLoopId);
@@ -1492,9 +1612,23 @@
       }
     }
 
+    function safeSet(id, value) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+
     function setBarcodeStatus(msg) {
-      var el = document.getElementById('barcode-capture-status');
-      if (el) el.textContent = msg;
+      safeSet('barcode-capture-status', msg);
+    }
+
+    function setBarcodeStatusDebounced(msg) {
+      if (msg === lastBarcodeStatusMessage) return;
+      lastBarcodeStatusMessage = msg;
+      setBarcodeStatus(msg);
+    }
+
+    function isBarcodeScanMobile() {
+      return /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
     }
 
     function startBarcodeScanLoop() {
@@ -1502,7 +1636,7 @@
       var video = document.getElementById('barcode-video');
       var statusEl = document.getElementById('barcode-capture-status');
       if (!video || !statusEl) return;
-      setBarcodeStatus('Scanning…');
+      transitionScannerState(SCANNER_STATE.SCANNING, 'Scanning…');
       function scheduleNext() {
         if (barcodeScanLoopId != null) cancelAnimationFrame(barcodeScanLoopId);
         barcodeScanLoopId = requestAnimationFrame(tick);
@@ -1515,7 +1649,11 @@
         if (skip) { scheduleNext(); return; }
 
         var now = Date.now();
-        var intervalMs = barcodeConsecutiveFailures >= 5 ? 600 : (barcodeCandidateHistory.length >= 1 ? 300 : BARCODE_SCAN_INTERVAL_MS);
+        var baseInterval = BARCODE_SCAN_INTERVAL_MS;
+        if (scannerState === SCANNER_STATE.VERIFYING) baseInterval = 400;
+        if (scannerState === SCANNER_STATE.LOW_LIGHT_WARNING) baseInterval = 700;
+        if (scannerState === SCANNER_STATE.HOLD_STEADY) baseInterval = 500;
+        var intervalMs = barcodeConsecutiveFailures >= 5 ? 600 : (barcodeCandidateHistory.length >= 1 ? 300 : baseInterval);
         if (now - lastBarcodeDecodeTime < intervalMs) { scheduleNext(); return; }
         lastBarcodeDecodeTime = now;
 
@@ -1524,40 +1662,107 @@
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
         var currentQuality = getFrameQualityScore(canvas);
+
         if (lastFrameQualityScore != null && Math.abs(currentQuality - lastFrameQualityScore) > BARCODE_MOTION_DIFF_THRESHOLD) {
-          lastFrameQualityScore = currentQuality;
-          scheduleNext();
-          return;
+          motionViolationCounter += 0.2;
+          if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
+        } else {
+          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
         }
         lastFrameQualityScore = currentQuality;
+
+        var currentStability = frameStabilityScore(canvas);
+        if (lastFrameStabilityScore != null && Math.abs(currentStability - lastFrameStabilityScore) > BARCODE_STABILITY_DIFF_THRESHOLD) {
+          motionViolationCounter += 0.2;
+          if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
+        } else {
+          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
+        }
+        lastFrameStabilityScore = currentStability;
+
+        var exposureScore = exposureStabilityScore(canvas);
+
+        // ---- Adaptive exposure hysteresis window ----
+        var exposureUpper = BARCODE_EXPOSURE_STABILITY_MAX * 1.5;
+        var exposureLower = BARCODE_EXPOSURE_STABILITY_MAX * 0.8;
+
+        // Only trigger warning if violation persists
+        if (exposureScore > exposureUpper) {
+          lowLightViolationCounter++;
+        } else if (exposureScore < exposureLower) {
+          lowLightViolationCounter = Math.max(0, lowLightViolationCounter - 1);
+        }
+
+        // State transition only after hysteresis stabilization
+        if (lowLightViolationCounter >= HYSTERESIS_LIMIT && scannerState !== SCANNER_STATE.LOW_LIGHT_WARNING) {
+          transitionScannerState(
+            SCANNER_STATE.LOW_LIGHT_WARNING,
+            'Move to brighter area'
+          );
+          var hintEl = document.getElementById('barcode-low-light-hint');
+          if (hintEl) hintEl.style.display = 'block';
+        }
+        if (centerBorderLuminanceDiff(canvas) > BARCODE_CENTER_BORDER_MAX) {
+          lowLightViolationCounter++;
+          if (lowLightViolationCounter >= HYSTERESIS_LIMIT && scannerState !== SCANNER_STATE.LOW_LIGHT_WARNING) {
+            transitionScannerState(SCANNER_STATE.LOW_LIGHT_WARNING, 'Move to brighter area');
+            var hintEl2 = document.getElementById('barcode-low-light-hint');
+            if (hintEl2) hintEl2.style.display = 'block';
+          }
+        } else {
+          lowLightViolationCounter = Math.max(0, lowLightViolationCounter - 0.5);
+        }
+        var currentEdge = sobelEdgeDensity(canvas);
+        var edgeVolatility = lastFrameEdgeScore != null
+          ? Math.abs(currentEdge - lastFrameEdgeScore) / (lastFrameEdgeScore + 1)
+          : 0;
+        if (edgeVolatility > BARCODE_EDGE_VOLATILITY_MAX) {
+          motionViolationCounter += 0.2;
+          if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
+        } else {
+          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
+        }
+        lastFrameEdgeScore = currentEdge;
 
         var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
         if (currentQuality <= qualityThreshold) { scheduleNext(); return; }
 
         decodeInProgress = true;
+        var frameQualityForConfidence = currentQuality;
         decodeBarcodeFromCanvas(canvas).then(function(value) {
           decodeInProgress = false;
           if (value && !lastBarcodeValue) {
             barcodeCandidateHistory.push(value);
-            if (barcodeCandidateHistory.length > 5) barcodeCandidateHistory.shift();
+            if (barcodeCandidateHistory.length > BARCODE_HISTORY_LENGTH) barcodeCandidateHistory.shift();
             var counts = {};
             for (var i = 0; i < barcodeCandidateHistory.length; i++) {
               var v = barcodeCandidateHistory[i];
               counts[v] = (counts[v] || 0) + 1;
             }
             var accepted = null;
-            for (var k in counts) { if (counts[k] >= 3) { accepted = k; break; } }
+            for (var k in counts) { if (counts[k] >= BARCODE_VOTE_QUORUM) { accepted = k; break; } }
             if (accepted) {
-              lastBarcodeValue = accepted;
-              barcodeCandidateHistory = [];
-              barcodeConsecutiveFailures = 0;
-              document.getElementById('barcode-result-value').textContent = accepted;
-              document.getElementById('barcode-result-preview').style.display = 'block';
-              document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
-              setBarcodeStatus('Barcode confirmed.');
-              stopBarcodeScanLoop();
+              var voteRatio = counts[accepted] / barcodeCandidateHistory.length;
+              var qualityComponent = Math.max(0, Math.min(1, frameQualityForConfidence / 100));
+              var confidenceScore = voteRatio * qualityComponent;
+              confidenceScore = clampConfidence(confidenceScore);
+              var confidenceThreshold = isBarcodeScanMobile() ? 0.35 : 0.5;
+              if (confidenceScore >= confidenceThreshold) {
+                lastBarcodeValue = accepted;
+                barcodeCandidateHistory = [];
+                barcodeConsecutiveFailures = 0;
+                safeSet('barcode-result-value', accepted);
+                var preview = document.getElementById('barcode-result-preview');
+                if (preview) preview.style.display = 'block';
+                var addBtn = document.getElementById('barcode-add-to-inventory-btn');
+                if (addBtn) addBtn.style.display = 'inline-block';
+                transitionScannerState(SCANNER_STATE.CONFIRMED, 'Barcode confirmed.');
+                stopBarcodeScanLoop();
+              } else {
+                transitionScannerState(SCANNER_STATE.VERIFYING, 'Verifying barcode');
+              }
             } else {
-              setBarcodeStatus('Verifying barcode');
+              transitionScannerState(SCANNER_STATE.VERIFYING, 'Verifying barcode');
             }
           } else {
             barcodeCandidateHistory = [];
@@ -1565,11 +1770,11 @@
             else {
               barcodeConsecutiveFailures++;
               if (barcodeConsecutiveFailures >= 8) {
-                setBarcodeStatus('Move to brighter area');
-                var hint = document.getElementById('barcode-low-light-hint');
-                if (hint) hint.style.display = 'block';
+                transitionScannerState(SCANNER_STATE.LOW_LIGHT_WARNING, 'Move to brighter area');
+                var hintEl = document.getElementById('barcode-low-light-hint');
+                if (hintEl) hintEl.style.display = 'block';
               } else {
-                setBarcodeStatus('Scanning…');
+                transitionScannerState(SCANNER_STATE.SCANNING, 'Scanning…');
               }
             }
           }
@@ -1591,13 +1796,22 @@
       barcodeConsecutiveFailures = 0;
       barcodeCandidateHistory = [];
       lastFrameQualityScore = null;
+      lastFrameStabilityScore = null;
+      lastFrameEdgeScore = null;
+      lowLightViolationCounter = 0;
+      motionViolationCounter = 0;
+      lastBarcodeStatusMessage = '';
+      scannerState = SCANNER_STATE.SCANNING;
       stopBarcodeScanLoop();
-      document.getElementById('barcode-result-preview').style.display = 'none';
-      document.getElementById('barcode-add-to-inventory-btn').style.display = 'none';
-      document.getElementById('barcode-manual-input').value = '';
-      var hint = document.getElementById('barcode-low-light-hint');
-      if (hint) hint.style.display = 'none';
-      setBarcodeStatus('Point camera at barcode');
+      var resultPreview = document.getElementById('barcode-result-preview');
+      if (resultPreview) resultPreview.style.display = 'none';
+      var addInvBtn = document.getElementById('barcode-add-to-inventory-btn');
+      if (addInvBtn) addInvBtn.style.display = 'none';
+      var manualInput = document.getElementById('barcode-manual-input');
+      if (manualInput) manualInput.value = '';
+      var lowLightHint = document.getElementById('barcode-low-light-hint');
+      if (lowLightHint) lowLightHint.style.display = 'none';
+      transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
       var cam = document.getElementById('barcode-camera-viewport');
@@ -1639,7 +1853,8 @@
         barcodeStream.getTracks().forEach(function(t) { t.stop(); });
         barcodeStream = null;
       }
-      document.getElementById('barcode-video').srcObject = null;
+      var vid = document.getElementById('barcode-video');
+      if (vid) vid.srcObject = null;
       const modal = document.getElementById('barcode-scan-modal');
       if (modal) { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
     }
@@ -1652,27 +1867,47 @@
       return temp;
     }
 
-    function normalizeContrast(canvas) {
+    function adaptiveContrastEnhance(canvas) {
       var ctx = canvas.getContext('2d');
       var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var data = img.data;
-      var sum = 0;
-      for (var i = 0; i < data.length; i += 4) {
-        sum += (data[i] + data[i + 1] + data[i + 2]) / 3;
+      var d = img.data;
+      var block = 32;
+      var w = canvas.width;
+      var h = canvas.height;
+
+      function blockMean(x, y) {
+        var sum = 0, n = 0;
+        for (var yy = y; yy < Math.min(y + block, h); yy++) {
+          for (var xx = x; xx < Math.min(x + block, w); xx++) {
+            var idx = (yy * w + xx) * 4;
+            sum += (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+            n++;
+          }
+        }
+        return n ? sum / n : 128;
       }
-      var mean = sum / (data.length / 4);
-      var factor = 128 / (mean + 1);
-      for (var i = 0; i < data.length; i += 4) {
-        data[i] = Math.min(255, data[i] * factor);
-        data[i + 1] = Math.min(255, data[i + 1] * factor);
-        data[i + 2] = Math.min(255, data[i + 2] * factor);
+
+      for (var y = 0; y < h; y += block) {
+        for (var x = 0; x < w; x += block) {
+          var localMean = blockMean(x, y);
+          var gain = 128 / (localMean + 1);
+          for (var yy2 = y; yy2 < Math.min(y + block, h); yy2++) {
+            for (var xx2 = x; xx2 < Math.min(x + block, w); xx2++) {
+              var i = (yy2 * w + xx2) * 4;
+              d[i] = Math.min(255, d[i] * gain);
+              d[i + 1] = Math.min(255, d[i + 1] * gain);
+              d[i + 2] = Math.min(255, d[i + 2] * gain);
+            }
+          }
+        }
       }
+
       ctx.putImageData(img, 0, 0);
       return canvas;
     }
 
     function decodeBarcodeFromCanvas(canvas) {
-      canvas = normalizeContrast(canvas);
+      canvas = adaptiveContrastEnhance(canvas);
       var formats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'upc_a', 'upc_e', 'itf', 'codabar', 'pdf417', 'aztec', 'data_matrix'];
       function tryBarcodeDetector(targetCanvas) {
         if (typeof BarcodeDetector === 'undefined') return Promise.resolve(null);
@@ -1746,7 +1981,7 @@
       if (lastBarcodeValue) return;
       const video = document.getElementById('barcode-video');
       if (!video || !video.videoWidth) return;
-      setBarcodeStatus('Scanning…');
+      transitionScannerState(SCANNER_STATE.SCANNING, 'Scanning…');
       var canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -1754,17 +1989,19 @@
       decodeBarcodeFromCanvas(canvas).then(function(value) {
         if (value) {
           lastBarcodeValue = value;
-          document.getElementById('barcode-result-value').textContent = value;
-          document.getElementById('barcode-result-preview').style.display = 'block';
-          document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
-          setBarcodeStatus('Barcode confirmed.');
+          safeSet('barcode-result-value', value);
+          var prev = document.getElementById('barcode-result-preview');
+          if (prev) prev.style.display = 'block';
+          var addB = document.getElementById('barcode-add-to-inventory-btn');
+          if (addB) addB.style.display = 'inline-block';
+          transitionScannerState(SCANNER_STATE.CONFIRMED, 'Barcode confirmed.');
           stopBarcodeScanLoop();
         } else {
-          setBarcodeStatus('Point camera at barcode');
+          transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
           showNotification('info', 'No barcode in shot', 'Hold the barcode in view or tap Capture again.');
         }
       }).catch(function(err) {
-        setBarcodeStatus('Point camera at barcode');
+        transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
         showNotification('error', 'Decode failed', err && err.message ? err.message : 'Try manual entry.');
       });
     });
@@ -1775,9 +2012,11 @@
         var v = (this.value || '').trim();
         if (v) {
           lastBarcodeValue = v;
-          document.getElementById('barcode-result-value').textContent = v;
-          document.getElementById('barcode-result-preview').style.display = 'block';
-          document.getElementById('barcode-add-to-inventory-btn').style.display = 'inline-block';
+          safeSet('barcode-result-value', v);
+          var resPrev = document.getElementById('barcode-result-preview');
+          if (resPrev) resPrev.style.display = 'block';
+          var addBtn2 = document.getElementById('barcode-add-to-inventory-btn');
+          if (addBtn2) addBtn2.style.display = 'inline-block';
         }
       }
     });
