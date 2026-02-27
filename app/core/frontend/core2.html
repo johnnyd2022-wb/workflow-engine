@@ -1232,22 +1232,100 @@
       }
     };
 
+    let barcodeCameraCheckPromise = null;
+    const CAMERA_CHECK_TIMEOUT_MS = 3000;
+
+    function isBarcodeCameraAvailable() {
+      if (barcodeCameraCheckPromise) return barcodeCameraCheckPromise;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        barcodeCameraCheckPromise = Promise.resolve(false);
+        return barcodeCameraCheckPromise;
+      }
+      barcodeCameraCheckPromise = new Promise(function(resolve) {
+        var settled = false;
+        var timer = setTimeout(function() {
+          if (settled) return;
+          settled = true;
+          resolve(false);
+        }, CAMERA_CHECK_TIMEOUT_MS);
+        try {
+          navigator.mediaDevices.enumerateDevices()
+            .then(function(devices) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(devices.some(function(d) { return d && d.kind === 'videoinput'; }));
+            })
+            .catch(function() {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(false);
+            });
+        } catch (e) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
+        }
+      });
+      return barcodeCameraCheckPromise;
+    }
+
     function setupInventoryEntryHub() {
       const hubModal = document.getElementById('inventory-entry-hub-modal');
       const addInventoryModal = document.getElementById('add-inventory-modal');
       if (!hubModal) return;
-      document.getElementById('inventory-entry-manual-btn')?.addEventListener('click', function() {
-      if (hubModal) hubModal.style.display = 'none';
-      if (addInventoryModal) { addInventoryModal.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
-    });
-    document.getElementById('inventory-entry-csv-btn')?.addEventListener('click', function() {
-      if (hubModal) hubModal.style.display = 'none';
-      openCsvUploadModal();
-    });
-    document.getElementById('inventory-entry-scan-btn')?.addEventListener('click', function() {
-      if (hubModal) hubModal.style.display = 'none';
-      openBarcodeScanModal();
-    });
+
+      const manualBtn = document.getElementById('inventory-entry-manual-btn');
+      if (manualBtn) {
+        manualBtn.addEventListener('click', function() {
+          hubModal.style.display = 'none';
+          if (addInventoryModal) {
+            addInventoryModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+          }
+        });
+      }
+
+      const csvBtn = document.getElementById('inventory-entry-csv-btn');
+      if (csvBtn) {
+        csvBtn.addEventListener('click', function() {
+          hubModal.style.display = 'none';
+          openCsvUploadModal();
+        });
+      }
+
+      const scanBtn = document.getElementById('inventory-entry-scan-btn');
+      if (scanBtn) {
+        isBarcodeCameraAvailable().then(function(hasCamera) {
+          if (!hasCamera) {
+            scanBtn.disabled = true;
+            scanBtn.style.opacity = '0.5';
+            scanBtn.style.cursor = 'not-allowed';
+            scanBtn.title = 'No camera detected on this device. Use Manual or CSV entry instead.';
+            var label = scanBtn.querySelector('span');
+            if (label) {
+              label.textContent = 'Scan Barcode (Camera unavailable)';
+            }
+          } else {
+            scanBtn.addEventListener('click', function() {
+              hubModal.style.display = 'none';
+              openBarcodeScanModal();
+            });
+          }
+        }).catch(function() {
+          scanBtn.disabled = true;
+          scanBtn.style.opacity = '0.5';
+          scanBtn.style.cursor = 'not-allowed';
+          scanBtn.title = 'No camera detected on this device. Use Manual or CSV entry instead.';
+          var label = scanBtn.querySelector('span');
+          if (label) {
+            label.textContent = 'Scan Barcode (Camera unavailable)';
+          }
+        });
+      }
+    }
 
     // --- CSV Upload Modal ---
     const CSV_TEMPLATE_HEADERS = 'Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date';
@@ -1721,7 +1799,6 @@
     document.getElementById('barcode-scan-back-btn')?.addEventListener('click', function() { closeBarcodeScanModal(); if (hubModal) { hubModal.style.display = 'flex'; document.body.style.overflow = 'hidden'; } });
     window.openCsvUploadModal = openCsvUploadModal;
     window.openBarcodeScanModal = openBarcodeScanModal;
-    }
 
     // Attach the Create Process Form Handler Once + help tooltips
     document.addEventListener('DOMContentLoaded', () => {
@@ -2071,7 +2148,7 @@
         notificationTimeout = null;
       }
     }
-    
+
     // Add inventory handler with optimistic UI
     window.addInventoryItem = function (form) {
       const formData = new FormData(form);
