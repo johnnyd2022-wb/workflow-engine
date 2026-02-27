@@ -361,6 +361,10 @@ def register_routes(bp):
     @requires_auth
     def decode_barcode():
         """Barcode decoding is done in the browser (BarcodeDetector + ZXing). This endpoint is deprecated."""
+        logger.warning(
+            "Deprecated decode-barcode endpoint accessed; client should use scanner UI (user_id=%s)",
+            getattr(g, "user_id", None),
+        )
         return (
             jsonify(
                 {
