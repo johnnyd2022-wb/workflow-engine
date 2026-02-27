@@ -1300,7 +1300,14 @@
       if (scanBtn) {
         isBarcodeCameraAvailable().then(function(hasCamera) {
           if (!hasCamera) {
-            scanBtn.style.display = 'none';
+            scanBtn.disabled = true;
+            scanBtn.style.opacity = '0.5';
+            scanBtn.style.cursor = 'not-allowed';
+            scanBtn.title = 'No camera detected on this device. Use Manual or CSV entry instead.';
+            var label = scanBtn.querySelector('span');
+            if (label) {
+              label.textContent = 'Scan Barcode (Camera unavailable)';
+            }
           } else {
             scanBtn.addEventListener('click', function() {
               hubModal.style.display = 'none';
@@ -1308,7 +1315,14 @@
             });
           }
         }).catch(function() {
-          scanBtn.style.display = 'none';
+          scanBtn.disabled = true;
+          scanBtn.style.opacity = '0.5';
+          scanBtn.style.cursor = 'not-allowed';
+          scanBtn.title = 'No camera detected on this device. Use Manual or CSV entry instead.';
+          var label = scanBtn.querySelector('span');
+          if (label) {
+            label.textContent = 'Scan Barcode (Camera unavailable)';
+          }
         });
       }
     }
