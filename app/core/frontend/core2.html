@@ -1422,19 +1422,28 @@
       var statusEl = document.getElementById('barcode-capture-status');
       if (!video || !statusEl) return;
       setBarcodeStatus('Scanning…');
+      function scheduleNext() {
+        if (barcodeScanLoopId != null) cancelAnimationFrame(barcodeScanLoopId);
+        barcodeScanLoopId = requestAnimationFrame(tick);
+      }
       function tick() {
+        if (barcodeScanLoopId != null) {
+          cancelAnimationFrame(barcodeScanLoopId);
+          barcodeScanLoopId = null;
+        }
         if (lastBarcodeValue) return;
         if (!video.videoWidth || !video.readyState || video.readyState < 2) {
-          barcodeScanLoopId = requestAnimationFrame(tick);
+          scheduleNext();
           return;
         }
         if (decodeInProgress) {
-          barcodeScanLoopId = requestAnimationFrame(tick);
+          scheduleNext();
           return;
         }
         var now = Date.now();
-        if (now - lastBarcodeDecodeTime < BARCODE_SCAN_INTERVAL_MS) {
-          barcodeScanLoopId = requestAnimationFrame(tick);
+        var intervalMs = barcodeConsecutiveFailures >= 5 ? 600 : (barcodeConfidenceCounter >= 1 ? 300 : BARCODE_SCAN_INTERVAL_MS);
+        if (now - lastBarcodeDecodeTime < intervalMs) {
+          scheduleNext();
           return;
         }
         lastBarcodeDecodeTime = now;
@@ -1442,8 +1451,9 @@
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
-        if (getFrameQualityScore(canvas) <= BARCODE_QUALITY_MIN_VARIANCE) {
-          barcodeScanLoopId = requestAnimationFrame(tick);
+        var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
+        if (getFrameQualityScore(canvas) <= qualityThreshold) {
+          scheduleNext();
           return;
         }
         decodeInProgress = true;
@@ -1489,9 +1499,9 @@
           decodeInProgress = false;
           barcodeConsecutiveFailures++;
         });
-        barcodeScanLoopId = requestAnimationFrame(tick);
+        scheduleNext();
       }
-      barcodeScanLoopId = requestAnimationFrame(tick);
+      scheduleNext();
     }
 
     function openBarcodeScanModal() {
