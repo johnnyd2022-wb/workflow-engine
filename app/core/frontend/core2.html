@@ -1386,7 +1386,7 @@
     let barcodeCandidateHistory = [];
     let lastFrameQualityScore = null;
     let lastFrameStabilityScore = null;
-    const BARCODE_SCAN_INTERVAL_MS = 450;
+    const BARCODE_SCAN_INTERVAL_MS = 250;
     const DECODE_TIMEOUT_MS = 800;
     const BARCODE_QUALITY_MIN_VARIANCE = 30;
     const BARCODE_MOTION_DIFF_THRESHOLD = 600;
@@ -1518,6 +1518,10 @@
       safeSet('barcode-capture-status', msg);
     }
 
+    function isBarcodeScanMobile() {
+      return /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+    }
+
     function startBarcodeScanLoop() {
       stopBarcodeScanLoop();
       var video = document.getElementById('barcode-video');
@@ -1547,6 +1551,7 @@
         var currentQuality = getFrameQualityScore(canvas);
         if (lastFrameQualityScore != null && Math.abs(currentQuality - lastFrameQualityScore) > BARCODE_MOTION_DIFF_THRESHOLD) {
           lastFrameQualityScore = currentQuality;
+          barcodeCandidateHistory = [];
           scheduleNext();
           return;
         }
@@ -1555,11 +1560,13 @@
         var currentStability = frameStabilityScore(canvas);
         if (lastFrameStabilityScore != null && Math.abs(currentStability - lastFrameStabilityScore) > BARCODE_STABILITY_DIFF_THRESHOLD) {
           lastFrameStabilityScore = currentStability;
+          barcodeCandidateHistory = [];
           scheduleNext();
           return;
         }
         lastFrameStabilityScore = currentStability;
 
+        /* Temporarily disabled — can reintroduce as soft penalties later
         if (exposureStabilityScore(canvas) > BARCODE_EXPOSURE_STABILITY_MAX) {
           scheduleNext();
           return;
@@ -1568,7 +1575,6 @@
           scheduleNext();
           return;
         }
-
         var currentEdge = sobelEdgeDensity(canvas);
         var edgeVolatility = lastFrameEdgeScore != null
           ? Math.abs(currentEdge - lastFrameEdgeScore) / (lastFrameEdgeScore + 1)
@@ -1579,6 +1585,7 @@
           return;
         }
         lastFrameEdgeScore = currentEdge;
+        */
 
         var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
         if (currentQuality <= qualityThreshold) { scheduleNext(); return; }
@@ -1602,7 +1609,8 @@
               var qualityComponent = Math.max(0, Math.min(1, frameQualityForConfidence / 100));
               var motionComponent = 1;
               var confidenceScore = voteRatio * qualityComponent * motionComponent;
-              if (confidenceScore >= BARCODE_CONFIDENCE_THRESHOLD) {
+              var confidenceThreshold = isBarcodeScanMobile() ? 0.35 : 0.5;
+              if (confidenceScore >= confidenceThreshold) {
                 lastBarcodeValue = accepted;
                 barcodeCandidateHistory = [];
                 barcodeConsecutiveFailures = 0;
