@@ -1392,6 +1392,11 @@
     const BARCODE_MOTION_DIFF_THRESHOLD = 600;
     const BARCODE_STABILITY_DIFF_THRESHOLD = 40;
     const BARCODE_CONFIDENCE_THRESHOLD = 0.5;
+    const BARCODE_EXPOSURE_STABILITY_MAX = 60;
+    const BARCODE_HISTORY_LENGTH = 10;
+    const BARCODE_VOTE_QUORUM = 5;
+    const BARCODE_EDGE_FLUCTUATION_THRESHOLD = 8;
+    let lastFrameEdgeScore = null;
 
     function getFrameQualityScore(canvas) {
       var ctx = canvas.getContext('2d');
@@ -1428,6 +1433,41 @@
       cx /= total;
       cy /= total;
       return Math.sqrt(cx * cx + cy * cy);
+    }
+
+    function exposureStabilityScore(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var brightnessSamples = [];
+      for (var i = 0; i < d.length; i += 4) {
+        brightnessSamples.push((d[i] + d[i + 1] + d[i + 2]) / 3);
+      }
+      if (!brightnessSamples.length) return 0;
+      var mean = brightnessSamples.reduce(function(a, b) { return a + b; }, 0) / brightnessSamples.length;
+      var variance = brightnessSamples.reduce(function(a, b) { return a + (b - mean) * (b - mean); }, 0) / brightnessSamples.length;
+      return Math.sqrt(variance);
+    }
+
+    function sobelEdgeDensity(canvas) {
+      var ctx = canvas.getContext('2d');
+      var w = canvas.width;
+      var h = canvas.height;
+      var img = ctx.getImageData(0, 0, w, h);
+      var d = img.data;
+      var step = 4;
+      var sum = 0, n = 0;
+      for (var y = 1; y < h - 1; y += step) {
+        for (var x = 1; x < w - 1; x += step) {
+          var idx = (y * w + x) * 4;
+          var g = function(xx, yy) { var i = (yy * w + xx) * 4; return (d[i] + d[i + 1] + d[i + 2]) / 3; };
+          var gx = g(x + 1, y) - g(x - 1, y);
+          var gy = g(x, y + 1) - g(x, y - 1);
+          sum += Math.sqrt(gx * gx + gy * gy);
+          n++;
+        }
+      }
+      return n ? sum / n : 0;
     }
 
     function stopBarcodeScanLoop() {
@@ -1488,6 +1528,19 @@
         }
         lastFrameStabilityScore = currentStability;
 
+        if (exposureStabilityScore(canvas) > BARCODE_EXPOSURE_STABILITY_MAX) {
+          scheduleNext();
+          return;
+        }
+
+        var currentEdge = sobelEdgeDensity(canvas);
+        if (lastFrameEdgeScore != null && Math.abs(currentEdge - lastFrameEdgeScore) > BARCODE_EDGE_FLUCTUATION_THRESHOLD) {
+          lastFrameEdgeScore = currentEdge;
+          scheduleNext();
+          return;
+        }
+        lastFrameEdgeScore = currentEdge;
+
         var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
         if (currentQuality <= qualityThreshold) { scheduleNext(); return; }
 
@@ -1497,14 +1550,14 @@
           decodeInProgress = false;
           if (value && !lastBarcodeValue) {
             barcodeCandidateHistory.push(value);
-            if (barcodeCandidateHistory.length > 5) barcodeCandidateHistory.shift();
+            if (barcodeCandidateHistory.length > BARCODE_HISTORY_LENGTH) barcodeCandidateHistory.shift();
             var counts = {};
             for (var i = 0; i < barcodeCandidateHistory.length; i++) {
               var v = barcodeCandidateHistory[i];
               counts[v] = (counts[v] || 0) + 1;
             }
             var accepted = null;
-            for (var k in counts) { if (counts[k] >= 3) { accepted = k; break; } }
+            for (var k in counts) { if (counts[k] >= BARCODE_VOTE_QUORUM) { accepted = k; break; } }
             if (accepted) {
               var voteRatio = counts[accepted] / barcodeCandidateHistory.length;
               var qualityComponent = Math.max(0, Math.min(1, frameQualityForConfidence / 100));
@@ -1560,6 +1613,7 @@
       barcodeCandidateHistory = [];
       lastFrameQualityScore = null;
       lastFrameStabilityScore = null;
+      lastFrameEdgeScore = null;
       stopBarcodeScanLoop();
       var resultPreview = document.getElementById('barcode-result-preview');
       if (resultPreview) resultPreview.style.display = 'none';
