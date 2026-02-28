@@ -54,7 +54,6 @@ def save_file(org_id: str, execution_id: str, data: bytes, content_type: str) ->
     Save file to org_id/execution_id/uuid.ext using atomic write.
     Returns (storage_path_relative_to_root, checksum_sha256).
     """
-    root = get_storage_root()
     dest_dir = _dir_for(org_id, execution_id)
     logger.info("Evidence save_file: dest_dir=%s, size=%s, content_type=%s", dest_dir, len(data), content_type)
     ensure_dir(dest_dir)
