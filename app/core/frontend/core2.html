@@ -2035,74 +2035,71 @@
       }
     });
 
-    document.getElementById('barcode-add-to-inventory-btn')?.addEventListener('click', function() {
-      var code = lastBarcodeValue || (document.getElementById('barcode-result-value') && document.getElementById('barcode-result-value').textContent) || '';
-      closeBarcodeScanModal();
-      if (!addInventoryModal) return;
-      window._addInventorySourceMethod = 'barcode_scan';
-      (function openAfterLookup() {
-        CoreAPI.lookupBarcode(code).then(function(res) {
-          var form = addInventoryModal.querySelector('form');
-          var barcodeInput = document.getElementById('add-inventory-barcode-input');
-          var barcodeDisplayWrap = document.getElementById('add-inventory-barcode-display-wrap');
-          var barcodeDisplay = document.getElementById('add-inventory-barcode-display');
-          var nameEl = document.getElementById('add-inventory-name');
-          var unitEl = document.getElementById('add-inventory-unit');
-          var supplierEl = document.getElementById('add-inventory-supplier');
-          if (barcodeInput) barcodeInput.value = code || '';
-          if (barcodeDisplayWrap) barcodeDisplayWrap.style.display = code ? 'block' : 'none';
-          if (barcodeDisplay) barcodeDisplay.textContent = code || '';
-          if (res.exists) {
-            window._addInventoryBarcodeLookup = { name: res.name, unit: res.unit, supplier: res.supplier || '' };
-            if (nameEl) { nameEl.value = res.name || ''; nameEl.readOnly = true; nameEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
-            if (unitEl) {
-              unitEl.value = res.unit || '';
-              unitEl.disabled = true;
-              unitEl.style.background = 'var(--bg-subtle, #f3f4f6)';
-            }
-            if (supplierEl) { supplierEl.value = res.supplier || ''; supplierEl.readOnly = true; supplierEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
-            if (form) {
-              var q = form.querySelector('[name="quantity"]'); if (q) q.value = '';
-              var pd = form.querySelector('[name="purchaseDate"]'); if (pd) pd.value = '';
-              var bn = form.querySelector('[name="batchNumber"]'); if (bn) bn.value = '';
-              var ed = form.querySelector('[name="expiryDate"]'); if (ed) ed.value = '';
-              form.querySelector('[name="quantity"]').focus();
-            }
-          } else {
-            window._addInventoryBarcodeLookup = null;
-            if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; nameEl.value = ''; }
-            if (unitEl) { unitEl.disabled = false; unitEl.style.background = ''; }
-            if (supplierEl) { supplierEl.readOnly = false; supplierEl.style.background = ''; supplierEl.value = ''; }
-            if (nameEl) nameEl.focus();
-          }
-          addInventoryModal.style.display = 'flex';
-          document.body.style.overflow = 'hidden';
-        }).catch(function() {
-          window._addInventoryBarcodeLookup = null;
-          var bi = document.getElementById('add-inventory-barcode-input');
-          var bdw = document.getElementById('add-inventory-barcode-display-wrap');
-          var bd = document.getElementById('add-inventory-barcode-display');
-          if (bi) bi.value = code || '';
-          if (bdw) bdw.style.display = code ? 'block' : 'none';
-          if (bd) bd.textContent = code || '';
-          addInventoryModal.style.display = 'flex';
-          document.body.style.overflow = 'hidden';
-          var form = addInventoryModal.querySelector('form');
-          if (form) { form.querySelector('[name="name"]').value = ''; form.querySelector('[name="quantity"]').focus(); }
-        });
-      })();
-    });
-
-    function attachBarcodeModalCloseHandlers() {
+    function attachBarcodeModalHandlers() {
       var closeBtn = document.getElementById('barcode-scan-modal-close');
       var backBtn = document.getElementById('barcode-scan-back-btn');
+      var addToInvBtn = document.getElementById('barcode-add-to-inventory-btn');
       if (closeBtn) closeBtn.addEventListener('click', closeBarcodeScanModal);
-      if (backBtn) backBtn.addEventListener('click', function() { closeBarcodeScanModal(); if (hubModal) { hubModal.style.display = 'flex'; document.body.style.overflow = 'hidden'; } });
+      if (backBtn) backBtn.addEventListener('click', function() { closeBarcodeScanModal(); var hm = document.getElementById('inventory-entry-hub-modal'); if (hm) { hm.style.display = 'flex'; document.body.style.overflow = 'hidden'; } });
+      if (addToInvBtn) {
+        addToInvBtn.addEventListener('click', function() {
+          var code = lastBarcodeValue || (document.getElementById('barcode-result-value') && document.getElementById('barcode-result-value').textContent) || '';
+          closeBarcodeScanModal();
+          var addInventoryModalEl = document.getElementById('add-inventory-modal');
+          if (!addInventoryModalEl) return;
+          window._addInventorySourceMethod = 'barcode_scan';
+          CoreAPI.lookupBarcode(code).then(function(res) {
+            var form = addInventoryModalEl.querySelector('form');
+            var barcodeInput = document.getElementById('add-inventory-barcode-input');
+            var barcodeDisplayWrap = document.getElementById('add-inventory-barcode-display-wrap');
+            var barcodeDisplay = document.getElementById('add-inventory-barcode-display');
+            var nameEl = document.getElementById('add-inventory-name');
+            var unitEl = document.getElementById('add-inventory-unit');
+            var supplierEl = document.getElementById('add-inventory-supplier');
+            if (barcodeInput) barcodeInput.value = code || '';
+            if (barcodeDisplayWrap) barcodeDisplayWrap.style.display = code ? 'block' : 'none';
+            if (barcodeDisplay) barcodeDisplay.textContent = code || '';
+            if (res.exists) {
+              window._addInventoryBarcodeLookup = { name: res.name, unit: res.unit, supplier: res.supplier || '' };
+              if (nameEl) { nameEl.value = res.name || ''; nameEl.readOnly = true; nameEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              if (unitEl) { unitEl.value = res.unit || ''; unitEl.disabled = true; unitEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              if (supplierEl) { supplierEl.value = res.supplier || ''; supplierEl.readOnly = true; supplierEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              if (form) {
+                var q = form.querySelector('[name="quantity"]'); if (q) q.value = '';
+                var pd = form.querySelector('[name="purchaseDate"]'); if (pd) pd.value = '';
+                var bn = form.querySelector('[name="batchNumber"]'); if (bn) bn.value = '';
+                var ed = form.querySelector('[name="expiryDate"]'); if (ed) ed.value = '';
+                form.querySelector('[name="quantity"]').focus();
+              }
+            } else {
+              window._addInventoryBarcodeLookup = null;
+              if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; nameEl.value = ''; }
+              if (unitEl) { unitEl.disabled = false; unitEl.style.background = ''; }
+              if (supplierEl) { supplierEl.readOnly = false; supplierEl.style.background = ''; supplierEl.value = ''; }
+              if (nameEl) nameEl.focus();
+            }
+            addInventoryModalEl.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+          }).catch(function() {
+            window._addInventoryBarcodeLookup = null;
+            var bi = document.getElementById('add-inventory-barcode-input');
+            var bdw = document.getElementById('add-inventory-barcode-display-wrap');
+            var bd = document.getElementById('add-inventory-barcode-display');
+            if (bi) bi.value = code || '';
+            if (bdw) bdw.style.display = code ? 'block' : 'none';
+            if (bd) bd.textContent = code || '';
+            addInventoryModalEl.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            var form = addInventoryModalEl.querySelector('form');
+            if (form) { form.querySelector('[name="name"]').value = ''; form.querySelector('[name="quantity"]').focus(); }
+          });
+        });
+      }
     }
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', attachBarcodeModalCloseHandlers);
+      document.addEventListener('DOMContentLoaded', attachBarcodeModalHandlers);
     } else {
-      attachBarcodeModalCloseHandlers();
+      attachBarcodeModalHandlers();
     }
     window.openCsvUploadModal = openCsvUploadModal;
     window.openBarcodeScanModal = openBarcodeScanModal;
