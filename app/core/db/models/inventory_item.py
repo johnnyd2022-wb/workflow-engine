@@ -20,7 +20,10 @@ class InventoryType(enum.Enum):
 
 
 class InventoryItem(Base):
-    """InventoryItem model for tracking raw materials, WIP, and final products"""
+    """InventoryItem model for tracking raw materials, WIP, and final products.
+
+    DB enforces UNIQUE (org_id, barcode) where barcode IS NOT NULL (see migration uq_inventory_org_barcode_001).
+    """
 
     __tablename__ = "inventory_items"
 
