@@ -510,14 +510,34 @@
     
     // Render execution prompts
     const executionPrompts = stepDefinition.execution_prompts || [];
+    const currentStepId = stepDefinition.id ? String(stepDefinition.id) : null;
     if (executionPrompts.length > 0 && promptsContainer) {
+      var executionIdForEvidence = modal.dataset.executionId || '';
+      let evidenceListForStep = [];
+      if (typeof CoreAPI.listEvidence === 'function' && executionIdForEvidence && currentStepId) {
+        try {
+          const res = await CoreAPI.listEvidence(executionIdForEvidence);
+          evidenceListForStep = (res.evidence || []).filter(function(e) { return e.step_id === currentStepId; });
+        } catch (e) { evidenceListForStep = []; }
+      }
       executionPrompts.forEach(prompt => {
         const promptSection = document.createElement('div');
         promptSection.className = 'execute-prompt-section';
         promptSection.style.cssText = 'margin-bottom: 16px;';
-        
+        promptSection.dataset.promptLabel = prompt.label || '';
+        promptSection.dataset.promptRequired = prompt.required !== false ? 'true' : 'false';
+        promptSection.dataset.promptType = prompt.type || 'text';
+
         let inputHtml = '';
-        if (prompt.type === 'text') {
+        if (prompt.type === 'evidence') {
+          inputHtml = `
+            <div class="execute-evidence-upload" data-step-id="${currentStepId || ''}" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 16px; background: var(--bg-secondary, #f9fafb);">
+              <p style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-secondary);">Photos or PDFs (JPEG, PNG, PDF, max 10MB)</p>
+              <input type="file" class="execute-evidence-file-input" accept="image/jpeg,image/png,application/pdf" multiple style="display: block; margin-bottom: 8px;">
+              <div class="execute-evidence-list" style="margin-top: 12px;"></div>
+            </div>
+          `;
+        } else if (prompt.type === 'text') {
           inputHtml = `<input type="text" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
         } else if (prompt.type === 'number') {
           inputHtml = `<input type="number" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} step="0.01" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
@@ -526,29 +546,60 @@
         } else if (prompt.type === 'select') {
           inputHtml = `<select class="form-select execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;"><option value="">Select...</option></select>`;
         }
-        
+
         promptSection.innerHTML = `
           <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
             ${escapeHtml(prompt.label)}${prompt.required !== false ? ' <span style="color: var(--error);">*</span>' : ''}${prompt.unit ? ` (${escapeHtml(prompt.unit)})` : ''}
           </label>
           ${inputHtml}
         `;
-        
-        // Add event listener to clear error styling when user fixes issues
-        const promptInput = promptSection.querySelector('.execute-prompt-input');
-        if (promptInput) {
-          promptInput.addEventListener('input', function() {
-            if (this.value.trim()) {
-              this.style.border = '';
-            }
-          });
-          promptInput.addEventListener('change', function() {
-            if (this.value.trim()) {
-              this.style.border = '';
-            }
-          });
+
+        if (prompt.type === 'evidence') {
+          const uploadZone = promptSection.querySelector('.execute-evidence-upload');
+          const listEl = promptSection.querySelector('.execute-evidence-list');
+          const fileInput = promptSection.querySelector('.execute-evidence-file-input');
+          function renderEvidenceList(items) {
+            if (!listEl) return;
+            listEl.innerHTML = items.length === 0 ? '' : items.map(function(item) {
+              var url = typeof CoreAPI.getEvidenceDownloadUrl === 'function' ? CoreAPI.getEvidenceDownloadUrl(item.id) : '#';
+              return '<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;"><span>' + escapeHtml(item.file_name || 'File') + '</span><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" style="margin-left: 8px;">View</a></div>';
+            }).join('');
+          }
+          renderEvidenceList(evidenceListForStep);
+          uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+          if (fileInput) {
+            fileInput.addEventListener('change', async function() {
+              var files = this.files;
+              if (!files || !files.length || !executionIdForEvidence || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
+              for (var i = 0; i < files.length; i++) {
+                var fd = new FormData();
+                fd.append('file', files[i]);
+                fd.append('execution_id', executionIdForEvidence);
+                fd.append('step_id', currentStepId);
+                try {
+                  var result = await CoreAPI.uploadEvidence(fd);
+                  evidenceListForStep.push({ id: result.id, file_name: result.file_name });
+                  uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+                  renderEvidenceList(evidenceListForStep);
+                } catch (err) {
+                  if (typeof showNotification === 'function') showNotification('error', 'Upload failed', err.message || 'Could not upload file.');
+                }
+              }
+              this.value = '';
+            });
+          }
+        } else {
+          const promptInput = promptSection.querySelector('.execute-prompt-input');
+          if (promptInput) {
+            promptInput.addEventListener('input', function() {
+              if (this.value.trim()) this.style.border = '';
+            });
+            promptInput.addEventListener('change', function() {
+              if (this.value.trim()) this.style.border = '';
+            });
+          }
         }
-        
+
         promptsContainer.appendChild(promptSection);
       });
     } else if (promptsContainer) {
@@ -876,7 +927,7 @@
       }
     });
     
-    // VALIDATION: Check required execution prompts
+    // VALIDATION: Check required execution prompts (text/number/date/select)
     const promptInputs = modal.querySelectorAll('.execute-prompt-input[required]');
     promptInputs.forEach(input => {
       const label = input.dataset.promptLabel;
@@ -887,6 +938,20 @@
         input.style.border = '2px solid var(--error, #ef4444)';
       } else {
         input.style.border = '';
+      }
+    });
+
+    // VALIDATION: Check required evidence (at least one file uploaded)
+    const evidenceSections = modal.querySelectorAll('.execute-prompt-section[data-prompt-type="evidence"][data-prompt-required="true"]');
+    evidenceSections.forEach(section => {
+      const uploadZone = section.querySelector('.execute-evidence-upload');
+      const label = section.dataset.promptLabel || 'Evidence';
+      const count = uploadZone ? parseInt(uploadZone.dataset.evidenceCount || '0', 10) : 0;
+      if (count < 1) {
+        validationErrors.push(`Please upload at least one file for "${label}"`);
+        if (uploadZone) uploadZone.style.borderColor = 'var(--error, #ef4444)';
+      } else if (uploadZone) {
+        uploadZone.style.borderColor = '';
       }
     });
     

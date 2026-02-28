@@ -4235,6 +4235,29 @@
             stepStatus.setAttribute('fill', '#6b7280');
             stepStatus.textContent = step.status || 'PENDING';
             svg.appendChild(stepStatus);
+
+            // Evidence button when this step has evidence
+            const evidenceForStep = (exec.evidence || []).filter(function(e) { return e.step_id === step.step_id; });
+            if (evidenceForStep.length > 0 && typeof CoreAPI.getEvidenceDownloadUrl === 'function') {
+              const evidenceBtn = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+              evidenceBtn.setAttribute('x', x + width - 60);
+              evidenceBtn.setAttribute('y', stepY + 32);
+              evidenceBtn.setAttribute('font-size', '9');
+              evidenceBtn.setAttribute('font-weight', '600');
+              evidenceBtn.setAttribute('fill', '#2563eb');
+              evidenceBtn.setAttribute('cursor', 'pointer');
+              evidenceBtn.textContent = evidenceForStep.length === 1 ? 'Evidence' : 'Evidence (' + evidenceForStep.length + ')';
+              evidenceBtn.className = 'flowchart-element evidence-link';
+              evidenceBtn.setAttribute('data-execution-id', exec.id);
+              evidenceBtn.setAttribute('data-step-id', step.step_id);
+              evidenceBtn.addEventListener('click', function(evt) {
+                evt.stopPropagation();
+                var list = (exec.evidence || []).filter(function(e) { return e.step_id === step.step_id; });
+                if (list.length === 0) return;
+                window.open(CoreAPI.getEvidenceDownloadUrl(list[0].id), '_blank');
+              });
+              svg.appendChild(evidenceBtn);
+            }
             
             // Store position for connections
             step._flowchartX = x;

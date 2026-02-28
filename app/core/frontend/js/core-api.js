@@ -259,6 +259,27 @@ const CoreAPI = {
             method: 'POST',
         });
     },
+
+    // Evidence (execution attachments: images, PDFs)
+    async uploadEvidence(formData) {
+        const url = `${this.baseURL}/evidence/upload`;
+        const config = { method: 'POST', body: formData };
+        if (typeof window !== 'undefined' && window.fetch) {
+            const response = await fetch(url, { ...config, credentials: 'same-origin' });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+            return data;
+        }
+        return this.request('/evidence/upload', { method: 'POST', body: formData });
+    },
+
+    async listEvidence(executionId) {
+        return this.request(`/evidence/list?execution_id=${encodeURIComponent(executionId)}`);
+    },
+
+    getEvidenceDownloadUrl(evidenceId) {
+        return `${this.baseURL}/evidence/${encodeURIComponent(evidenceId)}/download`;
+    },
 };
 
 if (typeof window !== 'undefined') {
