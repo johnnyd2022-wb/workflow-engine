@@ -89,16 +89,21 @@ class InventoryRepository:
         extra_data_merge: dict | None = None,
         commit: bool = True,
     ) -> InventoryItem | None:
-        """Add quantity to an existing inventory item (e.g. repeat barcode scan). Merges extra_data_merge into item.extra_data."""
-        item = self.get_inventory_item_by_id(item_id, org_id)
+        """Add quantity to an existing inventory item (e.g. repeat barcode scan). Merges extra_data_merge into item.extra_data.
+        Uses SELECT ... FOR UPDATE to avoid lost updates under concurrent add-quantity for the same item.
+        """
+        item = self.get_inventory_item_by_id_for_update(item_id, org_id)
         if not item:
             return None
         current = _parse_quantity(item.quantity) or Decimal("0")
         add_val = _parse_quantity(quantity_to_add) or Decimal("0")
         if add_val <= 0:
+            if commit:
+                self.db.commit()
             return item
         item.quantity = str(current + add_val)
         if extra_data_merge:
+            # Merge audit etc. into extra_data; for high volume consider a relational InventoryAuditEntry table
             merged = dict(item.extra_data or {})
             for key, value in extra_data_merge.items():
                 if key == "inventory_audit_history" and isinstance(value, list):

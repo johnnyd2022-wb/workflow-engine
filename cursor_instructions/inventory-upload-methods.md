@@ -1,162 +1,111 @@
-⚠️ Issues / Risks You Should Fix
-1️⃣ Barcode Is NOT Uniquely Constrained (Major Risk)
+⚠️ Important Issues Remaining
+🔴 1. Concurrency Problem in add_quantity_to_inventory_item
 
-Your model:
+This is your biggest risk now.
 
-barcode = Column(String(255), nullable=True, index=True)
+Current implementation:
 
-This is not enough.
+current = _parse_quantity(item.quantity)
+add_val = _parse_quantity(quantity_to_add)
+item.quantity = str(current + add_val)
+self.db.commit()
 
-Right now:
+This is vulnerable to lost updates.
 
-Multiple inventory rows can have same barcode
+Race scenario:
 
-With different names
+Two requests at same time:
 
-In a race condition scenario
+Thread A:
 
-You rely on application logic only.
+Reads quantity = 10
 
-You need:
-UniqueConstraint('org_id', 'barcode', name='uq_inventory_org_barcode')
+Thread B:
 
-OR
+Reads quantity = 10
 
-If barcode represents product identity (not stock entry identity), you should actually separate:
+Both add 5:
 
-InventoryProduct
+A writes 15
 
-id
+B writes 15
 
-org_id
+Final value = 15
+Correct value = 20
 
-barcode (unique)
+This is a classic read-modify-write race.
 
-name
+✅ Correct Solution
 
-unit
+Use a database-level atomic update:
 
-supplier
+Example (conceptually):
 
-InventoryStockEntry
+self.db.query(InventoryItem).filter(
+    InventoryItem.id == item_id,
+    InventoryItem.org_id == org_id
+).update(
+    {
+        InventoryItem.quantity: cast(InventoryItem.quantity, Numeric) + add_val
+    }
+)
 
-id
+Or use SELECT ... FOR UPDATE locking.
 
-product_id (FK)
+Without atomicity, your quantity math is not safe in multi-user systems.
 
-quantity
+🟡 2. Supplier Semantics Changed (Be Intentional)
 
-purchase_date
+You now treat:
 
-expiry_date
+supplier = stock-level metadata
 
-batch_number
+NOT part of identity
 
-Your current design conflates product and stock entry.
+But the table still has:
 
-This will cause pain later.
+supplier = Column(String(255), nullable=True)
 
-2️⃣ Race Condition Risk
+Meaning:
 
-Two users scan same new barcode at same time:
+If user scans same barcode with different supplier:
 
-Flow:
+You add quantity
 
-Both lookup → not found
+But supplier field on row does not change
 
-Both submit
+You store supplier only in audit history
 
-Both create rows
+That’s OK — but you’ve effectively:
 
-Now duplicate barcodes exist
+Decoupled supplier from canonical row
 
-You need:
+That’s fine, but it’s a product decision.
 
-Either:
+🟡 3. JSON Audit Log Inside Row
 
-A) DB-level unique constraint
-OR
-B) Transactional locking pattern
+This works, but:
 
-Without that, integrity is not guaranteed.
+Over time:
 
-3️⃣ find_by_barcode Logic Has Redundant Condition
+inventory_audit_history could grow large
 
-This:
+Entire JSON blob rewrites on each update
 
-if not (barcode or (barcode and barcode.strip())):
+No indexing possible
 
-Is overly complex.
+This is acceptable for low volume, but if this grows:
 
-Should simply be:
+You’ll want:
 
-if not barcode or not barcode.strip():
-    return None
-
-Cleaner and less error-prone.
-
-4️⃣ Canonical Supplier Enforcement May Be Conceptually Wrong
-
-You enforce:
-
-if data.get("supplier") != existing.supplier
-
-Is supplier really part of product identity?
-
-In real-world inventory systems:
-
-Same product
-
-Different suppliers
-
-Different purchase batches
-
-Supplier is typically stock-entry-level metadata.
-
-If supplier is identity-level, that’s fine — but it’s a business rule decision, not a technical one.
-
-Clarify that.
-
-5️⃣ Minor Frontend Risk: Hidden Barcode Field Trust
-
-You rely on:
-
-const barcode = (formData.get('barcode') || '').trim() || null;
-
-Since it’s a hidden input, someone could tamper with it.
-
-You’re protected server-side, but:
-
-Better approach:
-
-Do not trust lookup cache
-
-Always resolve canonical values again server-side
-
-Which you do — so you're safe
-
-Just ensure this never drifts.
-
-6️⃣ API Response Contract Is Good But Could Be Stronger
-
-Current:
-
-{
-  "exists": true,
-  "name": "...",
-  "unit": "...",
-  "supplier": "..."
-}
-
-Better:
-
-{
-  "exists": true,
-  "product": {
-    "name": "...",
-    "unit": "...",
-    "supplier": "..."
-  }
-}
-
-More extensible and version-safe.
+InventoryAuditEntry
+- id
+- inventory_item_id
+- timestamp
+- quantity_added
+- purchase_date
+- expiry_date
+- batch_number
+- user_id
+
+Relational event log scales better.

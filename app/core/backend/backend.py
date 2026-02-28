@@ -1577,7 +1577,7 @@ def create_inventory_item():
                     return jsonify({"error": "Product name does not match existing product for this barcode"}), 409
                 if unit is not None and unit != existing.unit:
                     return jsonify({"error": "Unit does not match existing product for this barcode"}), 409
-                # Add quantity to existing item; supplier is stock-level, not enforced for match
+                # Add quantity to existing item; supplier is stock-level (stored in audit only, row.supplier unchanged)
                 supplier = (data.get("supplier") or "").strip() or None
                 purchase_date = None
                 if data.get("purchase_date"):
@@ -1593,6 +1593,7 @@ def create_inventory_item():
                     "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "source_method": source_method,
                     "quantity_added": str(quantity),
+                    "supplier": supplier,
                     "purchase_date": purchase_date.isoformat() if purchase_date else None,
                     "expiry_date": expiry_date.isoformat() if expiry_date else None,
                     "supplier_batch_number": (data.get("supplier_batch_number") or "").strip() or None,
