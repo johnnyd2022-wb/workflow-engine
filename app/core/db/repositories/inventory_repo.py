@@ -28,7 +28,7 @@ class InventoryRepository:
 
     def find_by_barcode(self, org_id: UUID, barcode: str) -> InventoryItem | None:
         """Return the first inventory item with this barcode in the org (for product-level lookup)."""
-        if not (barcode or (barcode and barcode.strip())):
+        if not barcode or not barcode.strip():
             return None
         return (
             self.db.query(InventoryItem)
@@ -79,6 +79,38 @@ class InventoryRepository:
         _ = item.id
         if commit:
             self.db.commit()
+        return item
+
+    def add_quantity_to_inventory_item(
+        self,
+        item_id: UUID,
+        org_id: UUID,
+        quantity_to_add: str,
+        extra_data_merge: dict | None = None,
+        commit: bool = True,
+    ) -> InventoryItem | None:
+        """Add quantity to an existing inventory item (e.g. repeat barcode scan). Merges extra_data_merge into item.extra_data."""
+        item = self.get_inventory_item_by_id(item_id, org_id)
+        if not item:
+            return None
+        current = _parse_quantity(item.quantity) or Decimal("0")
+        add_val = _parse_quantity(quantity_to_add) or Decimal("0")
+        if add_val <= 0:
+            return item
+        item.quantity = str(current + add_val)
+        if extra_data_merge:
+            merged = dict(item.extra_data or {})
+            for key, value in extra_data_merge.items():
+                if key == "inventory_audit_history" and isinstance(value, list):
+                    existing = list(merged.get(key) or [])
+                    merged[key] = existing + value
+                else:
+                    merged[key] = value
+            item.extra_data = merged
+        if commit:
+            self.db.commit()
+        self.db.expire(item, ["updated_at"])
+        _ = item.updated_at
         return item
 
     def get_inventory_item_by_id(self, item_id: UUID, org_id: UUID | None = None) -> InventoryItem | None:

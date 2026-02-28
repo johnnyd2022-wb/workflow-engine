@@ -128,9 +128,11 @@ def register_routes(bp):
         return jsonify(
             {
                 "exists": True,
-                "name": existing.name,
-                "unit": existing.unit,
-                "supplier": existing.supplier or "",
+                "product": {
+                    "name": existing.name,
+                    "unit": existing.unit,
+                    "supplier": existing.supplier or "",
+                },
             }
         ), 200
 

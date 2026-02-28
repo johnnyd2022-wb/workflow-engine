@@ -2060,10 +2060,14 @@
             if (barcodeDisplayWrap) barcodeDisplayWrap.style.display = code ? 'block' : 'none';
             if (barcodeDisplay) barcodeDisplay.textContent = code || '';
             if (res.exists) {
-              window._addInventoryBarcodeLookup = { name: res.name, unit: res.unit, supplier: res.supplier || '' };
-              if (nameEl) { nameEl.value = res.name || ''; nameEl.readOnly = true; nameEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
-              if (unitEl) { unitEl.value = res.unit || ''; unitEl.disabled = true; unitEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
-              if (supplierEl) { supplierEl.value = res.supplier || ''; supplierEl.readOnly = true; supplierEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              var p = res.product || {};
+              var pName = p.name !== undefined ? p.name : res.name;
+              var pUnit = p.unit !== undefined ? p.unit : res.unit;
+              var pSupplier = (p.supplier !== undefined ? p.supplier : res.supplier) || '';
+              window._addInventoryBarcodeLookup = { name: pName, unit: pUnit, supplier: pSupplier };
+              if (nameEl) { nameEl.value = pName || ''; nameEl.readOnly = true; nameEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              if (unitEl) { unitEl.value = pUnit || ''; unitEl.disabled = true; unitEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              if (supplierEl) { supplierEl.value = pSupplier || ''; supplierEl.readOnly = true; supplierEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
               if (form) {
                 var q = form.querySelector('[name="quantity"]'); if (q) q.value = '';
                 var pd = form.querySelector('[name="purchaseDate"]'); if (pd) pd.value = '';
@@ -2539,11 +2543,15 @@
           const metrics = await CoreAPI.getMetrics();
           updateMetricsV2(metrics);
 
-          showNotification(
-            'success',
-            'Inventory Item Added',
-            `"${name}" has been added to inventory successfully.`
-          );
+          if (saved.quantity_added) {
+            showNotification('success', 'Quantity added', `Quantity added to "${saved.name}".`);
+          } else {
+            showNotification(
+              'success',
+              'Inventory Item Added',
+              `"${name}" has been added to inventory successfully.`
+            );
+          }
         } catch (error) {
           removeOptimisticInventoryV2(tempId);
 

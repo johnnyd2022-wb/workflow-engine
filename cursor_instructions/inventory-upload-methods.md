@@ -1,77 +1,36 @@
-📦 Barcode-Aware Inventory Entry – Implementation Plan
-Objective
+⚠️ Issues / Risks You Should Fix
+1️⃣ Barcode Is NOT Uniquely Constrained (Major Risk)
 
-Enhance inventory entry so that:
+Your model:
 
-When a barcode is scanned:
+barcode = Column(String(255), nullable=True, index=True)
 
-If barcode does not exist → open manual entry flow (same as current manual modal).
+This is not enough.
 
-If barcode exists → prefill known product fields and only prompt for stock-specific metadata.
+Right now:
 
-The solution must integrate with existing SQLAlchemy models, Alembic migrations, and frontend modal architecture.
+Multiple inventory rows can have same barcode
 
-1️⃣ Data Model Updates (SQLAlchemy + Alembic)
-Step 1.1 — Add Barcode Support
+With different names
 
-Update your inventory-related model(s) to support storing a barcode.
+In a race condition scenario
 
-High-level requirement:
+You rely on application logic only.
 
-Add barcode column (String, indexed).
+You need:
+UniqueConstraint('org_id', 'barcode', name='uq_inventory_org_barcode')
 
-Make it unique only if your business rule requires unique product identity.
+OR
 
-Otherwise, allow reuse across stock entries.
+If barcode represents product identity (not stock entry identity), you should actually separate:
 
-Cursor should:
+InventoryProduct
 
-Update the SQLAlchemy model.
+id
 
-Generate an Alembic migration.
+org_id
 
-Apply proper indexing.
-
-Step 1.2 — Decide Data Ownership Model
-
-Cursor should determine from your schema whether:
-
-You already have a Product-like abstraction.
-
-Or inventory rows directly store item attributes.
-
-If you already have a product table:
-
-Barcode should live at the product level.
-
-If not:
-
-Barcode can initially live on the inventory table.
-
-Cursor should align with your current domain model, not introduce new tables unless necessary.
-
-2️⃣ Backend: Barcode Lookup Endpoint
-Step 2.1 — Add Barcode Lookup Route
-
-Create a new API endpoint:
-
-GET /api/inventory/barcode/<code>
-
-Behavior:
-
-Query existing records for that barcode.
-
-Return:
-
-exists: true + canonical item data
-
-OR exists: false
-
-Important:
-
-Do not return sensitive fields.
-
-Return only:
+barcode (unique)
 
 name
 
@@ -79,219 +38,125 @@ unit
 
 supplier
 
-(any other product-level attributes you already store)
+InventoryStockEntry
 
-Cursor should:
+id
 
-Reuse existing service/query layers if present.
-
-Follow your current JSON response conventions.
-
-Use proper error handling.
-
-3️⃣ Frontend: Scanner Integration
-Step 3.1 — Hook Into Existing Scan Success
-
-When a barcode is successfully decoded:
-
-Replace direct modal logic with:
-
-lookupBarcode(code)
-
-Cursor should integrate into your existing scanner success handler.
-
-Step 3.2 — Barcode Lookup Flow
-
-Frontend logic:
-
-Call lookup endpoint.
-
-If exists === false:
-
-Open existing manual modal.
-
-Prefill barcode field.
-
-If exists === true:
-
-Open entry modal.
-
-Prefill:
-
-name
-
-unit
-
-supplier
-
-Lock those fields.
-
-Prompt only for:
+product_id (FK)
 
 quantity
 
-purchase date
+purchase_date
 
-expiry date
+expiry_date
 
-batch number
+batch_number
 
-Cursor should:
+Your current design conflates product and stock entry.
 
-Reuse the current modal.
+This will cause pain later.
 
-Avoid duplicating forms.
+2️⃣ Race Condition Risk
 
-Toggle fields dynamically.
+Two users scan same new barcode at same time:
 
-4️⃣ Modal Behavior Rules
-Case A – New Barcode
+Flow:
 
-User must input:
+Both lookup → not found
 
-Name
+Both submit
 
-Quantity
+Both create rows
 
-Unit
+Now duplicate barcodes exist
 
-Supplier
+You need:
 
-Purchase date
+Either:
 
-Barcode should be:
+A) DB-level unique constraint
+OR
+B) Transactional locking pattern
 
-Visible (or hidden) but stored
+Without that, integrity is not guaranteed.
 
-Editable only if you allow corrections
+3️⃣ find_by_barcode Logic Has Redundant Condition
 
-Case B – Existing Barcode
+This:
 
-Prefill and lock:
+if not (barcode or (barcode and barcode.strip())):
 
-Name
+Is overly complex.
 
-Unit
+Should simply be:
 
-Supplier
+if not barcode or not barcode.strip():
+    return None
 
-User inputs:
+Cleaner and less error-prone.
 
-Quantity
+4️⃣ Canonical Supplier Enforcement May Be Conceptually Wrong
 
-Purchase date
+You enforce:
 
-Expiry date
+if data.get("supplier") != existing.supplier
 
-Batch number
+Is supplier really part of product identity?
 
-Barcode must still be submitted in payload.
+In real-world inventory systems:
 
-5️⃣ Backend Save Logic
+Same product
 
-Cursor should modify the existing create-inventory endpoint so that:
+Different suppliers
 
-If barcode provided:
+Different purchase batches
 
-Persist it.
+Supplier is typically stock-entry-level metadata.
 
-If barcode exists:
+If supplier is identity-level, that’s fine — but it’s a business rule decision, not a technical one.
 
-Ensure product identity remains consistent.
+Clarify that.
 
-Prevent conflicting product definitions for the same barcode.
+5️⃣ Minor Frontend Risk: Hidden Barcode Field Trust
 
-If mismatch occurs:
+You rely on:
 
-Return 409 or validation error.
+const barcode = (formData.get('barcode') || '').trim() || null;
 
-6️⃣ Validation Requirements
+Since it’s a hidden input, someone could tamper with it.
 
-Backend must enforce:
+You’re protected server-side, but:
 
-Quantity required
+Better approach:
 
-Name required (unless product resolved via barcode)
+Do not trust lookup cache
 
-Purchase date required
+Always resolve canonical values again server-side
 
-Barcode optional unless coming from scanner
+Which you do — so you're safe
 
-Do not rely solely on frontend validation.
+Just ensure this never drifts.
 
-7️⃣ Alembic Migration Instructions
+6️⃣ API Response Contract Is Good But Could Be Stronger
 
-Cursor should:
+Current:
 
-Modify SQLAlchemy model.
-
-Generate migration:
-
-alembic revision --autogenerate -m "add barcode to inventory"
-
-Review migration for correctness.
-
-Do not apply the migration - I will do this once all the code is prepped for review
-
-Migration must:
-
-Add column.
-
-Add index.
-
-Handle nullable state safely.
-
-8️⃣ Edge Cases
-
-Cursor must handle:
-
-Barcode exists but product fields differ → reject with validation error.
-
-Barcode reused for multiple batches → allowed.
-
-Manual entry without barcode → allowed.
-
-9️⃣ Testing Scenarios
-Scenario 1 – First Scan
-
-Scan unknown barcode
-
-Manual modal appears
-
-Save
-
-Confirm barcode persisted
-
-Scenario 2 – Repeat Scan
-
-Scan same barcode
-
-Fields prefilled and locked
-
-Save new quantity with batch data
-
-Scenario 3 – Manual Flow Unchanged
-
-Manual button works exactly as before
-
-🔟 Architectural Principle
-
-Barcode represents product identity.
-
-Inventory entry represents stock event.
-
-Cursor should preserve separation if your schema already supports it.
-
-Expected Outcome
-
-After implementation:
-
-Barcode acts as a product accelerator.
-
-Manual workflow remains intact.
-
-Scanner integrates cleanly.
-
-Schema remains aligned with your domain model.
-
-No duplicated modal logic.
+{
+  "exists": true,
+  "name": "...",
+  "unit": "...",
+  "supplier": "..."
+}
+
+Better:
+
+{
+  "exists": true,
+  "product": {
+    "name": "...",
+    "unit": "...",
+    "supplier": "..."
+  }
+}
+
+More extensible and version-safe.
