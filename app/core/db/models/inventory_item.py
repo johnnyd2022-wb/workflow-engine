@@ -20,7 +20,10 @@ class InventoryType(enum.Enum):
 
 
 class InventoryItem(Base):
-    """InventoryItem model for tracking raw materials, WIP, and final products"""
+    """InventoryItem model for tracking raw materials, WIP, and final products.
+
+    DB enforces UNIQUE (org_id, barcode) where barcode IS NOT NULL (see migration uq_inventory_org_barcode_001).
+    """
 
     __tablename__ = "inventory_items"
 
@@ -32,6 +35,7 @@ class InventoryItem(Base):
     inventory_type = Column(String(50), nullable=False)  # raw_material, work_in_progress, final_product
     # Supplier information (for raw materials)
     supplier = Column(String(255), nullable=True)
+    barcode = Column(String(255), nullable=True, index=True)  # Product identity; reused across stock entries
     purchase_date = Column(Date, nullable=True)
     supplier_batch_number = Column(String(255), nullable=True)
     expiry_date = Column(Date, nullable=True)

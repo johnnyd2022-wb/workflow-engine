@@ -114,6 +114,28 @@ def _sanitize(s: str, max_len: int = 500) -> str:
 
 
 def register_routes(bp):
+    @bp.route("/api/core/inventory/barcode/<path:code>", methods=["GET"])
+    @requires_auth
+    def barcode_lookup(code):
+        """Look up product-level data by barcode. Returns exists and canonical name/unit/supplier for prefilling."""
+        if not code or not (code.strip()):
+            return jsonify({"exists": False}), 200
+        org_id = UUID(g.org_id)
+        repo = InventoryRepository(db_session)
+        existing = repo.find_by_barcode(org_id, code.strip())
+        if not existing:
+            return jsonify({"exists": False}), 200
+        return jsonify(
+            {
+                "exists": True,
+                "product": {
+                    "name": existing.name,
+                    "unit": existing.unit,
+                    "supplier": existing.supplier or "",
+                },
+            }
+        ), 200
+
     @bp.route("/api/core/config/units", methods=["GET"])
     @requires_auth
     def get_allowed_units():

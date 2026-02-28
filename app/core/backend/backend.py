@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
+from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
@@ -1547,17 +1548,18 @@ def reset_demo_db_route():
 @core_bp.route("/api/core/inventory", methods=["POST"])
 @requires_auth
 def create_inventory_item():
-    """Create a new inventory item (typically raw material)"""
+    """Create a new inventory item (typically raw material). Supports barcode; enforces product identity when barcode exists."""
     org_id = UUID(g.org_id)
     data = request.get_json()
 
-    name = data.get("name")
+    name = (data.get("name") or "").strip() or None
     quantity = data.get("quantity")
-    unit = data.get("unit")
+    unit = (data.get("unit") or "").strip() or None
     inventory_type = data.get("inventory_type", InventoryType.RAW_MATERIAL.value)
+    barcode = (data.get("barcode") or "").strip() or None
 
-    if not all([name, quantity, unit]):
-        return jsonify({"error": "name, quantity, and unit are required"}), 400
+    if quantity is None or (isinstance(quantity, str) and not quantity.strip()):
+        return jsonify({"error": "quantity is required"}), 400
     try:
         qty_val = float(quantity)
         if qty_val <= 0:
@@ -1567,6 +1569,67 @@ def create_inventory_item():
 
     repo = InventoryRepository(db_session)
     try:
+        # If barcode provided and we have an existing row for it, add quantity to it (one row per barcode per org)
+        if barcode:
+            existing = repo.find_by_barcode(org_id, barcode)
+            if existing:
+                if name is not None and name != existing.name:
+                    return jsonify({"error": "Product name does not match existing product for this barcode"}), 409
+                if unit is not None and unit != existing.unit:
+                    return jsonify({"error": "Unit does not match existing product for this barcode"}), 409
+                # Add quantity to existing item; supplier is stock-level (stored in audit only, row.supplier unchanged)
+                supplier = (data.get("supplier") or "").strip() or None
+                purchase_date = None
+                if data.get("purchase_date"):
+                    purchase_date = datetime.fromisoformat(data.get("purchase_date").replace("Z", "+00:00")).date()
+                expiry_date = None
+                if data.get("expiry_date"):
+                    expiry_date = datetime.fromisoformat(data.get("expiry_date").replace("Z", "+00:00")).date()
+                source_method = (data.get("source_method") or "barcode_scan").strip()
+                if source_method not in ("manual", "csv_upload", "barcode_scan"):
+                    source_method = "barcode_scan"
+                audit_entry = {
+                    "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
+                    "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "source_method": source_method,
+                    "quantity_added": str(quantity),
+                    "supplier": supplier,
+                    "purchase_date": purchase_date.isoformat() if purchase_date else None,
+                    "expiry_date": expiry_date.isoformat() if expiry_date else None,
+                    "supplier_batch_number": (data.get("supplier_batch_number") or "").strip() or None,
+                }
+                extra_merge = {"inventory_audit_history": [audit_entry]}
+                updated = repo.add_quantity_to_inventory_item(
+                    existing.id, org_id, str(quantity), extra_data_merge=extra_merge, commit=True
+                )
+                if not updated:
+                    return jsonify({"error": "Failed to add quantity to existing item"}), 500
+                return (
+                    jsonify(
+                        {
+                            "id": str(updated.id),
+                            "name": updated.name,
+                            "quantity": updated.quantity,
+                            "unit": updated.unit,
+                            "inventory_type": updated.inventory_type,
+                            "supplier": updated.supplier,
+                            "purchase_date": updated.purchase_date.isoformat() if updated.purchase_date else None,
+                            "supplier_batch_number": updated.supplier_batch_number,
+                            "expiry_date": updated.expiry_date.isoformat() if updated.expiry_date else None,
+                            "created_at": updated.created_at.isoformat() if updated.created_at else None,
+                            "quantity_added": True,
+                        }
+                    ),
+                    200,
+                )
+            elif not name or not unit:
+                return jsonify({"error": "name and unit are required for new barcode"}), 400
+        if not name:
+            return jsonify({"error": "name is required"}), 400
+        if not unit:
+            return jsonify({"error": "unit is required"}), 400
+
+        supplier = (data.get("supplier") or "").strip() or None
         # Parse purchase date if provided
         purchase_date = None
         if data.get("purchase_date"):
@@ -1612,21 +1675,28 @@ def create_inventory_item():
             except (TypeError, ValueError):
                 extra_data["remaining_balance_to_reconcile"] = str(quantity) if quantity else "0"
 
-        item = repo.create_inventory_item(
-            org_id=org_id,
-            name=name,
-            quantity=str(quantity),
-            unit=unit,
-            inventory_type=inventory_type,
-            supplier=data.get("supplier"),
-            purchase_date=purchase_date,
-            supplier_batch_number=data.get("supplier_batch_number"),
-            expiry_date=expiry_date,
-            source_execution_id=source_execution_id,
-            source_execution_step_id=source_execution_step_id,
-            source_output_id=source_output_id,
-            extra_data=extra_data if extra_data else None,
-        )
+        try:
+            item = repo.create_inventory_item(
+                org_id=org_id,
+                name=name,
+                quantity=str(quantity),
+                unit=unit,
+                inventory_type=inventory_type,
+                supplier=supplier,
+                barcode=barcode,
+                purchase_date=purchase_date,
+                supplier_batch_number=data.get("supplier_batch_number"),
+                expiry_date=expiry_date,
+                source_execution_id=source_execution_id,
+                source_execution_step_id=source_execution_step_id,
+                source_output_id=source_output_id,
+                extra_data=extra_data if extra_data else None,
+            )
+        except IntegrityError:
+            db_session.rollback()
+            return jsonify(
+                {"error": "Duplicate barcode for this organisation; try again or add quantity to existing item."}
+            ), 409
 
         return (
             jsonify(
