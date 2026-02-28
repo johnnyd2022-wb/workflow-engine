@@ -1576,7 +1576,9 @@ def create_inventory_item():
                     return jsonify({"error": "Product name does not match existing product for this barcode"}), 409
                 if unit is not None and unit != existing.unit:
                     return jsonify({"error": "Unit does not match existing product for this barcode"}), 409
-                if data.get("supplier") is not None and (data.get("supplier") or "").strip() != (existing.supplier or ""):
+                if data.get("supplier") is not None and (data.get("supplier") or "").strip() != (
+                    existing.supplier or ""
+                ):
                     return jsonify({"error": "Supplier does not match existing product for this barcode"}), 409
                 name = name or existing.name
                 unit = unit or existing.unit

@@ -125,12 +125,14 @@ def register_routes(bp):
         existing = repo.find_by_barcode(org_id, code.strip())
         if not existing:
             return jsonify({"exists": False}), 200
-        return jsonify({
-            "exists": True,
-            "name": existing.name,
-            "unit": existing.unit,
-            "supplier": existing.supplier or "",
-        }), 200
+        return jsonify(
+            {
+                "exists": True,
+                "name": existing.name,
+                "unit": existing.unit,
+                "supplier": existing.supplier or "",
+            }
+        ), 200
 
     @bp.route("/api/core/config/units", methods=["GET"])
     @requires_auth
