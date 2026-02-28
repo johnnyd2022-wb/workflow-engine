@@ -61,7 +61,7 @@ unit_tests:
     - pip install uv
     - uv sync --extra dev
     # Install PostgreSQL client and curl for health checks
-    - apt-get update -qq && apt-get install -y -qq postgresql-client curl openssl
+    - apt-get update -o Acquire::AllowInsecureRepositories=true -qq && apt-get install -y -qq postgresql-client curl openssl
     # Make CI scripts executable
     - chmod +x ci/*.sh
     # Setup database (wait for postgres, update config, run migrations)

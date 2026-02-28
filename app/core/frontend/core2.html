@@ -1650,38 +1650,41 @@
       var video = document.getElementById('barcode-video');
       var statusEl = document.getElementById('barcode-capture-status');
       if (!video || !statusEl) return;
-      transitionScannerState(SCANNER_STATE.SCANNING, 'Scanning…');
+      setBarcodeStatus('Scanning…');
       function scheduleNext() {
         if (barcodeScanLoopId != null) cancelAnimationFrame(barcodeScanLoopId);
         barcodeScanLoopId = requestAnimationFrame(tick);
       }
       function tick() {
-        var skip = false;
-        if (lastBarcodeValue) skip = true;
-        else if (!video.videoWidth || !video.readyState || video.readyState < 2) skip = true;
-        else if (decodeInProgress) skip = true;
-        if (skip) { scheduleNext(); return; }
-
+        if (barcodeScanLoopId != null) {
+          cancelAnimationFrame(barcodeScanLoopId);
+          barcodeScanLoopId = null;
+        }
+        if (lastBarcodeValue) return;
+        if (!video.videoWidth || !video.readyState || video.readyState < 2) {
+          scheduleNext();
+          return;
+        }
+        if (decodeInProgress) {
+          scheduleNext();
+          return;
+        }
         var now = Date.now();
-        var baseInterval = BARCODE_SCAN_INTERVAL_MS;
-        if (scannerState === SCANNER_STATE.VERIFYING) baseInterval = 400;
-        if (scannerState === SCANNER_STATE.LOW_LIGHT_WARNING) baseInterval = 700;
-        if (scannerState === SCANNER_STATE.HOLD_STEADY) baseInterval = 500;
-        var intervalMs = barcodeConsecutiveFailures >= 5 ? 600 : (barcodeCandidateHistory.length >= 1 ? 300 : baseInterval);
-        if (now - lastBarcodeDecodeTime < intervalMs) { scheduleNext(); return; }
+        var intervalMs = barcodeConsecutiveFailures >= 5 ? 600 : (barcodeConfidenceCounter >= 1 ? 300 : BARCODE_SCAN_INTERVAL_MS);
+        if (now - lastBarcodeDecodeTime < intervalMs) {
+          scheduleNext();
+          return;
+        }
         lastBarcodeDecodeTime = now;
 
         var canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
-        var currentQuality = getFrameQualityScore(canvas);
-
-        if (lastFrameQualityScore != null && Math.abs(currentQuality - lastFrameQualityScore) > BARCODE_MOTION_DIFF_THRESHOLD) {
-          motionViolationCounter += 0.2;
-          if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
-        } else {
-          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
+        var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
+        if (getFrameQualityScore(canvas) <= qualityThreshold) {
+          scheduleNext();
+          return;
         }
         lastFrameQualityScore = currentQuality;
 
