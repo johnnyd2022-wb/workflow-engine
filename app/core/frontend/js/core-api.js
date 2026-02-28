@@ -177,6 +177,14 @@ const CoreAPI = {
         });
     },
 
+    /** Look up product by barcode for inventory entry. Returns { exists: boolean, name?, unit?, supplier? }. */
+    async lookupBarcode(code) {
+        if (!code || !String(code).trim()) return { exists: false };
+        const trimmed = String(code).trim();
+        const encoded = encodeURIComponent(trimmed);
+        return this.request(`/inventory/barcode/${encoded}`);
+    },
+
     async getConfigUnits() {
         return this.request('/config/units');
     },

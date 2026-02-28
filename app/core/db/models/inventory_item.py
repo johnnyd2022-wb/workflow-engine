@@ -32,6 +32,7 @@ class InventoryItem(Base):
     inventory_type = Column(String(50), nullable=False)  # raw_material, work_in_progress, final_product
     # Supplier information (for raw materials)
     supplier = Column(String(255), nullable=True)
+    barcode = Column(String(255), nullable=True, index=True)  # Product identity; reused across stock entries
     purchase_date = Column(Date, nullable=True)
     supplier_batch_number = Column(String(255), nullable=True)
     expiry_date = Column(Date, nullable=True)

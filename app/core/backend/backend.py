@@ -1547,17 +1547,18 @@ def reset_demo_db_route():
 @core_bp.route("/api/core/inventory", methods=["POST"])
 @requires_auth
 def create_inventory_item():
-    """Create a new inventory item (typically raw material)"""
+    """Create a new inventory item (typically raw material). Supports barcode; enforces product identity when barcode exists."""
     org_id = UUID(g.org_id)
     data = request.get_json()
 
-    name = data.get("name")
+    name = (data.get("name") or "").strip() or None
     quantity = data.get("quantity")
-    unit = data.get("unit")
+    unit = (data.get("unit") or "").strip() or None
     inventory_type = data.get("inventory_type", InventoryType.RAW_MATERIAL.value)
+    barcode = (data.get("barcode") or "").strip() or None
 
-    if not all([name, quantity, unit]):
-        return jsonify({"error": "name, quantity, and unit are required"}), 400
+    if quantity is None or (isinstance(quantity, str) and not quantity.strip()):
+        return jsonify({"error": "quantity is required"}), 400
     try:
         qty_val = float(quantity)
         if qty_val <= 0:
@@ -1567,6 +1568,26 @@ def create_inventory_item():
 
     repo = InventoryRepository(db_session)
     try:
+        # If barcode provided and we have an existing product for it, enforce product identity consistency
+        if barcode:
+            existing = repo.find_by_barcode(org_id, barcode)
+            if existing:
+                if name is not None and name != existing.name:
+                    return jsonify({"error": "Product name does not match existing product for this barcode"}), 409
+                if unit is not None and unit != existing.unit:
+                    return jsonify({"error": "Unit does not match existing product for this barcode"}), 409
+                if data.get("supplier") is not None and (data.get("supplier") or "").strip() != (existing.supplier or ""):
+                    return jsonify({"error": "Supplier does not match existing product for this barcode"}), 409
+                name = name or existing.name
+                unit = unit or existing.unit
+            elif not name or not unit:
+                return jsonify({"error": "name and unit are required for new barcode"}), 400
+        if not name:
+            return jsonify({"error": "name is required"}), 400
+        if not unit:
+            return jsonify({"error": "unit is required"}), 400
+
+        supplier = (data.get("supplier") or "").strip() or None
         # Parse purchase date if provided
         purchase_date = None
         if data.get("purchase_date"):
@@ -1618,7 +1639,8 @@ def create_inventory_item():
             quantity=str(quantity),
             unit=unit,
             inventory_type=inventory_type,
-            supplier=data.get("supplier"),
+            supplier=supplier,
+            barcode=barcode,
             purchase_date=purchase_date,
             supplier_batch_number=data.get("supplier_batch_number"),
             expiry_date=expiry_date,

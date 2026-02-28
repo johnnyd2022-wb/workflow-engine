@@ -26,6 +26,17 @@ class InventoryRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    def find_by_barcode(self, org_id: UUID, barcode: str) -> InventoryItem | None:
+        """Return the first inventory item with this barcode in the org (for product-level lookup)."""
+        if not (barcode or (barcode and barcode.strip())):
+            return None
+        return (
+            self.db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.barcode == barcode.strip())
+            .limit(1)
+            .first()
+        )
+
     def create_inventory_item(
         self,
         org_id: UUID,
@@ -34,6 +45,7 @@ class InventoryRepository:
         unit: str,
         inventory_type: str,
         supplier: str | None = None,
+        barcode: str | None = None,
         purchase_date: date | None = None,
         supplier_batch_number: str | None = None,
         expiry_date: date | None = None,
@@ -52,6 +64,7 @@ class InventoryRepository:
             unit=unit,
             inventory_type=inventory_type,
             supplier=supplier,
+            barcode=barcode,
             purchase_date=purchase_date,
             supplier_batch_number=supplier_batch_number,
             expiry_date=expiry_date,

@@ -1277,10 +1277,24 @@
       const addInventoryModal = document.getElementById('add-inventory-modal');
       if (!hubModal) return;
 
+      function resetAddInventoryModalForManual() {
+        window._addInventoryBarcodeLookup = null;
+        var bi = document.getElementById('add-inventory-barcode-input');
+        var bdw = document.getElementById('add-inventory-barcode-display-wrap');
+        var nameEl = document.getElementById('add-inventory-name');
+        var unitEl = document.getElementById('add-inventory-unit');
+        var supplierEl = document.getElementById('add-inventory-supplier');
+        if (bi) bi.value = '';
+        if (bdw) bdw.style.display = 'none';
+        if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; }
+        if (unitEl) { unitEl.disabled = false; unitEl.style.background = ''; }
+        if (supplierEl) { supplierEl.readOnly = false; supplierEl.style.background = ''; }
+      }
       const manualBtn = document.getElementById('inventory-entry-manual-btn');
       if (manualBtn) {
         manualBtn.addEventListener('click', function() {
           hubModal.style.display = 'none';
+          resetAddInventoryModalForManual();
           if (addInventoryModal) {
             addInventoryModal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -2022,16 +2036,61 @@
     });
 
     document.getElementById('barcode-add-to-inventory-btn')?.addEventListener('click', function() {
+      var code = lastBarcodeValue || (document.getElementById('barcode-result-value') && document.getElementById('barcode-result-value').textContent) || '';
       closeBarcodeScanModal();
       if (!addInventoryModal) return;
-      addInventoryModal.style.display = 'flex';
-      document.body.style.overflow = 'hidden';
-      const form = addInventoryModal.querySelector('form');
-      if (form) {
-        form.querySelector('[name="name"]').value = lastBarcodeValue || '';
-        form.querySelector('[name="quantity"]').focus();
-      }
       window._addInventorySourceMethod = 'barcode_scan';
+      (function openAfterLookup() {
+        CoreAPI.lookupBarcode(code).then(function(res) {
+          var form = addInventoryModal.querySelector('form');
+          var barcodeInput = document.getElementById('add-inventory-barcode-input');
+          var barcodeDisplayWrap = document.getElementById('add-inventory-barcode-display-wrap');
+          var barcodeDisplay = document.getElementById('add-inventory-barcode-display');
+          var nameEl = document.getElementById('add-inventory-name');
+          var unitEl = document.getElementById('add-inventory-unit');
+          var supplierEl = document.getElementById('add-inventory-supplier');
+          if (barcodeInput) barcodeInput.value = code || '';
+          if (barcodeDisplayWrap) barcodeDisplayWrap.style.display = code ? 'block' : 'none';
+          if (barcodeDisplay) barcodeDisplay.textContent = code || '';
+          if (res.exists) {
+            window._addInventoryBarcodeLookup = { name: res.name, unit: res.unit, supplier: res.supplier || '' };
+            if (nameEl) { nameEl.value = res.name || ''; nameEl.readOnly = true; nameEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+            if (unitEl) {
+              unitEl.value = res.unit || '';
+              unitEl.disabled = true;
+              unitEl.style.background = 'var(--bg-subtle, #f3f4f6)';
+            }
+            if (supplierEl) { supplierEl.value = res.supplier || ''; supplierEl.readOnly = true; supplierEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+            if (form) {
+              var q = form.querySelector('[name="quantity"]'); if (q) q.value = '';
+              var pd = form.querySelector('[name="purchaseDate"]'); if (pd) pd.value = '';
+              var bn = form.querySelector('[name="batchNumber"]'); if (bn) bn.value = '';
+              var ed = form.querySelector('[name="expiryDate"]'); if (ed) ed.value = '';
+              form.querySelector('[name="quantity"]').focus();
+            }
+          } else {
+            window._addInventoryBarcodeLookup = null;
+            if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; nameEl.value = ''; }
+            if (unitEl) { unitEl.disabled = false; unitEl.style.background = ''; }
+            if (supplierEl) { supplierEl.readOnly = false; supplierEl.style.background = ''; supplierEl.value = ''; }
+            if (nameEl) nameEl.focus();
+          }
+          addInventoryModal.style.display = 'flex';
+          document.body.style.overflow = 'hidden';
+        }).catch(function() {
+          window._addInventoryBarcodeLookup = null;
+          var bi = document.getElementById('add-inventory-barcode-input');
+          var bdw = document.getElementById('add-inventory-barcode-display-wrap');
+          var bd = document.getElementById('add-inventory-barcode-display');
+          if (bi) bi.value = code || '';
+          if (bdw) bdw.style.display = code ? 'block' : 'none';
+          if (bd) bd.textContent = code || '';
+          addInventoryModal.style.display = 'flex';
+          document.body.style.overflow = 'hidden';
+          var form = addInventoryModal.querySelector('form');
+          if (form) { form.querySelector('[name="name"]').value = ''; form.querySelector('[name="quantity"]').focus(); }
+        });
+      })();
     });
 
     document.getElementById('barcode-scan-modal-close')?.addEventListener('click', closeBarcodeScanModal);
@@ -2391,10 +2450,12 @@
     // Add inventory handler with optimistic UI
     window.addInventoryItem = function (form) {
       const formData = new FormData(form);
-      const name = formData.get('name')?.trim();
+      const lookup = window._addInventoryBarcodeLookup;
+      const name = (formData.get('name') || (lookup && lookup.name) || '').trim();
       const quantity = parseFloat(formData.get('quantity'));
-      const unit = formData.get('unit');
-      const supplier = formData.get('supplier')?.trim() || null;
+      const unit = formData.get('unit') || (lookup && lookup.unit) || '';
+      const supplier = (formData.get('supplier') || (lookup && lookup.supplier) || '').trim() || null;
+      const barcode = (formData.get('barcode') || '').trim() || null;
       const purchaseDate = formData.get('purchaseDate') || null;
       const batchNumber = formData.get('batchNumber')?.trim() || null;
       const expiryDate = formData.get('expiryDate') || null;
@@ -2437,6 +2498,7 @@
         document.body.style.overflow = 'auto';
       }
       form.reset();
+      if (window._addInventoryBarcodeLookup) window._addInventoryBarcodeLookup = null;
 
       // Render immediately
       prependInventoryItemV2(optimisticItem);
@@ -2446,7 +2508,7 @@
         try {
           const sourceMethod = window._addInventorySourceMethod || 'manual';
           if (window._addInventorySourceMethod) window._addInventorySourceMethod = null;
-          const saved = await CoreAPI.createInventoryItem({
+          const payload = {
             name,
             quantity,
             unit,
@@ -2456,7 +2518,9 @@
             supplier_batch_number: batchNumber,
             expiry_date: expiryDate,
             source_method: sourceMethod,
-          });
+          };
+          if (barcode) payload.barcode = barcode;
+          const saved = await CoreAPI.createInventoryItem(payload);
 
           replaceOptimisticInventoryV2(tempId, saved);
 
@@ -2902,10 +2966,14 @@
         </button>
       </div>
       <form>
+        <input type="hidden" name="barcode" id="add-inventory-barcode-input" value="">
+        <div id="add-inventory-barcode-display-wrap" style="display: none; margin-bottom: 4px;">
+          <span style="font-size: 13px; color: var(--text-secondary);">Barcode: </span><span id="add-inventory-barcode-display" style="font-size: 13px; font-weight: 500; color: var(--text-primary);"></span>
+        </div>
         <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
-            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Steel Rods">
+            <input type="text" name="name" id="add-inventory-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Steel Rods">
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
@@ -2914,7 +2982,7 @@
             </div>
             <div>
               <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit</label>
-              <select name="unit" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <select name="unit" id="add-inventory-unit" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
                 <option value="kg">Kilograms (kg)</option>
                 <option value="g">Grams (g)</option>
                 <option value="L">Liters (L)</option>
@@ -2941,7 +3009,7 @@
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Supplier (optional)</label>
-            <input type="text" name="supplier" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Supplier name">
+            <input type="text" name="supplier" id="add-inventory-supplier" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Supplier name">
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
