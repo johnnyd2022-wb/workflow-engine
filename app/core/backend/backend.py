@@ -1694,7 +1694,9 @@ def create_inventory_item():
             )
         except IntegrityError:
             db_session.rollback()
-            return jsonify({"error": "Duplicate barcode for this organisation; try again or add quantity to existing item."}), 409
+            return jsonify(
+                {"error": "Duplicate barcode for this organisation; try again or add quantity to existing item."}
+            ), 409
 
         return (
             jsonify(
