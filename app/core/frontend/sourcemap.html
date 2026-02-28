@@ -4254,7 +4254,8 @@
                 evt.stopPropagation();
                 var list = (exec.evidence || []).filter(function(e) { return e.step_id === step.step_id; });
                 if (list.length === 0) return;
-                window.open(CoreAPI.getEvidenceDownloadUrl(list[0].id), '_blank');
+                var viewUrl = typeof CoreAPI.getEvidenceViewUrl === 'function' ? CoreAPI.getEvidenceViewUrl(list[0].id) : CoreAPI.getEvidenceDownloadUrl(list[0].id);
+                window.open(viewUrl, '_blank');
               });
               svg.appendChild(evidenceBtn);
             }

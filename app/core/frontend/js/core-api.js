@@ -280,6 +280,11 @@ const CoreAPI = {
     getEvidenceDownloadUrl(evidenceId) {
         return `${this.baseURL}/evidence/${encodeURIComponent(evidenceId)}/download`;
     },
+
+    /** Open evidence in browser (inline) without forcing download. Use for View. */
+    getEvidenceViewUrl(evidenceId) {
+        return `${this.baseURL}/evidence/${encodeURIComponent(evidenceId)}/download?inline=1`;
+    },
 };
 
 if (typeof window !== 'undefined') {

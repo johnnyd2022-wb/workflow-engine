@@ -1087,10 +1087,27 @@
       let completedStepsHtml = '';
       let nextStepHtml = '';
       let nextStepHeaderHtml = '';
+      let executionEvidenceHtml = '';
       if (status === 'active' || status === 'completed') {
         try {
           const executionData = await CoreAPI.getExecution(executionId);
           const executionSteps = executionData.execution_steps || [];
+          const evidenceList = executionData.evidence || [];
+          if (evidenceList.length > 0) {
+            executionEvidenceHtml = `
+              <div class="execution-evidence-section" style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-light, #e5e7eb);">
+                <div style="font-size: 12px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Evidence (${evidenceList.length})</div>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  ${evidenceList.map(ev => {
+                    const viewUrl = typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceViewUrl ? CoreAPI.getEvidenceViewUrl(ev.id) : '#';
+                    const downloadUrl = typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceDownloadUrl ? CoreAPI.getEvidenceDownloadUrl(ev.id) : '#';
+                    const fileName = escapeHtml(ev.file_name || 'Evidence file');
+                    return '<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--bg-card, #fff); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb);"><span style="font-size: 13px; color: var(--text-primary, #111827);">' + fileName + '</span><div style="display: flex; gap: 8px;"><a href="' + viewUrl + '" target="_blank" rel="noopener" style="font-size: 12px; color: var(--primary, #3b82f6); text-decoration: none; font-weight: 500;">View</a><a href="' + downloadUrl + '" target="_blank" rel="noopener" style="font-size: 12px; color: var(--primary, #3b82f6); text-decoration: none; font-weight: 500;">Download</a></div></div>';
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          }
           
           // Get completed steps, sorted by step_number
           const completedSteps = executionSteps
@@ -1371,6 +1388,7 @@
               ` : ''}
             `}
           </div>
+          ${executionEvidenceHtml || ''}
           ${completedStepsHtml}
         </div>
       `;
@@ -2729,6 +2747,7 @@
               <option value="number">Number</option>
               <option value="date">Date</option>
               <option value="select">Select</option>
+              <option value="evidence">Evidence (upload)</option>
             </select>
           </span>
           <span class="io-item-unit">

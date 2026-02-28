@@ -225,7 +225,20 @@
             <option value="dont_ask">Don't ask during execution — this step does not require a batch number</option>
           </select>
         </div>
-        
+
+        <!-- Dedicated Evidence field: Required / Optional / Don't ask -->
+        <div id="guided-prompt-evidence-section" style="margin-bottom: 20px; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
+          <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Evidence</label>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;">
+            Photos or documents (e.g. JPEG, PNG, PDF) recorded when this step runs. Choose whether to require at least one file, allow optional upload, or not ask during execution.
+          </p>
+          <select id="guided-prompt-evidence-mode" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 14px; box-sizing: border-box;">
+            <option value="required">Required — at least one file must be uploaded to complete this step</option>
+            <option value="optional" selected>Optional — allow upload during execution but not mandatory</option>
+            <option value="dont_ask">Don't ask during execution — this step does not require evidence upload</option>
+          </select>
+        </div>
+
         <div id="guided-prompts-container" style="margin-bottom: 20px;">
           <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 10px 0;">Other execution prompts (e.g. temperature, quality grade, operator name):</p>
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">

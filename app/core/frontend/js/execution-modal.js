@@ -561,8 +561,9 @@
           function renderEvidenceList(items) {
             if (!listEl) return;
             listEl.innerHTML = items.length === 0 ? '' : items.map(function(item) {
-              var url = typeof CoreAPI.getEvidenceDownloadUrl === 'function' ? CoreAPI.getEvidenceDownloadUrl(item.id) : '#';
-              return '<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;"><span>' + escapeHtml(item.file_name || 'File') + '</span><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" style="margin-left: 8px;">View</a></div>';
+              var viewUrl = typeof CoreAPI.getEvidenceViewUrl === 'function' ? CoreAPI.getEvidenceViewUrl(item.id) : '#';
+              var downloadUrl = typeof CoreAPI.getEvidenceDownloadUrl === 'function' ? CoreAPI.getEvidenceDownloadUrl(item.id) : '#';
+              return '<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;"><span>' + escapeHtml(item.file_name || 'File') + '</span><div style="display: flex; gap: 8px;"><a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="margin-left: 8px;">View</a><a href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" style="margin-left: 4px;">Download</a></div></div>';
             }).join('');
           }
           renderEvidenceList(evidenceListForStep);
