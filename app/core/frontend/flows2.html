@@ -1427,7 +1427,8 @@
         
       } catch (error) {
         console.error('Failed to open execution modal:', error);
-        showNotification('error', 'Failed to Open Execution Modal', error.message || 'Failed to open execution modal. Please try again.');
+        const msg = error && error.message ? error.message : 'Failed to open execution modal. Please try again.';
+        showNotification('error', 'Failed to Open Execution Modal', msg);
       }
     };
     

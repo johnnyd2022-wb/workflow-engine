@@ -20,15 +20,22 @@ const CoreAPI = {
         
         try {
             const response = await fetch(url, config);
-            const data = await response.json();
-            
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseErr) {
+                console.error(`API request failed: ${endpoint} - invalid JSON`, parseErr);
+                throw new Error(response.ok ? 'Invalid response from server.' : `Server error (${response.status}). Please try again.`);
+            }
             if (!response.ok) {
                 throw new Error(data.message || data.error || `HTTP error! status: ${response.status}`);
             }
-            
             return data;
         } catch (error) {
             console.error(`API request failed: ${endpoint}`, error);
+            if (error.name === 'TypeError' && (error.message === 'Failed to fetch' || error.message === 'Load failed')) {
+                throw new Error('Network error. Check your connection and that the server is running, then try again.');
+            }
             throw error;
         }
     },
