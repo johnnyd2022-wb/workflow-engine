@@ -11,7 +11,12 @@ from app.core.backend.evidence.evidence_service import (
     list_evidence_for_execution,
     upload_evidence_from_temp,
 )
-from app.core.backend.evidence.evidence_validation import validate_file_streaming, validate_upload_request
+from app.core.backend.evidence.evidence_validation import (
+    get_allowed_mime_types,
+    get_max_file_size_bytes,
+    validate_file_streaming,
+    validate_upload_request,
+)
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 
@@ -19,10 +24,20 @@ logger = logging.getLogger(__name__)
 
 
 def register_routes(bp):
+    @bp.route("/api/core/evidence/config", methods=["GET"])
+    @requires_auth
+    def evidence_config():
+        """Return evidence upload limits (single source of truth for frontend)."""
+        return jsonify({
+            "max_file_size_bytes": get_max_file_size_bytes(),
+            "allowed_mime_types": get_allowed_mime_types(),
+        })
+
     @bp.route("/api/core/evidence/upload", methods=["POST"])
     @requires_auth
     def evidence_upload():
-        """Upload an evidence file for an execution (optional step_id)."""
+        """Upload an evidence file for an execution (optional step_id).
+        Frontend may send multiple files in sequence; each is an independent record (no batch semantics)."""
         org_id = getattr(g, "org_id", None)
         if not org_id:
             return jsonify({"error": "Organisation context required"}), 400

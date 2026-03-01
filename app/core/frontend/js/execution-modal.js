@@ -517,13 +517,34 @@
       if (typeof CoreAPI.listEvidence === 'function' && executionIdForEvidence && currentStepId) {
         try {
           const res = await CoreAPI.listEvidence(executionIdForEvidence);
-          evidenceListForStep = (res.evidence || []).filter(function(e) {
-            return (e.step_definition_id && e.step_definition_id === currentStepId) || (e.execution_step_id && e.execution_step_id === currentStepId);
+          const allEvidence = res.evidence || [];
+          var byStepDef = new Map();
+          var byExecStep = new Map();
+          allEvidence.forEach(function(e) {
+            if (e.step_definition_id) {
+              var list = byStepDef.get(e.step_definition_id) || [];
+              list.push(e);
+              byStepDef.set(e.step_definition_id, list);
+            }
+            if (e.execution_step_id) {
+              var list2 = byExecStep.get(e.execution_step_id) || [];
+              list2.push(e);
+              byExecStep.set(e.execution_step_id, list2);
+            }
           });
+          var stepList = (byStepDef.get(currentStepId) || []).concat(byExecStep.get(currentStepId) || []);
+          evidenceListForStep = stepList.filter(function(e, i, arr) { return arr.findIndex(function(x) { return x.id === e.id; }) === i; });
         } catch (e) { evidenceListForStep = []; }
       }
       if (!modal.evidenceByStepId) modal.evidenceByStepId = new Map();
       modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
+      var maxEvidenceBytes = 10 * 1024 * 1024;
+      if (typeof CoreAPI.getEvidenceConfig === 'function') {
+        try {
+          var evidenceCfg = await CoreAPI.getEvidenceConfig();
+          if (evidenceCfg && evidenceCfg.max_file_size_bytes != null) maxEvidenceBytes = evidenceCfg.max_file_size_bytes;
+        } catch (e) {}
+      }
       executionPrompts.forEach(prompt => {
         const promptSection = document.createElement('div');
         promptSection.className = 'execute-prompt-section';
@@ -573,7 +594,6 @@
           renderEvidenceList(evidenceListForStep);
           uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
           if (fileInput) {
-            var maxEvidenceBytes = 10 * 1024 * 1024;
             fileInput.addEventListener('change', async function() {
               var files = this.files;
               if (!files || !files.length || !executionIdForEvidence || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
@@ -581,7 +601,7 @@
               for (var i = 0; i < files.length; i++) {
                 var file = files[i];
                 if (file.size > maxEvidenceBytes) {
-                  if (typeof showNotification === 'function') showNotification('error', 'File too large', 'Max size 10MB. Choose a smaller file.');
+                  if (typeof showNotification === 'function') showNotification('error', 'File too large', 'Max ' + Math.round(maxEvidenceBytes / (1024 * 1024)) + 'MB. Choose a smaller file.');
                   continue;
                 }
                 var fd = new FormData();
@@ -591,16 +611,18 @@
                 toUpload.push(CoreAPI.uploadEvidence(fd));
               }
               if (toUpload.length === 0) { this.value = ''; return; }
-              try {
-                var results = await Promise.all(toUpload);
-                var added = results.filter(function(r) { return r && r.id; });
-                evidenceListForStep = evidenceListForStep.concat(added);
-                if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
-                uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
-                renderEvidenceList(evidenceListForStep);
-              } catch (err) {
-                if (typeof showNotification === 'function') showNotification('error', 'Upload failed', err.message || 'Could not upload file.');
-              }
+              var settled = await Promise.allSettled(toUpload);
+              var added = [];
+              var failed = 0;
+              settled.forEach(function(s, idx) {
+                if (s.status === 'fulfilled' && s.value && s.value.id) added.push(s.value);
+                else failed++;
+              });
+              evidenceListForStep = evidenceListForStep.concat(added);
+              if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
+              uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+              renderEvidenceList(evidenceListForStep);
+              if (failed > 0 && typeof showNotification === 'function') showNotification('warning', 'Partial upload', failed + ' of ' + toUpload.length + ' file(s) failed to upload.');
               this.value = '';
             });
           }

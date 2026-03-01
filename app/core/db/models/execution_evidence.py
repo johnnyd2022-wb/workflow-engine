@@ -8,6 +8,11 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
 
+# Status: PENDING_FILE (record created, file not yet moved), ACTIVE (file finalized), FAILED (finalize failed, cleaned)
+EVIDENCE_STATUS_PENDING = "pending"
+EVIDENCE_STATUS_ACTIVE = "active"
+EVIDENCE_STATUS_FAILED = "failed"
+
 
 class ExecutionEvidence(Base):
     """Stores metadata for evidence files linked to an execution (and optionally a step)."""
@@ -26,3 +31,4 @@ class ExecutionEvidence(Base):
     uploaded_by = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     extra_data = Column(JSONB, nullable=True)
+    evidence_status = Column(String(32), nullable=False, default=EVIDENCE_STATUS_ACTIVE, index=True)

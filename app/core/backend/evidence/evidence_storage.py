@@ -85,10 +85,10 @@ def prepare_final_path(org_id: str, execution_id: str, content_type: str) -> tup
     return rel_path, name
 
 
-def finalize_from_temp(temp_path: Path, org_id: str, execution_id: str, filename: str) -> None:
+def finalize_from_temp(temp_path: Path, org_id: str, execution_id: str, filename: str) -> Path:
     """
     Atomically move temp file to final location under storage root.
-    Call only after DB commit. Raises if filename is not safe or move fails.
+    Call only after DB commit. Returns the final Path. Raises if filename is not safe or move fails.
     """
     if not is_safe_filename(filename):
         raise ValueError(f"Unsafe filename: {filename!r}")
@@ -101,6 +101,13 @@ def finalize_from_temp(temp_path: Path, org_id: str, execution_id: str, filename
         raise FileNotFoundError(f"Temp file missing: {temp_path}")
     os.replace(temp_path, full_path)
     logger.info("Evidence finalize_from_temp: %s -> %s", temp_path, full_path)
+    return full_path
+
+
+def verify_checksum_at_path(file_path: Path, expected_checksum: str, chunk_size: int = 65536) -> bool:
+    """Verify file at path has the given SHA256 checksum. Protects against disk corruption / partial writes."""
+    actual = compute_checksum(file_path, chunk_size=chunk_size)
+    return actual == expected_checksum
 
 
 def read_file_path(org_id: str, execution_id: str, filename: str) -> Path | None:

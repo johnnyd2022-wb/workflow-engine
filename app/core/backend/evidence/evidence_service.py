@@ -10,8 +10,10 @@ from app.core.backend.evidence.evidence_storage import (
     finalize_from_temp,
     prepare_final_path,
     read_file_path,
+    verify_checksum_at_path,
 )
 from app.core.db import db_session
+from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, EVIDENCE_STATUS_PENDING
 from app.core.db.repositories.evidence_repo import EvidenceRepository
 from app.core.db.repositories.execution_repo import ExecutionRepository
 
@@ -65,6 +67,7 @@ def upload_evidence_from_temp(
         file_size=file_size,
         checksum_sha256=checksum,
         uploaded_by=uploaded_by,
+        evidence_status=EVIDENCE_STATUS_PENDING,
     )
     try:
         db_session.commit()
@@ -76,11 +79,55 @@ def upload_evidence_from_temp(
             pass
         return None, "Failed to save evidence record", 500
 
+    full_path = None
     try:
-        finalize_from_temp(temp_path, str(org_id), str(execution_id), filename)
+        full_path = finalize_from_temp(temp_path, str(org_id), str(execution_id), filename)
     except Exception as e:
         logger.exception("Evidence finalize_from_temp failed (record already committed): %s", e)
+        try:
+            evidence_repo.delete_by_id(record.id, org_id)
+            db_session.commit()
+        except Exception as rollback_e:
+            logger.exception("Evidence cleanup delete record failed: %s", rollback_e)
+            db_session.rollback()
+        try:
+            if temp_path.exists():
+                os.unlink(temp_path)
+        except OSError:
+            pass
         return None, "Failed to finalize file", 500
+
+    if not verify_checksum_at_path(full_path, checksum):
+        logger.error("Evidence verify_checksum_at_path failed after move: %s", full_path)
+        try:
+            evidence_repo.delete_by_id(record.id, org_id)
+            db_session.commit()
+        except Exception as rollback_e:
+            logger.exception("Evidence cleanup after verify fail: %s", rollback_e)
+            db_session.rollback()
+        try:
+            if full_path.exists():
+                os.unlink(full_path)
+        except OSError:
+            pass
+        return None, "File verification failed after save", 500
+
+    try:
+        evidence_repo.update_status(record.id, org_id, EVIDENCE_STATUS_ACTIVE)
+        db_session.commit()
+    except Exception as e:
+        logger.exception("Evidence update_status to ACTIVE failed: %s", e)
+        try:
+            evidence_repo.delete_by_id(record.id, org_id)
+            db_session.commit()
+        except Exception:
+            db_session.rollback()
+        try:
+            if full_path.exists():
+                os.unlink(full_path)
+        except OSError:
+            pass
+        return None, "Failed to activate evidence record", 500
 
     # Canonical shape so frontend never infers mapping (step_definition_id, execution_step_id, execution_id)
     step_definition_id = str(record.step_id) if record.step_id else None

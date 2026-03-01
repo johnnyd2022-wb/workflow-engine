@@ -277,6 +277,11 @@ const CoreAPI = {
         return this.request(`/evidence/list?execution_id=${encodeURIComponent(executionId)}`);
     },
 
+    /** Evidence upload limits (single source of truth; use for client-side size check). */
+    async getEvidenceConfig() {
+        return this.request('/evidence/config');
+    },
+
     getEvidenceDownloadUrl(evidenceId) {
         return `${this.baseURL}/evidence/${encodeURIComponent(evidenceId)}/download`;
     },
