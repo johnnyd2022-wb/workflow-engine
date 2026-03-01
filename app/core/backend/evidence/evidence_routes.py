@@ -28,10 +28,12 @@ def register_routes(bp):
     @requires_auth
     def evidence_config():
         """Return evidence upload limits (single source of truth for frontend)."""
-        return jsonify({
-            "max_file_size_bytes": get_max_file_size_bytes(),
-            "allowed_mime_types": get_allowed_mime_types(),
-        })
+        return jsonify(
+            {
+                "max_file_size_bytes": get_max_file_size_bytes(),
+                "allowed_mime_types": get_allowed_mime_types(),
+            }
+        )
 
     @bp.route("/api/core/evidence/upload", methods=["POST"])
     @requires_auth

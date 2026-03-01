@@ -5,9 +5,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.db.models.execution_evidence import (
-    ExecutionEvidence,
     EVIDENCE_STATUS_ACTIVE,
     EVIDENCE_STATUS_PENDING,
+    ExecutionEvidence,
 )
 
 
