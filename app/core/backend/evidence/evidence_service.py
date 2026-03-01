@@ -34,7 +34,7 @@ def upload_evidence_from_temp(
     Returns (response_dict, error_message, status_code).
     """
     repo = ExecutionRepository(db_session)
-    execution = repo.get_execution_by_id(execution_id, org_id)
+    execution = repo.get_execution_with_steps(execution_id, org_id)
     if not execution:
         logger.warning(
             "Evidence upload_evidence_from_temp: execution not found execution_id=%s org_id=%s",
@@ -82,15 +82,25 @@ def upload_evidence_from_temp(
         logger.exception("Evidence finalize_from_temp failed (record already committed): %s", e)
         return None, "Failed to finalize file", 500
 
+    # Canonical shape so frontend never infers mapping (step_definition_id, execution_step_id, execution_id)
+    step_definition_id = str(record.step_id) if record.step_id else None
+    execution_step_id = None
+    if execution.execution_steps and step_definition_id:
+        for es in execution.execution_steps:
+            if es.step_id and str(es.step_id) == step_definition_id:
+                execution_step_id = str(es.id)
+                break
+
     logger.info("Evidence upload_evidence_from_temp: success evidence_id=%s storage_path=%s", record.id, rel_path)
     return (
         {
             "id": str(record.id),
             "file_name": record.file_name,
-            "storage_path": record.storage_path,
             "mime_type": record.mime_type,
             "file_size": record.file_size,
-            "checksum_sha256": record.checksum_sha256,
+            "step_definition_id": step_definition_id,
+            "execution_step_id": execution_step_id,
+            "execution_id": str(execution_id),
             "created_at": record.created_at.isoformat() if record.created_at else None,
         },
         "",
@@ -114,22 +124,24 @@ def list_evidence_for_execution(execution_id: UUID, org_id: UUID) -> list[dict]:
             if es.step_id:
                 step_id_to_exec_step_id[str(es.step_id)] = str(es.id)
 
+    # Canonical shape: id, file_name, mime_type, file_size, step_definition_id, execution_step_id, execution_id
+    # step_id kept as alias for step_definition_id for backward compatibility
     out = []
+    exec_id_str = str(execution_id)
     for r in records:
         step_definition_id = str(r.step_id) if r.step_id else None
         execution_step_id = step_id_to_exec_step_id.get(step_definition_id) if step_definition_id else None
-        out.append(
-            {
-                "id": str(r.id),
-                "file_name": r.file_name,
-                "mime_type": r.mime_type,
-                "file_size": r.file_size,
-                "step_id": step_definition_id,
-                "step_definition_id": step_definition_id,
-                "execution_step_id": execution_step_id,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-        )
+        out.append({
+            "id": str(r.id),
+            "file_name": r.file_name,
+            "mime_type": r.mime_type,
+            "file_size": r.file_size,
+            "step_definition_id": step_definition_id,
+            "execution_step_id": execution_step_id,
+            "execution_id": exec_id_str,
+            "step_id": step_definition_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
     return out
 
 

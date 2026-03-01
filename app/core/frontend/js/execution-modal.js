@@ -518,10 +518,12 @@
         try {
           const res = await CoreAPI.listEvidence(executionIdForEvidence);
           evidenceListForStep = (res.evidence || []).filter(function(e) {
-            return e.step_id === currentStepId || (e.step_definition_id && e.step_definition_id === currentStepId);
+            return (e.step_definition_id && e.step_definition_id === currentStepId) || (e.execution_step_id && e.execution_step_id === currentStepId);
           });
         } catch (e) { evidenceListForStep = []; }
       }
+      if (!modal.evidenceByStepId) modal.evidenceByStepId = new Map();
+      modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
       executionPrompts.forEach(prompt => {
         const promptSection = document.createElement('div');
         promptSection.className = 'execute-prompt-section';
@@ -575,6 +577,7 @@
             fileInput.addEventListener('change', async function() {
               var files = this.files;
               if (!files || !files.length || !executionIdForEvidence || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
+              var toUpload = [];
               for (var i = 0; i < files.length; i++) {
                 var file = files[i];
                 if (file.size > maxEvidenceBytes) {
@@ -585,17 +588,18 @@
                 fd.append('file', file);
                 fd.append('execution_id', executionIdForEvidence);
                 fd.append('step_id', currentStepId);
-                try {
-                  await CoreAPI.uploadEvidence(fd);
-                  var res = await CoreAPI.listEvidence(executionIdForEvidence);
-                  evidenceListForStep = (res.evidence || []).filter(function(e) {
-                    return e.step_id === currentStepId || (e.step_definition_id && e.step_definition_id === currentStepId);
-                  });
-                  uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
-                  renderEvidenceList(evidenceListForStep);
-                } catch (err) {
-                  if (typeof showNotification === 'function') showNotification('error', 'Upload failed', err.message || 'Could not upload file.');
-                }
+                toUpload.push(CoreAPI.uploadEvidence(fd));
+              }
+              if (toUpload.length === 0) { this.value = ''; return; }
+              try {
+                var results = await Promise.all(toUpload);
+                var added = results.filter(function(r) { return r && r.id; });
+                evidenceListForStep = evidenceListForStep.concat(added);
+                if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
+                uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+                renderEvidenceList(evidenceListForStep);
+              } catch (err) {
+                if (typeof showNotification === 'function') showNotification('error', 'Upload failed', err.message || 'Could not upload file.');
               }
               this.value = '';
             });
@@ -953,12 +957,14 @@
       }
     });
 
-    // VALIDATION: Check required evidence (at least one file uploaded)
+    // VALIDATION: Check required evidence (source of truth: modal.evidenceByStepId, not only dataset)
     const evidenceSections = modal.querySelectorAll('.execute-prompt-section[data-prompt-type="evidence"][data-prompt-required="true"]');
     evidenceSections.forEach(section => {
       const uploadZone = section.querySelector('.execute-evidence-upload');
       const label = section.dataset.promptLabel || 'Evidence';
-      const count = uploadZone ? parseInt(uploadZone.dataset.evidenceCount || '0', 10) : 0;
+      const stepId = uploadZone && uploadZone.dataset.stepId;
+      const list = (modal.evidenceByStepId && stepId && modal.evidenceByStepId.get(stepId)) || [];
+      const count = list.length;
       if (count < 1) {
         validationErrors.push(`Please upload at least one file for "${label}"`);
         if (uploadZone) uploadZone.style.borderColor = 'var(--error, #ef4444)';
