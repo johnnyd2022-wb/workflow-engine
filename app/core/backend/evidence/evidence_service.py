@@ -88,8 +88,8 @@ def upload_evidence_from_temp(
         try:
             evidence_repo.delete_by_id(record.id, org_id)
             db_session.commit()
-        except Exception as rollback_e:
-            logger.exception("Evidence cleanup delete record failed: %s", rollback_e)
+        except Exception:
+            logger.exception("Cleanup record deletion failed")
             db_session.rollback()
         try:
             if temp_path.exists():
@@ -103,8 +103,8 @@ def upload_evidence_from_temp(
         try:
             evidence_repo.delete_by_id(record.id, org_id)
             db_session.commit()
-        except Exception as rollback_e:
-            logger.exception("Evidence cleanup after verify fail: %s", rollback_e)
+        except Exception:
+            logger.exception("Cleanup record deletion failed")
             db_session.rollback()
         try:
             if full_path.exists():
@@ -123,6 +123,7 @@ def upload_evidence_from_temp(
             evidence_repo.delete_by_id(record.id, org_id)
             db_session.commit()
         except Exception:
+            logger.exception("Cleanup record deletion failed")
             db_session.rollback()
         try:
             if full_path.exists():
