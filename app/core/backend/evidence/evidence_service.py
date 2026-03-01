@@ -7,6 +7,7 @@ from uuid import UUID
 
 from app.core.backend.evidence.evidence_storage import (
     compute_checksum,
+    delete_file,
     finalize_from_temp,
     prepare_final_path,
     read_file_path,
@@ -223,3 +224,27 @@ def get_evidence_for_download(
         logger.exception("Evidence read failed: %s", e)
         return None, None, None, "Failed to read file"
     return file_bytes, record.mime_type, record.file_name, None
+
+
+def delete_evidence(evidence_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
+    """
+    Delete an evidence record and its file. Caller must have org access.
+    Returns (success, error_message, status_code).
+    """
+    evidence_repo = EvidenceRepository(db_session)
+    record = evidence_repo.get_by_id(evidence_id, org_id, active_only=False)
+    if not record:
+        return False, "Evidence not found or access denied", 404
+    parts = record.storage_path.replace("\\", "/").split("/")
+    if len(parts) >= 3:
+        filename = parts[-1]
+        delete_file(str(record.org_id), str(record.execution_id), filename)
+    try:
+        evidence_repo.delete_by_id(evidence_id, org_id)
+        db_session.commit()
+    except Exception as e:
+        logger.exception("Evidence delete_evidence failed: %s", e)
+        db_session.rollback()
+        return False, "Failed to delete evidence record", 500
+    logger.info("Evidence delete_evidence: removed evidence_id=%s", evidence_id)
+    return True, "", 200

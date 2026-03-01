@@ -127,3 +127,18 @@ def read_file_path(org_id: str, execution_id: str, filename: str) -> Path | None
         return candidate
     except (ValueError, OSError):
         return None
+
+
+def delete_file(org_id: str, execution_id: str, filename: str) -> bool:
+    """Delete a stored evidence file if it exists and is safe. Returns True if deleted or missing."""
+    full_path = read_file_path(org_id, execution_id, filename)
+    if not full_path:
+        return True
+    try:
+        if full_path.exists():
+            full_path.unlink()
+            logger.info("Evidence delete_file: removed %s", full_path)
+        return True
+    except OSError as e:
+        logger.warning("Evidence delete_file failed: %s", e)
+        return False

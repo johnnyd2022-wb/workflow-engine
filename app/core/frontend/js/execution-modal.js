@@ -588,9 +588,28 @@
             listEl.innerHTML = items.length === 0 ? '' : items.map(function(item) {
               var viewUrl = typeof CoreAPI.getEvidenceViewUrl === 'function' ? CoreAPI.getEvidenceViewUrl(item.id) : '#';
               var downloadUrl = typeof CoreAPI.getEvidenceDownloadUrl === 'function' ? CoreAPI.getEvidenceDownloadUrl(item.id) : '#';
-              return '<div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;"><span>' + escapeHtml(item.file_name || 'File') + '</span><div style="display: flex; gap: 8px;"><a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="margin-left: 8px;">View</a><a href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" style="margin-left: 4px;">Download</a></div></div>';
+              var id = (item.id && escapeHtml(item.id)) || '';
+              return '<div class="execute-evidence-row" data-evidence-id="' + id + '" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;"><span>' + escapeHtml(item.file_name || 'File') + '</span><div style="display: flex; gap: 8px; align-items: center;"><a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="margin-left: 8px;">View</a><a href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" style="margin-left: 4px;">Download</a><button type="button" class="execute-evidence-remove-btn" data-evidence-id="' + id + '" style="margin-left: 8px; padding: 2px 8px; font-size: 12px;">Remove</button></div></div>';
             }).join('');
           }
+          listEl.addEventListener('click', async function(ev) {
+            var btn = ev.target && ev.target.closest && ev.target.closest('.execute-evidence-remove-btn');
+            if (!btn || !btn.dataset || !btn.dataset.evidenceId) return;
+            var evidenceId = btn.dataset.evidenceId;
+            if (!evidenceId || typeof CoreAPI.deleteEvidence !== 'function') return;
+            btn.disabled = true;
+            try {
+              await CoreAPI.deleteEvidence(evidenceId);
+              evidenceListForStep = evidenceListForStep.filter(function(e) { return e.id !== evidenceId; });
+              if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
+              if (uploadZone) uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+              renderEvidenceList(evidenceListForStep);
+              if (typeof showNotification === 'function') showNotification('success', 'Evidence removed', '');
+            } catch (err) {
+              if (typeof showNotification === 'function') showNotification('error', 'Remove failed', err && err.message ? err.message : 'Could not remove evidence.');
+            }
+            btn.disabled = false;
+          });
           renderEvidenceList(evidenceListForStep);
           uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
           if (fileInput) {

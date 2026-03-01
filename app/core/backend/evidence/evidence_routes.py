@@ -7,6 +7,7 @@ from uuid import UUID
 from flask import g, jsonify, request, send_file
 
 from app.core.backend.evidence.evidence_service import (
+    delete_evidence,
     get_evidence_for_download,
     list_evidence_for_execution,
     upload_evidence_from_temp,
@@ -157,3 +158,23 @@ def register_routes(bp):
             return jsonify({"error": "Invalid execution_id"}), 400
         items = list_evidence_for_execution(execution_uuid, org_uuid)
         return jsonify({"evidence": items})
+
+    @bp.route("/api/core/evidence/<evidence_id>", methods=["DELETE"])
+    @requires_auth
+    def evidence_delete(evidence_id: str):
+        """Remove evidence for an execution (record and file). Use before completing the step."""
+        org_id = getattr(g, "org_id", None)
+        if not org_id:
+            return jsonify({"error": "Organisation context required"}), 400
+        try:
+            org_uuid = UUID(org_id) if isinstance(org_id, str) else org_id
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid organisation context"}), 400
+        try:
+            eid = UUID(evidence_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid evidence ID"}), 400
+        success, err_msg, status = delete_evidence(eid, org_uuid)
+        if not success:
+            return jsonify({"error": err_msg}), status
+        return jsonify({"ok": True}), 200

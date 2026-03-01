@@ -284,6 +284,11 @@ const CoreAPI = {
         return this.request(`/evidence/list?execution_id=${encodeURIComponent(executionId)}`);
     },
 
+    /** Remove evidence (record and file). Use from execution modal before completing the step. */
+    async deleteEvidence(evidenceId) {
+        return this.request(`/evidence/${encodeURIComponent(evidenceId)}`, { method: 'DELETE' });
+    },
+
     /** Evidence upload limits (single source of truth; use for client-side size check). */
     async getEvidenceConfig() {
         return this.request('/evidence/config');
