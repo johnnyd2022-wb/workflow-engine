@@ -229,12 +229,13 @@ def get_evidence_for_download(
 def delete_evidence(evidence_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
     """
     Delete an evidence record and its file. Caller must have org access.
+    Idempotent: if the record is already missing, returns success so retries get 200.
     Returns (success, error_message, status_code).
     """
     evidence_repo = EvidenceRepository(db_session)
     record = evidence_repo.get_by_id(evidence_id, org_id, active_only=False)
     if not record:
-        return False, "Evidence not found or access denied", 404
+        return True, "", 200  # already gone: idempotent success
     parts = record.storage_path.replace("\\", "/").split("/")
     if len(parts) >= 3:
         filename = parts[-1]

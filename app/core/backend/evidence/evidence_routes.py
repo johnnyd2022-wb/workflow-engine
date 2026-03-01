@@ -177,4 +177,4 @@ def register_routes(bp):
         success, err_msg, status = delete_evidence(eid, org_uuid)
         if not success:
             return jsonify({"error": err_msg}), status
-        return jsonify({"ok": True}), 200
+        return jsonify({"deleted": True}), 200
