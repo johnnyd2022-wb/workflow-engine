@@ -57,22 +57,23 @@ def upload_evidence_from_temp(
 
     rel_path, filename = prepare_final_path(str(org_id), str(execution_id), content_type)
     evidence_repo = EvidenceRepository(db_session)
-    record = evidence_repo.create(
-        org_id=org_id,
-        execution_id=execution_id,
-        step_id=step_id,
-        file_name=file_name,
-        storage_path=rel_path,
-        mime_type=content_type,
-        file_size=file_size,
-        checksum_sha256=checksum,
-        uploaded_by=uploaded_by,
-        evidence_status=EVIDENCE_STATUS_PENDING,
-    )
+    # Explicit transaction: metadata commit first, then storage (senior platform standard)
     try:
-        db_session.commit()
+        with db_session.begin():
+            record = evidence_repo.create(
+                org_id=org_id,
+                execution_id=execution_id,
+                step_id=step_id,
+                file_name=file_name,
+                storage_path=rel_path,
+                mime_type=content_type,
+                file_size=file_size,
+                checksum_sha256=checksum,
+                uploaded_by=uploaded_by,
+                evidence_status=EVIDENCE_STATUS_PENDING,
+            )
     except Exception as e:
-        logger.exception("Evidence upload_evidence_from_temp: commit failed: %s", e)
+        logger.exception("Evidence upload_evidence_from_temp: create/commit failed: %s", e)
         try:
             os.unlink(temp_path)
         except OSError:
@@ -85,8 +86,8 @@ def upload_evidence_from_temp(
     except Exception as e:
         logger.exception("Evidence finalize_from_temp failed (record already committed): %s", e)
         try:
-            evidence_repo.delete_by_id(record.id, org_id)
-            db_session.commit()
+            with db_session.begin():
+                evidence_repo.delete_by_id(record.id, org_id)
         except Exception as rollback_e:
             logger.exception("Evidence cleanup delete record failed: %s", rollback_e)
             db_session.rollback()
@@ -100,8 +101,8 @@ def upload_evidence_from_temp(
     if not verify_checksum_at_path(full_path, checksum):
         logger.error("Evidence verify_checksum_at_path failed after move: %s", full_path)
         try:
-            evidence_repo.delete_by_id(record.id, org_id)
-            db_session.commit()
+            with db_session.begin():
+                evidence_repo.delete_by_id(record.id, org_id)
         except Exception as rollback_e:
             logger.exception("Evidence cleanup after verify fail: %s", rollback_e)
             db_session.rollback()
@@ -112,14 +113,15 @@ def upload_evidence_from_temp(
             pass
         return None, "File verification failed after save", 500
 
+    # Second transaction: mark ACTIVE only after storage is finalized and verified
     try:
-        evidence_repo.update_status(record.id, org_id, EVIDENCE_STATUS_ACTIVE)
-        db_session.commit()
+        with db_session.begin():
+            evidence_repo.update_status(record.id, org_id, EVIDENCE_STATUS_ACTIVE)
     except Exception as e:
         logger.exception("Evidence update_status to ACTIVE failed: %s", e)
         try:
-            evidence_repo.delete_by_id(record.id, org_id)
-            db_session.commit()
+            with db_session.begin():
+                evidence_repo.delete_by_id(record.id, org_id)
         except Exception:
             db_session.rollback()
         try:

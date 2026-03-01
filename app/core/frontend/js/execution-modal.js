@@ -619,6 +619,12 @@
                 else failed++;
               });
               evidenceListForStep = evidenceListForStep.concat(added);
+              var seenIds = new Set();
+              evidenceListForStep = evidenceListForStep.filter(function(e) {
+                if (!e.id || seenIds.has(e.id)) return false;
+                seenIds.add(e.id);
+                return true;
+              });
               if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
               uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
               renderEvidenceList(evidenceListForStep);
