@@ -517,7 +517,9 @@
       if (typeof CoreAPI.listEvidence === 'function' && executionIdForEvidence && currentStepId) {
         try {
           const res = await CoreAPI.listEvidence(executionIdForEvidence);
-          evidenceListForStep = (res.evidence || []).filter(function(e) { return e.step_id === currentStepId; });
+          evidenceListForStep = (res.evidence || []).filter(function(e) {
+            return e.step_id === currentStepId || (e.step_definition_id && e.step_definition_id === currentStepId);
+          });
         } catch (e) { evidenceListForStep = []; }
       }
       executionPrompts.forEach(prompt => {
@@ -569,17 +571,26 @@
           renderEvidenceList(evidenceListForStep);
           uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
           if (fileInput) {
+            var maxEvidenceBytes = 10 * 1024 * 1024;
             fileInput.addEventListener('change', async function() {
               var files = this.files;
               if (!files || !files.length || !executionIdForEvidence || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
               for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+                if (file.size > maxEvidenceBytes) {
+                  if (typeof showNotification === 'function') showNotification('error', 'File too large', 'Max size 10MB. Choose a smaller file.');
+                  continue;
+                }
                 var fd = new FormData();
-                fd.append('file', files[i]);
+                fd.append('file', file);
                 fd.append('execution_id', executionIdForEvidence);
                 fd.append('step_id', currentStepId);
                 try {
-                  var result = await CoreAPI.uploadEvidence(fd);
-                  evidenceListForStep.push({ id: result.id, file_name: result.file_name });
+                  await CoreAPI.uploadEvidence(fd);
+                  var res = await CoreAPI.listEvidence(executionIdForEvidence);
+                  evidenceListForStep = (res.evidence || []).filter(function(e) {
+                    return e.step_id === currentStepId || (e.step_definition_id && e.step_definition_id === currentStepId);
+                  });
                   uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
                   renderEvidenceList(evidenceListForStep);
                 } catch (err) {

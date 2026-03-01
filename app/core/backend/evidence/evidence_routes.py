@@ -9,9 +9,9 @@ from flask import g, jsonify, request, send_file
 from app.core.backend.evidence.evidence_service import (
     get_evidence_for_download,
     list_evidence_for_execution,
-    upload_evidence,
+    upload_evidence_from_temp,
 )
-from app.core.backend.evidence.evidence_validation import validate_file, validate_upload_request
+from app.core.backend.evidence.evidence_validation import validate_upload_request, validate_file_streaming
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 
@@ -39,15 +39,20 @@ def register_routes(bp):
             logger.warning("Evidence upload validate_upload_request failed: %s", err)
             return jsonify({"error": err}), 400
 
-        ok, err, data, content_type, original_filename = validate_file()
+        ok, err, temp_path, content_type, original_filename, file_size = validate_file_streaming()
         if not ok:
-            logger.warning("Evidence upload validate_file failed: %s", err)
+            logger.warning("Evidence upload validate_file_streaming failed: %s", err)
             return jsonify({"error": err}), 400
 
         try:
             execution_uuid = UUID(execution_id)
             step_uuid = UUID(step_id) if step_id else None
         except (ValueError, TypeError):
+            if temp_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
             return jsonify({"error": "Invalid execution_id or step_id"}), 400
 
         user_email = (
@@ -57,12 +62,13 @@ def register_routes(bp):
             user_email = user_email.get("email")
         uploaded_by = str(user_email) if user_email else None
 
-        result, err_msg, status = upload_evidence(
+        result, err_msg, status = upload_evidence_from_temp(
             org_id=org_uuid,
             execution_id=execution_uuid,
+            temp_path=temp_path,
             file_name=original_filename,
-            data=data,
             content_type=content_type,
+            file_size=file_size,
             step_id=step_uuid,
             uploaded_by=uploaded_by,
         )

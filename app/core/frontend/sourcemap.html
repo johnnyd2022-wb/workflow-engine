@@ -1422,7 +1422,7 @@
           ? '<div class="sourcemap-row-card-actions" style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">Reconcile when completing an execution that produces this output (Map to untracked item in the execution modal).</div>'
           : '';
         // Small evidence pane (View / Download) when item has execution evidence
-        // evidence.step_id can be steps.id or execution_steps.id - match via exec step's step_id or id
+        // Prefer execution_step_id when backend returns it; else match by step_id (step def or exec step id)
         let evidencePane = '';
         if (it.source_execution_id && it.source_execution_step_id && typeof allExecutions !== 'undefined' && typeof CoreAPI !== 'undefined') {
           const exec = allExecutions.find(function(e) { return e && String(e.id) === String(it.source_execution_id); });
@@ -1430,6 +1430,7 @@
           const stepDefId = (execStep && execStep.step_id) ? String(execStep.step_id) : null;
           const execStepId = (execStep && execStep.id) ? String(execStep.id) : null;
           const evList = (exec && exec.evidence) ? (exec.evidence || []).filter(function(e) {
+            if (e.execution_step_id && String(e.execution_step_id) === String(it.source_execution_step_id)) return true;
             if (!e.step_id) return false;
             const sid = String(e.step_id);
             return sid === stepDefId || sid === execStepId;
@@ -2934,11 +2935,12 @@
         height += Math.ceil(detailsToShow.length / 2) * 40 + 8;
       }
       
-      // Evidence pane height; match evidence by step.step_id or step.id
+      // Evidence pane height; prefer execution_step_id when present
       if (stepData && stepData.execution && stepData.step && (stepData.execution.evidence || []).length > 0) {
         const stepDefId = stepData.step.step_id ? String(stepData.step.step_id) : null;
         const execStepId = stepData.step.id ? String(stepData.step.id) : null;
         const evidenceCount = (stepData.execution.evidence || []).filter(function(e) {
+          if (e.execution_step_id && String(e.execution_step_id) === execStepId) return true;
           if (!e.step_id) return false;
           const sid = String(e.step_id);
           return sid === stepDefId || sid === execStepId;
@@ -3043,11 +3045,12 @@
       }
       
       // Small evidence pane (View / Download) above execution metadata when step has evidence
-      // evidence.step_id can be steps.id (stepDefId) or execution_steps.id (step.id) depending on upload
+      // Prefer execution_step_id when backend returns it; else match by step_id
       if (stepData && stepData.execution && stepData.step && typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceViewUrl) {
         const stepDefId = stepData.step.step_id ? String(stepData.step.step_id) : null;
         const execStepId = stepData.step.id ? String(stepData.step.id) : null;
         const evidenceList = (stepData.execution.evidence || []).filter(function(e) {
+          if (e.execution_step_id && String(e.execution_step_id) === execStepId) return true;
           if (!e.step_id) return false;
           const sid = String(e.step_id);
           return sid === stepDefId || sid === execStepId;
@@ -6217,14 +6220,16 @@
         return dateB - dateA; // Newest first
       });
       
-      // Helper function to get evidence for an entry that came from an execution step
+      // Helper: evidence for this entry (backend may return execution_step_id for trivial filtering)
       function getEvidenceForEntry(entry) {
         if (!entry.source_execution_id || !entry.source_execution_step_id || !allExecutions || allExecutions.length === 0) return [];
         const exec = allExecutions.find(function(e) { return e && String(e.id) === String(entry.source_execution_id); });
         if (!exec || !exec.evidence || exec.evidence.length === 0) return [];
         const step = (exec.execution_steps || []).find(function(s) { return s && String(s.id) === String(entry.source_execution_step_id); });
-        if (!step) return [];
-        return (exec.evidence || []).filter(function(e) { return String(e.step_id) === String(step.step_id); });
+        return (exec.evidence || []).filter(function(e) {
+          if (e.execution_step_id && String(e.execution_step_id) === String(entry.source_execution_step_id)) return true;
+          return step && e.step_id && String(e.step_id) === String(step.step_id);
+        });
       }
 
       // Helper function to render an entry

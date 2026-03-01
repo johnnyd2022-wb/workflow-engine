@@ -1,9 +1,16 @@
 """Business logic for evidence upload and retrieval."""
 
 import logging
+import os
+from pathlib import Path
 from uuid import UUID
 
-from app.core.backend.evidence.evidence_storage import read_file_path, save_file
+from app.core.backend.evidence.evidence_storage import (
+    compute_checksum,
+    finalize_from_temp,
+    prepare_final_path,
+    read_file_path,
+)
 from app.core.db import db_session
 from app.core.db.repositories.evidence_repo import EvidenceRepository
 from app.core.db.repositories.execution_repo import ExecutionRepository
@@ -11,56 +18,71 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 logger = logging.getLogger(__name__)
 
 
-def upload_evidence(
+def upload_evidence_from_temp(
     org_id: UUID,
     execution_id: UUID,
+    temp_path: Path,
     file_name: str,
-    data: bytes,
     content_type: str,
+    file_size: int,
     step_id: UUID | None = None,
     uploaded_by: str | None = None,
 ) -> tuple[dict | None, str, int]:
     """
-    Validate execution belongs to org, save file, insert metadata.
+    Two-phase upload: validate execution, compute checksum from temp file, insert DB, commit, then
+    atomically move temp to final path. No file at final path until after commit (no orphan files).
     Returns (response_dict, error_message, status_code).
     """
     repo = ExecutionRepository(db_session)
     execution = repo.get_execution_by_id(execution_id, org_id)
     if not execution:
-        logger.warning("Evidence upload_evidence: execution not found execution_id=%s org_id=%s", execution_id, org_id)
+        logger.warning(
+            "Evidence upload_evidence_from_temp: execution not found execution_id=%s org_id=%s",
+            execution_id,
+            org_id,
+        )
         return None, "Execution not found or access denied", 404
 
-    logger.info(
-        "Evidence upload_evidence: saving file execution_id=%s step_id=%s file_name=%s size=%s",
-        execution_id,
-        step_id,
-        file_name,
-        len(data),
-    )
     try:
-        storage_path, checksum = save_file(str(org_id), str(execution_id), data, content_type)
+        checksum = compute_checksum(temp_path)
     except Exception as e:
-        logger.exception("Evidence save_file failed: %s", e)
-        return None, "Failed to save file", 500
+        logger.exception("Evidence compute_checksum failed: %s", e)
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        return None, "Failed to process file", 500
 
+    rel_path, filename = prepare_final_path(str(org_id), str(execution_id), content_type)
     evidence_repo = EvidenceRepository(db_session)
     record = evidence_repo.create(
         org_id=org_id,
         execution_id=execution_id,
         step_id=step_id,
         file_name=file_name,
-        storage_path=storage_path,
+        storage_path=rel_path,
         mime_type=content_type,
-        file_size=len(data),
+        file_size=file_size,
         checksum_sha256=checksum,
         uploaded_by=uploaded_by,
     )
     try:
         db_session.commit()
     except Exception as e:
-        logger.exception("Evidence upload_evidence: commit failed after file write: %s", e)
+        logger.exception("Evidence upload_evidence_from_temp: commit failed: %s", e)
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
         return None, "Failed to save evidence record", 500
-    logger.info("Evidence upload_evidence: success evidence_id=%s storage_path=%s", record.id, storage_path)
+
+    try:
+        finalize_from_temp(temp_path, str(org_id), str(execution_id), filename)
+    except Exception as e:
+        logger.exception("Evidence finalize_from_temp failed (record already committed): %s", e)
+        return None, "Failed to finalize file", 500
+
+    logger.info("Evidence upload_evidence_from_temp: success evidence_id=%s storage_path=%s", record.id, rel_path)
     return (
         {
             "id": str(record.id),
@@ -77,20 +99,36 @@ def upload_evidence(
 
 
 def list_evidence_for_execution(execution_id: UUID, org_id: UUID) -> list[dict]:
-    """Return list of evidence metadata for an execution (org-scoped)."""
-    repo = EvidenceRepository(db_session)
-    records = repo.list_by_execution(execution_id, org_id)
-    return [
-        {
+    """
+    Return list of evidence metadata for an execution (org-scoped).
+    Each item includes step_definition_id (steps.id) and execution_step_id (execution_steps.id)
+    so the frontend can filter without duplicating step-id resolution logic.
+    """
+    evidence_repo = EvidenceRepository(db_session)
+    records = evidence_repo.list_by_execution(execution_id, org_id)
+    exec_repo = ExecutionRepository(db_session)
+    execution = exec_repo.get_execution_with_steps(execution_id, org_id)
+    step_id_to_exec_step_id = {}
+    if execution and execution.execution_steps:
+        for es in execution.execution_steps:
+            if es.step_id:
+                step_id_to_exec_step_id[str(es.step_id)] = str(es.id)
+
+    out = []
+    for r in records:
+        step_definition_id = str(r.step_id) if r.step_id else None
+        execution_step_id = step_id_to_exec_step_id.get(step_definition_id) if step_definition_id else None
+        out.append({
             "id": str(r.id),
             "file_name": r.file_name,
             "mime_type": r.mime_type,
             "file_size": r.file_size,
-            "step_id": str(r.step_id) if r.step_id else None,
+            "step_id": step_definition_id,
+            "step_definition_id": step_definition_id,
+            "execution_step_id": execution_step_id,
             "created_at": r.created_at.isoformat() if r.created_at else None,
-        }
-        for r in records
-    ]
+        })
+    return out
 
 
 def get_evidence_for_download(
