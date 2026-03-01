@@ -118,16 +118,18 @@ def list_evidence_for_execution(execution_id: UUID, org_id: UUID) -> list[dict]:
     for r in records:
         step_definition_id = str(r.step_id) if r.step_id else None
         execution_step_id = step_id_to_exec_step_id.get(step_definition_id) if step_definition_id else None
-        out.append({
-            "id": str(r.id),
-            "file_name": r.file_name,
-            "mime_type": r.mime_type,
-            "file_size": r.file_size,
-            "step_id": step_definition_id,
-            "step_definition_id": step_definition_id,
-            "execution_step_id": execution_step_id,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        })
+        out.append(
+            {
+                "id": str(r.id),
+                "file_name": r.file_name,
+                "mime_type": r.mime_type,
+                "file_size": r.file_size,
+                "step_id": step_definition_id,
+                "step_definition_id": step_definition_id,
+                "execution_step_id": execution_step_id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
     return out
 
 

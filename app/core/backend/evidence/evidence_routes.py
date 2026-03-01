@@ -11,7 +11,7 @@ from app.core.backend.evidence.evidence_service import (
     list_evidence_for_execution,
     upload_evidence_from_temp,
 )
-from app.core.backend.evidence.evidence_validation import validate_upload_request, validate_file_streaming
+from app.core.backend.evidence.evidence_validation import validate_file_streaming, validate_upload_request
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 

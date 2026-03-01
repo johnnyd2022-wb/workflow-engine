@@ -4,7 +4,6 @@ import hashlib
 import logging
 import os
 import re
-import tempfile
 from pathlib import Path
 from uuid import uuid4
 

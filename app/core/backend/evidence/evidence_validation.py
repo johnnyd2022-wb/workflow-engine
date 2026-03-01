@@ -109,8 +109,8 @@ def validate_file_streaming():
     On failure temp_path is None and caller has nothing to clean up. On success caller must pass
     temp_path to upload; it will be moved (or cleaned up on error).
     """
-    import tempfile
     import os as os_mod
+    import tempfile
 
     if "file" not in request.files:
         logger.warning("Evidence validate_file_streaming: no 'file' in request.files")
@@ -151,9 +151,18 @@ def validate_file_streaming():
                 os_mod.unlink(temp_path)
             except OSError:
                 pass
-            return False, f"File type not allowed (got {content_type!r}). Allowed: {', '.join(allowed)}", None, None, None, 0
+            return (
+                False,
+                f"File type not allowed (got {content_type!r}). Allowed: {', '.join(allowed)}",
+                None,
+                None,
+                None,
+                0,
+            )
 
-        logger.info("Evidence validate_file_streaming: ok filename=%s size=%s content_type=%s", f.filename, size, content_type)
+        logger.info(
+            "Evidence validate_file_streaming: ok filename=%s size=%s content_type=%s", f.filename, size, content_type
+        )
         return True, "", Path(temp_path), content_type, (f.filename or "").strip(), size
     except Exception as e:
         logger.exception("Evidence validate_file_streaming failed: %s", e)
