@@ -1421,11 +1421,36 @@
         const untrackedHint = isUntracked
           ? '<div class="sourcemap-row-card-actions" style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">Reconcile when completing an execution that produces this output (Map to untracked item in the execution modal).</div>'
           : '';
+        // Small evidence pane (View / Download) when item has execution evidence
+        // Prefer execution_step_id when backend returns it; else match by step_id (step def or exec step id)
+        let evidencePane = '';
+        if (it.source_execution_id && it.source_execution_step_id && typeof allExecutions !== 'undefined' && typeof CoreAPI !== 'undefined') {
+          const exec = allExecutions.find(function(e) { return e && String(e.id) === String(it.source_execution_id); });
+          const execStep = (exec && exec.execution_steps) ? exec.execution_steps.find(function(es) { return es && String(es.id) === String(it.source_execution_step_id); }) : null;
+          const stepDefId = (execStep && execStep.step_id) ? String(execStep.step_id) : null;
+          const execStepId = (execStep && execStep.id) ? String(execStep.id) : null;
+          const evList = (exec && exec.evidence) ? (exec.evidence || []).filter(function(e) {
+            if (e.execution_step_id && String(e.execution_step_id) === String(it.source_execution_step_id)) return true;
+            if (!e.step_id) return false;
+            const sid = String(e.step_id);
+            return sid === stepDefId || sid === execStepId;
+          }) : [];
+          if (evList.length > 0) {
+            const evParts = evList.map(function(ev) {
+              const viewUrl = CoreAPI.getEvidenceViewUrl ? CoreAPI.getEvidenceViewUrl(ev.id) : '#';
+              const downloadUrl = CoreAPI.getEvidenceDownloadUrl ? CoreAPI.getEvidenceDownloadUrl(ev.id) : '#';
+              const fn = escapeHtml((ev.file_name || 'Evidence').substring(0, 20));
+              return '<span style="display:inline-flex;align-items:center;gap:4px;"><span style="font-size:11px;color:#6b7280;">' + fn + '</span><a href="' + viewUrl + '" target="_blank" rel="noopener" style="font-size:11px;color:#2563eb;">View</a><a href="' + downloadUrl + '" target="_blank" rel="noopener" style="font-size:11px;color:#2563eb;">Download</a></span>';
+            }).join('');
+            evidencePane = '<div class="sourcemap-row-card-evidence" style="margin-top:6px;padding:6px 8px;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;font-size:11px;"><span style="font-weight:600;color:#6b7280;">Evidence (' + evList.length + ')</span><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:8px 12px;">' + evParts + '</div></div>';
+          }
+        }
         return '<div class="' + cardClass + '"' + titleAttr + '>' +
           '<div class="sourcemap-row-card-title">' + escapeHtml(name) + '</div>' +
           '<span class="sourcemap-row-card-type ' + typeC + '">' + escapeHtml(type) + '</span>' +
           (gridHtml ? '<div class="sourcemap-row-card-grid">' + gridHtml + '</div>' : '') +
           metaBlock +
+          evidencePane +
           checkReasonBlock +
           untrackedHint +
           '</div>';
@@ -2910,6 +2935,21 @@
         height += Math.ceil(detailsToShow.length / 2) * 40 + 8;
       }
       
+      // Evidence pane height; prefer execution_step_id when present
+      if (stepData && stepData.execution && stepData.step && (stepData.execution.evidence || []).length > 0) {
+        const stepDefId = stepData.step.step_id ? String(stepData.step.step_id) : null;
+        const execStepId = stepData.step.id ? String(stepData.step.id) : null;
+        const evidenceCount = (stepData.execution.evidence || []).filter(function(e) {
+          if (e.execution_step_id && String(e.execution_step_id) === execStepId) return true;
+          if (!e.step_id) return false;
+          const sid = String(e.step_id);
+          return sid === stepDefId || sid === execStepId;
+        }).length;
+        if (evidenceCount > 0) {
+          height += 14 + 4 + evidenceCount * 14 + 4;
+        }
+      }
+      
       // Execution prompts
       if (promptData && Object.keys(promptData).length > 0) {
         height += 24; // Header
@@ -3002,6 +3042,58 @@
         });
         
         currentY = rowY + (col > 0 ? rowGap : 0) + 8;
+      }
+      
+      // Small evidence pane (View / Download) above execution metadata when step has evidence
+      // Prefer execution_step_id when backend returns it; else match by step_id
+      if (stepData && stepData.execution && stepData.step && typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceViewUrl) {
+        const stepDefId = stepData.step.step_id ? String(stepData.step.step_id) : null;
+        const execStepId = stepData.step.id ? String(stepData.step.id) : null;
+        const evidenceList = (stepData.execution.evidence || []).filter(function(e) {
+          if (e.execution_step_id && String(e.execution_step_id) === execStepId) return true;
+          if (!e.step_id) return false;
+          const sid = String(e.step_id);
+          return sid === stepDefId || sid === execStepId;
+        });
+        if (evidenceList.length > 0) {
+          const evLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          evLabel.setAttribute('x', x + padding);
+          evLabel.setAttribute('y', currentY);
+          evLabel.setAttribute('font-size', '11');
+          evLabel.setAttribute('font-weight', '600');
+          evLabel.setAttribute('fill', '#6b7280');
+          evLabel.textContent = 'Evidence (' + evidenceList.length + ')';
+          group.appendChild(evLabel);
+          currentY += 14;
+          evidenceList.forEach(function(ev) {
+            const viewUrl = CoreAPI.getEvidenceViewUrl(ev.id);
+            const downloadUrl = CoreAPI.getEvidenceDownloadUrl ? CoreAPI.getEvidenceDownloadUrl(ev.id) : viewUrl;
+            const viewText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            viewText.setAttribute('x', x + padding);
+            viewText.setAttribute('y', currentY);
+            viewText.setAttribute('font-size', '10');
+            viewText.setAttribute('fill', '#2563eb');
+            viewText.setAttribute('cursor', 'pointer');
+            viewText.setAttribute('text-decoration', 'underline');
+            viewText.textContent = 'View';
+            viewText.className = 'flowchart-element evidence-link';
+            viewText.addEventListener('click', function(e) { e.stopPropagation(); window.open(viewUrl, '_blank'); });
+            group.appendChild(viewText);
+            const downloadText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            downloadText.setAttribute('x', x + padding + 32);
+            downloadText.setAttribute('y', currentY);
+            downloadText.setAttribute('font-size', '10');
+            downloadText.setAttribute('fill', '#2563eb');
+            downloadText.setAttribute('cursor', 'pointer');
+            downloadText.setAttribute('text-decoration', 'underline');
+            downloadText.textContent = 'Download';
+            downloadText.className = 'flowchart-element evidence-link';
+            downloadText.addEventListener('click', function(e) { e.stopPropagation(); window.open(downloadUrl, '_blank'); });
+            group.appendChild(downloadText);
+            currentY += 14;
+          });
+          currentY += 4;
+        }
       }
       
       // Execution metadata
@@ -4235,6 +4327,30 @@
             stepStatus.setAttribute('fill', '#6b7280');
             stepStatus.textContent = step.status || 'PENDING';
             svg.appendChild(stepStatus);
+
+            // Evidence button when this step has evidence (compare as strings for UUID/string consistency)
+            const evidenceForStep = (exec.evidence || []).filter(function(e) { return String(e.step_id) === String(step.step_id); });
+            if (evidenceForStep.length > 0 && typeof CoreAPI.getEvidenceDownloadUrl === 'function') {
+              const evidenceBtn = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+              evidenceBtn.setAttribute('x', x + width - 60);
+              evidenceBtn.setAttribute('y', stepY + 32);
+              evidenceBtn.setAttribute('font-size', '9');
+              evidenceBtn.setAttribute('font-weight', '600');
+              evidenceBtn.setAttribute('fill', '#2563eb');
+              evidenceBtn.setAttribute('cursor', 'pointer');
+              evidenceBtn.textContent = evidenceForStep.length === 1 ? 'Evidence' : 'Evidence (' + evidenceForStep.length + ')';
+              evidenceBtn.className = 'flowchart-element evidence-link';
+              evidenceBtn.setAttribute('data-execution-id', exec.id);
+              evidenceBtn.setAttribute('data-step-id', step.step_id);
+              evidenceBtn.addEventListener('click', function(evt) {
+                evt.stopPropagation();
+                var list = (exec.evidence || []).filter(function(e) { return String(e.step_id) === String(step.step_id); });
+                if (list.length === 0) return;
+                var viewUrl = typeof CoreAPI.getEvidenceViewUrl === 'function' ? CoreAPI.getEvidenceViewUrl(list[0].id) : CoreAPI.getEvidenceDownloadUrl(list[0].id);
+                window.open(viewUrl, '_blank');
+              });
+              svg.appendChild(evidenceBtn);
+            }
             
             // Store position for connections
             step._flowchartX = x;
@@ -6104,6 +6220,18 @@
         return dateB - dateA; // Newest first
       });
       
+      // Helper: evidence for this entry (backend may return execution_step_id for trivial filtering)
+      function getEvidenceForEntry(entry) {
+        if (!entry.source_execution_id || !entry.source_execution_step_id || !allExecutions || allExecutions.length === 0) return [];
+        const exec = allExecutions.find(function(e) { return e && String(e.id) === String(entry.source_execution_id); });
+        if (!exec || !exec.evidence || exec.evidence.length === 0) return [];
+        const step = (exec.execution_steps || []).find(function(s) { return s && String(s.id) === String(entry.source_execution_step_id); });
+        return (exec.evidence || []).filter(function(e) {
+          if (e.execution_step_id && String(e.execution_step_id) === String(entry.source_execution_step_id)) return true;
+          return step && e.step_id && String(e.step_id) === String(step.step_id);
+        });
+      }
+
       // Helper function to render an entry
       function renderEntry(entry, index, isOutOfStock) {
         const entryDiv = document.createElement('div');
@@ -6114,6 +6242,16 @@
         }
         
         const qty = parseFloat(entry.quantity || '0');
+        const evidenceList = getEvidenceForEntry(entry);
+        const evidencePaneHtml = evidenceList.length > 0 && typeof CoreAPI !== 'undefined' ? (function() {
+          var parts = evidenceList.map(function(ev) {
+            var viewUrl = CoreAPI.getEvidenceViewUrl ? CoreAPI.getEvidenceViewUrl(ev.id) : '#';
+            var downloadUrl = CoreAPI.getEvidenceDownloadUrl ? CoreAPI.getEvidenceDownloadUrl(ev.id) : '#';
+            var fn = escapeHtml(ev.file_name || 'Evidence');
+            return '<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="font-size: 11px; color: var(--text-secondary, #6b7280); max-width: 120px; overflow: hidden; text-overflow: ellipsis;">' + fn + '</span><a href="' + viewUrl + '" target="_blank" rel="noopener" style="font-size: 11px; color: var(--primary, #3b82f6);">View</a><a href="' + downloadUrl + '" target="_blank" rel="noopener" style="font-size: 11px; color: var(--primary, #3b82f6);">Download</a></span>';
+          }).join('');
+          return '<div class="inventory-entry-evidence-pane" style="margin: 6px 0; padding: 6px 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); font-size: 11px;"><span style="font-weight: 600; color: var(--text-secondary, #6b7280);">Evidence (' + evidenceList.length + ')</span><div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px 12px;">' + parts + '</div></div>';
+        }()) : '';
         
         entryDiv.innerHTML = `
           <div class="inventory-entry-item-header">
@@ -6129,6 +6267,7 @@
             </span>
           </div>
           <div class="inventory-entry-item-details">
+            ${evidencePaneHtml}
             <div class="inventory-entry-item-detail">
               <div class="inventory-entry-item-detail-label">Quantity</div>
               <div class="inventory-entry-item-detail-value">${entry.quantity || '0'} ${entry.unit || ''}</div>

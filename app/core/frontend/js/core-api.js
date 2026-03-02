@@ -20,15 +20,22 @@ const CoreAPI = {
         
         try {
             const response = await fetch(url, config);
-            const data = await response.json();
-            
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseErr) {
+                console.error(`API request failed: ${endpoint} - invalid JSON`, parseErr);
+                throw new Error(response.ok ? 'Invalid response from server.' : `Server error (${response.status}). Please try again.`);
+            }
             if (!response.ok) {
                 throw new Error(data.message || data.error || `HTTP error! status: ${response.status}`);
             }
-            
             return data;
         } catch (error) {
             console.error(`API request failed: ${endpoint}`, error);
+            if (error.name === 'TypeError' && (error.message === 'Failed to fetch' || error.message === 'Load failed')) {
+                throw new Error('Network error. Check your connection and that the server is running, then try again.');
+            }
             throw error;
         }
     },
@@ -258,6 +265,42 @@ const CoreAPI = {
         return this.request('/reset-demo-db', {
             method: 'POST',
         });
+    },
+
+    // Evidence (execution attachments: images, PDFs)
+    async uploadEvidence(formData) {
+        const url = `${this.baseURL}/evidence/upload`;
+        const config = { method: 'POST', body: formData };
+        if (typeof window !== 'undefined' && window.fetch) {
+            const response = await fetch(url, { ...config, credentials: 'same-origin' });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+            return data;
+        }
+        return this.request('/evidence/upload', { method: 'POST', body: formData });
+    },
+
+    async listEvidence(executionId) {
+        return this.request(`/evidence/list?execution_id=${encodeURIComponent(executionId)}`);
+    },
+
+    /** Remove evidence (record and file). Use from execution modal before completing the step. */
+    async deleteEvidence(evidenceId) {
+        return this.request(`/evidence/${encodeURIComponent(evidenceId)}`, { method: 'DELETE' });
+    },
+
+    /** Evidence upload limits (single source of truth; use for client-side size check). */
+    async getEvidenceConfig() {
+        return this.request('/evidence/config');
+    },
+
+    getEvidenceDownloadUrl(evidenceId) {
+        return `${this.baseURL}/evidence/${encodeURIComponent(evidenceId)}/download`;
+    },
+
+    /** Open evidence in browser (inline) without forcing download. Use for View. */
+    getEvidenceViewUrl(evidenceId) {
+        return `${this.baseURL}/evidence/${encodeURIComponent(evidenceId)}/download?inline=1`;
     },
 };
 

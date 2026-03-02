@@ -73,14 +73,21 @@
     
     if (step.execution_prompts && step.execution_prompts.length > 0) {
       const batchNumberModeEl = document.getElementById('guided-prompt-batch-number-mode');
+      const evidenceModeEl = document.getElementById('guided-prompt-evidence-mode');
       if (batchNumberModeEl) batchNumberModeEl.value = 'dont_ask';
+      if (evidenceModeEl) evidenceModeEl.value = 'dont_ask';
       for (const prompt of step.execution_prompts) {
         const isBatchNumber = (prompt.label || '').toLowerCase() === 'batch number';
+        const isEvidence = prompt.type === 'evidence' || (prompt.label || '').toLowerCase() === 'evidence';
         if (isBatchNumber && batchNumberModeEl) {
           batchNumberModeEl.value = prompt.required !== false ? 'required' : 'optional';
           continue;
         }
-        if (!isBatchNumber) {
+        if (isEvidence && evidenceModeEl) {
+          evidenceModeEl.value = prompt.required !== false ? 'required' : 'optional';
+          continue;
+        }
+        if (!isBatchNumber && !isEvidence) {
           window.addGuidedPrompt();
           const promptContainers = document.querySelectorAll('#guided-prompts-list > div');
           const lastPromptContainer = promptContainers[promptContainers.length - 1];
@@ -648,6 +655,8 @@
     document.getElementById('guided-prompts-list').innerHTML = '';
     const batchNumberMode = document.getElementById('guided-prompt-batch-number-mode');
     if (batchNumberMode) batchNumberMode.value = 'optional';
+    const evidenceMode = document.getElementById('guided-prompt-evidence-mode');
+    if (evidenceMode) evidenceMode.value = 'optional';
     guidedInputs = [];
     guidedOutputs = [];
     guidedPrompts = [];
@@ -2797,8 +2806,15 @@
     // Dedicated Batch number: add or remove based on dropdown (required / optional / don't ask)
     const batchNumberModeEl = document.getElementById('guided-prompt-batch-number-mode');
     const batchNumberMode = batchNumberModeEl ? batchNumberModeEl.value : 'dont_ask';
-    // Remove any Batch number from the list (we'll add one from the dropdown if needed)
-    const filteredPrompts = executionPrompts.filter(p => (p.label || '').toLowerCase() !== 'batch number');
+    // Dedicated Evidence: add or remove based on dropdown
+    const evidenceModeEl = document.getElementById('guided-prompt-evidence-mode');
+    const evidenceMode = evidenceModeEl ? evidenceModeEl.value : 'dont_ask';
+    // Remove any Batch number and Evidence from the list (we'll add from dedicated panes if needed)
+    const filteredPrompts = executionPrompts.filter(p => {
+      const label = (p.label || '').toLowerCase();
+      const isEvidence = p.type === 'evidence' || label === 'evidence';
+      return label !== 'batch number' && !isEvidence;
+    });
     if (batchNumberMode === 'required' || batchNumberMode === 'optional') {
       filteredPrompts.unshift({
         label: 'Batch number',
@@ -2807,7 +2823,15 @@
         required: batchNumberMode === 'required'
       });
     }
-    // Use filtered list (with Batch number only if required/optional)
+    if (evidenceMode === 'required' || evidenceMode === 'optional') {
+      filteredPrompts.push({
+        label: 'Evidence',
+        type: 'evidence',
+        unit: null,
+        required: evidenceMode === 'required'
+      });
+    }
+    // Use filtered list (with Batch number and Evidence from panes when applicable)
     executionPrompts.length = 0;
     executionPrompts.push(...filteredPrompts);
     

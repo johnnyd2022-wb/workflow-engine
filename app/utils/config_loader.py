@@ -207,6 +207,22 @@ class Config:
         return self.get("database", "readonly_user", self.db_user)
 
     @property
+    def evidence_storage_root(self) -> str:
+        """Root directory for evidence file storage (default: app-relative evidence_storage)."""
+        return self.get("evidence", "storage_root", "")
+
+    @property
+    def evidence_max_file_size_mb(self) -> int:
+        """Max evidence file size in MB (default 10)."""
+        return self.getint("evidence", "max_file_size_mb", 10)
+
+    @property
+    def evidence_allowed_mime_types(self) -> list[str]:
+        """Allowed MIME types for evidence (default: jpeg, png, pdf)."""
+        raw = self.get("evidence", "allowed_mime_types", "image/jpeg,image/png,application/pdf")
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @property
     def db_readonly_password(self) -> str:
         """Read-only database password (for reporting/read-only connections)"""
         # Try KeePassXC first (look for ReadonlyPassword or Notes field), fallback to config
