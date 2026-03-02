@@ -88,7 +88,7 @@ def validate_file():
     max_bytes = get_max_file_size_bytes()
     if size > max_bytes:
         logger.warning("Evidence validate_file: file too large size=%s max=%s", size, max_bytes)
-        return False, f"File too large (max {max_bytes // (1024*1024)}MB)", None, None, None
+        return False, f"File too large (max {max_bytes // (1024 * 1024)}MB)", None, None, None
     if size == 0:
         logger.warning("Evidence validate_file: file is empty")
         return False, "File is empty", None, None, None
@@ -131,7 +131,7 @@ def validate_file_streaming():
                 os_mod.unlink(temp_path)
             except OSError:
                 pass
-            return False, f"File too large (max {max_bytes // (1024*1024)}MB)", None, None, None, 0
+            return False, f"File too large (max {max_bytes // (1024 * 1024)}MB)", None, None, None, 0
         if size == 0:
             try:
                 os_mod.unlink(temp_path)
