@@ -223,6 +223,26 @@ class Config:
         return [x.strip() for x in raw.split(",") if x.strip()]
 
     @property
+    def process_docs_storage_root(self) -> str:
+        """Root directory for process step documentation (SOP) file storage."""
+        return self.get("process_docs", "storage_root", "")
+
+    @property
+    def process_docs_max_file_size_mb(self) -> int:
+        """Max process doc file size in MB (default 20)."""
+        return self.getint("process_docs", "max_file_size_mb", 20)
+
+    @property
+    def process_docs_allowed_mime_types(self) -> list[str]:
+        """Allowed MIME types for process docs (PDF, Word, markdown, plain text; no images)."""
+        raw = self.get(
+            "process_docs",
+            "allowed_mime_types",
+            "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain",
+        )
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @property
     def db_readonly_password(self) -> str:
         """Read-only database password (for reporting/read-only connections)"""
         # Try KeePassXC first (look for ReadonlyPassword or Notes field), fallback to config

@@ -302,6 +302,20 @@ const CoreAPI = {
     getEvidenceViewUrl(evidenceId) {
         return `${this.baseURL}/evidence/${encodeURIComponent(evidenceId)}/download?inline=1`;
     },
+
+    // Process step documentation (SOP) – for execution modal
+    async getStepDocumentation(stepId) {
+        return this.request(`/process-docs/${encodeURIComponent(stepId)}`);
+    },
+
+    getProcessDocDownloadUrl(docId, inline = false) {
+        const q = inline ? '?inline=1' : '';
+        return `${this.baseURL}/process-docs/${encodeURIComponent(docId)}/download${q}`;
+    },
+
+    getProcessDocViewUrl(docId) {
+        return this.getProcessDocDownloadUrl(docId, true);
+    },
 };
 
 if (typeof window !== 'undefined') {

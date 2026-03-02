@@ -12,6 +12,7 @@ from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution
+from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
@@ -1524,6 +1525,7 @@ corechecks.register_routes(core_bp)
 reconciliation_routes.register_routes(core_bp)
 inventory_upload_routes.register_routes(core_bp)
 evidence_routes.register_routes(core_bp)
+process_docs_routes.register_routes(core_bp)
 
 
 @core_bp.route("/api/core/reset-demo-db", methods=["POST"])

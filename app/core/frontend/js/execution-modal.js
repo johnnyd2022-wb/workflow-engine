@@ -55,17 +55,65 @@
     const inputsContainer = modal.querySelector('#execute-inputs-container');
     const promptsContainer = modal.querySelector('#execute-prompts-container');
     const outputsContainer = modal.querySelector('#execute-outputs-container');
+    const docsContainer = modal.querySelector('#execute-docs-container');
+    const docsSection = modal.querySelector('#execute-docs-section');
     
     if (inputsContainer) inputsContainer.innerHTML = '';
     if (promptsContainer) promptsContainer.innerHTML = '';
     if (outputsContainer) outputsContainer.innerHTML = '';
+    if (docsContainer) docsContainer.innerHTML = '';
+    if (docsSection) docsSection.style.display = 'none';
     
-    // Load inventory, expired/flagged, and untracked materials in parallel (for highlighting step inputs)
-    const [inventoryData, expiredData, untrackedData] = await Promise.all([
+    // Load inventory, expired/flagged, untracked, and step documentation in parallel
+    const stepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
+    const docsPromise = (stepId && typeof CoreAPI.getStepDocumentation === 'function')
+      ? CoreAPI.getStepDocumentation(stepId).catch(function() { return { documents: [] }; })
+      : Promise.resolve({ documents: [] });
+    
+    const [inventoryData, expiredData, untrackedData, docsData] = await Promise.all([
       CoreAPI.getInventory(),
       CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; }),
-      CoreAPI.getUntrackedItems().catch(function() { return { untracked_items: [] }; })
+      CoreAPI.getUntrackedItems().catch(function() { return { untracked_items: [] }; }),
+      docsPromise
     ]);
+    
+    // Render step documentation (SOP) – read-only
+    const documents = (docsData && docsData.documents) ? docsData.documents : [];
+    if (documents.length > 0 && docsContainer && docsSection) {
+      docsSection.style.display = 'block';
+      documents.forEach(function(doc) {
+        const block = document.createElement('div');
+        block.style.cssText = 'margin-bottom: 16px; padding: 12px 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--bg-secondary, #f9fafb);';
+        const titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-weight: 600; font-size: 14px; color: var(--text-primary); margin-bottom: 8px;';
+        titleEl.textContent = doc.title || 'Documentation';
+        block.appendChild(titleEl);
+        if (doc.content_markdown) {
+          const content = document.createElement('div');
+          content.style.cssText = 'font-size: 13px; color: var(--text-primary); white-space: pre-wrap; line-height: 1.5;';
+          content.innerHTML = (doc.content_markdown || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+          block.appendChild(content);
+        } else if (doc.storage_path && doc.id) {
+          const viewUrl = typeof CoreAPI.getProcessDocViewUrl === 'function' ? CoreAPI.getProcessDocViewUrl(doc.id) : '#';
+          const downloadUrl = typeof CoreAPI.getProcessDocDownloadUrl === 'function' ? CoreAPI.getProcessDocDownloadUrl(doc.id) : viewUrl;
+          const mime = (doc.mime_type || '').toLowerCase();
+          const isPdf = mime.indexOf('pdf') !== -1;
+          let linkHtml = '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="color: var(--primary, #2563eb); font-size: 13px;">View / Download</a>';
+          if (downloadUrl !== viewUrl) {
+            linkHtml += ' &middot; <a href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" download style="color: var(--primary, #2563eb); font-size: 13px;">Download</a>';
+          }
+          block.insertAdjacentHTML('beforeend', '<div style="margin-top: 8px;">' + linkHtml + '</div>');
+          if (isPdf) {
+            const iframe = document.createElement('iframe');
+            iframe.src = viewUrl;
+            iframe.title = escapeHtml(doc.title || 'PDF');
+            iframe.style.cssText = 'width: 100%; height: 320px; border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-top: 8px;';
+            block.appendChild(iframe);
+          }
+        }
+        docsContainer.appendChild(block);
+      });
+    }
     const allInventory = inventoryData.inventory_items || [];
     const expiredRaw = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
     const impactedItems = (expiredData && expiredData.impacted_items) ? expiredData.impacted_items : [];
