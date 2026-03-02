@@ -874,12 +874,15 @@
     }
   }
 
-  // Delete-doc confirmation modal (in-app, not browser confirm)
-  (function initDeleteDocConfirmModal() {
+  // Delete-doc confirmation modal (in-app, not browser confirm). Lazy-init listeners when modal is first shown so DOM is ready.
+  let deleteDocModalInitialized = false;
+  function ensureDeleteDocModalListeners() {
+    if (deleteDocModalInitialized) return;
     const modalEl = document.getElementById('delete-doc-confirm-modal');
     const cancelBtn = document.getElementById('delete-doc-confirm-cancel');
     const removeBtn = document.getElementById('delete-doc-confirm-remove');
     if (!modalEl || !cancelBtn || !removeBtn) return;
+    deleteDocModalInitialized = true;
     cancelBtn.addEventListener('click', function() {
       modalEl.style.display = 'none';
       pendingDeleteDoc = null;
@@ -891,16 +894,17 @@
       modalEl.style.display = 'none';
       try {
         await CoreAPI.deleteProcessDoc(docId);
-        row.remove();
+        if (row && row.parentNode) row.remove();
         if (window.showNotification) window.showNotification('success', 'Removed', 'Documentation removed.');
       } catch (e) {
         if (window.showNotification) window.showNotification('error', 'Error', e.message || 'Could not delete.');
       }
     });
-  })();
+  }
   window.showDeleteDocConfirmModal = function(docId, row) {
     const modalEl = document.getElementById('delete-doc-confirm-modal');
     if (!modalEl) return;
+    ensureDeleteDocModalListeners();
     pendingDeleteDoc = { docId, row };
     modalEl.style.display = 'flex';
   };
