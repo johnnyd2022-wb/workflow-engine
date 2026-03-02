@@ -69,9 +69,7 @@ def prepare_final_path(org_id: str, process_id: str, step_id: str, content_type:
     return rel_path, name
 
 
-def finalize_from_temp(
-    temp_path: Path, org_id: str, process_id: str, step_id: str, filename: str
-) -> Path:
+def finalize_from_temp(temp_path: Path, org_id: str, process_id: str, step_id: str, filename: str) -> Path:
     """Atomically move temp file to final location. Call after DB commit. Raises if filename unsafe or move fails."""
     if not is_safe_filename(filename):
         raise ValueError(f"Unsafe filename: {filename!r}")

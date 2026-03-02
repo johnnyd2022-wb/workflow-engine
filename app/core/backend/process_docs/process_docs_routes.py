@@ -20,8 +20,8 @@ from app.core.backend.process_docs.process_docs_validation import (
     validate_inline_request,
     validate_upload_request,
 )
-from app.core.security.permissions import requires_auth, requires_role
 from app.core.db.models.user import UserRole
+from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,12 @@ def register_routes(bp):
             "upload",
             "process_step_document",
             result.get("id") and UUID(result["id"]),
-            {"process_id": process_id, "step_id": step_id, "title": result.get("title"), "file_size": result.get("file_size")},
+            {
+                "process_id": process_id,
+                "step_id": step_id,
+                "title": result.get("title"),
+                "file_size": result.get("file_size"),
+            },
             org_id,
             _user_id_uuid(),
         )

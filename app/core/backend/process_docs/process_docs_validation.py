@@ -8,8 +8,8 @@ from uuid import UUID
 
 from flask import request
 
-from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db import db_session
+from app.core.db.repositories.process_repo import ProcessRepository
 
 logger = logging.getLogger(__name__)
 
@@ -134,9 +134,21 @@ def validate_file_streaming() -> tuple[bool, str, Path | None, str, str, int]:
                 os.unlink(temp_path)
             except OSError:
                 pass
-            return False, f"File type not allowed (got {content_type!r}). Allowed: {', '.join(allowed)}", None, "", "", 0
+            return (
+                False,
+                f"File type not allowed (got {content_type!r}). Allowed: {', '.join(allowed)}",
+                None,
+                "",
+                "",
+                0,
+            )
 
-        logger.info("Process docs validate_file_streaming: ok filename=%s size=%s content_type=%s", f.filename, size, content_type)
+        logger.info(
+            "Process docs validate_file_streaming: ok filename=%s size=%s content_type=%s",
+            f.filename,
+            size,
+            content_type,
+        )
         return True, "", Path(temp_path), content_type, (f.filename or "").strip(), size
     except Exception as e:
         logger.exception("Process docs validate_file_streaming failed: %s", e)

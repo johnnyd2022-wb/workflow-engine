@@ -6,10 +6,12 @@ from pathlib import Path
 from uuid import UUID
 
 from app.core.backend.process_docs.process_docs_storage import (
+    delete_file as storage_delete_file,
+)
+from app.core.backend.process_docs.process_docs_storage import (
     finalize_from_temp,
     prepare_final_path,
     read_file_path,
-    delete_file as storage_delete_file,
 )
 from app.core.db import db_session
 from app.core.db.repositories.process_step_document_repo import ProcessStepDocumentRepository
@@ -191,9 +193,7 @@ def delete_document(doc_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
         parts = doc.storage_path.replace("\\", "/").split("/")
         if len(parts) >= 4:
             filename = parts[-1]
-            storage_delete_file(
-                str(doc.org_id), str(doc.process_id), str(doc.step_id), filename
-            )
+            storage_delete_file(str(doc.org_id), str(doc.process_id), str(doc.step_id), filename)
     repo.soft_delete(doc_id, org_id)
     try:
         db_session.commit()
