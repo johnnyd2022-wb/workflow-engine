@@ -303,9 +303,26 @@ const CoreAPI = {
         return `${this.baseURL}/evidence/${encodeURIComponent(evidenceId)}/download?inline=1`;
     },
 
-    // Process step documentation (SOP) – for execution modal
+    // Process step documentation (SOP) – for execution modal and step creation
     async getStepDocumentation(stepId) {
         return this.request(`/process-docs/${encodeURIComponent(stepId)}`);
+    },
+
+    /** Create or update inline SOP for a step (admin). Used when defining steps. */
+    async createProcessDocInline(processId, stepId, title, contentMarkdown, documentId = null) {
+        const body = { process_id: processId, step_id: stepId, title, content_markdown: contentMarkdown };
+        if (documentId) body.document_id = documentId;
+        return this.request('/process-docs/inline', { method: 'POST', body });
+    },
+
+    /** Upload SOP file for a step (admin). formData must include process_id, step_id, file; optional title. */
+    async uploadProcessDoc(formData) {
+        const url = `${this.baseURL}/process-docs/upload`;
+        const config = { method: 'POST', body: formData };
+        const response = await fetch(url, { ...config, credentials: 'same-origin' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        return data;
     },
 
     getProcessDocDownloadUrl(docId, inline = false) {
@@ -315,6 +332,11 @@ const CoreAPI = {
 
     getProcessDocViewUrl(docId) {
         return this.getProcessDocDownloadUrl(docId, true);
+    },
+
+    /** Delete a process step document (admin). Used in create/edit process modal. */
+    async deleteProcessDoc(docId) {
+        return this.request(`/process-docs/${encodeURIComponent(docId)}`, { method: 'DELETE' });
     },
 };
 

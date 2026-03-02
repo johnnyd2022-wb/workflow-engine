@@ -30,7 +30,37 @@
       console.warn('ExecutionModalConfig.onStepCompleted not configured. Set window.ExecutionModalConfig before loading this script.');
     }
   };
-  
+
+  // Full-screen doc overlay (app-like): no browser back button; "Back to step" closes overlay. Reusable for future SPA.
+  window.openDocFullScreenOverlay = function(docUrl, docTitle) {
+    if (!docUrl || docUrl === '#') return;
+    var overlay = document.createElement('div');
+    overlay.id = 'doc-fullscreen-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-label', docTitle || 'Step instructions');
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1100; display: flex; flex-direction: column; background: var(--bg-primary, #fff);';
+    var bar = document.createElement('div');
+    bar.style.cssText = 'flex-shrink: 0; display: flex; align-items: center; min-height: 48px; padding: 0 16px; border-bottom: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff);';
+    var backBtn = document.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'btn btn-secondary';
+    backBtn.innerHTML = '&#8592; Back to step';
+    backBtn.onclick = function() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    };
+    bar.appendChild(backBtn);
+    var frameWrap = document.createElement('div');
+    frameWrap.style.cssText = 'flex: 1; min-height: 0; width: 100%;';
+    var iframe = document.createElement('iframe');
+    iframe.src = docUrl;
+    iframe.title = docTitle || 'Step instructions';
+    iframe.style.cssText = 'width: 100%; height: 100%; border: none; display: block;';
+    frameWrap.appendChild(iframe);
+    overlay.appendChild(bar);
+    overlay.appendChild(frameWrap);
+    document.body.appendChild(overlay);
+  };
+
   // ============================================================
   // OPEN EXECUTION MODAL
   // ============================================================
@@ -98,17 +128,42 @@
           const downloadUrl = typeof CoreAPI.getProcessDocDownloadUrl === 'function' ? CoreAPI.getProcessDocDownloadUrl(doc.id) : viewUrl;
           const mime = (doc.mime_type || '').toLowerCase();
           const isPdf = mime.indexOf('pdf') !== -1;
-          let linkHtml = '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="color: var(--primary, #2563eb); font-size: 13px;">View / Download</a>';
-          if (downloadUrl !== viewUrl) {
-            linkHtml += ' &middot; <a href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" download style="color: var(--primary, #2563eb); font-size: 13px;">Download</a>';
+          // Mobile/narrow: full-screen in-app overlay with "Back to step" (no browser back). Desktop: new tab.
+          const isNarrowOrTouch = (typeof window !== 'undefined' && (window.innerWidth <= 768 || 'ontouchstart' in window));
+          const openLabel = isPdf
+            ? (isNarrowOrTouch ? 'Open instructions (full screen)' : 'Open PDF in new tab to read')
+            : (isNarrowOrTouch ? 'View document' : 'View in new tab');
+          const actionsDiv = document.createElement('div');
+          actionsDiv.style.cssText = 'margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;';
+          const openBtn = document.createElement('a');
+          openBtn.href = viewUrl;
+          openBtn.rel = 'noopener';
+          openBtn.target = isNarrowOrTouch ? '_self' : '_blank';
+          openBtn.textContent = openLabel;
+          openBtn.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 12px 18px; background: var(--primary, #2563eb); color: #fff; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; text-decoration: none; box-sizing: border-box;';
+          if (isNarrowOrTouch && typeof window.openDocFullScreenOverlay === 'function') {
+            openBtn.addEventListener('click', function(e) {
+              e.preventDefault();
+              window.openDocFullScreenOverlay(viewUrl, doc.title || 'Step instructions');
+            });
           }
-          block.insertAdjacentHTML('beforeend', '<div style="margin-top: 8px;">' + linkHtml + '</div>');
+          const downloadLink = document.createElement('a');
+          downloadLink.href = downloadUrl;
+          downloadLink.target = '_blank';
+          downloadLink.rel = 'noopener';
+          downloadLink.download = true;
+          downloadLink.textContent = 'Download';
+          downloadLink.style.cssText = 'display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; color: var(--text-secondary); font-size: 14px; text-decoration: none;';
+          actionsDiv.appendChild(openBtn);
+          actionsDiv.appendChild(downloadLink);
+          block.appendChild(actionsDiv);
           if (isPdf) {
-            const iframe = document.createElement('iframe');
-            iframe.src = viewUrl;
-            iframe.title = escapeHtml(doc.title || 'PDF');
-            iframe.style.cssText = 'width: 100%; height: 320px; border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-top: 8px;';
-            block.appendChild(iframe);
+            const hint = document.createElement('p');
+            hint.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin: 10px 0 0 0; line-height: 1.4;';
+            hint.textContent = isNarrowOrTouch
+              ? 'Opens full screen in the app. Tap "Back to step" to return.'
+              : 'Opens in a new tab so you can read the instructions at full size.';
+            block.appendChild(hint);
           }
         }
         docsContainer.appendChild(block);

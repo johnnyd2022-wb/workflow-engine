@@ -14,7 +14,8 @@
   let isEditingExistingProcess = false; // True when modal was opened for a non-draft process with steps (show list + Edit / Add new step)
   let isStartNewOverwriteDraft = false; // True when user chose "Start New" on resume draft — save/finish should overwrite old draft steps
   let startNewOldStepIds = []; // Step IDs that existed when user clicked Start New; we delete these on save draft or finish
-  
+  let pendingDeleteDoc = null; // { docId, row } when delete-doc-confirm modal is open
+
   // Get draft key for current process
   function getDraftKey() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -803,9 +804,106 @@
         window.addGuidedOutput();
       }
     }
+
+    // On step 4: show attached docs when editing a step; load list and enable delete
+    const attachedDocsSection = document.getElementById('guided-step-attached-docs-section');
+    const attachedDocsList = document.getElementById('guided-step-docs-list');
+    if (attachedDocsSection && attachedDocsList) {
+      if (editingStepId) {
+        attachedDocsSection.style.display = 'block';
+        loadAttachedStepDocs(editingStepId);
+      } else {
+        attachedDocsSection.style.display = 'none';
+        attachedDocsList.innerHTML = '';
+      }
+    }
   }
   // Expose for SPA page so it can sync step display without opening the modal
   window.updateStepDisplay = updateStepDisplay;
+
+  // Load attached documentation for the current step (step 4) and render list with delete
+  async function loadAttachedStepDocs(stepId) {
+    const container = document.getElementById('guided-step-docs-list');
+    if (!container) return;
+    container.innerHTML = 'Loading…';
+    try {
+      const res = await CoreAPI.getStepDocumentation(stepId);
+      const docs = (res && res.documents) ? res.documents : [];
+      container.innerHTML = '';
+      if (docs.length === 0) {
+        const empty = document.createElement('p');
+        empty.style.cssText = 'color: var(--text-tertiary, #9ca3af); margin: 0; font-size: 13px;';
+        empty.textContent = 'No documentation attached.';
+        container.appendChild(empty);
+      } else {
+        docs.forEach(function(doc) {
+          const row = document.createElement('div');
+          row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--bg-card, #fff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); margin-bottom: 6px;';
+          const label = document.createElement('span');
+          label.textContent = doc.title || (doc.content_markdown ? 'Inline doc' : 'File');
+          label.style.cssText = 'flex: 1; min-width: 0; font-size: 13px; color: var(--text-primary);';
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'btn btn-secondary btn-sm';
+            delBtn.textContent = 'Delete';
+            delBtn.onclick = function() {
+              if (typeof window.showDeleteDocConfirmModal === 'function') {
+                window.showDeleteDocConfirmModal(doc.id, row);
+              } else {
+                if (confirm('Remove this documentation from the step?')) {
+                  CoreAPI.deleteProcessDoc(doc.id).then(function() {
+                    row.remove();
+                    if (window.showNotification) window.showNotification('success', 'Removed', 'Documentation removed.');
+                  }).catch(function(e) {
+                    if (window.showNotification) window.showNotification('error', 'Error', e.message || 'Could not delete.');
+                  });
+                }
+              }
+            };
+          row.appendChild(label);
+          row.appendChild(delBtn);
+          container.appendChild(row);
+        });
+      }
+    } catch (e) {
+      container.innerHTML = '';
+      const err = document.createElement('p');
+      err.style.cssText = 'color: var(--error, #dc2626); margin: 0; font-size: 13px;';
+      err.textContent = 'Could not load documentation.';
+      container.appendChild(err);
+    }
+  }
+
+  // Delete-doc confirmation modal (in-app, not browser confirm)
+  (function initDeleteDocConfirmModal() {
+    const modalEl = document.getElementById('delete-doc-confirm-modal');
+    const cancelBtn = document.getElementById('delete-doc-confirm-cancel');
+    const removeBtn = document.getElementById('delete-doc-confirm-remove');
+    if (!modalEl || !cancelBtn || !removeBtn) return;
+    cancelBtn.addEventListener('click', function() {
+      modalEl.style.display = 'none';
+      pendingDeleteDoc = null;
+    });
+    removeBtn.addEventListener('click', async function() {
+      if (!pendingDeleteDoc) return;
+      const { docId, row } = pendingDeleteDoc;
+      pendingDeleteDoc = null;
+      modalEl.style.display = 'none';
+      try {
+        await CoreAPI.deleteProcessDoc(docId);
+        row.remove();
+        if (window.showNotification) window.showNotification('success', 'Removed', 'Documentation removed.');
+      } catch (e) {
+        if (window.showNotification) window.showNotification('error', 'Error', e.message || 'Could not delete.');
+      }
+    });
+  })();
+  window.showDeleteDocConfirmModal = function(docId, row) {
+    const modalEl = document.getElementById('delete-doc-confirm-modal');
+    if (!modalEl) return;
+    pendingDeleteDoc = { docId, row };
+    modalEl.style.display = 'flex';
+  };
 
   // Validate inventory inputs (quantity & unit required, quantity must be > 0)
   function validateInventoryInputs() {
@@ -1922,9 +2020,10 @@
         explanationDiv.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs. This allows you to track specific batches through your process.';
         typeField.appendChild(explanationDiv);
         
-        // Update explanation when type changes
+        // Update explanation when type changes (use explanationDiv from closure; getElementById can be null if container not in DOM yet, e.g. during restoreStepIntoForm)
         typeSelect.addEventListener('change', function() {
-          const explanation = document.getElementById(`guided-input-explanation-${inputId}`);
+          const explanation = document.getElementById(`guided-input-explanation-${inputId}`) || explanationDiv;
+          if (!explanation) return;
           if (this.value === 'variable') {
             explanation.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs. This allows you to track specific batches through your process.';
           } else {
@@ -2908,9 +3007,41 @@
         saved = await CoreAPI.createStep(processId, stepData);
       }
       
-      if (saved && saved.id) {
+        if (saved && saved.id) {
         // Use the step_number from the saved step (backend might have adjusted it)
         const savedStepNumber = saved.step_number || stepCount;
+        
+        // Optional: add step documentation (SOP) if user filled inline or selected a file
+        const docFileInput = document.getElementById('guided-doc-file');
+        const docInlineTitle = document.getElementById('guided-doc-inline-title');
+        const docInlineContent = document.getElementById('guided-doc-inline-content');
+        const hasFile = docFileInput && docFileInput.files && docFileInput.files.length > 0;
+        const inlineTitle = docInlineTitle ? docInlineTitle.value.trim() : '';
+        const inlineContent = docInlineContent ? docInlineContent.value.trim() : '';
+        const hasInline = inlineTitle && inlineContent;
+        if (typeof CoreAPI.uploadProcessDoc === 'function' && typeof CoreAPI.createProcessDocInline === 'function') {
+          try {
+            if (hasFile) {
+              const fd = new FormData();
+              fd.append('process_id', processId);
+              fd.append('step_id', saved.id);
+              fd.append('file', docFileInput.files[0]);
+              if (inlineTitle) fd.append('title', inlineTitle);
+              await CoreAPI.uploadProcessDoc(fd);
+            } else if (hasInline) {
+              await CoreAPI.createProcessDocInline(processId, saved.id, inlineTitle, inlineContent);
+            }
+            // Clear doc fields after successful add so next step doesn't reuse them
+            if (docInlineTitle) docInlineTitle.value = '';
+            if (docInlineContent) docInlineContent.value = '';
+            if (docFileInput) docFileInput.value = '';
+          } catch (docErr) {
+            console.warn('Could not add step documentation:', docErr);
+            if (window.showNotification) {
+              window.showNotification('warning', 'Step created', 'Step was created but documentation could not be added. You can add it later. ' + (docErr.message || ''));
+            }
+          }
+        }
         
         // Store the created step
         const stepSummary = {
@@ -3158,7 +3289,7 @@
         });
         expandedDetails.appendChild(promptsSection);
       }
-      
+
       summaryCard.appendChild(expandedDetails);
       summariesList.appendChild(summaryCard);
     });
