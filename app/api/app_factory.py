@@ -181,8 +181,12 @@ def create_app():
         # Prevent MIME type sniffing (forces browsers to respect Content-Type)
         response.headers["X-Content-Type-Options"] = "nosniff"
 
-        # Prevent clickjacking attacks by blocking iframe embedding
-        response.headers["X-Frame-Options"] = "DENY"
+        # Prevent clickjacking: DENY by default; allow SAMEORIGIN only for process-docs download (PDF preview in execution modal)
+        path = (request.path or "").strip()
+        if "/api/core/process-docs/" in path and path.rstrip("/").endswith("/download"):
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        else:
+            response.headers["X-Frame-Options"] = "DENY"
 
         # Enable XSS protection in older browsers (modern browsers have better built-in protection)
         response.headers["X-XSS-Protection"] = "1; mode=block"

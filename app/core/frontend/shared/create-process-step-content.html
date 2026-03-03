@@ -250,6 +250,38 @@
             <!-- Execution prompts will be added here dynamically -->
           </div>
         </div>
+
+        <!-- Attached documentation (when editing a step: list and delete) -->
+        <div id="guided-step-attached-docs-section" style="margin-top: 24px; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); display: none;">
+          <h3 style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Attached documentation</h3>
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">Documentation already linked to this step. Remove any that are outdated.</p>
+          <div id="guided-step-docs-list" style="font-size: 13px;">
+            <!-- Filled by JS when editing a step -->
+          </div>
+        </div>
+
+        <!-- Step documentation (SOP) – optional; add new when defining a step -->
+        <div id="guided-step-docs-section" style="margin-top: 24px; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
+          <h3 style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Step documentation (optional)</h3>
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 16px 0; line-height: 1.5;">
+            Add reference documentation (SOP) for this step. Operators will see it in the execution modal when they run the step.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <label for="guided-doc-inline-title" style="display: block; font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Title (for inline doc)</label>
+              <input type="text" id="guided-doc-inline-title" placeholder="e.g. SOP – Mixing instructions" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px; box-sizing: border-box;">
+            </div>
+            <div>
+              <label for="guided-doc-inline-content" style="display: block; font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Inline documentation (plain text)</label>
+              <textarea id="guided-doc-inline-content" rows="4" placeholder="Optional: Write step instructions or paste SOP content here. Operators will see this when executing the step." style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px; box-sizing: border-box; resize: vertical;"></textarea>
+            </div>
+            <div>
+              <label for="guided-doc-file" style="display: block; font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Or upload a file (PDF, Word, markdown, text)</label>
+              <input type="file" id="guided-doc-file" accept=".pdf,.doc,.docx,.md,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain" style="font-size: 13px;">
+              <p style="font-size: 12px; color: var(--text-secondary); margin: 4px 0 0 0;">Max 20 MB. If you upload a file, inline text above is ignored for this step.</p>
+            </div>
+          </div>
+        </div>
       </div>
       </div>
       <div class="create-process-step-actions" style="display: flex; gap: 12px; justify-content: space-between;">
