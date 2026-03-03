@@ -110,7 +110,8 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                 .all()
             )
             items = [
-                i for i in items
+                i
+                for i in items
                 if _normalize(i.name or "") == _normalize(out_name) and (i.unit or "").strip() == out_unit
             ]
 
@@ -141,23 +142,25 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                 process_name = es.execution.process.name if es.execution and es.execution.process else None
                 step_name = es.step.name if es.step else None
 
-                output_expiry_items.append({
-                    "type": "expiry",
-                    "severity": severity,
-                    "message": message,
-                    "execution_id": str(es.execution_id),
-                    "process_id": str(es.execution.process_id) if es.execution else None,
-                    "step_id": str(es.step_id),
-                    "process_name": process_name,
-                    "step_name": step_name,
-                    "inventory_item_id": str(item.id),
-                    "item_name": item.name,
-                    "unit": item.unit,
-                    "expiry_date": expiry_date.isoformat(),
-                    "expiry_prompt": expiry_prompt,
-                    "warning_days": warning_days,
-                    "metadata": {"rule_type": config.get("rule_type", "custom_output_expiry")},
-                })
+                output_expiry_items.append(
+                    {
+                        "type": "expiry",
+                        "severity": severity,
+                        "message": message,
+                        "execution_id": str(es.execution_id),
+                        "process_id": str(es.execution.process_id) if es.execution else None,
+                        "step_id": str(es.step_id),
+                        "process_name": process_name,
+                        "step_name": step_name,
+                        "inventory_item_id": str(item.id),
+                        "item_name": item.name,
+                        "unit": item.unit,
+                        "expiry_date": expiry_date.isoformat(),
+                        "expiry_prompt": expiry_prompt,
+                        "warning_days": warning_days,
+                        "metadata": {"rule_type": config.get("rule_type", "custom_output_expiry")},
+                    }
+                )
 
     flagged = len(output_expiry_items) > 0
     message = None

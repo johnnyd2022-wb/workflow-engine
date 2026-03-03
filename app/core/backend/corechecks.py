@@ -63,8 +63,8 @@ class CoreChecksRunner:
     def _register_builtin_checks(self) -> None:
         """Register built-in checks so they can be run by id."""
         from app.core.backend.checks.expired_materials import run_expired_materials_check
-        from app.core.backend.checks.untracked_items import run_untracked_items_check
         from app.core.backend.checks.output_expiry_check import run_output_expiry_check
+        from app.core.backend.checks.untracked_items import run_untracked_items_check
 
         self.register_check("expired_materials", run_expired_materials_check)
         self.register_check("untracked_items", run_untracked_items_check)

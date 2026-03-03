@@ -1006,6 +1006,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                             break
         except Exception as audit_err:
             import logging
+
             logging.getLogger(__name__).warning(
                 "Audit log for custom_output_expiry_used failed: %s", audit_err, exc_info=True
             )
