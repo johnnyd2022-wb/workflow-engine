@@ -34,7 +34,7 @@ def _detect_mime_from_path(file_path: Path, original_filename: str = "") -> str 
             if mime:
                 return mime
             # ZIP: infer from original filename; temp file is .tmp so file_path.suffix is wrong
-            ext = (Path(original_filename).suffix.lower() if original_filename else file_path.suffix.lower())
+            ext = Path(original_filename).suffix.lower() if original_filename else file_path.suffix.lower()
             if ext in (".docx", ".md", ".txt"):
                 if ext == ".docx":
                     return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
