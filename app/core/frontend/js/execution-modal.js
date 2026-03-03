@@ -819,7 +819,15 @@
             });
         var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
         var hasMatch = matchingUntracked.length > 0;
+        var ce = (output.extra_data || {}).custom_expiry;
+        var customExpiryHtml = '';
+        if (ce && ce.enabled) {
+          var days = ce.expiry_days != null ? String(ce.expiry_days) : 'X';
+          var prompt = (ce.expiry_prompt || '').trim() || ('This output should be consumed within ' + days + ' days.');
+          customExpiryHtml = '<div class="execute-output-expiry-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Custom expiry rule applies:</strong> ' + escapeHtml(prompt) + '</div>';
+        }
         outputSection.innerHTML = `
+          ${customExpiryHtml}
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               ${escapeHtml(output.name)}

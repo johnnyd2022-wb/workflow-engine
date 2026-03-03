@@ -24,6 +24,7 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
 from app.core.security.permissions import requires_auth
+from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.utils.config_loader import config
@@ -700,6 +701,11 @@ def complete_step(execution_id: str, execution_step_id: str):
 
         # Refresh execution_step to ensure we have the latest data including execution_data
         db_session.refresh(execution_step)
+        # Capture step outputs for post-commit audit (avoid lazy load after commit)
+        step_outputs_for_audit = None
+        step_def = getattr(execution_step, "step", None)
+        if step_def is not None:
+            step_outputs_for_audit = list(step_def.outputs or []) if getattr(step_def, "outputs", None) else None
 
         # Initialize inventory repository once for reuse throughout this function
         inventory_repo = InventoryRepository(db_session)
@@ -976,6 +982,34 @@ def complete_step(execution_id: str, execution_step_id: str):
             db_session.rollback()
             return jsonify({"error": "Failed to update inventory", "details": str(e)}), 500
 
+        # Audit: when completed step has custom output expiry config (non-blocking)
+        try:
+            if step_outputs_for_audit:
+                for out in step_outputs_for_audit:
+                    if isinstance(out, dict):
+                        ce = (out.get("extra_data") or {}).get("custom_expiry")
+                        if ce and ce.get("enabled"):
+                            user_id = getattr(g, "user_id", None)
+                            log_action(
+                                "custom_output_expiry_used",
+                                "execution_step",
+                                execution_step.id,
+                                {
+                                    "execution_id": str(execution_step.execution_id),
+                                    "step_id": str(execution_step.step_id),
+                                    "expiry_days": ce.get("expiry_days"),
+                                    "rule_type": ce.get("rule_type", "custom_output_expiry"),
+                                },
+                                org_id,
+                                user_id,
+                            )
+                            break
+        except Exception as audit_err:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Audit log for custom_output_expiry_used failed: %s", audit_err, exc_info=True
+            )
+
         response_data = {
             "id": str(execution_step.id),
             "status": execution_step.status.value,
@@ -986,15 +1020,13 @@ def complete_step(execution_id: str, execution_step_id: str):
         return (jsonify(response_data), 200)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
     except Exception:
         # Log the full error for debugging but return generic message to client
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.exception("Error creating process")
-        return jsonify({"error": "Failed to create process"}), 500
+        logger.exception("Error completing execution step")
+        return jsonify({"error": "Failed to complete step"}), 500
 
 
 @core_bp.route("/api/core/inventory", methods=["GET"])

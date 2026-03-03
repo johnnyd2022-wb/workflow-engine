@@ -168,6 +168,22 @@
         parts.push('<p class="system-findings-item__detail-section"><strong>Impacted item(s):</strong> ' +
           impacted.map(function (x) { return escapeHtml(x && x.name ? x.name : x.id || '—'); }).join(', ') + '</p>');
       }
+    } else if (checkId === 'output_expiry') {
+      var items = data.output_expiry_items;
+      if (Array.isArray(items) && items.length > 0) {
+        parts.push('<p class="system-findings-item__detail-section"><strong>Custom output expiry (expired or near expiry):</strong></p>');
+        items.forEach(function (x) {
+          var name = escapeHtml(x && x.item_name ? x.item_name : x.inventory_item_id || '—');
+          var processStep = [x.process_name, x.step_name].filter(Boolean).join(' · ');
+          var severity = (x.severity === 'red') ? 'Expired' : 'Near expiry';
+          var expiryDate = x.expiry_date ? escapeHtml(x.expiry_date) : '';
+          parts.push('<div class="system-findings-output-expiry-item" style="margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--border-default); border-radius: 6px; font-size: 13px;">' +
+            '<p style="margin: 0 0 4px 0; font-weight: 600;">' + name + '</p>' +
+            (processStep ? '<p style="margin: 0 0 4px 0; color: var(--text-secondary); font-size: 12px;">' + escapeHtml(processStep) + '</p>' : '') +
+            '<p style="margin: 0; font-size: 12px;"><span style="color: var(--error, #ef4444);">' + escapeHtml(severity) + '</span>' + (expiryDate ? ' — Expiry: ' + expiryDate : '') + '</p>' +
+            '</div>');
+        });
+      }
     } else if (checkId === 'untracked_items') {
       var untracked = data.untracked_items;
       if (Array.isArray(untracked) && untracked.length > 0) {

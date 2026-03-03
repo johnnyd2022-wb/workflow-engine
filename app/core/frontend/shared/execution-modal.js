@@ -445,8 +445,15 @@
         const outputSection = document.createElement('div');
         outputSection.className = 'execute-output-section';
         outputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
-        
+        const ce = (output.extra_data || {}).custom_expiry;
+        let customExpiryHtml = '';
+        if (ce && ce.enabled) {
+          const days = ce.expiry_days != null ? String(ce.expiry_days) : 'X';
+          const prompt = (ce.expiry_prompt || '').trim() || ('This output should be consumed within ' + days + ' days.');
+          customExpiryHtml = '<div class="execute-output-expiry-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Custom expiry rule applies:</strong> ' + escapeHtml(prompt) + '</div>';
+        }
         outputSection.innerHTML = `
+          ${customExpiryHtml}
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               ${escapeHtml(output.name)} 

@@ -142,3 +142,18 @@ class TestExpiredMaterialsComplianceSemantics:
         assert "expired_raw_materials" in result.data
         assert "impacted_items" in result.data
         assert "connections" in result.data
+
+
+class TestOutputExpiryCheck:
+    """Custom output expiry check: registered and returns expected shape."""
+
+    def test_output_expiry_registered_and_shape(self, db, demo_data):
+        """output_expiry check is registered and returns output_expiry_items list."""
+        org_id = demo_data["org_id"]
+        runner = CoreChecksRunner(org_id=org_id, session=db)
+        result = runner.run_check("output_expiry")
+        assert result is not None
+        assert result.check_id == "output_expiry"
+        assert result.data is not None
+        assert "output_expiry_items" in result.data
+        assert isinstance(result.data["output_expiry_items"], list)
