@@ -8,6 +8,7 @@ from uuid import UUID
 
 from flask import request
 
+from app.core.backend.process_docs.process_docs_storage import get_temp_dir
 from app.core.db import db_session
 from app.core.db.repositories.process_repo import ProcessRepository
 
@@ -17,12 +18,12 @@ logger = logging.getLogger(__name__)
 _MAGIC = {
     b"%PDF": "application/pdf",
     b"\xd0\xcf\x11\xe0": "application/msword",  # DOC
-    b"PK\x03\x04": None,  # ZIP-based (docx, etc.) – check extension or content-type
+    b"PK\x03\x04": None,  # ZIP-based (docx, etc.) – check extension from original filename
 }
 
 
-def _detect_mime_from_path(file_path: Path) -> str | None:
-    """Detect MIME from file magic bytes."""
+def _detect_mime_from_path(file_path: Path, original_filename: str = "") -> str | None:
+    """Detect MIME from file magic bytes. For ZIP-based files, use original_filename extension (temp file has .tmp)."""
     try:
         with open(file_path, "rb") as f:
             head = f.read(12)
@@ -32,13 +33,14 @@ def _detect_mime_from_path(file_path: Path) -> str | None:
         if head.startswith(magic):
             if mime:
                 return mime
-            # ZIP: could be docx
-            if file_path.suffix.lower() in (".docx", ".md", ".txt"):
-                if file_path.suffix.lower() == ".docx":
+            # ZIP: infer from original filename; temp file is .tmp so file_path.suffix is wrong
+            ext = (Path(original_filename).suffix.lower() if original_filename else file_path.suffix.lower())
+            if ext in (".docx", ".md", ".txt"):
+                if ext == ".docx":
                     return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                if file_path.suffix.lower() == ".md":
+                if ext == ".md":
                     return "text/markdown"
-                if file_path.suffix.lower() == ".txt":
+                if ext == ".txt":
                     return "text/plain"
             return "application/octet-stream"
     return None
@@ -52,7 +54,10 @@ def get_allowed_mime_types() -> list[str]:
 
 
 def get_max_file_size_bytes() -> int:
-    """Return max file size in bytes (default 20MB)."""
+    """Return max file size in bytes (default 20MB).
+    If limits are increased, consider setting app.config['MAX_CONTENT_LENGTH'] so Flask
+    rejects oversized requests before streaming to disk.
+    """
     from app.utils.config_loader import config
 
     return config.process_docs_max_file_size_mb * 1024 * 1024
@@ -103,7 +108,9 @@ def validate_file_streaming() -> tuple[bool, str, Path | None, str, str, int]:
         return False, "No file selected", None, "", "", 0
 
     max_bytes = get_max_file_size_bytes()
-    fd, temp_path = tempfile.mkstemp(prefix="process_doc_", suffix=".tmp")
+    # Temp under storage root so os.replace(temp, final) is same-filesystem and atomic (avoids cross-device link errors)
+    temp_dir = get_temp_dir()
+    fd, temp_path = tempfile.mkstemp(prefix="process_doc_", suffix=".tmp", dir=temp_dir)
     try:
         os.close(fd)
         f.save(temp_path)
@@ -122,7 +129,7 @@ def validate_file_streaming() -> tuple[bool, str, Path | None, str, str, int]:
                 pass
             return False, "File is empty", None, "", "", 0
 
-        content_type = _detect_mime_from_path(Path(temp_path))
+        content_type = _detect_mime_from_path(Path(temp_path), (f.filename or "").strip())
         if not content_type:
             content_type = _normalize_content_type(f.content_type or request.content_type or "")
         content_type = _normalize_content_type(content_type or "")

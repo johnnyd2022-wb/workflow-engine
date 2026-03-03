@@ -184,16 +184,18 @@ def list_docs_for_step(step_id: UUID, org_id: UUID) -> list[dict]:
 
 
 def delete_document(doc_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
-    """Soft-delete a document; remove file from storage if file-based. Returns (success, error_message, status_code)."""
+    """
+    Soft-delete a document; then remove file from storage if file-based (best effort).
+    Order: soft-delete record, commit, then delete file — so a failed commit does not orphan the file.
+    Returns (success, error_message, status_code).
+    """
     repo = ProcessStepDocumentRepository(db_session)
     doc = repo.get_by_id(doc_id, org_id)
     if not doc:
         return True, "", 200  # idempotent
-    if doc.storage_path:
-        parts = doc.storage_path.replace("\\", "/").split("/")
-        if len(parts) >= 4:
-            filename = parts[-1]
-            storage_delete_file(str(doc.org_id), str(doc.process_id), str(doc.step_id), filename)
+    # Capture path info before soft-delete (record may be updated)
+    storage_path = doc.storage_path
+    org_id_s, process_id_s, step_id_s = str(doc.org_id), str(doc.process_id), str(doc.step_id)
     repo.soft_delete(doc_id, org_id)
     try:
         db_session.commit()
@@ -201,6 +203,12 @@ def delete_document(doc_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
         logger.exception("Process docs delete_document failed: %s", e)
         db_session.rollback()
         return False, "Failed to delete document record", 500
+    # Best-effort file deletion after commit (avoids storage leak; file delete failure is logged only)
+    if storage_path:
+        parts = storage_path.replace("\\", "/").split("/")
+        if len(parts) >= 4:
+            filename = parts[-1]
+            storage_delete_file(org_id_s, process_id_s, step_id_s, filename)
     logger.info("Process docs delete_document: removed doc_id=%s", doc_id)
     return True, "", 200
 

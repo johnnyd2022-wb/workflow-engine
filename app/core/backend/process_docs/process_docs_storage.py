@@ -40,6 +40,14 @@ def _dir_for(org_id: str, process_id: str, step_id: str) -> Path:
     return root / str(org_id) / str(process_id) / str(step_id)
 
 
+def get_temp_dir() -> Path:
+    """Return a tmp directory under the storage root so os.replace(temp, final) is same-filesystem and atomic."""
+    root = get_storage_root()
+    tmp = root / "tmp"
+    ensure_dir(tmp)
+    return tmp
+
+
 def ensure_dir(path: Path) -> None:
     """Create directory and parents if they do not exist."""
     path.mkdir(parents=True, exist_ok=True)
