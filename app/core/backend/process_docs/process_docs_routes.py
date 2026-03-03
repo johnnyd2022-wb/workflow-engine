@@ -195,12 +195,14 @@ def register_routes(bp):
             return jsonify({"error": err}), 400
         inline = request.args.get("inline") or request.args.get("view")
         as_attachment = not (inline and str(inline).strip().lower() in ("1", "true", "yes"))
-        return send_file(
+        response = send_file(
             BytesIO(file_bytes),
             mimetype=mime_type or "application/octet-stream",
             as_attachment=as_attachment,
             download_name=file_name or "document",
         )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
 
     @bp.route("/api/core/process-docs/<doc_id>", methods=["DELETE"])
     @requires_auth

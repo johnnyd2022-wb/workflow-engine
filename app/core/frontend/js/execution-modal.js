@@ -128,8 +128,8 @@
           const downloadUrl = typeof CoreAPI.getProcessDocDownloadUrl === 'function' ? CoreAPI.getProcessDocDownloadUrl(doc.id) : viewUrl;
           const mime = (doc.mime_type || '').toLowerCase();
           const isPdf = mime.indexOf('pdf') !== -1;
-          // Mobile/narrow: full-screen in-app overlay with "Back to step" (no browser back). Desktop: new tab.
-          const isNarrowOrTouch = (typeof window !== 'undefined' && (window.innerWidth <= 768 || 'ontouchstart' in window));
+          // Narrow viewport only: full-screen in-app overlay with "Back to step". Wide (e.g. touchscreen laptops) opens new tab.
+          const isNarrowOrTouch = (typeof window !== 'undefined' && window.innerWidth <= 768);
           const openLabel = isPdf
             ? (isNarrowOrTouch ? 'Open instructions (full screen)' : 'Open PDF in new tab to read')
             : (isNarrowOrTouch ? 'View document' : 'View in new tab');

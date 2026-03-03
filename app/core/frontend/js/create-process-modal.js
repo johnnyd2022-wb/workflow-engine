@@ -805,7 +805,7 @@
       }
     }
 
-    // On step 4: show attached docs when editing a step; load list and enable delete
+    // On step 4: show attached docs when editing a step; load list and enable delete. Disable inline fields when file is selected.
     const attachedDocsSection = document.getElementById('guided-step-attached-docs-section');
     const attachedDocsList = document.getElementById('guided-step-docs-list');
     if (attachedDocsSection && attachedDocsList) {
@@ -817,6 +817,28 @@
         attachedDocsList.innerHTML = '';
       }
     }
+    if (currentStep === 4) {
+      ensureDocFileListener();
+      syncDocInlineDisabledState();
+    }
+  }
+
+  // When a file is selected for step docs, disable inline title/content so file wins and UX is clear (no silent ignore).
+  function syncDocInlineDisabledState() {
+    const docFileInput = document.getElementById('guided-doc-file');
+    const docInlineTitle = document.getElementById('guided-doc-inline-title');
+    const docInlineContent = document.getElementById('guided-doc-inline-content');
+    const hasFile = docFileInput && docFileInput.files && docFileInput.files.length > 0;
+    if (docInlineTitle) docInlineTitle.disabled = !!hasFile;
+    if (docInlineContent) docInlineContent.disabled = !!hasFile;
+  }
+  let docFileListenerAttached = false;
+  function ensureDocFileListener() {
+    if (docFileListenerAttached) return;
+    const docFileInput = document.getElementById('guided-doc-file');
+    if (!docFileInput) return;
+    docFileListenerAttached = true;
+    docFileInput.addEventListener('change', syncDocInlineDisabledState);
   }
   // Expose for SPA page so it can sync step display without opening the modal
   window.updateStepDisplay = updateStepDisplay;
