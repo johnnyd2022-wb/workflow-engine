@@ -900,13 +900,9 @@ def complete_step(execution_id: str, execution_step_id: str):
                             ce_cfg = candidate
                             break
                 if ce_cfg and ce_cfg.get("enabled"):
-                    cfg_mode = ce_cfg.get("mode")
-                    if not cfg_mode:
-                        # Backward compatibility: older schema used expiry_days (fixed duration)
-                        if ce_cfg.get("duration_value") is not None or ce_cfg.get("expiry_days") is not None:
-                            cfg_mode = "fixed_duration"
-                        else:
-                            cfg_mode = "set_at_execution"
+                    cfg_mode = (ce_cfg.get("mode") or "").strip()
+                    if cfg_mode not in {"fixed_duration", "set_at_execution"}:
+                        cfg_mode = ""
                     if cfg_mode == "set_at_execution":
                         ce_in = output.get("custom_expiry_input")
                         if not isinstance(ce_in, dict) or not ce_in.get("mode"):
@@ -1088,6 +1084,12 @@ def complete_step(execution_id: str, execution_step_id: str):
                                 {
                                     "execution_id": str(execution_step.execution_id),
                                     "step_id": str(execution_step.step_id),
+                                    "mode": ce.get("mode"),
+                                    "duration_value": ce.get("duration_value"),
+                                    "duration_unit": ce.get("duration_unit"),
+                                    "warning_value": ce.get("warning_value"),
+                                    "warning_unit": ce.get("warning_unit"),
+                                    # Legacy fields (deprecated)
                                     "expiry_days": ce.get("expiry_days"),
                                     "rule_type": ce.get("rule_type", "custom_output_expiry"),
                                 },
@@ -1099,7 +1101,10 @@ def complete_step(execution_id: str, execution_step_id: str):
             import logging
 
             logging.getLogger(__name__).warning(
-                "Audit log for custom_output_expiry_used failed: %s", audit_err, exc_info=True
+                "Audit log for custom_output_expiry_used failed: %s",
+                audit_err,
+                exc_info=True,
+                extra={"event": "custom_output_expiry_audit_failure"},
             )
 
         response_data = {

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.backend.corechecks import CheckResult
@@ -32,6 +33,9 @@ DEFAULT_WARNING_UNIT = "days"
 
 _ALLOWED_UNITS = {"hours", "days", "weeks", "months"}
 
+# Buffer to reduce false-positives from clock skew / delayed commits
+CLOCK_SKEW_BUFFER_HOURS = 0.5
+
 
 def _as_int(val: Any, default: int | None = None) -> int | None:
     try:
@@ -46,6 +50,11 @@ def _normalize_dt(val: Any) -> datetime | None:
     """Parse ISO datetime strings and normalize to UTC-aware datetime if possible."""
     if val is None:
         return None
+    if isinstance(val, (int, float)):
+        try:
+            return datetime.fromtimestamp(val, tz=timezone.utc)
+        except Exception:
+            return None
     if isinstance(val, datetime):
         if val.tzinfo is None:
             return val.replace(tzinfo=timezone.utc)
@@ -102,30 +111,21 @@ def _get_custom_expiry_config(output: dict) -> dict | None:
     ce = extra.get("custom_expiry")
     if not ce or not ce.get("enabled"):
         return None
-    mode = (ce.get("mode") or "").strip() or None
-    # Infer mode when missing
-    if not mode:
-        if ce.get("duration_value") is not None or ce.get("expiry_days") is not None:
-            mode = "fixed_duration"
-        else:
-            mode = "set_at_execution"
+    mode = (ce.get("mode") or "").strip()
+    if mode not in {"fixed_duration", "set_at_execution"}:
+        return None
 
     duration_value = _as_int(ce.get("duration_value"), None)
     duration_unit = (ce.get("duration_unit") or "").strip().lower() or "days"
-    # Legacy
-    if duration_value is None and ce.get("expiry_days") is not None:
-        duration_value = _as_int(ce.get("expiry_days"), None)
-        duration_unit = "days"
 
     warning_value = _as_int(ce.get("warning_value"), None)
     warning_unit = (ce.get("warning_unit") or "").strip().lower() or DEFAULT_WARNING_UNIT
-    if warning_value is None and ce.get("warning_days") is not None:
-        warning_value = _as_int(ce.get("warning_days"), None)
-        warning_unit = "days"
 
     if warning_unit not in _ALLOWED_UNITS:
         warning_unit = DEFAULT_WARNING_UNIT
-    if warning_value is None or warning_value < 0:
+    if warning_value is None:
+        warning_value = DEFAULT_WARNING_VALUE
+    elif warning_value < 0:
         warning_value = DEFAULT_WARNING_VALUE
 
     if mode == "fixed_duration":
@@ -174,7 +174,7 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
         completed_at = es.completed_at
         if not completed_at:
             continue
-        completed_dt = _normalize_dt(completed_at) or datetime.utcnow().replace(tzinfo=timezone.utc)
+        completed_dt = _normalize_dt(completed_at) or datetime.now(timezone.utc)
 
         for out_def in step_outputs:
             if not isinstance(out_def, dict):
@@ -188,20 +188,17 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
             if not out_name:
                 continue
 
-            # Inventory items produced by this execution step; filter by name/unit in Python
+            # Inventory items produced by this execution step; filter by name/unit in SQL
             items = (
                 session.query(InventoryItem)
                 .filter(InventoryItem.org_id == org_id)
                 .filter(InventoryItem.source_execution_step_id == es.id)
+                .filter(func.lower(InventoryItem.name) == _normalize(out_name))
+                .filter(func.trim(InventoryItem.unit) == out_unit)
                 .all()
             )
-            items = [
-                i
-                for i in items
-                if _normalize(i.name or "") == _normalize(out_name) and (i.unit or "").strip() == out_unit
-            ]
 
-            now = datetime.utcnow().replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc) - timedelta(hours=CLOCK_SKEW_BUFFER_HOURS)
 
             for item in items:
                 if str(item.id) in seen_item_ids:

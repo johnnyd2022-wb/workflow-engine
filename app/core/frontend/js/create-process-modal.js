@@ -1090,6 +1090,7 @@
               duration_unit: expiryUnit || 'days',
               warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 7,
               warning_unit: warningUnit || 'days',
+              expiry_at: null,
               rule_type: 'custom_output_expiry'
             }
           };
@@ -1100,7 +1101,7 @@
       const expiryValidation = validateFixedExpiryWarning(outputsForValidation);
       if (!expiryValidation.valid) {
         if (window.showNotification) {
-          window.showNotification('error', 'Invalid expiry settings', expiryValidation.message);
+          window.showNotification('warning', 'Expiry settings warning', expiryValidation.message);
         } else {
           alert(expiryValidation.message);
         }
@@ -1117,7 +1118,6 @@
             match.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         } catch (e) {}
-        return;
       }
     }
     
@@ -3203,12 +3203,18 @@
             duration_unit: expiryUnit || 'days',
             warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 7,
             warning_unit: warningUnit || 'days',
+            expiry_at: null,
             rule_type: 'custom_output_expiry'
           };
         } else if (expiryMode === 'set_at_execution') {
           extra_data.custom_expiry = {
             enabled: true,
             mode: 'set_at_execution',
+            duration_value: null,
+            duration_unit: null,
+            warning_value: null,
+            warning_unit: null,
+            expiry_at: null,
             rule_type: 'custom_output_expiry'
           };
         }
@@ -3228,11 +3234,10 @@
     const expiryValidation = validateFixedExpiryWarning(outputs);
     if (!expiryValidation.valid) {
       if (window.showNotification) {
-        window.showNotification('error', 'Invalid expiry settings', expiryValidation.message);
+        window.showNotification('warning', 'Expiry settings warning', expiryValidation.message);
       } else {
         alert(expiryValidation.message);
       }
-      return;
     }
     
     // Collect execution prompts

@@ -823,12 +823,8 @@
         var customExpiryHtml = '';
         var expiryInputHtml = '';
         if (ce && ce.enabled) {
-          // Backward compatibility: older schema used expiry_days
-          var mode = ce.mode || null;
-          if (!mode) {
-            if (ce.duration_value != null || ce.expiry_days != null) mode = 'fixed_duration';
-            else mode = 'set_at_execution';
-          }
+          var mode = (ce.mode || '').trim();
+          if (mode !== 'fixed_duration' && mode !== 'set_at_execution') mode = '';
           if (mode === 'fixed_duration') {
             var v = (ce.duration_value != null) ? ce.duration_value : ce.expiry_days;
             var u = (ce.duration_unit || 'days');
@@ -1440,10 +1436,8 @@
         }
       });
       if (expiryValidationErrors.length > 0) {
-        showNotification('error', 'Invalid expiry settings', expiryValidationErrors[0]);
-        var firstBox = modal.querySelector('.execute-output-expiry-input');
-        if (firstBox) firstBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
+        // Hint only — backend remains authoritative validator
+        showNotification('warning', 'Expiry settings warning', expiryValidationErrors[0]);
       }
 
       // First, collect variable outputs (user-entered quantities). Always include each variable output
@@ -1472,7 +1466,7 @@
         // If expiry is set during execution, capture operator selection for backend persistence
         try {
           const ce = outputDef && outputDef.extra_data ? (outputDef.extra_data.custom_expiry || null) : null;
-          const mode = ce && ce.enabled ? (ce.mode || (ce.duration_value != null || ce.expiry_days != null ? 'fixed_duration' : 'set_at_execution')) : null;
+          const mode = ce && ce.enabled ? (ce.mode || null) : null;
           if (mode === 'set_at_execution') {
             const modeSel = Array.from(modal.querySelectorAll('.execute-output-expiry-input-mode')).find(function(el) {
               return (el.dataset.outputName || '').trim() === name;
