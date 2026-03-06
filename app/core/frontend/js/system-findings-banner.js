@@ -176,7 +176,8 @@
           var name = escapeHtml(x && x.item_name ? x.item_name : x.inventory_item_id || '—');
           var processStep = [x.process_name, x.step_name].filter(Boolean).join(' · ');
           var severity = (x.severity === 'red') ? 'Expired' : 'Near expiry';
-          var expiryDate = x.expiry_date ? escapeHtml(x.expiry_date) : '';
+          var expiryDate = x.expiry_at || x.expiry_date;
+          expiryDate = expiryDate ? escapeHtml(String(expiryDate)) : '';
           parts.push('<div class="system-findings-output-expiry-item" style="margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--border-default); border-radius: 6px; font-size: 13px;">' +
             '<p style="margin: 0 0 4px 0; font-weight: 600;">' + name + '</p>' +
             (processStep ? '<p style="margin: 0 0 4px 0; color: var(--text-secondary); font-size: 12px;">' + escapeHtml(processStep) + '</p>' : '') +

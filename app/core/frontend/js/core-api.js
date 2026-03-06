@@ -28,7 +28,9 @@ const CoreAPI = {
                 throw new Error(response.ok ? 'Invalid response from server.' : `Server error (${response.status}). Please try again.`);
             }
             if (!response.ok) {
-                throw new Error(data.message || data.error || `HTTP error! status: ${response.status}`);
+                const msg = data.message || data.error || `HTTP error! status: ${response.status}`;
+                const details = data.details ? ` ${data.details}` : '';
+                throw new Error(msg + details);
             }
             return data;
         } catch (error) {

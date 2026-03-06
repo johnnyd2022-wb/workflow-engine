@@ -8,7 +8,8 @@ risk signals only (no inventory modification). Findings appear in system banner 
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+import calendar
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -25,8 +26,65 @@ _log = logging.getLogger(__name__)
 SEVERITY_EXPIRED = "red"
 # Severity when within warning window (e.g. 7 days before expiry)
 SEVERITY_NEAR_EXPIRY = "amber"
-# Default days before expiry to show amber when warning_days not set
-DEFAULT_WARNING_DAYS = 7
+# Default warning threshold when not configured
+DEFAULT_WARNING_VALUE = 7
+DEFAULT_WARNING_UNIT = "days"
+
+_ALLOWED_UNITS = {"hours", "days", "weeks", "months"}
+
+
+def _as_int(val: Any, default: int | None = None) -> int | None:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except Exception:
+        return default
+
+
+def _normalize_dt(val: Any) -> datetime | None:
+    """Parse ISO datetime strings and normalize to UTC-aware datetime if possible."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        if val.tzinfo is None:
+            return val.replace(tzinfo=timezone.utc)
+        return val.astimezone(timezone.utc)
+    if isinstance(val, str) and val.strip():
+        s = val.strip()
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except Exception:
+            return None
+    return None
+
+
+def _add_months(dt: datetime, months: int) -> datetime:
+    """Add months to datetime, clamping day to end-of-month when needed."""
+    months = int(months)
+    y = dt.year + (dt.month - 1 + months) // 12
+    m = (dt.month - 1 + months) % 12 + 1
+    last_day = calendar.monthrange(y, m)[1]
+    d = min(dt.day, last_day)
+    return dt.replace(year=y, month=m, day=d)
+
+
+def _add_duration(dt: datetime, value: int, unit: str) -> datetime:
+    unit = (unit or "").strip().lower()
+    if unit not in _ALLOWED_UNITS:
+        unit = "days"
+    if unit == "hours":
+        return dt + timedelta(hours=value)
+    if unit == "days":
+        return dt + timedelta(days=value)
+    if unit == "weeks":
+        return dt + timedelta(weeks=value)
+    if unit == "months":
+        return _add_months(dt, value)
+    return dt + timedelta(days=value)
 
 
 def _normalize(s: str | None) -> str:
@@ -34,24 +92,55 @@ def _normalize(s: str | None) -> str:
 
 
 def _get_custom_expiry_config(output: dict) -> dict | None:
-    """Return custom_expiry dict if enabled and valid, else None."""
+    """Return custom_expiry config dict if enabled and valid, else None.
+
+    Supported schemas:
+    - New: { enabled, mode, duration_value, duration_unit, warning_value, warning_unit }
+    - Legacy: { enabled, expiry_days, warning_days }
+    """
     extra = output.get("extra_data") or {}
     ce = extra.get("custom_expiry")
     if not ce or not ce.get("enabled"):
         return None
-    days = ce.get("expiry_days")
-    if days is None or (isinstance(days, (int, float)) and int(days) <= 0):
-        return None
-    warning_days = ce.get("warning_days")
-    if warning_days is not None and isinstance(warning_days, (int, float)):
-        warning_days = max(0, int(warning_days))
-    else:
-        warning_days = DEFAULT_WARNING_DAYS
+    mode = (ce.get("mode") or "").strip() or None
+    # Infer mode when missing
+    if not mode:
+        if ce.get("duration_value") is not None or ce.get("expiry_days") is not None:
+            mode = "fixed_duration"
+        else:
+            mode = "set_at_execution"
+
+    duration_value = _as_int(ce.get("duration_value"), None)
+    duration_unit = (ce.get("duration_unit") or "").strip().lower() or "days"
+    # Legacy
+    if duration_value is None and ce.get("expiry_days") is not None:
+        duration_value = _as_int(ce.get("expiry_days"), None)
+        duration_unit = "days"
+
+    warning_value = _as_int(ce.get("warning_value"), None)
+    warning_unit = (ce.get("warning_unit") or "").strip().lower() or DEFAULT_WARNING_UNIT
+    if warning_value is None and ce.get("warning_days") is not None:
+        warning_value = _as_int(ce.get("warning_days"), None)
+        warning_unit = "days"
+
+    if warning_unit not in _ALLOWED_UNITS:
+        warning_unit = DEFAULT_WARNING_UNIT
+    if warning_value is None or warning_value < 0:
+        warning_value = DEFAULT_WARNING_VALUE
+
+    if mode == "fixed_duration":
+        if duration_value is None or duration_value <= 0:
+            return None
+        if duration_unit not in _ALLOWED_UNITS:
+            duration_unit = "days"
+
     return {
-        "expiry_days": int(days),
-        "expiry_prompt": (ce.get("expiry_prompt") or "").strip() or f"Use within {int(days)} days",
+        "mode": mode,
+        "duration_value": duration_value,
+        "duration_unit": duration_unit,
+        "warning_value": warning_value,
+        "warning_unit": warning_unit,
         "rule_type": ce.get("rule_type") or "custom_output_expiry",
-        "warning_days": warning_days,
     }
 
 
@@ -85,8 +174,7 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
         completed_at = es.completed_at
         if not completed_at:
             continue
-        # Use date only for expiry calculation
-        completed_date = completed_at.date() if hasattr(completed_at, "date") else completed_at
+        completed_dt = _normalize_dt(completed_at) or datetime.utcnow().replace(tzinfo=timezone.utc)
 
         for out_def in step_outputs:
             if not isinstance(out_def, dict):
@@ -94,9 +182,7 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
             config = _get_custom_expiry_config(out_def)
             if not config:
                 continue
-            expiry_days = config["expiry_days"]
-            expiry_prompt = config["expiry_prompt"]
-            warning_days = config.get("warning_days", DEFAULT_WARNING_DAYS)
+            mode = config.get("mode")
             out_name = (out_def.get("name") or "").strip()
             out_unit = (out_def.get("unit") or "").strip()
             if not out_name:
@@ -115,8 +201,7 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                 if _normalize(i.name or "") == _normalize(out_name) and (i.unit or "").strip() == out_unit
             ]
 
-            expiry_date = completed_date + timedelta(days=expiry_days)
-            today = date.today()
+            now = datetime.utcnow().replace(tzinfo=timezone.utc)
 
             for item in items:
                 if str(item.id) in seen_item_ids:
@@ -130,14 +215,51 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
 
                 seen_item_ids.add(str(item.id))
 
-                if today > expiry_date:
+                expiry_at: datetime | None = None
+                warning_value = config.get("warning_value", DEFAULT_WARNING_VALUE)
+                warning_unit = config.get("warning_unit", DEFAULT_WARNING_UNIT)
+                prompt_text = None
+
+                if mode == "fixed_duration":
+                    dv = config.get("duration_value")
+                    du = config.get("duration_unit") or "days"
+                    if isinstance(dv, int) and dv > 0:
+                        expiry_at = _add_duration(completed_dt, dv, du)
+                        prompt_text = f"Output must be consumed in {dv} {du}."
+                elif mode == "set_at_execution":
+                    actual = (item.extra_data or {}).get("custom_expiry_actual") if isinstance(item.extra_data, dict) else None
+                    if isinstance(actual, dict):
+                        a_mode = actual.get("mode")
+                        # Allow per-item warning overrides
+                        warning_value = _as_int(actual.get("warning_value"), warning_value) or warning_value
+                        warning_unit = (actual.get("warning_unit") or warning_unit or DEFAULT_WARNING_UNIT).strip().lower()
+                        if warning_unit not in _ALLOWED_UNITS:
+                            warning_unit = DEFAULT_WARNING_UNIT
+                        if a_mode == "datetime":
+                            expiry_at = _normalize_dt(actual.get("expiry_at"))
+                            prompt_text = "Output has an operator-set expiry date/time."
+                        elif a_mode == "duration":
+                            dv = _as_int(actual.get("duration_value"), None)
+                            du = (actual.get("duration_unit") or "days").strip().lower()
+                            if dv is not None and dv > 0:
+                                expiry_at = _add_duration(completed_dt, dv, du)
+                                prompt_text = f"Output must be consumed in {dv} {du}."
+
+                if not expiry_at:
+                    continue
+
+                warn_at = _add_duration(expiry_at, -int(warning_value), warning_unit) if int(warning_value) > 0 else expiry_at
+
+                if now > expiry_at:
                     severity = SEVERITY_EXPIRED
-                    message = f"Output '{out_name}' expired on {expiry_date.isoformat()}. {expiry_prompt}"
-                elif today >= expiry_date - timedelta(days=warning_days):
+                    message = f"Output '{out_name}' expired on {expiry_at.isoformat()}."
+                elif now >= warn_at:
                     severity = SEVERITY_NEAR_EXPIRY
-                    message = f"Output '{out_name}' expires on {expiry_date.isoformat()}. {expiry_prompt}"
+                    message = f"Output '{out_name}' expires on {expiry_at.isoformat()}."
                 else:
                     continue
+                if prompt_text:
+                    message = f"{message} {prompt_text}"
 
                 process_name = es.execution.process.name if es.execution and es.execution.process else None
                 step_name = es.step.name if es.step else None
@@ -155,9 +277,10 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                         "inventory_item_id": str(item.id),
                         "item_name": item.name,
                         "unit": item.unit,
-                        "expiry_date": expiry_date.isoformat(),
-                        "expiry_prompt": expiry_prompt,
-                        "warning_days": warning_days,
+                        "expiry_at": expiry_at.isoformat(),
+                        "warning_value": int(warning_value),
+                        "warning_unit": warning_unit,
+                        "config_mode": mode,
                         "metadata": {"rule_type": config.get("rule_type", "custom_output_expiry")},
                     }
                 )
