@@ -891,8 +891,10 @@
         }
       });
       if (expiryValidationErrors.length > 0) {
-        // Hint only — backend remains the authoritative validator
-        showNotification('warning', 'Expiry settings warning', expiryValidationErrors[0]);
+        showNotification('error', 'Invalid expiry settings', expiryValidationErrors[0]);
+        const firstBox = modal.querySelector('.execute-output-expiry-input');
+        if (firstBox) firstBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
       }
 
       // First, collect variable outputs (user-entered quantities)

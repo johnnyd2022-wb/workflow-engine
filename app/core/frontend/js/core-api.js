@@ -346,3 +346,91 @@ if (typeof window !== 'undefined') {
     window.CoreAPI = CoreAPI;
 }
 
+// ---------------------------------------------------------------------------
+// Custom expiry validation helpers (shared by step builder + execution modal)
+// ---------------------------------------------------------------------------
+if (typeof window !== 'undefined') {
+    window.CustomExpiryValidation = window.CustomExpiryValidation || (function () {
+        function durationToHours(value, unit) {
+            if (value == null || value === '' || isNaN(Number(value)) || Number(value) < 0) return null;
+            var v = Number(value);
+            switch ((unit || 'days').toLowerCase()) {
+                case 'hours': return v;
+                case 'days': return v * 24;
+                case 'weeks': return v * 24 * 7;
+                case 'months': return v * 24 * 30;
+                default: return v * 24;
+            }
+        }
+
+        function formatDurationLabel(value, unit) {
+            var v = (value == null) ? '' : String(value);
+            var u = (unit || 'days');
+            return (v + ' ' + u).trim();
+        }
+
+        // Core rule: warn window must be <= expiry window (both in hours).
+        function validateWarnNotLongerThanExpiry(opts) {
+            opts = opts || {};
+            var outputName = opts.outputName || '';
+            var warnValue = opts.warnValue;
+            var warnUnit = opts.warnUnit || 'days';
+            var expiryHours = opts.expiryHours;
+            var expiryLabel = opts.expiryLabel || 'the expiry period';
+
+            var warnHours = durationToHours(warnValue, warnUnit);
+            if (warnHours == null || expiryHours == null) return { valid: true };
+            if (warnHours > expiryHours) {
+                var prefix = outputName ? ('For output "' + outputName + '", ') : '';
+                var warnLabel = formatDurationLabel(warnValue, warnUnit);
+                return {
+                    valid: false,
+                    message:
+                        prefix +
+                        'the warn-before-expiry period (' +
+                        warnLabel +
+                        ') cannot be longer than ' +
+                        expiryLabel +
+                        '. Please set the warning to the same duration or less.',
+                };
+            }
+            return { valid: true };
+        }
+
+        // Validate fixed-duration outputs: warning must not exceed expiry. Returns { valid, message, outputName }.
+        function validateFixedExpiryWarning(outputs) {
+            for (var i = 0; i < (outputs || []).length; i++) {
+                var out = outputs[i] || {};
+                var ce = (out.extra_data || {}).custom_expiry;
+                if (!ce || ce.mode !== 'fixed_duration') continue;
+                var expVal = ce.duration_value;
+                var expUnit = ce.duration_unit || 'days';
+                var warnVal = ce.warning_value;
+                var warnUnit = ce.warning_unit || 'days';
+                var expHours = durationToHours(expVal, expUnit);
+                if (expHours != null && expHours <= 0) continue;
+                var outName = out.name || 'this output';
+                var expLabel = 'the expiry period (' + formatDurationLabel(expVal, expUnit) + ')';
+                var r = validateWarnNotLongerThanExpiry({
+                    outputName: outName,
+                    warnValue: warnVal,
+                    warnUnit: warnUnit,
+                    expiryHours: expHours,
+                    expiryLabel: expLabel,
+                });
+                if (!r.valid) {
+                    return { valid: false, outputName: outName, message: r.message };
+                }
+            }
+            return { valid: true };
+        }
+
+        return {
+            durationToHours: durationToHours,
+            formatDurationLabel: formatDurationLabel,
+            validateWarnNotLongerThanExpiry: validateWarnNotLongerThanExpiry,
+            validateFixedExpiryWarning: validateFixedExpiryWarning,
+        };
+    })();
+}
+

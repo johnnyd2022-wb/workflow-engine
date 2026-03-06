@@ -999,41 +999,13 @@
     return { valid: true };
   }
 
-  // Convert duration (value + unit) to hours for comparing expiry vs warning
-  function durationToHours(value, unit) {
-    if (value == null || value === '' || isNaN(Number(value)) || Number(value) < 0) return null;
-    const v = Number(value);
-    switch (unit) {
-      case 'hours': return v;
-      case 'days': return v * 24;
-      case 'weeks': return v * 24 * 7;
-      case 'months': return v * 24 * 30;
-      default: return v * 24; // treat as days
-    }
-  }
-
-  // Validate fixed-duration outputs: warning must not exceed expiry. Returns { valid, message, outputName }.
+  // Validate fixed-duration outputs: warning must not exceed expiry. Shared helper (single source of truth).
   function validateFixedExpiryWarning(outputs) {
-    for (const out of outputs) {
-      const ce = (out.extra_data || {}).custom_expiry;
-      if (!ce || ce.mode !== 'fixed_duration') continue;
-      const expVal = ce.duration_value;
-      const expUnit = ce.duration_unit || 'days';
-      const warnVal = ce.warning_value;
-      const warnUnit = ce.warning_unit || 'days';
-      const expHours = durationToHours(expVal, expUnit);
-      const warnHours = durationToHours(warnVal, warnUnit);
-      if (expHours != null && expHours <= 0) continue;
-      if (warnHours != null && expHours != null && warnHours > expHours) {
-        const expLabel = (expVal + ' ' + expUnit).replace(/s$/, '');
-        const warnLabel = (warnVal + ' ' + warnUnit).replace(/s$/, '');
-        return {
-          valid: false,
-          outputName: out.name || 'this output',
-          message: 'For output "' + (out.name || 'Unnamed') + '", the warn-before-expiry period (' + warnLabel + ') cannot be longer than the expiry period (' + expLabel + '). Please set the warning to the same duration or less than the expiry period.'
-        };
+    try {
+      if (window.CustomExpiryValidation && typeof window.CustomExpiryValidation.validateFixedExpiryWarning === 'function') {
+        return window.CustomExpiryValidation.validateFixedExpiryWarning(outputs);
       }
-    }
+    } catch (e) {}
     return { valid: true };
   }
   
@@ -1101,7 +1073,7 @@
       const expiryValidation = validateFixedExpiryWarning(outputsForValidation);
       if (!expiryValidation.valid) {
         if (window.showNotification) {
-          window.showNotification('warning', 'Expiry settings warning', expiryValidation.message);
+          window.showNotification('error', 'Invalid expiry settings', expiryValidation.message);
         } else {
           alert(expiryValidation.message);
         }
@@ -1118,6 +1090,7 @@
             match.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         } catch (e) {}
+        return;
       }
     }
     
@@ -3234,10 +3207,11 @@
     const expiryValidation = validateFixedExpiryWarning(outputs);
     if (!expiryValidation.valid) {
       if (window.showNotification) {
-        window.showNotification('warning', 'Expiry settings warning', expiryValidation.message);
+        window.showNotification('error', 'Invalid expiry settings', expiryValidation.message);
       } else {
         alert(expiryValidation.message);
       }
+      return;
     }
     
     // Collect execution prompts

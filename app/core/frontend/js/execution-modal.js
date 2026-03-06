@@ -923,17 +923,6 @@
               modeSel.addEventListener('change', apply);
               apply();
               (function() {
-                function durationToHours(val, unit) {
-                  if (val == null || val === '' || isNaN(Number(val)) || Number(val) < 0) return null;
-                  var v = Number(val);
-                  switch (unit) {
-                    case 'hours': return v;
-                    case 'days': return v * 24;
-                    case 'weeks': return v * 24 * 7;
-                    case 'months': return v * 24 * 30;
-                    default: return v * 24;
-                  }
-                }
                 function runValidation() {
                   var v = modeSel.value;
                   var errEl = expiryBox.querySelector('.execute-output-expiry-validation-error');
@@ -947,8 +936,9 @@
                   if (v !== 'duration' && v !== 'datetime') return;
                   var warnVal = parseInt(warnValEl.value, 10);
                   var warnUnit = (warnUnitEl.value || 'days');
-                  var warnHours = durationToHours(isNaN(warnVal) ? null : warnVal, warnUnit);
                   var expiryHours = null;
+                  var validator = (window.CustomExpiryValidation || {});
+                  var durationToHours = (typeof validator.durationToHours === 'function') ? validator.durationToHours : function() { return null; };
                   if (v === 'duration') {
                     var durValEl = expiryBox.querySelector('.execute-output-expiry-duration-value');
                     var durUnitEl = expiryBox.querySelector('.execute-output-expiry-duration-unit');
@@ -970,11 +960,20 @@
                     errEl.style.display = 'block';
                     return;
                   }
-                  if (expiryHours != null && warnHours != null && warnHours > expiryHours) {
-                    errEl.textContent = 'Warn period must not be longer than the expiry period. Set warning to the same or less.';
-                    errEl.style.display = 'block';
-                    warnValEl.style.borderColor = 'var(--danger, #dc2626)';
-                    warnUnitEl.style.borderColor = 'var(--danger, #dc2626)';
+                  if (typeof validator.validateWarnNotLongerThanExpiry === 'function') {
+                    var res = validator.validateWarnNotLongerThanExpiry({
+                      outputName: (expiryBox.dataset.outputName || '').trim(),
+                      warnValue: isNaN(warnVal) ? null : warnVal,
+                      warnUnit: warnUnit,
+                      expiryHours: expiryHours,
+                      expiryLabel: (v === 'datetime') ? 'the time remaining until expiry' : 'the expiry period',
+                    });
+                    if (res && res.valid === false) {
+                      errEl.textContent = res.message || 'Warn period must not be longer than the expiry period.';
+                      errEl.style.display = 'block';
+                      warnValEl.style.borderColor = 'var(--danger, #dc2626)';
+                      warnUnitEl.style.borderColor = 'var(--danger, #dc2626)';
+                    }
                   }
                 }
                 [expiryBox.querySelector('.execute-output-expiry-duration-value'), expiryBox.querySelector('.execute-output-expiry-duration-unit'), expiryBox.querySelector('.execute-output-expiry-warning-value'), expiryBox.querySelector('.execute-output-expiry-warning-unit'), expiryBox.querySelector('.execute-output-expiry-datetime')].forEach(function(el) {
@@ -1387,17 +1386,8 @@
       const allStepOutputs = stepDefinitionForOutputs.outputs || [];
 
       // Validate set_at_execution expiry: warn must not exceed expiry period (duration or time until datetime)
-      function durationToHours(val, unit) {
-        if (val == null || val === '' || isNaN(Number(val)) || Number(val) < 0) return null;
-        var v = Number(val);
-        switch (unit) {
-          case 'hours': return v;
-          case 'days': return v * 24;
-          case 'weeks': return v * 24 * 7;
-          case 'months': return v * 24 * 30;
-          default: return v * 24;
-        }
-      }
+      var expiryValidator = (window.CustomExpiryValidation || {});
+      var durationToHours = (typeof expiryValidator.durationToHours === 'function') ? expiryValidator.durationToHours : function() { return null; };
       const expiryValidationErrors = [];
       (allStepOutputs || []).forEach(function(outputDef) {
         var ce = (outputDef.extra_data || {}).custom_expiry;
@@ -1411,7 +1401,6 @@
         var warnUnitEl = box.querySelector('.execute-output-expiry-warning-unit');
         var warnVal = warnValEl ? parseInt((warnValEl.value || '').trim(), 10) : 0;
         var warnUnit = (warnUnitEl && warnUnitEl.value) || 'days';
-        var warnHours = durationToHours(isNaN(warnVal) ? null : warnVal, warnUnit);
         var expiryHours = null;
         if (inputMode === 'duration') {
           var dvEl = box.querySelector('.execute-output-expiry-duration-value');
@@ -1431,13 +1420,22 @@
           expiryValidationErrors.push('Output "' + outName + '": expiry date and time must be in the future.');
           return;
         }
-        if (expiryHours != null && warnHours != null && warnHours > expiryHours) {
-          expiryValidationErrors.push('Output "' + outName + '": warn period must not be longer than the expiry period. Set warning to the same or less.');
+        if (typeof expiryValidator.validateWarnNotLongerThanExpiry === 'function') {
+          var res = expiryValidator.validateWarnNotLongerThanExpiry({
+            outputName: outName,
+            warnValue: isNaN(warnVal) ? null : warnVal,
+            warnUnit: warnUnit,
+            expiryHours: expiryHours,
+            expiryLabel: (inputMode === 'datetime') ? 'the time remaining until expiry' : 'the expiry period',
+          });
+          if (res && res.valid === false) expiryValidationErrors.push(res.message || ('Output "' + outName + '": invalid warn-before-expiry setting.'));
         }
       });
       if (expiryValidationErrors.length > 0) {
-        // Hint only — backend remains authoritative validator
-        showNotification('warning', 'Expiry settings warning', expiryValidationErrors[0]);
+        showNotification('error', 'Invalid expiry settings', expiryValidationErrors[0]);
+        var firstBox = modal.querySelector('.execute-output-expiry-input');
+        if (firstBox) firstBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
       }
 
       // First, collect variable outputs (user-entered quantities). Always include each variable output
