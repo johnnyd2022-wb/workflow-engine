@@ -151,10 +151,39 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
     step_ids = list({i.source_execution_step_id for i in untracked_orm if i.source_execution_step_id})
     step_meta_by_id = _batch_fetch_step_metadata(session, org_id, step_ids)
 
+    # Fallback: for items with source_execution_id but no process_id from step (e.g. step deleted), get process from execution
+    execution_ids_fallback = set()
+    for i in untracked_orm:
+        if not i.source_execution_id:
+            continue
+        meta = step_meta_by_id.get(i.source_execution_step_id) if i.source_execution_step_id else None
+        if not meta or not meta.get("process_id"):
+            execution_ids_fallback.add(i.source_execution_id)
+    execution_fallback: dict[str, dict[str, Any]] = {}
+    if execution_ids_fallback:
+        try:
+            executions = (
+                session.query(Execution)
+                .filter(Execution.id.in_(execution_ids_fallback), Execution.org_id == org_id)
+                .options(joinedload(Execution.process))
+                .all()
+            )
+            for e in executions:
+                execution_fallback[str(e.id)] = {
+                    "process_id": str(e.process_id) if e.process_id else None,
+                    "process_name": e.process.name if e.process else None,
+                }
+        except Exception as e:
+            _log.debug("Execution fallback for untracked process_id failed: %s", e)
+
     # Resolve producing step (step that defines the output) per item for reconcile guidance
-    process_ids = list(
-        {step_meta.get("process_id") for step_meta in step_meta_by_id.values() if step_meta.get("process_id")}
-    )
+    process_ids_set = {
+        step_meta.get("process_id") for step_meta in step_meta_by_id.values() if step_meta.get("process_id")
+    }
+    for meta in execution_fallback.values():
+        if meta.get("process_id"):
+            process_ids_set.add(meta["process_id"])
+    process_ids = list(process_ids_set)
     process_repo = ProcessRepository(session)
     processes_by_id: dict[str, Any] = {}
     for pid in process_ids:
@@ -198,6 +227,11 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
         }
         base["process_id"] = step_meta.get("process_id")
         base["process_name"] = step_meta.get("process_name")
+        if not base["process_id"] and item.source_execution_id:
+            fallback = execution_fallback.get(str(item.source_execution_id)) or {}
+            base["process_id"] = fallback.get("process_id")
+            if not base["process_name"] and fallback.get("process_name"):
+                base["process_name"] = fallback.get("process_name")
         base["step_name"] = step_meta.get("step_name")
         base["source_step_completed_by"] = step_meta["source_step_completed_by"]
         base["source_step_execution_prompts"] = step_meta["source_step_execution_prompts"]

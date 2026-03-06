@@ -218,16 +218,13 @@
                 return '<div style="padding: 4px 8px; background: var(--bg-secondary, #f9fafb); border-radius: 4px;"><span style="color: var(--text-secondary); font-size: 11px;">' + escapeHtml(e[0]) + '</span><br><span style="font-size: 12px;">' + escapeHtml(String(e[1])) + '</span></div>';
               }).join('') + '</div></div>';
           }
-          var processId = u.process_id || '';
-          var processName = u.process_name || '';
+          var processId = (u.process_id != null && String(u.process_id).trim() !== '') ? String(u.process_id) : '';
+          var processName = (u.process_name != null) ? String(u.process_name) : '';
           var stepName = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : (u.step_name || '');
-          var reconcileAttrs = '';
-          if (processId) {
-            reconcileAttrs = ' data-reconcile-process-id="' + escapeHtml(processId) + '" data-reconcile-process-name="' + escapeHtml(processName) + '" data-reconcile-step-name="' + escapeHtml(stepName) + '"';
-          }
-          var reconcileLink = processId
-            ? '<a href="#" class="system-findings-untracked-item__reconcile-link"' + reconcileAttrs + ' style="flex-shrink: 0; font-size: 12px; color: var(--link-color, #2563eb); text-decoration: none;">Click here to reconcile untracked item</a>'
-            : '';
+          var reconcileAttrs = ' data-reconcile-process-id="' + escapeHtml(processId) + '" data-reconcile-process-name="' + escapeHtml(processName) + '" data-reconcile-step-name="' + escapeHtml(stepName) + '"';
+          var reconcileLabel = processId ? 'Click here to reconcile untracked item' : 'Open Source Map to reconcile';
+          var reconcileHref = processId ? '#' : '/core/sourcemap?show=check-needed';
+          var reconcileLink = '<a href="' + reconcileHref + '" class="system-findings-untracked-item__reconcile-link"' + reconcileAttrs + ' style="flex-shrink: 0; font-size: 12px; color: var(--link-color, #2563eb); text-decoration: none;">' + escapeHtml(reconcileLabel) + '</a>';
           parts.push(
             '<div class="system-findings-untracked-item" style="margin-bottom: 8px; border: 1px solid var(--border-default); border-radius: 6px; overflow: hidden;">' +
               '<div style="display: flex; align-items: center; padding: 10px 12px; background: var(--bg-secondary, #f9fafb); gap: 8px;">' +
@@ -296,12 +293,15 @@
   function onReconcileLinkClick(ev) {
     var link = ev.target && ev.target.closest && ev.target.closest('.system-findings-untracked-item__reconcile-link');
     if (!link) return;
-    ev.preventDefault();
-    ev.stopPropagation();
     var processId = link.getAttribute('data-reconcile-process-id');
     var processName = link.getAttribute('data-reconcile-process-name') || '';
     var stepName = link.getAttribute('data-reconcile-step-name') || '';
-    if (processId) openReconcileModal(processId, processName, stepName);
+    if (processId) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      openReconcileModal(processId, processName, stepName);
+    }
+    /* when no processId, link href is Source Map URL – allow default navigation */
   }
 
   function onReconcileModalGo(ev) {
