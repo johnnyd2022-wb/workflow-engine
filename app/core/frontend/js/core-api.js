@@ -144,6 +144,11 @@ const CoreAPI = {
         return this.request('/inventory/untracked-items');
     },
 
+    /** Get output ready date findings (outputs not yet usable). */
+    async getOutputReadyDate() {
+        return this.request('/inventory/output-ready-date');
+    },
+
     /** Get untracked items matching name and unit (for Add to Inventory and execution modal reconciliation).
      * When executionId is provided, includes items with qty 0 that were consumed in that execution. */
     async getMatchingUntracked(name, unit, processId = null, executionId = null) {
@@ -355,6 +360,11 @@ if (typeof window !== 'undefined') {
         EXECUTION: 'set_at_execution',
         NONE: 'none'
     };
+    window.READY_DATE_MODES = window.READY_DATE_MODES || {
+        FIXED: 'fixed_duration',
+        EXECUTION: 'set_at_execution',
+        NONE: 'none'
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -441,6 +451,78 @@ if (typeof window !== 'undefined') {
             formatDurationLabel: formatDurationLabel,
             validateWarnNotLongerThanExpiry: validateWarnNotLongerThanExpiry,
             validateFixedExpiryWarning: validateFixedExpiryWarning,
+        };
+    })();
+
+    // Ready date validation (days, weeks, months, years) — warn period must not exceed ready period
+    window.ReadyDateValidation = window.ReadyDateValidation || (function () {
+        function durationToHours(value, unit) {
+            if (value == null || value === '' || isNaN(Number(value)) || Number(value) < 0) return null;
+            var v = Number(value);
+            switch ((unit || 'days').toLowerCase()) {
+                case 'days': return v * 24;
+                case 'weeks': return v * 24 * 7;
+                case 'months': return v * 24 * 30;
+                case 'years': return v * 24 * 365;
+                default: return v * 24;
+            }
+        }
+
+        function formatDurationLabel(value, unit) {
+            var v = (value == null) ? '' : String(value);
+            var u = (unit || 'days');
+            return (v + ' ' + u).trim();
+        }
+
+        function validateWarnNotLongerThanReadyPeriod(opts) {
+            opts = opts || {};
+            var warnValue = opts.warnValue;
+            var warnUnit = opts.warnUnit || 'days';
+            var readyHours = opts.readyHours;
+            var readyLabel = opts.readyLabel || 'the ready period';
+            var warnHours = durationToHours(warnValue, warnUnit);
+            if (warnHours == null || readyHours == null) return { valid: true };
+            if (warnHours > readyHours) {
+                var warnLabel = formatDurationLabel(warnValue, warnUnit);
+                return {
+                    valid: false,
+                    message: 'The warn-before-ready period (' + warnLabel + ') cannot be longer than ' + readyLabel + '. Please set the warning to the same duration or less.',
+                };
+            }
+            return { valid: true };
+        }
+
+        function validateFixedReadyDateWarning(outputs) {
+            for (var i = 0; i < (outputs || []).length; i++) {
+                var out = outputs[i] || {};
+                var rd = (out.extra_data || {}).ready_date;
+                if (!rd || rd.mode !== 'fixed_duration') continue;
+                var readyVal = rd.duration_value;
+                var readyUnit = rd.duration_unit || 'days';
+                var warnVal = rd.warning_value;
+                var warnUnit = rd.warning_unit || 'days';
+                var readyHours = durationToHours(readyVal, readyUnit);
+                if (readyHours != null && readyHours <= 0) continue;
+                var outName = out.name || 'this output';
+                var readyLabel = 'the ready period (' + formatDurationLabel(readyVal, readyUnit) + ')';
+                var r = validateWarnNotLongerThanReadyPeriod({
+                    warnValue: warnVal,
+                    warnUnit: warnUnit,
+                    readyHours: readyHours,
+                    readyLabel: readyLabel,
+                });
+                if (!r.valid) {
+                    return { valid: false, outputName: outName, message: r.message };
+                }
+            }
+            return { valid: true };
+        }
+
+        return {
+            durationToHours: durationToHours,
+            formatDurationLabel: formatDurationLabel,
+            validateWarnNotLongerThanReadyPeriod: validateWarnNotLongerThanReadyPeriod,
+            validateFixedReadyDateWarning: validateFixedReadyDateWarning,
         };
     })();
 
@@ -547,6 +629,39 @@ if (typeof window !== 'undefined') {
         if (!ce || !ce.enabled || ce.mode !== 'set_at_execution' || typeof window.collectExecutionOutputExpiryPayload !== 'function') return;
         var payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
         if (payload) outPayload.custom_expiry_input = payload;
+    };
+
+    // Ready date at execution: single date-of-availability picker (used when step output ready_date.mode === 'set_at_execution')
+    window.renderExecutionReadyDateUI = function(output, escapeHtml) {
+        if (!output || typeof escapeHtml !== 'function') return '';
+        var outputId = window.getExecutionOutputId(output);
+        var enc = function(s) { return escapeHtml(s == null ? '' : String(s)); };
+        return '<div class="execute-output-ready-date-input" data-output-id="' + enc(outputId) + '" style="margin-bottom: 12px; padding: 12px 16px; background: hsl(220, 92%, 95%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md);">' +
+            '<div style="font-weight: 700; color: #1e40af; font-size: 13px; margin-bottom: 8px;">Set date of availability for this output</div>' +
+            '<label style="display:block; font-size: 12px; color: #1e40af; margin-bottom: 4px;">Date when this output can be used</label>' +
+            '<input type="date" class="execute-output-ready-date-date" data-output-id="' + enc(outputId) + '" style="width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+            '<p style="margin: 6px 0 0 0; font-size: 12px; color: #1e40af; opacity: 0.9;">Required — output cannot be consumed before this date.</p>' +
+            '</div>';
+    };
+
+    window.collectExecutionOutputReadyDatePayload = function(modal, outputId) {
+        if (!modal || !outputId) return null;
+        var id = String(outputId).trim();
+        var matchById = function(el) { return (el.dataset.outputId || '').trim() === id; };
+        var dateEl = Array.from(modal.querySelectorAll('.execute-output-ready-date-date')).find(matchById);
+        var raw = dateEl ? (dateEl.value || '').trim() : '';
+        if (!raw) return null;
+        var d = new Date(raw + 'T00:00:00Z');
+        if (isNaN(d.getTime())) return null;
+        return { date: d.toISOString() };
+    };
+
+    window.applyExecutionOutputReadyDateToPayload = function(modal, outputId, outputDef, outPayload) {
+        if (!modal || !outputId || !outputDef || !outPayload) return;
+        var rd = outputDef.extra_data && outputDef.extra_data.ready_date;
+        if (!rd || !rd.enabled || rd.mode !== 'set_at_execution' || typeof window.collectExecutionOutputReadyDatePayload !== 'function') return;
+        var payload = window.collectExecutionOutputReadyDatePayload(modal, outputId);
+        if (payload) outPayload.ready_date_input = payload;
     };
 }
 

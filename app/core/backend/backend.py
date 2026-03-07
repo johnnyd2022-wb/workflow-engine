@@ -1003,6 +1003,35 @@ def complete_step(execution_id: str, execution_step_id: str):
                                     f"Output '{output_name}' has invalid expiry selection. Choose duration or date/time."
                                 )
 
+                # Ready date: if configured as set_at_execution, require and persist operator-set date
+                rd_cfg = None
+                for od in step_outputs_def or []:
+                    if isinstance(od, dict) and (od.get("name") or "").strip() == output_name:
+                        candidate = (od.get("extra_data") or {}).get("ready_date")
+                        if candidate and candidate.get("enabled") and (candidate.get("mode") or "").strip() == "set_at_execution":
+                            rd_cfg = candidate
+                            break
+                if rd_cfg:
+                    rd_in = output.get("ready_date_input")
+                    if not isinstance(rd_in, dict) or not rd_in.get("date"):
+                        execution_errors.append(
+                            f"Output '{output_name}' requires a date of availability to be set during execution."
+                        )
+                    else:
+                        raw = rd_in.get("date")
+                        ready_iso = None
+                        if isinstance(raw, str) and raw.strip():
+                            try:
+                                ready_iso = datetime.fromisoformat(raw.strip().replace("Z", "+00:00")).isoformat()
+                            except Exception:
+                                ready_iso = None
+                        if not ready_iso:
+                            execution_errors.append(
+                                f"Output '{output_name}' has invalid ready date. Choose a valid date."
+                            )
+                        else:
+                            extra_data["ready_date_actual"] = {"date": ready_iso}
+
                 # Optional: map this output to an untracked item (reconcile at completion)
                 untracked_item_id_raw = output.get("untracked_item_id")
                 untracked_item_id_uuid = None

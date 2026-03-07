@@ -170,13 +170,20 @@
       });
     }
     const allInventory = inventoryData.inventory_items || [];
+    modal._inventoryForSubmit = allInventory;
     const expiredRaw = (expiredData && expiredData.expired_raw_materials) ? expiredData.expired_raw_materials : [];
     const impactedItems = (expiredData && expiredData.impacted_items) ? expiredData.impacted_items : [];
     const untrackedItems = (untrackedData && untrackedData.untracked_items) ? untrackedData.untracked_items : [];
     const expiredIds = new Set(expiredRaw.map(function(m) { return String(m.id); }));
     const impactedIds = new Set(impactedItems.map(function(i) { return String(i.id); }));
     const untrackedIds = new Set(untrackedItems.map(function(i) { return String(i.id); }));
+    const readyDateReasons = {};
+    allInventory.forEach(function(inv) {
+      var finding = (inv.system_findings || []).find(function(f) { return f && f.check_id === 'output_ready_date'; });
+      if (finding) readyDateReasons[String(inv.id)] = finding.reason || 'Output not yet ready';
+    });
     function getExpiredReason(id) {
+      if (readyDateReasons[String(id)]) return readyDateReasons[String(id)];
       if (expiredIds.has(String(id))) return 'Expired';
       var imp = impactedItems.find(function(i) { return String(i.id) === String(id); });
       if (imp && imp.expired_raw_material_name) return 'Made with expired: ' + imp.expired_raw_material_name;
@@ -820,8 +827,10 @@
         var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
         var hasMatch = matchingUntracked.length > 0;
         var ce = (output.extra_data || {}).custom_expiry;
+        var rd = (output.extra_data || {}).ready_date;
         var customExpiryHtml = '';
         var expiryInputHtml = '';
+        var readyDateHtml = '';
         if (ce && ce.enabled) {
           var mode = (ce.mode || '').trim();
           if (mode !== 'fixed_duration' && mode !== 'set_at_execution') mode = '';
@@ -836,8 +845,28 @@
               : '';
           }
         }
+        if (rd && rd.enabled) {
+          var rdMode = (rd.mode || '').trim();
+          if (rdMode === 'fixed_duration' && rd.duration_value != null && rd.duration_unit) {
+            var v = rd.duration_value;
+            var u = rd.duration_unit;
+            var msg = 'Output cannot be consumed for ' + String(v) + ' ' + String(u) + ' after step completion.';
+            readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Ready Date rule applies:</strong> ' + escapeHtml(msg) + '</div>';
+          } else if (rdMode === 'set_at_execution') {
+            readyDateHtml = (typeof window.renderExecutionReadyDateUI === 'function')
+              ? window.renderExecutionReadyDateUI(output, escapeHtml)
+              : '';
+          } else if (rd.date) {
+            var readyDate = new Date(rd.date);
+            if (!isNaN(readyDate.getTime()) && readyDate > new Date()) {
+              var rdMsg = (rd.prompt && rd.prompt.trim()) ? escapeHtml(rd.prompt.trim()) : ('This output cannot be used until ' + readyDate.toLocaleDateString(undefined, { dateStyle: 'long' }) + '.');
+              readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Ready Date rule applies:</strong> ' + rdMsg + '</div>';
+            }
+          }
+        }
         outputSection.innerHTML = `
           ${customExpiryHtml}
+          ${readyDateHtml}
           ${expiryInputHtml}
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
@@ -1286,7 +1315,27 @@
       }
       return;
     }
-    
+
+    var invList = modal._inventoryForSubmit || [];
+    var notReadyUsed = [];
+    inventorySelects.forEach(function(select) {
+      var invId = select.value;
+      if (!invId) return;
+      var item = invList.find(function(i) { return String(i.id) === String(invId); });
+      if (!item || !Array.isArray(item.system_findings)) return;
+      var finding = item.system_findings.find(function(f) { return f && f.check_id === 'output_ready_date'; });
+      if (finding) {
+        var inputName = select.dataset.inputName || 'Input';
+        notReadyUsed.push({ inputName: inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Output not yet ready' });
+      }
+    });
+    if (notReadyUsed.length > 0) {
+      var message = 'The following product(s) are not yet ready for use:\n\n' +
+        notReadyUsed.map(function(u) { return '• ' + u.inputName + ': ' + u.itemName + '\n  ' + u.reason; }).join('\n\n') +
+        '\n\nAre you sure you want to use them?';
+      if (!confirm(message)) return;
+    }
+
     try {
       // Collect variable inputs (inventory selections)
       const actualInputs = [];
@@ -1404,6 +1453,28 @@
         return;
       }
 
+      // Validate set_at_execution ready date: date of availability must be set
+      var readyDateValidationErrors = [];
+      (allStepOutputs || []).forEach(function(outputDef) {
+        var rd = (outputDef.extra_data || {}).ready_date;
+        if (!rd || !rd.enabled || (rd.mode || '') !== 'set_at_execution') return;
+        var outName = (outputDef.name || '').trim();
+        var getOutputId = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
+        var outputId = getOutputId(outputDef);
+        var payload = (typeof window.collectExecutionOutputReadyDatePayload === 'function')
+          ? window.collectExecutionOutputReadyDatePayload(modal, outputId)
+          : null;
+        if (!payload || !payload.date) {
+          readyDateValidationErrors.push('Output "' + outName + '": set the date when this output can be used.');
+        }
+      });
+      if (readyDateValidationErrors.length > 0) {
+        showNotification('error', 'Ready date required', readyDateValidationErrors[0]);
+        var firstReadyBox = modal.querySelector('.execute-output-ready-date-input');
+        if (firstReadyBox) firstReadyBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
       // First, collect variable outputs (user-entered quantities). Always include each variable output
       // so reconciliation selection (untracked_item_id) is never dropped when quantity is empty.
       const outputInputs = modal.querySelectorAll('.execute-output-quantity-input');
@@ -1433,6 +1504,9 @@
         // If expiry is set during execution, capture operator selection for backend persistence (logic in core-api.js)
         if (typeof window.applyExecutionOutputExpiryToPayload === 'function') {
           window.applyExecutionOutputExpiryToPayload(modal, outputId, outputDef, outPayload);
+        }
+        if (typeof window.applyExecutionOutputReadyDateToPayload === 'function') {
+          window.applyExecutionOutputReadyDateToPayload(modal, outputId, outputDef, outPayload);
         }
         actualOutputs.push(outPayload);
         variableOutputNames.add(name);

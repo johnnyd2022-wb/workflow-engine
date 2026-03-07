@@ -192,6 +192,31 @@
             '</div>');
         });
       }
+    } else if (checkId === 'output_ready_date') {
+      var items = data.output_ready_date_items;
+      if (Array.isArray(items) && items.length > 0) {
+        var seenIds = new Set();
+        items = items.filter(function (x) {
+          var id = x && (x.inventory_item_id || x.id);
+          if (!id || seenIds.has(id)) return false;
+          seenIds.add(id);
+          return true;
+        });
+        parts.push('<p class="system-findings-item__detail-section"><strong>Output ready date (not yet usable or nearing ready):</strong></p>');
+        items.forEach(function (x) {
+          var name = escapeHtml(x && x.item_name ? x.item_name : x.inventory_item_id || '—');
+          var processStep = [x.process_name, x.step_name].filter(Boolean).join(' · ');
+          var readyDate = x.ready_date;
+          readyDate = readyDate ? escapeHtml(String(readyDate)) : '';
+          var severityLabel = (x.severity === 'amber') ? 'Nearing ready' : 'Not yet ready';
+          var severityColor = (x.severity === 'amber') ? 'var(--warning, #f59e0b)' : 'var(--error, #ef4444)';
+          parts.push('<div class="system-findings-output-ready-date-item" style="margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--border-default); border-radius: 6px; font-size: 13px;">' +
+            '<p style="margin: 0 0 4px 0; font-weight: 600;">' + name + '</p>' +
+            (processStep ? '<p style="margin: 0 0 4px 0; color: var(--text-secondary); font-size: 12px;">' + escapeHtml(processStep) + '</p>' : '') +
+            '<p style="margin: 0; font-size: 12px;"><span style="color: ' + severityColor + ';">' + escapeHtml(severityLabel) + '</span>' + (readyDate ? ' — Ready: ' + readyDate : '') + '</p>' +
+            '</div>');
+        });
+      }
     } else if (checkId === 'untracked_items') {
       var untracked = data.untracked_items;
       if (Array.isArray(untracked) && untracked.length > 0) {
