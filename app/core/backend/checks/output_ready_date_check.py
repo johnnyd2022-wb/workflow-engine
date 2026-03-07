@@ -164,10 +164,7 @@ def is_inventory_item_ready_for_consumption(
     if not step_id:
         return (True, None)
     execution_step = (
-        session.query(ExecutionStep)
-        .filter(ExecutionStep.id == step_id)
-        .options(joinedload(ExecutionStep.step))
-        .first()
+        session.query(ExecutionStep).filter(ExecutionStep.id == step_id).options(joinedload(ExecutionStep.step)).first()
     )
     if not execution_step or not execution_step.step or not execution_step.completed_at:
         return (True, None)
@@ -252,11 +249,7 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
             .join(Step, ExecutionStep.step_id == Step.id)
             .filter(Execution.org_id == org_id)
             .filter(ExecutionStep.completed_at.isnot(None))
-            .filter(
-                text(
-                    "jsonb_path_exists(steps.outputs, :path)"
-                ).bindparams(path=_READY_DATE_JSONB_PATH)
-            )
+            .filter(text("jsonb_path_exists(steps.outputs, :path)").bindparams(path=_READY_DATE_JSONB_PATH))
             .all()
         )
     ]
