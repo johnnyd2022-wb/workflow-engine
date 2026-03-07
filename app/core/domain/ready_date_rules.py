@@ -25,9 +25,15 @@ from datetime import timedelta
 VALID_READY_DATE_UNITS = {"days", "weeks", "months", "years"}
 
 # Readiness state labels for UI and checks (single source of truth for copy).
+# Derive all UI text from these to avoid drift.
 READINESS_STATE_NOT_READY = "Not ready"
 READINESS_STATE_NEAR_READY = "Nearing ready"
 READINESS_STATE_READY = "Ready"
+READINESS_STATES = (
+    READINESS_STATE_NOT_READY,
+    READINESS_STATE_NEAR_READY,
+    READINESS_STATE_READY,
+)
 
 
 def duration_to_timedelta(value: int | float, unit: str) -> timedelta:

@@ -14,12 +14,14 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.backend.corechecks import CheckResult
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.step import Step
 from app.core.domain.ready_date_rules import (
     READINESS_STATE_NEAR_READY,
     READINESS_STATE_NOT_READY,
@@ -36,6 +38,9 @@ SEVERITY_NEAR_READY = "amber"
 DEFAULT_WARNING_VALUE = 1
 DEFAULT_WARNING_UNIT = "days"
 MAX_READY_DATE_ITEMS = 500
+
+# JSONPath to detect step.outputs[] with extra_data.ready_date.enabled == true (DB-level filter).
+_READY_DATE_JSONB_PATH = "$[*].extra_data.ready_date ? (@.enabled == true)"
 
 
 def _as_int(val: Any, default: int | None = None) -> int | None:
@@ -132,6 +137,67 @@ def _step_has_ready_date_output(step: Any) -> bool:
     return False
 
 
+def is_inventory_item_ready_for_consumption(
+    session: Session, item: InventoryItem, now: datetime | None = None
+) -> tuple[bool, str | None]:
+    """
+    Execution consumption guard: return (True, None) if the item can be consumed (no ready date or ready_dt <= now),
+    else (False, error_message). Used by complete_step to block consuming not-ready inventory when API is called directly.
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    extra = (item.extra_data or {}) if isinstance(item.extra_data, dict) else {}
+    # Set-at-execution: ready date stored on item
+    actual = extra.get("ready_date_actual")
+    if isinstance(actual, dict) and actual.get("date"):
+        ready_dt = _normalize_dt(actual.get("date"))
+        if ready_dt and now < ready_dt:
+            return (
+                False,
+                f"Item '{item.name or 'Unknown'}' is not ready for use until {ready_dt.date().isoformat()}. "
+                "Complete the step from the UI and confirm if you intend to use it anyway.",
+            )
+        return (True, None)
+
+    # Fixed duration: need source execution step and step definition to compute ready_dt
+    step_id = getattr(item, "source_execution_step_id", None)
+    if not step_id:
+        return (True, None)
+    execution_step = (
+        session.query(ExecutionStep)
+        .filter(ExecutionStep.id == step_id)
+        .options(joinedload(ExecutionStep.step))
+        .first()
+    )
+    if not execution_step or not execution_step.step or not execution_step.completed_at:
+        return (True, None)
+    step_outputs = getattr(execution_step.step, "outputs", None) or []
+    completed_dt = _normalize_dt(execution_step.completed_at)
+    if not completed_dt:
+        return (True, None)
+    item_name_norm = _normalize(item.name or "")
+    item_unit = (item.unit or "").strip()
+    for out_def in step_outputs:
+        if not isinstance(out_def, dict):
+            continue
+        if _normalize(out_def.get("name") or "") != item_name_norm:
+            continue
+        if (out_def.get("unit") or "").strip() != item_unit:
+            continue
+        config = _get_ready_date_config(out_def)
+        if not config:
+            return (True, None)
+        ready_dt, _ = _compute_ready_and_warn(config, completed_dt, item)
+        if ready_dt and now < ready_dt:
+            return (
+                False,
+                f"Item '{item.name or 'Unknown'}' is not ready for use until {ready_dt.date().isoformat()}. "
+                "Complete the step from the UI and confirm if you intend to use it anyway.",
+            )
+        return (True, None)
+    return (True, None)
+
+
 def _compute_ready_and_warn(
     config: dict, completed_dt: datetime, item: InventoryItem
 ) -> tuple[datetime | None, datetime | None]:
@@ -168,29 +234,31 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
     Find inventory items produced by steps with ready_date config that are
     not yet usable (red) or within the warn-before-ready window (amber).
 
-    Performance: only loads inventory for execution steps that have at least one
-    output with ready_date enabled (database-level filter on source_execution_step_id),
-    avoiding O(all_org_inventory) when most steps do not use ready date.
+    Performance: uses a DB-side JSONB filter to get execution_step IDs that have
+    ready_date enabled (jsonb_path_exists on steps.outputs), then loads only those
+    execution_steps and their inventory. Avoids loading all org execution_steps
+    and all org inventory when most steps do not use ready date (scales for large orgs).
     """
-    execution_steps = (
-        session.query(ExecutionStep)
-        .join(Execution, ExecutionStep.execution_id == Execution.id)
-        .filter(Execution.org_id == org_id)
-        .filter(ExecutionStep.completed_at.isnot(None))
-        .options(
-            joinedload(ExecutionStep.step),
-            joinedload(ExecutionStep.execution).joinedload(Execution.process),
-        )
-        .all()
-    )
-
+    now = datetime.now(timezone.utc)
     ready_date_items: list[dict[str, Any]] = []
     seen_item_ids: set[UUID] = set()
-    now = datetime.now(timezone.utc)
 
-    # Restrict to steps that have at least one output with ready_date config (reduces inventory query size).
+    # 1) DB-level filter: only execution_step IDs whose step has ready_date in outputs (no Python scan).
     step_ids_with_ready_date = [
-        es.id for es in execution_steps if es.id and es.step and _step_has_ready_date_output(es.step)
+        row[0]
+        for row in (
+            session.query(ExecutionStep.id)
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .join(Step, ExecutionStep.step_id == Step.id)
+            .filter(Execution.org_id == org_id)
+            .filter(ExecutionStep.completed_at.isnot(None))
+            .filter(
+                text(
+                    "jsonb_path_exists(steps.outputs, :path)"
+                ).bindparams(path=_READY_DATE_JSONB_PATH)
+            )
+            .all()
+        )
     ]
     if not step_ids_with_ready_date:
         _log.debug(
@@ -205,6 +273,18 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
             data={"output_ready_date_items": []},
         )
 
+    # 2) Load only those execution_steps (with step + execution.process for config and names).
+    execution_steps = (
+        session.query(ExecutionStep)
+        .filter(ExecutionStep.id.in_(step_ids_with_ready_date))
+        .options(
+            joinedload(ExecutionStep.step),
+            joinedload(ExecutionStep.execution).joinedload(Execution.process),
+        )
+        .all()
+    )
+
+    # 3) Load only inventory items produced by those steps (not all org inventory).
     inventory_items = (
         session.query(InventoryItem)
         .filter(InventoryItem.org_id == org_id)
@@ -303,7 +383,11 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
                         "item_name": item.name,
                         "unit": item.unit,
                         "ready_date": ready_dt.isoformat(),
-                        "metadata": {"rule_type": config.get("rule_type", RULE_TYPE_READY_DATE)},
+                        "metadata": {
+                            "rule_type": config.get("rule_type", RULE_TYPE_READY_DATE),
+                            "evaluated_at": now.isoformat(),
+                            "rule_version": "1.0",
+                        },
                     }
                 )
         if len(ready_date_items) >= MAX_READY_DATE_ITEMS:

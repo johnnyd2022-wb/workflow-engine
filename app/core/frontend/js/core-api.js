@@ -579,9 +579,9 @@ if (typeof window !== 'undefined') {
         // Execution modal: when both are dates (ISO strings), require ready <= expiry
         function validateExpiryAfterReadyDates(outputName, readyDateIso, expiryDateIso) {
             if (!readyDateIso || !expiryDateIso) return { valid: true };
-            var readyMs = new Date(readyDateIso.replace('Z', '+00:00')).getTime();
-            var expiryMs = new Date(expiryDateIso.replace('Z', '+00:00')).getTime();
-            if (isNaN(readyMs) || isNaN(expiryMs)) return { valid: true };
+            var readyMs = window.parseISODate && window.parseISODate(readyDateIso);
+            var expiryMs = window.parseISODate && window.parseISODate(expiryDateIso);
+            if (readyMs == null || expiryMs == null) return { valid: true };
             if (readyMs > expiryMs) {
                 return {
                     valid: false,
@@ -595,6 +595,22 @@ if (typeof window !== 'undefined') {
             validateExpiryAfterReadyDates: validateExpiryAfterReadyDates,
         };
     })();
+
+    /**
+     * Parse an ISO date/datetime string (backend or input). Prefer over string concat to avoid breakage if format changes.
+     * @param {string} isoString - ISO 8601 or date-only (e.g. YYYY-MM-DD)
+     * @returns {number|null} Timestamp in ms, or null if invalid
+     */
+    window.parseISODate = function(isoString) {
+        if (isoString == null || typeof isoString !== 'string' || !isoString.trim()) return null;
+        var s = isoString.trim();
+        var t = Date.parse(s);
+        if (isNaN(t)) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) t = Date.parse(s + 'T00:00:00.000Z');
+            if (isNaN(t)) return null;
+        }
+        return t;
+    };
 
     window.getExecutionOutputId = function(output) {
         if (!output) return 'out-unknown';
@@ -646,7 +662,7 @@ if (typeof window !== 'undefined') {
             '</select>' +
             '</div>' +
             '<div class="execute-output-expiry-warning-hint" style="margin-top: 6px; font-size: 12px; color: #92400e; opacity: 0.9;">Shown as a warning when this amount of time remains until expiry. Must be the same or less than the expiry period.</div>' +
-            '<div class="execute-output-expiry-validation-error" style="display:none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626);" role="alert"></div>' +
+            '<div class="execute-output-expiry-validation-error" style="display:none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626);" role="alert" aria-live="polite"></div>' +
             '</div>' +
             '</div>';
     };
@@ -721,9 +737,36 @@ if (typeof window !== 'undefined') {
         var dateEl = Array.from(modal.querySelectorAll('.execute-output-ready-date-date')).find(matchById);
         var raw = dateEl ? (dateEl.value || '').trim() : '';
         if (!raw) return null;
-        var d = new Date(raw + 'T00:00:00Z');
-        if (isNaN(d.getTime())) return null;
-        return { date: d.toISOString() };
+        var ts = window.parseISODate && window.parseISODate(raw);
+        if (ts == null) return null;
+        return { date: new Date(ts).toISOString() };
+    };
+
+    /**
+     * Centralized renderer for ready date status (single source for copy; avoids drift).
+     * @param {{ state: string, readyDate: string, outputName: string, severity: string, detail?: string, processStep?: string }} opts
+     * @param {function(string): string} escapeHtml
+     * @returns {string} HTML for one item
+     */
+    window.renderReadyDateStatus = function(opts, escapeHtml) {
+        if (!opts || typeof escapeHtml !== 'function') return '';
+        var state = (opts.state && opts.state.trim()) ? opts.state.trim() : 'Not ready';
+        var readyDate = opts.readyDate;
+        var readyFrom = readyDate
+            ? (function() {
+                var t = window.parseISODate && window.parseISODate(readyDate);
+                return t != null ? escapeHtml(new Date(t).toLocaleDateString(undefined, { dateStyle: 'medium' })) : escapeHtml(String(readyDate));
+            })()
+            : '—';
+        var outputName = escapeHtml(opts.outputName || '—');
+        var severityColor = (opts.severity === 'amber') ? 'var(--warning, #f59e0b)' : 'var(--error, #ef4444)';
+        var detail = (opts.detail && opts.detail.trim()) ? escapeHtml(opts.detail.trim()) : 'Output not yet ready.';
+        var processStep = (opts.processStep && opts.processStep.trim()) ? '<p style="margin: 0 0 4px 0; color: var(--text-secondary); font-size: 12px;">' + escapeHtml(opts.processStep) + '</p>' : '';
+        return '<p style="margin: 0 0 4px 0; font-weight: 600;">' + outputName + '</p>' +
+            processStep +
+            '<p style="margin: 4px 0 0 0; font-size: 12px;">&#x26A0;&#xFE0F; Ready from: ' + readyFrom + '</p>' +
+            '<p style="margin: 2px 0 0 0; font-size: 12px;"><span style="color: ' + severityColor + ';">Status: ' + escapeHtml(state) + '</span></p>' +
+            '<p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary);">Detail: ' + detail + '</p>';
     };
 
     window.applyExecutionOutputReadyDateToPayload = function(modal, outputId, outputDef, outPayload) {
@@ -749,11 +792,13 @@ if (typeof window !== 'undefined') {
             div.textContent = text;
             return div.innerHTML;
         }
+        var count = (notReadyUsed || []).length;
+        var summaryHtml = '<p class="ready-date-confirm-summary" style="margin: 0 0 12px 0; font-weight: 600; font-size: 14px;">' + count + ' output(s) are not yet ready for use.</p>';
         var listHtml = '<ul style="margin: 0; padding-left: 20px;">' +
             (notReadyUsed || []).map(function(u) {
                 return '<li style="margin-bottom: 6px;"><strong>' + escapeHtml(u.inputName) + ':</strong> ' + escapeHtml(u.itemName) + ' &mdash; <span style="color: var(--text-secondary);">' + escapeHtml(u.reason) + '</span></li>';
             }).join('') + '</ul>';
-        bodyEl.innerHTML = listHtml;
+        bodyEl.innerHTML = summaryHtml + listHtml;
         modal.style.display = 'flex';
         return new Promise(function(resolve) {
             var resolved = false;

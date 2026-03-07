@@ -23,6 +23,7 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
+from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates, assert_expiry_after_ready_duration
 from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
@@ -721,10 +722,11 @@ def complete_step(execution_id: str, execution_step_id: str):
     except ValueError:
         return jsonify({"error": "Invalid execution or step ID"}), 400
 
-    data = request.get_json()
+    data = request.get_json() or {}
     actual_inputs = data.get("actual_inputs", [])
     actual_outputs = data.get("actual_outputs", [])
     execution_data = data.get("execution_data", {})
+    confirm_not_ready_consumption = data.get("confirm_not_ready_consumption") is True
 
     # Get current user from Flask g and always store in execution_data for accuracy
     # TODO: execution_data is becoming a structured contract with known fields:
@@ -792,6 +794,15 @@ def complete_step(execution_id: str, execution_step_id: str):
                                 f"Inventory item {inventory_item_id} not found for input '{input_data.get('name', 'Unknown')}'"
                             )
                             continue
+
+                        # Execution consumption guard: block consuming not-ready inventory (ready date) unless UI confirmed
+                        if not confirm_not_ready_consumption:
+                            ready_ok, ready_err = is_inventory_item_ready_for_consumption(
+                                db_session, inventory_item
+                            )
+                            if not ready_ok and ready_err:
+                                execution_errors.append(ready_err)
+                                continue
 
                         # QUANTITY PRECISION: Use Decimal for safe arithmetic.
                         # TODO: Standardize all inventory quantity handling on Decimal; some paths still use float(quantity).

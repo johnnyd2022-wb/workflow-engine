@@ -2920,6 +2920,7 @@
     expiryWarningError.className = 'guided-output-expiry-warning-error';
     expiryWarningError.style.cssText = 'display: none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626); line-height: 1.4;';
     expiryWarningError.setAttribute('role', 'alert');
+    expiryWarningError.setAttribute('aria-live', 'polite');
     warningWrap.appendChild(expiryWarningError);
     const validator = window.CustomExpiryValidation;
     function syncExpiryWarningValidation() {
@@ -3081,6 +3082,7 @@
     readyDateWarnError.className = 'guided-output-ready-date-warning-error';
     readyDateWarnError.style.cssText = 'display: none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626); line-height: 1.4;';
     readyDateWarnError.setAttribute('role', 'alert');
+    readyDateWarnError.setAttribute('aria-live', 'polite');
     readyDateWarnWrap.appendChild(readyDateWarnError);
     const readyDateValidator = window.ReadyDateValidation;
     function syncReadyDateWarnValidation() {
@@ -3140,6 +3142,7 @@
     expiryReadyErrorEl.className = 'guided-output-expiry-ready-validation-error';
     expiryReadyErrorEl.style.cssText = 'display: none; margin-top: 12px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500; line-height: 1.4;';
     expiryReadyErrorEl.setAttribute('role', 'alert');
+    expiryReadyErrorEl.setAttribute('aria-live', 'polite');
     contentArea.appendChild(expiryReadyErrorEl);
 
     function syncExpiryReadyValidation() {

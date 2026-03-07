@@ -488,7 +488,7 @@
             }
           }
         }
-        const expiryReadyValidationErrorHtml = (expiryInputHtml && readyDateHtml) ? `<div class="execute-output-expiry-ready-validation-error" data-output-id="${escapeHtml(outputId)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>` : '';
+        const expiryReadyValidationErrorHtml = (expiryInputHtml && readyDateHtml) ? `<div class="execute-output-expiry-ready-validation-error" data-output-id="${escapeHtml(outputId)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert" aria-live="polite"></div>` : '';
         outputSection.innerHTML = `
           ${customExpiryHtml}
           ${readyDateHtml}
@@ -826,11 +826,13 @@
         notReadyUsed.push({ inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Not ready' });
       }
     });
+    let confirmNotReadyConsumption = false;
     if (notReadyUsed.length > 0) {
       const confirmed = typeof window.showReadyDateConfirmModal === 'function'
         ? await window.showReadyDateConfirmModal(notReadyUsed)
         : false;
       if (!confirmed) return;
+      confirmNotReadyConsumption = true;
     }
 
     try {
@@ -1053,11 +1055,12 @@
       executionData.completed_by_email = user.email;
       executionData.completed_at = new Date().toISOString();
       
-      // Complete the step
+      // Complete the step (send confirm_not_ready_consumption when user confirmed "Use anyway" for not-ready items)
       await CoreAPI.completeStep(executionId, executionStepId, {
         actual_inputs: actualInputs,
         actual_outputs: actualOutputs,
-        execution_data: executionData
+        execution_data: executionData,
+        confirm_not_ready_consumption: confirmNotReadyConsumption || undefined
       });
       
       // Close modal
