@@ -663,6 +663,48 @@ if (typeof window !== 'undefined') {
         var payload = window.collectExecutionOutputReadyDatePayload(modal, outputId);
         if (payload) outPayload.ready_date_input = payload;
     };
+
+    /**
+     * Show the styled "product not yet ready" confirmation modal (replaces browser confirm).
+     * @param {Array<{inputName: string, itemName: string, reason: string}>} notReadyUsed
+     * @returns {Promise<boolean>} Resolves to true if user clicks "Use anyway", false if Cancel or backdrop.
+     */
+    window.showReadyDateConfirmModal = function(notReadyUsed) {
+        var modal = document.getElementById('ready-date-confirm-modal');
+        var bodyEl = document.getElementById('ready-date-confirm-body');
+        if (!modal || !bodyEl) return Promise.resolve(false);
+        function escapeHtml(text) {
+            if (text == null) return '';
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        var listHtml = '<ul style="margin: 0; padding-left: 20px;">' +
+            (notReadyUsed || []).map(function(u) {
+                return '<li style="margin-bottom: 6px;"><strong>' + escapeHtml(u.inputName) + ':</strong> ' + escapeHtml(u.itemName) + ' &mdash; <span style="color: var(--text-secondary);">' + escapeHtml(u.reason) + '</span></li>';
+            }).join('') + '</ul>';
+        bodyEl.innerHTML = listHtml;
+        modal.style.display = 'flex';
+        return new Promise(function(resolve) {
+            var resolved = false;
+            function done(useAnyway) {
+                if (resolved) return;
+                resolved = true;
+                modal.style.display = 'none';
+                resolve(useAnyway);
+            }
+            var cancelBtn = document.getElementById('ready-date-confirm-cancel');
+            var useBtn = document.getElementById('ready-date-confirm-use');
+            function onCancel() { done(false); }
+            function onUse() { done(true); }
+            function onBackdrop(ev) {
+                if (ev.target === modal) onCancel();
+            }
+            if (cancelBtn) cancelBtn.addEventListener('click', onCancel, { once: true });
+            if (useBtn) useBtn.addEventListener('click', onUse, { once: true });
+            modal.addEventListener('click', onBackdrop, { once: true });
+        });
+    };
 }
 
 

@@ -1330,10 +1330,10 @@
       }
     });
     if (notReadyUsed.length > 0) {
-      var message = 'The following product(s) are not yet ready for use:\n\n' +
-        notReadyUsed.map(function(u) { return '• ' + u.inputName + ': ' + u.itemName + '\n  ' + u.reason; }).join('\n\n') +
-        '\n\nAre you sure you want to use them?';
-      if (!confirm(message)) return;
+      var confirmed = typeof window.showReadyDateConfirmModal === 'function'
+        ? await window.showReadyDateConfirmModal(notReadyUsed)
+        : false;
+      if (!confirmed) return;
     }
 
     try {

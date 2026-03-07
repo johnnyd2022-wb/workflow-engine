@@ -782,10 +782,10 @@
       }
     });
     if (notReadyUsed.length > 0) {
-      const message = 'The following product(s) are not yet ready for use:\n\n' +
-        notReadyUsed.map(u => `• ${u.inputName}: ${u.itemName}\n  ${u.reason}`).join('\n\n') +
-        '\n\nAre you sure you want to use them?';
-      if (!confirm(message)) return;
+      const confirmed = typeof window.showReadyDateConfirmModal === 'function'
+        ? await window.showReadyDateConfirmModal(notReadyUsed)
+        : false;
+      if (!confirmed) return;
     }
 
     try {
