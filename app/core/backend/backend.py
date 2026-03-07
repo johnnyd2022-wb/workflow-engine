@@ -1,7 +1,7 @@
 """Core backend API routes for process execution platform"""
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -24,6 +24,7 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
 from app.core.security.permissions import requires_auth
+from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.utils.config_loader import config
@@ -36,6 +37,25 @@ core_bp = Blueprint(
     static_folder="../frontend",
     static_url_path="/static",
 )
+
+VALID_EXPIRY_UNITS = {"hours", "days", "weeks", "months"}
+
+
+def _duration_to_timedelta(value: int | float, unit: str) -> timedelta:
+    """Convert duration value + unit to timedelta (months approximated as 30 days)."""
+    u = (unit or "days").strip().lower()
+    if u not in VALID_EXPIRY_UNITS:
+        u = "days"
+    v = int(value) if value is not None else 0
+    if u == "hours":
+        return timedelta(hours=v)
+    if u == "days":
+        return timedelta(days=v)
+    if u == "weeks":
+        return timedelta(weeks=v)
+    if u == "months":
+        return timedelta(days=v * 30)
+    return timedelta(days=v)
 
 
 @core_bp.route("/core", methods=["GET"])
@@ -700,6 +720,11 @@ def complete_step(execution_id: str, execution_step_id: str):
 
         # Refresh execution_step to ensure we have the latest data including execution_data
         db_session.refresh(execution_step)
+        # Capture step outputs for post-commit audit (avoid lazy load after commit)
+        step_outputs_for_audit = None
+        step_def = getattr(execution_step, "step", None)
+        if step_def is not None:
+            step_outputs_for_audit = list(step_def.outputs or []) if getattr(step_def, "outputs", None) else None
 
         # Initialize inventory repository once for reuse throughout this function
         inventory_repo = InventoryRepository(db_session)
@@ -883,6 +908,107 @@ def complete_step(execution_id: str, execution_step_id: str):
                     if matching_output:
                         extra_data["variable_output"] = matching_output
 
+                # Custom expiry: if configured to be set at execution, validate and persist operator selection
+                step_def = getattr(execution_step, "step", None)
+                step_outputs_def = step_def.outputs if step_def and getattr(step_def, "outputs", None) else []
+                ce_cfg = None
+                for od in step_outputs_def or []:
+                    if isinstance(od, dict) and (od.get("name") or "").strip() == output_name:
+                        candidate = (od.get("extra_data") or {}).get("custom_expiry")
+                        if candidate and candidate.get("enabled"):
+                            ce_cfg = candidate
+                            break
+                if ce_cfg and ce_cfg.get("enabled"):
+                    cfg_mode = (ce_cfg.get("mode") or "").strip()
+                    if cfg_mode not in {"fixed_duration", "set_at_execution"}:
+                        cfg_mode = ""
+                    # Reject execution-time expiry payload when step is configured as fixed_duration
+                    if cfg_mode == "fixed_duration" and output.get("custom_expiry_input"):
+                        execution_errors.append(
+                            f"Output '{output_name}' is configured for fixed expiry; custom expiry input is not allowed."
+                        )
+                    elif cfg_mode == "set_at_execution":
+                        ce_in = output.get("custom_expiry_input")
+                        if not isinstance(ce_in, dict) or not ce_in.get("mode"):
+                            execution_errors.append(
+                                f"Output '{output_name}' requires expiry to be set during execution."
+                            )
+                        else:
+                            in_mode = ce_in.get("mode")
+                            # Validate units (reject invalid instead of normalizing)
+                            du_raw = (ce_in.get("duration_unit") or "days").strip().lower()
+                            wu_raw = (ce_in.get("warning_unit") or ce_cfg.get("warning_unit") or "days").strip().lower()
+                            if du_raw not in VALID_EXPIRY_UNITS:
+                                execution_errors.append(f"Output '{output_name}': invalid expiry duration unit.")
+                            if wu_raw not in VALID_EXPIRY_UNITS:
+                                execution_errors.append(f"Output '{output_name}': invalid warning duration unit.")
+                            # Warning fallback from step config
+                            warn_val = ce_in.get("warning_value")
+                            if warn_val is None:
+                                warn_val = ce_cfg.get("warning_value") or ce_cfg.get("warning_days")
+                            if not warn_val and warn_val != 0:
+                                warn_val = 7
+                            try:
+                                warn_val_int = int(warn_val)
+                                if warn_val_int < 0:
+                                    execution_errors.append(
+                                        f"Output '{output_name}': warning duration must not be negative."
+                                    )
+                                    warn_val_int = 7
+                            except (TypeError, ValueError):
+                                warn_val_int = 7
+
+                            if in_mode == "duration":
+                                dv = ce_in.get("duration_value")
+                                try:
+                                    dv_int = int(dv) if dv is not None else 0
+                                except (TypeError, ValueError):
+                                    dv_int = 0
+                                if dv_int <= 0:
+                                    execution_errors.append(
+                                        f"Output '{output_name}': expiry duration must be positive."
+                                    )
+                                elif du_raw in VALID_EXPIRY_UNITS and wu_raw in VALID_EXPIRY_UNITS:
+                                    if dv_int is not None and warn_val_int is not None:
+                                        expiry_delta = _duration_to_timedelta(dv_int, du_raw)
+                                        warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
+                                        if warning_delta > expiry_delta:
+                                            execution_errors.append(
+                                                f"Output '{output_name}': warning period cannot exceed expiry period."
+                                            )
+                                        else:
+                                            extra_data["custom_expiry_actual"] = {
+                                                "mode": "duration",
+                                                "duration_value": dv_int,
+                                                "duration_unit": du_raw,
+                                                "warning_value": warn_val_int,
+                                                "warning_unit": wu_raw,
+                                            }
+                            elif in_mode == "datetime":
+                                raw = ce_in.get("expiry_at")
+                                expiry_iso = None
+                                if isinstance(raw, str) and raw.strip():
+                                    s = raw.strip()
+                                    try:
+                                        expiry_iso = datetime.fromisoformat(s.replace("Z", "+00:00")).isoformat()
+                                    except Exception:
+                                        expiry_iso = None
+                                if not expiry_iso:
+                                    execution_errors.append(
+                                        f"Output '{output_name}' has invalid expiry date/time. Choose a valid date/time."
+                                    )
+                                elif wu_raw in VALID_EXPIRY_UNITS:
+                                    extra_data["custom_expiry_actual"] = {
+                                        "mode": "datetime",
+                                        "expiry_at": expiry_iso,
+                                        "warning_value": warn_val_int,
+                                        "warning_unit": wu_raw,
+                                    }
+                            else:
+                                execution_errors.append(
+                                    f"Output '{output_name}' has invalid expiry selection. Choose duration or date/time."
+                                )
+
                 # Optional: map this output to an untracked item (reconcile at completion)
                 untracked_item_id_raw = output.get("untracked_item_id")
                 untracked_item_id_uuid = None
@@ -895,6 +1021,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                         )
 
                 # Store creation parameters for atomic commit
+                source_step_name = step_def.name if step_def else None
                 output_creations.append(
                     {
                         "org_id": org_id,
@@ -904,7 +1031,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                         "inventory_type": inventory_type,
                         "source_execution_id": execution_uuid,
                         "source_execution_step_id": execution_step_uuid,
-                        "source_step_name": execution_step.step.name if execution_step.step else None,
+                        "source_step_name": source_step_name,
                         "extra_data": extra_data if extra_data else None,
                         "untracked_item_id": untracked_item_id_uuid,
                         "quantity_decimal": quantity_decimal,
@@ -976,6 +1103,44 @@ def complete_step(execution_id: str, execution_step_id: str):
             db_session.rollback()
             return jsonify({"error": "Failed to update inventory", "details": str(e)}), 500
 
+        # Audit: when completed step has custom output expiry config (non-blocking)
+        try:
+            if step_outputs_for_audit:
+                for out in step_outputs_for_audit:
+                    if isinstance(out, dict):
+                        ce = (out.get("extra_data") or {}).get("custom_expiry")
+                        if ce and ce.get("enabled"):
+                            user_id = getattr(g, "user_id", None)
+                            log_action(
+                                "custom_output_expiry_used",
+                                "execution_step",
+                                execution_step.id,
+                                {
+                                    "execution_id": str(execution_step.execution_id),
+                                    "step_id": str(execution_step.step_id),
+                                    "mode": ce.get("mode"),
+                                    "duration_value": ce.get("duration_value"),
+                                    "duration_unit": ce.get("duration_unit"),
+                                    "warning_value": ce.get("warning_value"),
+                                    "warning_unit": ce.get("warning_unit"),
+                                    # Legacy fields (deprecated)
+                                    "expiry_days": ce.get("expiry_days"),
+                                    "rule_type": ce.get("rule_type", "custom_output_expiry"),
+                                },
+                                org_id,
+                                user_id,
+                            )
+                            break
+        except Exception as audit_err:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Audit log for custom_output_expiry_used failed: %s",
+                audit_err,
+                exc_info=True,
+                extra={"event": "custom_output_expiry_audit_failure"},
+            )
+
         response_data = {
             "id": str(execution_step.id),
             "status": execution_step.status.value,
@@ -986,15 +1151,14 @@ def complete_step(execution_id: str, execution_step_id: str):
         return (jsonify(response_data), 200)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception:
-        # Log the full error for debugging but return generic message to client
+    except Exception as e:
+        # Log the full error for debugging; return message and details for diagnosis
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.exception("Error creating process")
-        return jsonify({"error": "Failed to create process"}), 500
+        logger.exception("Error completing execution step")
+        err_detail = str(e) if e else "Unknown error"
+        return jsonify({"error": "Failed to complete step", "details": err_detail}), 500
 
 
 @core_bp.route("/api/core/inventory", methods=["GET"])

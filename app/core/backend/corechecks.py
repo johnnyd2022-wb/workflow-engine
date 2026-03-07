@@ -63,10 +63,12 @@ class CoreChecksRunner:
     def _register_builtin_checks(self) -> None:
         """Register built-in checks so they can be run by id."""
         from app.core.backend.checks.expired_materials import run_expired_materials_check
+        from app.core.backend.checks.output_expiry_check import run_output_expiry_check
         from app.core.backend.checks.untracked_items import run_untracked_items_check
 
         self.register_check("expired_materials", run_expired_materials_check)
         self.register_check("untracked_items", run_untracked_items_check)
+        self.register_check("output_expiry", run_output_expiry_check)
 
     def register_check(self, check_id: str, fn: CheckFn) -> None:
         """Register a check so it can be run via run_check(check_id)."""
@@ -131,6 +133,11 @@ def get_system_findings_by_item(org_id: UUID, session: Session) -> dict[str, lis
             for it in r.data.get("impacted_items") or []:
                 iid = it.get("id") if isinstance(it, dict) else None
                 add(str(iid) if iid else "", r.check_id, "Produced using expired raw material")
+        elif r.check_id == "output_expiry":
+            for it in r.data.get("output_expiry_items") or []:
+                iid = it.get("inventory_item_id") if isinstance(it, dict) else None
+                reason = it.get("message") if isinstance(it, dict) else "Custom output expiry"
+                add(str(iid) if iid else "", r.check_id, reason or "Custom output expiry")
 
     return out
 
@@ -177,6 +184,21 @@ def register_routes(bp):
         result = runner.run_check("untracked_items")
         if result is None or result.data is None:
             return jsonify({"untracked_items": [], "connections": []}), 200
+        return jsonify(result.data), 200
+
+    @bp.route("/api/core/inventory/output-expiry", methods=["GET"])
+    @requires_auth
+    def list_output_expiry():
+        """List custom output expiry findings (expired or near-expiry outputs).
+
+        Uses CoreChecksRunner (output_expiry check). Used by system findings banner
+        and sourcemap highlighting.
+        """
+        org_id = UUID(g.org_id)
+        runner = CoreChecksRunner(org_id=org_id, session=db_session())
+        result = runner.run_check("output_expiry")
+        if result is None or result.data is None:
+            return jsonify({"output_expiry_items": []}), 200
         return jsonify(result.data), 200
 
     @bp.route("/api/core/system-findings", methods=["GET"])

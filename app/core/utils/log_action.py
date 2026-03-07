@@ -4,7 +4,7 @@ from uuid import UUID
 
 from flask import g
 
-from app.core.db import db_session
+from app.core.db import SessionLocal
 from app.core.db.repositories.audit_repo import AuditRepository
 
 
@@ -33,8 +33,11 @@ def log_action(
     if not org_id:
         return
 
-    # Use a separate session for audit logging to avoid conflicts
-    db = db_session()
+    # Use a truly separate DB session for audit logging.
+    # IMPORTANT: do NOT use the scoped `db_session()` here, because within a request/thread
+    # it may return the same session used by the handler; closing it would detach ORM objects
+    # and can break request flows (e.g. execution completion).
+    db = SessionLocal()
     try:
         audit_repo = AuditRepository(db)
         audit_repo.write_log(

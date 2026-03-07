@@ -168,6 +168,30 @@
         parts.push('<p class="system-findings-item__detail-section"><strong>Impacted item(s):</strong> ' +
           impacted.map(function (x) { return escapeHtml(x && x.name ? x.name : x.id || '—'); }).join(', ') + '</p>');
       }
+    } else if (checkId === 'output_expiry') {
+      var items = data.output_expiry_items;
+      if (Array.isArray(items) && items.length > 0) {
+        var seenIds = new Set();
+        items = items.filter(function (x) {
+          var id = x && (x.inventory_item_id || x.id);
+          if (!id || seenIds.has(id)) return false;
+          seenIds.add(id);
+          return true;
+        });
+        parts.push('<p class="system-findings-item__detail-section"><strong>Custom output expiry (expired or near expiry):</strong></p>');
+        items.forEach(function (x) {
+          var name = escapeHtml(x && x.item_name ? x.item_name : x.inventory_item_id || '—');
+          var processStep = [x.process_name, x.step_name].filter(Boolean).join(' · ');
+          var severity = (x.severity === 'red') ? 'Expired' : 'Near expiry';
+          var expiryDate = x.expiry_at || x.expiry_date;
+          expiryDate = expiryDate ? escapeHtml(String(expiryDate)) : '';
+          parts.push('<div class="system-findings-output-expiry-item" style="margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--border-default); border-radius: 6px; font-size: 13px;">' +
+            '<p style="margin: 0 0 4px 0; font-weight: 600;">' + name + '</p>' +
+            (processStep ? '<p style="margin: 0 0 4px 0; color: var(--text-secondary); font-size: 12px;">' + escapeHtml(processStep) + '</p>' : '') +
+            '<p style="margin: 0; font-size: 12px;"><span style="color: var(--error, #ef4444);">' + escapeHtml(severity) + '</span>' + (expiryDate ? ' — Expiry: ' + expiryDate : '') + '</p>' +
+            '</div>');
+        });
+      }
     } else if (checkId === 'untracked_items') {
       var untracked = data.untracked_items;
       if (Array.isArray(untracked) && untracked.length > 0) {
@@ -201,16 +225,13 @@
                 return '<div style="padding: 4px 8px; background: var(--bg-secondary, #f9fafb); border-radius: 4px;"><span style="color: var(--text-secondary); font-size: 11px;">' + escapeHtml(e[0]) + '</span><br><span style="font-size: 12px;">' + escapeHtml(String(e[1])) + '</span></div>';
               }).join('') + '</div></div>';
           }
-          var processId = u.process_id || '';
-          var processName = u.process_name || '';
+          var processId = (u.process_id != null && String(u.process_id).trim() !== '') ? String(u.process_id) : '';
+          var processName = (u.process_name != null) ? String(u.process_name) : '';
           var stepName = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : (u.step_name || '');
-          var reconcileAttrs = '';
-          if (processId) {
-            reconcileAttrs = ' data-reconcile-process-id="' + escapeHtml(processId) + '" data-reconcile-process-name="' + escapeHtml(processName) + '" data-reconcile-step-name="' + escapeHtml(stepName) + '"';
-          }
-          var reconcileLink = processId
-            ? '<a href="#" class="system-findings-untracked-item__reconcile-link"' + reconcileAttrs + ' style="flex-shrink: 0; font-size: 12px; color: var(--link-color, #2563eb); text-decoration: none;">Click here to reconcile untracked item</a>'
-            : '';
+          var reconcileAttrs = ' data-reconcile-process-id="' + escapeHtml(processId) + '" data-reconcile-process-name="' + escapeHtml(processName) + '" data-reconcile-step-name="' + escapeHtml(stepName) + '"';
+          var reconcileLabel = processId ? 'Click here to reconcile untracked item' : 'Open Source Map to reconcile';
+          var reconcileHref = processId ? '#' : '/core/sourcemap?show=check-needed';
+          var reconcileLink = '<a href="' + reconcileHref + '" class="system-findings-untracked-item__reconcile-link"' + reconcileAttrs + ' style="flex-shrink: 0; font-size: 12px; color: var(--link-color, #2563eb); text-decoration: none;">' + escapeHtml(reconcileLabel) + '</a>';
           parts.push(
             '<div class="system-findings-untracked-item" style="margin-bottom: 8px; border: 1px solid var(--border-default); border-radius: 6px; overflow: hidden;">' +
               '<div style="display: flex; align-items: center; padding: 10px 12px; background: var(--bg-secondary, #f9fafb); gap: 8px;">' +
@@ -279,12 +300,15 @@
   function onReconcileLinkClick(ev) {
     var link = ev.target && ev.target.closest && ev.target.closest('.system-findings-untracked-item__reconcile-link');
     if (!link) return;
-    ev.preventDefault();
-    ev.stopPropagation();
     var processId = link.getAttribute('data-reconcile-process-id');
     var processName = link.getAttribute('data-reconcile-process-name') || '';
     var stepName = link.getAttribute('data-reconcile-step-name') || '';
-    if (processId) openReconcileModal(processId, processName, stepName);
+    if (processId) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      openReconcileModal(processId, processName, stepName);
+    }
+    /* when no processId, link href is Source Map URL – allow default navigation */
   }
 
   function onReconcileModalGo(ev) {

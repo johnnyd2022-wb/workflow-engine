@@ -803,7 +803,7 @@
         const outputSection = document.createElement('div');
         outputSection.className = 'execute-output-section';
         outputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
-        const outputId = output.id != null ? escapeHtml(String(output.id)) : '';
+        const outputId = (output.id != null && String(output.id).trim() !== '') ? String(output.id) : (output.name ? 'out-' + (output.name || '').replace(/\s+/g, '-') : 'out-unknown');
         const outName = output.name || '';
         const outUnit = output.unit || 'units';
         // Match = backend semantics: name case-insensitive (ilike), unit exact after trim. Use API result when available.
@@ -819,16 +819,35 @@
             });
         var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
         var hasMatch = matchingUntracked.length > 0;
+        var ce = (output.extra_data || {}).custom_expiry;
+        var customExpiryHtml = '';
+        var expiryInputHtml = '';
+        if (ce && ce.enabled) {
+          var mode = (ce.mode || '').trim();
+          if (mode !== 'fixed_duration' && mode !== 'set_at_execution') mode = '';
+          if (mode === 'fixed_duration') {
+            var v = (ce.duration_value != null) ? ce.duration_value : ce.expiry_days;
+            var u = (ce.duration_unit || 'days');
+            var msg = 'Output must be consumed in ' + String(v != null ? v : 'X') + ' ' + String(u) + '.';
+            customExpiryHtml = '<div class="execute-output-expiry-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Custom expiry rule applies:</strong> ' + escapeHtml(msg) + '</div>';
+          } else if (mode === 'set_at_execution') {
+            expiryInputHtml = (typeof window.renderExecutionExpiryUI === 'function')
+              ? window.renderExecutionExpiryUI(output, escapeHtml)
+              : '';
+          }
+        }
         outputSection.innerHTML = `
+          ${customExpiryHtml}
+          ${expiryInputHtml}
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               ${escapeHtml(output.name)}
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${output.quantity || '0'} ${output.unit || ''})</span>
             </label>
-            <input type="number" class="form-input execute-output-quantity-input" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <input type="number" class="form-input execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
-            <div class="execute-reconcile-untracked-wrapper" data-output-name="${escapeHtml(outName)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
-              <input type="hidden" class="execute-reconcile-untracked-value" data-output-name="${escapeHtml(outName)}" value="${escapeHtml(defaultId)}">
+            <div class="execute-reconcile-untracked-wrapper" data-output-id="${escapeHtml(outputId)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
+              <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
               <label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 8px;">Reconcile to untracked item (optional)</label>
               <p style="margin: 0 0 8px 0; color: #92400e; font-size: 12px;">Choose an item from the dropdown to reconcile when you complete the step.</p>
               <div class="execute-reconcile-untracked-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
@@ -844,6 +863,89 @@
           </div>
         `;
         outputsContainer.appendChild(outputSection);
+
+        // Wire expiry input toggle (set_at_execution)
+        try {
+          var expiryBox = outputSection.querySelector('.execute-output-expiry-input');
+          if (expiryBox) {
+            var modeSel = outputSection.querySelector('.execute-output-expiry-input-mode');
+            var durFields = outputSection.querySelector('.execute-output-expiry-duration-fields');
+            var dtFields = outputSection.querySelector('.execute-output-expiry-datetime-fields');
+            var warnFields = outputSection.querySelector('.execute-output-expiry-warning-fields');
+            if (modeSel && durFields && dtFields) {
+              var apply = function() {
+                var v = modeSel.value;
+                durFields.style.display = v === 'duration' ? 'block' : 'none';
+                dtFields.style.display = v === 'datetime' ? 'block' : 'none';
+                if (warnFields) warnFields.style.display = (v === 'duration' || v === 'datetime') ? 'block' : 'none';
+              };
+              modeSel.addEventListener('change', apply);
+              apply();
+              (function() {
+                function runValidation() {
+                  var v = modeSel.value;
+                  var errEl = expiryBox.querySelector('.execute-output-expiry-validation-error');
+                  var warnValEl = expiryBox.querySelector('.execute-output-expiry-warning-value');
+                  var warnUnitEl = expiryBox.querySelector('.execute-output-expiry-warning-unit');
+                  if (!errEl || !warnValEl || !warnUnitEl) return;
+                  errEl.style.display = 'none';
+                  errEl.textContent = '';
+                  warnValEl.style.borderColor = '';
+                  warnUnitEl.style.borderColor = '';
+                  if (v !== 'duration' && v !== 'datetime') return;
+                  var warnVal = parseInt(warnValEl.value, 10);
+                  var warnUnit = (warnUnitEl.value || 'days').trim();
+                  var expiryHours = null;
+                  var expiryLabel = 'the expiry period';
+                  var validator = (window.CustomExpiryValidation || {});
+                  var durationToHours = (typeof validator.durationToHours === 'function') ? validator.durationToHours : function() { return null; };
+                  if (v === 'duration') {
+                    var durValEl = expiryBox.querySelector('.execute-output-expiry-duration-value');
+                    var durUnitEl = expiryBox.querySelector('.execute-output-expiry-duration-unit');
+                    var durVal = durValEl ? parseInt(durValEl.value, 10) : null;
+                    var durUnit = (durUnitEl ? (durUnitEl.value || 'days') : 'days').trim();
+                    expiryHours = durationToHours(durVal != null && !isNaN(durVal) ? durVal : null, durUnit);
+                    expiryLabel = (durVal != null ? durVal : '') + ' ' + durUnit;
+                  } else {
+                    var dtEl = expiryBox.querySelector('.execute-output-expiry-datetime');
+                    var raw = dtEl ? (dtEl.value || '').trim() : '';
+                    if (raw) {
+                      var expiryAt = new Date(raw);
+                      if (!isNaN(expiryAt.getTime())) {
+                        expiryHours = (expiryAt.getTime() - Date.now()) / (1000 * 60 * 60);
+                        expiryLabel = 'the expiry date/time';
+                      }
+                    }
+                  }
+                  if (expiryHours != null && expiryHours <= 0 && v === 'datetime') {
+                    errEl.textContent = 'Expiry date and time must be in the future.';
+                    errEl.style.display = 'block';
+                    return;
+                  }
+                  if (typeof validator.validateWarnNotLongerThanExpiry === 'function') {
+                    var res = validator.validateWarnNotLongerThanExpiry({
+                      outputName: outName,
+                      warnValue: isNaN(warnVal) ? null : warnVal,
+                      warnUnit: warnUnit,
+                      expiryHours: expiryHours,
+                      expiryLabel: expiryLabel,
+                    });
+                    if (res && res.valid === false) {
+                      errEl.textContent = res.message || 'Warn period must not be longer than the expiry period.';
+                      errEl.style.display = 'block';
+                      warnValEl.style.borderColor = 'var(--danger, #dc2626)';
+                      warnUnitEl.style.borderColor = 'var(--danger, #dc2626)';
+                    }
+                  }
+                }
+                [expiryBox.querySelector('.execute-output-expiry-duration-value'), expiryBox.querySelector('.execute-output-expiry-duration-unit'), expiryBox.querySelector('.execute-output-expiry-warning-value'), expiryBox.querySelector('.execute-output-expiry-warning-unit'), expiryBox.querySelector('.execute-output-expiry-datetime')].forEach(function(el) {
+                  if (el) { el.addEventListener('input', runValidation); el.addEventListener('change', runValidation); }
+                });
+                modeSel.addEventListener('change', runValidation);
+              })();
+            }
+          }
+        } catch (e) {}
 
         if (hasMatch) {
           var wrapper = outputSection.querySelector('.execute-reconcile-untracked-wrapper');
@@ -1244,30 +1346,94 @@
       // Collect ALL outputs (both variable and static) to store as intermediate products
       const actualOutputs = [];
       const allStepOutputs = stepDefinitionForOutputs.outputs || [];
-      
+
+      // Validate set_at_execution expiry: warn must not exceed expiry period (duration or time until datetime)
+      var expiryValidator = (window.CustomExpiryValidation || {});
+      var durationToHours = (typeof expiryValidator.durationToHours === 'function') ? expiryValidator.durationToHours : function() { return null; };
+      const expiryValidationErrors = [];
+      (allStepOutputs || []).forEach(function(outputDef) {
+        var ce = (outputDef.extra_data || {}).custom_expiry;
+        if (!ce || !ce.enabled || (ce.mode || '') !== 'set_at_execution') return;
+        var outName = (outputDef.name || '').trim();
+        var getOutputId = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
+        var outId = getOutputId(outputDef);
+        var box = Array.from(modal.querySelectorAll('.execute-output-expiry-input')).find(function(b) {
+          return (b.dataset.outputId || '').trim() === outId;
+        });
+        if (!box) return;
+        var modeSel = box.querySelector('.execute-output-expiry-input-mode');
+        var inputMode = modeSel ? (modeSel.value || 'duration') : 'duration';
+        var warnValEl = box.querySelector('.execute-output-expiry-warning-value');
+        var warnUnitEl = box.querySelector('.execute-output-expiry-warning-unit');
+        var warnVal = warnValEl ? parseInt((warnValEl.value || '').trim(), 10) : 0;
+        var warnUnit = (warnUnitEl && warnUnitEl.value) || 'days';
+        var expiryHours = null;
+        if (inputMode === 'duration') {
+          var dvEl = box.querySelector('.execute-output-expiry-duration-value');
+          var duEl = box.querySelector('.execute-output-expiry-duration-unit');
+          var dv = dvEl ? parseInt((dvEl.value || '').trim(), 10) : null;
+          var du = (duEl && duEl.value) || 'days';
+          expiryHours = durationToHours(dv != null && !isNaN(dv) ? dv : null, du);
+        } else {
+          var dtEl = box.querySelector('.execute-output-expiry-datetime');
+          var raw = dtEl ? (dtEl.value || '').trim() : '';
+          if (raw) {
+            var expiryAt = new Date(raw);
+            if (!isNaN(expiryAt.getTime())) expiryHours = (expiryAt.getTime() - Date.now()) / (1000 * 60 * 60);
+          }
+        }
+        if (expiryHours != null && expiryHours <= 0 && inputMode === 'datetime') {
+          expiryValidationErrors.push('Output "' + outName + '": expiry date and time must be in the future.');
+          return;
+        }
+        if (typeof expiryValidator.validateWarnNotLongerThanExpiry === 'function') {
+          var res = expiryValidator.validateWarnNotLongerThanExpiry({
+            outputName: outName,
+            warnValue: isNaN(warnVal) ? null : warnVal,
+            warnUnit: warnUnit,
+            expiryHours: expiryHours,
+            expiryLabel: (inputMode === 'datetime') ? 'the time remaining until expiry' : 'the expiry period',
+          });
+          if (res && res.valid === false) expiryValidationErrors.push(res.message || ('Output "' + outName + '": invalid warn-before-expiry setting.'));
+        }
+      });
+      if (expiryValidationErrors.length > 0) {
+        showNotification('error', 'Invalid expiry settings', expiryValidationErrors[0]);
+        var firstBox = modal.querySelector('.execute-output-expiry-input');
+        if (firstBox) firstBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
       // First, collect variable outputs (user-entered quantities). Always include each variable output
       // so reconciliation selection (untracked_item_id) is never dropped when quantity is empty.
       const outputInputs = modal.querySelectorAll('.execute-output-quantity-input');
       const variableOutputNames = new Set();
+      const getOutputIdForPayload = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
       outputInputs.forEach(input => {
-        const name = (input.dataset.outputName || '').trim();
-        if (!name) return;
-        const outputDef = allStepOutputs.find(o => o.name === name);
+        const outputId = (input.dataset.outputId || '').trim();
+        if (!outputId) return;
+        const outputDef = allStepOutputs.find(o => getOutputIdForPayload(o) === outputId);
+        if (!outputDef) return;
+        const name = outputDef.name;
         let quantity = parseFloat(input.value);
         if (isNaN(quantity) || quantity < 0) {
           quantity = outputDef && (outputDef.quantity != null) ? parseFloat(outputDef.quantity) : 0;
           if (isNaN(quantity) || quantity < 0) quantity = 0;
         }
         const reconcileInput = Array.from(modal.querySelectorAll('.execute-reconcile-untracked-value')).find(function(el) {
-          return (el.dataset.outputName || '').trim() === name;
+          return (el.dataset.outputId || '').trim() === outputId;
         });
         const untrackedItemId = (reconcileInput && reconcileInput.value && reconcileInput.value.trim()) ? reconcileInput.value.trim() : null;
         const outPayload = {
           name: name,
           quantity: quantity,
-          unit: outputDef ? (outputDef.unit || 'units') : 'units'
+          unit: (outputDef ? (outputDef.unit || 'units') : 'units').trim()
         };
         if (untrackedItemId) outPayload.untracked_item_id = untrackedItemId;
+        // If expiry is set during execution, capture operator selection for backend persistence (logic in core-api.js)
+        if (typeof window.applyExecutionOutputExpiryToPayload === 'function') {
+          window.applyExecutionOutputExpiryToPayload(modal, outputId, outputDef, outPayload);
+        }
         actualOutputs.push(outPayload);
         variableOutputNames.add(name);
       });
