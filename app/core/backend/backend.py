@@ -1024,6 +1024,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                     else:
                         raw = rd_in.get("date")
                         ready_iso = None
+                        # Validate ISO parseability; optional future: reject past dates if policy requires future-only.
                         if isinstance(raw, str) and raw.strip():
                             try:
                                 ready_iso = datetime.fromisoformat(raw.strip().replace("Z", "+00:00")).isoformat()

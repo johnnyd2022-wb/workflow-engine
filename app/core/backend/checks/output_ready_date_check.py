@@ -21,12 +21,16 @@ from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.domain.ready_date_rules import (
+    READINESS_STATE_NEAR_READY,
+    READINESS_STATE_NOT_READY,
     VALID_READY_DATE_UNITS,
     duration_to_timedelta,
 )
 
 _log = logging.getLogger(__name__)
 
+CHECK_ID = "output_ready_date"
+RULE_TYPE_READY_DATE = "custom_ready_date"
 SEVERITY_BEFORE_READY = "red"
 SEVERITY_NEAR_READY = "amber"
 DEFAULT_WARNING_VALUE = 1
@@ -93,7 +97,7 @@ def _get_ready_date_config(output: dict) -> dict | None:
                 "ready_dt": ready_dt,
                 "warning_value": _as_int(rd.get("warning_value"), DEFAULT_WARNING_VALUE) or 0,
                 "warning_unit": (rd.get("warning_unit") or DEFAULT_WARNING_UNIT).strip().lower() or "days",
-                "rule_type": rd.get("rule_type") or "custom_ready_date",
+                "rule_type": rd.get("rule_type") or RULE_TYPE_READY_DATE,
             }
         return None
     if mode not in {"fixed_duration", "set_at_execution"}:
@@ -115,6 +119,17 @@ def _get_ready_date_config(output: dict) -> dict | None:
         "mode": mode,
         "rule_type": rd.get("rule_type") or "custom_ready_date",
     }
+
+
+def _step_has_ready_date_output(step: Any) -> bool:
+    """True if step has at least one output with ready_date config (enabled). Used to restrict inventory query."""
+    if not step:
+        return False
+    outputs = getattr(step, "outputs", None) or []
+    for out in outputs:
+        if isinstance(out, dict) and _get_ready_date_config(out):
+            return True
+    return False
 
 
 def _compute_ready_and_warn(
@@ -152,6 +167,10 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
     """
     Find inventory items produced by steps with ready_date config that are
     not yet usable (red) or within the warn-before-ready window (amber).
+
+    Performance: only loads inventory for execution steps that have at least one
+    output with ready_date enabled (database-level filter on source_execution_step_id),
+    avoiding O(all_org_inventory) when most steps do not use ready date.
     """
     execution_steps = (
         session.query(ExecutionStep)
@@ -169,11 +188,25 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
     seen_item_ids: set[UUID] = set()
     now = datetime.now(timezone.utc)
 
-    step_ids = [es.id for es in execution_steps if es.id]
+    # Restrict to steps that have at least one output with ready_date config (reduces inventory query size).
+    step_ids_with_ready_date = [es.id for es in execution_steps if es.id and es.step and _step_has_ready_date_output(es.step)]
+    if not step_ids_with_ready_date:
+        _log.debug(
+            "output_ready_date check org_id=%s count_flagged=0 (no steps with ready_date)",
+            org_id,
+            extra={"org_id": str(org_id), "count_flagged_items": 0},
+        )
+        return CheckResult(
+            check_id=CHECK_ID,
+            flagged=False,
+            message=None,
+            data={"output_ready_date_items": []},
+        )
+
     inventory_items = (
         session.query(InventoryItem)
         .filter(InventoryItem.org_id == org_id)
-        .filter(InventoryItem.source_execution_step_id.in_(step_ids))
+        .filter(InventoryItem.source_execution_step_id.in_(step_ids_with_ready_date))
         .all()
     )
     inventory_map: dict[tuple[UUID, str, str], list[InventoryItem]] = {}
@@ -243,10 +276,12 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
                 seen_item_ids.add(item.id)
                 if now < warn_dt:
                     severity = SEVERITY_BEFORE_READY
-                    message = f"Output '{out_name}' cannot be used until {ready_dt.isoformat()}."
+                    state_label = READINESS_STATE_NOT_READY
+                    detail = f"Output '{out_name}' cannot be used until {ready_dt.isoformat()}."
                 else:
                     severity = SEVERITY_NEAR_READY
-                    message = f"Output '{out_name}' will be ready on {ready_dt.isoformat()}."
+                    state_label = READINESS_STATE_NEAR_READY
+                    detail = f"Output '{out_name}' will be ready on {ready_dt.isoformat()}."
 
                 process_name = es.execution.process.name if es.execution and es.execution.process else None
                 step_name = es.step.name if es.step else None
@@ -255,7 +290,8 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
                     {
                         "type": "ready_date",
                         "severity": severity,
-                        "message": message,
+                        "state": state_label,
+                        "message": detail,
                         "execution_id": str(es.execution_id),
                         "process_id": str(es.execution.process_id) if es.execution else None,
                         "step_id": str(es.step_id),
@@ -265,7 +301,7 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
                         "item_name": item.name,
                         "unit": item.unit,
                         "ready_date": ready_dt.isoformat(),
-                        "metadata": {"rule_type": config.get("rule_type", "custom_ready_date")},
+                        "metadata": {"rule_type": config.get("rule_type", RULE_TYPE_READY_DATE)},
                     }
                 )
         if len(ready_date_items) >= MAX_READY_DATE_ITEMS:
@@ -276,8 +312,14 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
     if flagged:
         message = f"Output ready date: {len(ready_date_items)} output(s) not yet usable or nearing ready."
 
+    _log.debug(
+        "output_ready_date check org_id=%s count_flagged=%s",
+        org_id,
+        len(ready_date_items),
+        extra={"org_id": str(org_id), "count_flagged_items": len(ready_date_items)},
+    )
     return CheckResult(
-        check_id="output_ready_date",
+        check_id=CHECK_ID,
         flagged=flagged,
         message=message,
         data={"output_ready_date_items": ready_date_items},

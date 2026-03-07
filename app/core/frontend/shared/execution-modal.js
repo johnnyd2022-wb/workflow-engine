@@ -226,7 +226,7 @@
                 const hasReadyDateFinding = Array.isArray(inv.system_findings) && inv.system_findings.some(f => f && f.check_id === 'output_ready_date');
                 const productName = inv.process_name ? `${escapeHtml(inv.process_name)} - ${escapeHtml(inv.name)}` : escapeHtml(inv.name);
                 let displayText = `${productName} - ${inv.quantity} ${inv.unit}`;
-                if (hasReadyDateFinding) displayText += ' \u26A0\uFE0F Not ready';
+                if (hasReadyDateFinding) displayText += ' \u26A0\uFE0F Not ready (ready date)';
                 
                 // Add supplier/batch info if available (for raw materials)
                 if (inv.supplier) {
@@ -473,8 +473,8 @@
           if (rdMode === 'fixed_duration' && rd.duration_value != null && rd.duration_unit) {
             const v = rd.duration_value;
             const u = rd.duration_unit;
-            const msg = 'Output cannot be consumed for ' + String(v) + ' ' + String(u) + ' after step completion.';
-            readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Ready Date rule applies:</strong> ' + escapeHtml(msg) + '</div>';
+            const msg = 'Status: Not ready. This output cannot be consumed for ' + String(v) + ' ' + String(u) + ' after step completion.';
+            readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>&#x26A0;&#xFE0F; Ready date:</strong> ' + escapeHtml(msg) + '</div>';
           } else if (rdMode === 'set_at_execution') {
             readyDateHtml = (typeof window.renderExecutionReadyDateUI === 'function')
               ? window.renderExecutionReadyDateUI(output, escapeHtml)
@@ -482,8 +482,9 @@
           } else if (rd.date) {
             const readyDate = new Date(rd.date);
             if (!isNaN(readyDate.getTime()) && readyDate > new Date()) {
-              const msg = (rd.prompt && rd.prompt.trim()) ? escapeHtml(rd.prompt.trim()) : ('This output cannot be used until ' + readyDate.toLocaleDateString(undefined, { dateStyle: 'long' }) + '.');
-              readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Ready Date rule applies:</strong> ' + msg + '</div>';
+              const readyFrom = readyDate.toLocaleDateString(undefined, { dateStyle: 'long' });
+              const msg = (rd.prompt && rd.prompt.trim()) ? escapeHtml(rd.prompt.trim()) : ('Ready from: ' + readyFrom + '. Status: Not ready.');
+              readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>&#x26A0;&#xFE0F; Ready date:</strong> ' + msg + '</div>';
             }
           }
         }
@@ -778,7 +779,7 @@
       const finding = item.system_findings.find(f => f && f.check_id === 'output_ready_date');
       if (finding) {
         const inputName = select.dataset.inputName || 'Input';
-        notReadyUsed.push({ inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Output not yet ready' });
+        notReadyUsed.push({ inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Not ready' });
       }
     });
     if (notReadyUsed.length > 0) {

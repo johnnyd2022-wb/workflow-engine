@@ -749,6 +749,7 @@ class TestOutputReadyDateCheck:
                 for key in (
                     "type",
                     "severity",
+                    "state",
                     "message",
                     "execution_id",
                     "process_id",
@@ -761,6 +762,7 @@ class TestOutputReadyDateCheck:
                     assert key in item, f"output_ready_date item missing key: {key}"
                 assert item["type"] == "ready_date"
                 assert item["severity"] in ("red", "amber")
+                assert item["state"] in ("Not ready", "Nearing ready")
                 raw = item["ready_date"]
                 assert isinstance(raw, str), "ready_date must be string"
                 datetime.fromisoformat(raw.replace("Z", "+00:00"))

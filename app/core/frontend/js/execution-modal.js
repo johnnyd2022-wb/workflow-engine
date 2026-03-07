@@ -180,7 +180,7 @@
     const readyDateReasons = {};
     allInventory.forEach(function(inv) {
       var finding = (inv.system_findings || []).find(function(f) { return f && f.check_id === 'output_ready_date'; });
-      if (finding) readyDateReasons[String(inv.id)] = finding.reason || 'Output not yet ready';
+      if (finding) readyDateReasons[String(inv.id)] = finding.reason || 'Not ready';
     });
     function getExpiredReason(id) {
       if (readyDateReasons[String(id)]) return readyDateReasons[String(id)];
@@ -850,8 +850,8 @@
           if (rdMode === 'fixed_duration' && rd.duration_value != null && rd.duration_unit) {
             var v = rd.duration_value;
             var u = rd.duration_unit;
-            var msg = 'Output cannot be consumed for ' + String(v) + ' ' + String(u) + ' after step completion.';
-            readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Ready Date rule applies:</strong> ' + escapeHtml(msg) + '</div>';
+            var msg = 'Status: Not ready. This output cannot be consumed for ' + String(v) + ' ' + String(u) + ' after step completion.';
+            readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>&#x26A0;&#xFE0F; Ready date:</strong> ' + escapeHtml(msg) + '</div>';
           } else if (rdMode === 'set_at_execution') {
             readyDateHtml = (typeof window.renderExecutionReadyDateUI === 'function')
               ? window.renderExecutionReadyDateUI(output, escapeHtml)
@@ -859,8 +859,9 @@
           } else if (rd.date) {
             var readyDate = new Date(rd.date);
             if (!isNaN(readyDate.getTime()) && readyDate > new Date()) {
-              var rdMsg = (rd.prompt && rd.prompt.trim()) ? escapeHtml(rd.prompt.trim()) : ('This output cannot be used until ' + readyDate.toLocaleDateString(undefined, { dateStyle: 'long' }) + '.');
-              readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Ready Date rule applies:</strong> ' + rdMsg + '</div>';
+              var readyFrom = readyDate.toLocaleDateString(undefined, { dateStyle: 'long' });
+              var rdMsg = (rd.prompt && rd.prompt.trim()) ? escapeHtml(rd.prompt.trim()) : ('Ready from: ' + readyFrom + '. Status: Not ready.');
+              readyDateHtml = '<div class="execute-output-ready-date-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>&#x26A0;&#xFE0F; Ready date:</strong> ' + rdMsg + '</div>';
             }
           }
         }
@@ -1326,7 +1327,7 @@
       var finding = item.system_findings.find(function(f) { return f && f.check_id === 'output_ready_date'; });
       if (finding) {
         var inputName = select.dataset.inputName || 'Input';
-        notReadyUsed.push({ inputName: inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Output not yet ready' });
+        notReadyUsed.push({ inputName: inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Not ready' });
       }
     });
     if (notReadyUsed.length > 0) {

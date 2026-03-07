@@ -1,8 +1,14 @@
 """
 Single source of truth for output ready date rules.
 
-Invariant: warning_delta <= ready_delta
-(i.e. "warn before ready" period must not exceed the ready period)
+Invariants (lock these for compliance; do not change semantics without explicit change control):
+
+1. Readiness: A product is usable when current_time >= ready_time (inclusive).
+   So the product is not usable when current_time < ready_time.
+   Equality (current_time == ready_time) counts as ready.
+
+2. Warn-before-ready: warning_delta <= ready_delta
+   (i.e. "warn before ready" period must not exceed the ready period).
 
 Used by:
 - output_ready_date_check (duration math and unit validation)
@@ -17,6 +23,11 @@ from __future__ import annotations
 from datetime import timedelta
 
 VALID_READY_DATE_UNITS = {"days", "weeks", "months", "years"}
+
+# Readiness state labels for UI and checks (single source of truth for copy).
+READINESS_STATE_NOT_READY = "Not ready"
+READINESS_STATE_NEAR_READY = "Nearing ready"
+READINESS_STATE_READY = "Ready"
 
 
 def duration_to_timedelta(value: int | float, unit: str) -> timedelta:

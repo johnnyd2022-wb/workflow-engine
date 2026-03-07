@@ -202,18 +202,26 @@
           seenIds.add(id);
           return true;
         });
-        parts.push('<p class="system-findings-item__detail-section"><strong>Output ready date (not yet usable or nearing ready):</strong></p>');
+        parts.push('<p class="system-findings-item__detail-section"><strong>Output ready date:</strong></p>');
         items.forEach(function (x) {
           var name = escapeHtml(x && x.item_name ? x.item_name : x.inventory_item_id || '—');
           var processStep = [x.process_name, x.step_name].filter(Boolean).join(' · ');
           var readyDate = x.ready_date;
-          readyDate = readyDate ? escapeHtml(String(readyDate)) : '';
-          var severityLabel = (x.severity === 'amber') ? 'Nearing ready' : 'Not yet ready';
+          var readyFrom = readyDate ? (function () {
+            try {
+              var d = new Date(readyDate.replace('Z', '+00:00'));
+              return isNaN(d.getTime()) ? escapeHtml(String(readyDate)) : escapeHtml(d.toLocaleDateString(undefined, { dateStyle: 'medium' }));
+            } catch (e) { return escapeHtml(String(readyDate)); }
+          })() : '—';
+          var stateLabel = (x.state && x.state.trim()) ? x.state.trim() : ((x.severity === 'amber') ? 'Nearing ready' : 'Not ready');
           var severityColor = (x.severity === 'amber') ? 'var(--warning, #f59e0b)' : 'var(--error, #ef4444)';
+          var detail = (x.message && x.message.trim()) ? escapeHtml(x.message.trim()) : 'Output not yet ready.';
           parts.push('<div class="system-findings-output-ready-date-item" style="margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--border-default); border-radius: 6px; font-size: 13px;">' +
             '<p style="margin: 0 0 4px 0; font-weight: 600;">' + name + '</p>' +
             (processStep ? '<p style="margin: 0 0 4px 0; color: var(--text-secondary); font-size: 12px;">' + escapeHtml(processStep) + '</p>' : '') +
-            '<p style="margin: 0; font-size: 12px;"><span style="color: ' + severityColor + ';">' + escapeHtml(severityLabel) + '</span>' + (readyDate ? ' — Ready: ' + readyDate : '') + '</p>' +
+            '<p style="margin: 4px 0 0 0; font-size: 12px;">&#x26A0;&#xFE0F; Ready from: ' + readyFrom + '</p>' +
+            '<p style="margin: 2px 0 0 0; font-size: 12px;"><span style="color: ' + severityColor + ';">Status: ' + escapeHtml(stateLabel) + '</span></p>' +
+            '<p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary);">Detail: ' + detail + '</p>' +
             '</div>');
         });
       }

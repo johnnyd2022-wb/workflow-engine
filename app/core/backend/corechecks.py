@@ -64,13 +64,16 @@ class CoreChecksRunner:
         """Register built-in checks so they can be run by id."""
         from app.core.backend.checks.expired_materials import run_expired_materials_check
         from app.core.backend.checks.output_expiry_check import run_output_expiry_check
-        from app.core.backend.checks.output_ready_date_check import run_output_ready_date_check
+        from app.core.backend.checks.output_ready_date_check import (
+            CHECK_ID as OUTPUT_READY_DATE_CHECK_ID,
+            run_output_ready_date_check,
+        )
         from app.core.backend.checks.untracked_items import run_untracked_items_check
 
         self.register_check("expired_materials", run_expired_materials_check)
         self.register_check("untracked_items", run_untracked_items_check)
         self.register_check("output_expiry", run_output_expiry_check)
-        self.register_check("output_ready_date", run_output_ready_date_check)
+        self.register_check(OUTPUT_READY_DATE_CHECK_ID, run_output_ready_date_check)
 
     def register_check(self, check_id: str, fn: CheckFn) -> None:
         """Register a check so it can be run via run_check(check_id)."""
@@ -111,6 +114,8 @@ def get_system_findings_by_item(org_id: UUID, session: Session) -> dict[str, lis
     Used to enrich the inventory list API so each item has system_findings for UI (red border + reasons).
     New checks: add an extractor below for the check's result.data shape; no change to check implementations.
     """
+    from app.core.backend.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
+
     runner = CoreChecksRunner(org_id=org_id, session=session)
     results = runner.run_all_checks()
     out: dict[str, list[dict[str, Any]]] = {}
@@ -140,11 +145,13 @@ def get_system_findings_by_item(org_id: UUID, session: Session) -> dict[str, lis
                 iid = it.get("inventory_item_id") if isinstance(it, dict) else None
                 reason = it.get("message") if isinstance(it, dict) else "Custom output expiry"
                 add(str(iid) if iid else "", r.check_id, reason or "Custom output expiry")
-        elif r.check_id == "output_ready_date":
+        elif r.check_id == OUTPUT_READY_DATE_CHECK_ID:
             for it in r.data.get("output_ready_date_items") or []:
                 iid = it.get("inventory_item_id") if isinstance(it, dict) else None
-                reason = it.get("message") if isinstance(it, dict) else "Output not yet ready"
-                add(str(iid) if iid else "", r.check_id, reason or "Output not yet ready")
+                reason = it.get("message") if isinstance(it, dict) else None
+                state = it.get("state") if isinstance(it, dict) else None
+                reason = reason or (state or "Output not yet ready")
+                add(str(iid) if iid else "", r.check_id, reason)
 
     return out
 
@@ -216,9 +223,11 @@ def register_routes(bp):
         Uses CoreChecksRunner (output_ready_date check). Used by system findings banner
         and sourcemap highlighting.
         """
+        from app.core.backend.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
+
         org_id = UUID(g.org_id)
         runner = CoreChecksRunner(org_id=org_id, session=db_session())
-        result = runner.run_check("output_ready_date")
+        result = runner.run_check(OUTPUT_READY_DATE_CHECK_ID)
         if result is None or result.data is None:
             return jsonify({"output_ready_date_items": []}), 200
         return jsonify(result.data), 200
