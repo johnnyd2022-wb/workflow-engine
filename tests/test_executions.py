@@ -1044,6 +1044,75 @@ class TestCompleteStepNegative:
 
 
 # ---------------------------------------------------------------------------
+# Custom expiry validation (execution complete-step API safeguard)
+# ---------------------------------------------------------------------------
+
+
+class TestCustomExpiryWarningNotExceedDuration:
+    """
+    Safeguard: completing a step with custom_expiry_input where warning > duration
+    must be rejected. Validation lives in backend complete-step route; we test the
+    extracted validator so regressions are caught at pace.
+    """
+
+    def test_warning_exceeds_duration_returns_error(self):
+        """warning_value > duration_value must produce 'warning period cannot exceed expiry period'."""
+        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+
+        errors = validate_custom_expiry_warning_not_exceed_duration(
+            output_name="Batch Output",
+            duration_value=5,
+            duration_unit="days",
+            warning_value=10,
+            warning_unit="days",
+        )
+        assert len(errors) == 1
+        assert "warning period cannot exceed expiry period" in errors[0]
+        assert "Batch Output" in errors[0]
+
+    def test_warning_equals_duration_allowed(self):
+        """warning_value == duration_value is valid (no error)."""
+        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+
+        errors = validate_custom_expiry_warning_not_exceed_duration(
+            output_name="Out",
+            duration_value=7,
+            duration_unit="days",
+            warning_value=7,
+            warning_unit="days",
+        )
+        assert errors == []
+
+    def test_warning_less_than_duration_allowed(self):
+        """warning_value < duration_value is valid (no error)."""
+        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+
+        errors = validate_custom_expiry_warning_not_exceed_duration(
+            output_name="Out",
+            duration_value=10,
+            duration_unit="days",
+            warning_value=3,
+            warning_unit="days",
+        )
+        assert errors == []
+
+    def test_different_units_warning_exceeds_duration_returns_error(self):
+        """When units differ, warning period > expiry period still triggers error."""
+        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+
+        # 2 weeks = 14 days > 5 days expiry
+        errors = validate_custom_expiry_warning_not_exceed_duration(
+            output_name="Out",
+            duration_value=5,
+            duration_unit="days",
+            warning_value=2,
+            warning_unit="weeks",
+        )
+        assert len(errors) == 1
+        assert "warning period cannot exceed expiry period" in errors[0]
+
+
+# ---------------------------------------------------------------------------
 # Full flow (E2E-style)
 # ---------------------------------------------------------------------------
 

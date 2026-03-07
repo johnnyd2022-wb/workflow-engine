@@ -58,6 +58,31 @@ def _duration_to_timedelta(value: int | float, unit: str) -> timedelta:
     return timedelta(days=v)
 
 
+def validate_custom_expiry_warning_not_exceed_duration(
+    output_name: str,
+    duration_value: int | None,
+    duration_unit: str,
+    warning_value: int | None,
+    warning_unit: str,
+) -> list[str]:
+    """
+    Validate that warning period does not exceed expiry period for custom output expiry.
+    Returns a list of error messages (one element if invalid, else empty).
+    Used at execution step completion; tests call this to safeguard the validation.
+    """
+    if duration_value is None or warning_value is None:
+        return []
+    du = (duration_unit or "days").strip().lower()
+    wu = (warning_unit or "days").strip().lower()
+    if du not in VALID_EXPIRY_UNITS or wu not in VALID_EXPIRY_UNITS:
+        return []
+    expiry_delta = _duration_to_timedelta(duration_value, du)
+    warning_delta = _duration_to_timedelta(warning_value, wu)
+    if warning_delta > expiry_delta:
+        return [f"Output '{output_name}': warning period cannot exceed expiry period."]
+    return []
+
+
 @core_bp.route("/core", methods=["GET"])
 @requires_auth
 def core():
@@ -969,21 +994,18 @@ def complete_step(execution_id: str, execution_step_id: str):
                                         f"Output '{output_name}': expiry duration must be positive."
                                     )
                                 elif du_raw in VALID_EXPIRY_UNITS and wu_raw in VALID_EXPIRY_UNITS:
-                                    if dv_int is not None and warn_val_int is not None:
-                                        expiry_delta = _duration_to_timedelta(dv_int, du_raw)
-                                        warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
-                                        if warning_delta > expiry_delta:
-                                            execution_errors.append(
-                                                f"Output '{output_name}': warning period cannot exceed expiry period."
-                                            )
-                                        else:
-                                            extra_data["custom_expiry_actual"] = {
-                                                "mode": "duration",
-                                                "duration_value": dv_int,
-                                                "duration_unit": du_raw,
-                                                "warning_value": warn_val_int,
-                                                "warning_unit": wu_raw,
-                                            }
+                                    duration_errors = validate_custom_expiry_warning_not_exceed_duration(
+                                        output_name, dv_int, du_raw, warn_val_int, wu_raw
+                                    )
+                                    execution_errors.extend(duration_errors)
+                                    if not duration_errors:
+                                        extra_data["custom_expiry_actual"] = {
+                                            "mode": "duration",
+                                            "duration_value": dv_int,
+                                            "duration_unit": du_raw,
+                                            "warning_value": warn_val_int,
+                                            "warning_unit": wu_raw,
+                                        }
                             elif in_mode == "datetime":
                                 raw = ce_in.get("expiry_at")
                                 expiry_iso = None
