@@ -1,119 +1,54 @@
-⚠️ Issue 1 — Backend Unit Validation Logic Has Redundancy
-Problem
+1️⃣ Backend Python Changes
+elif du_raw in VALID_EXPIRY_UNITS and wu_raw in VALID_EXPIRY_UNITS:
+    expiry_delta = _duration_to_timedelta(dv_int, du_raw)
+    warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
+    if warning_delta > expiry_delta:
+        execution_errors.append(
+            f"Output '{output_name}': warning period cannot exceed expiry period."
+        )
+Observations:
 
-You now do:
+✅ Good: You removed the previous redundant pass blocks and now validate only when both units are valid.
 
-Append error if unit invalid
+⚠ Small Risk: Make sure dv_int and warn_val_int are always integers. If either could be None, _duration_to_timedelta may raise an exception. You might want to do an extra check:
 
-but later code still contains:
+if dv_int is not None and warn_val_int is not None:
+    expiry_delta = _duration_to_timedelta(dv_int, du_raw)
+    warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
+    if warning_delta > expiry_delta:
+        execution_errors.append(...)
+2️⃣ Frontend JS — collectExecutionOutputExpiryPayload
 
-elif du_raw not in VALID_EXPIRY_UNITS or wu_raw not in VALID_EXPIRY_UNITS:
-    pass
+You’ve introduced a single canonical collector for expiry data:
 
-This is dead logic.
+window.collectExecutionOutputExpiryPayload = function(modal, outputId) { ... }
+Observations:
 
-Fix
+✅ This addresses the earlier duplication issue. Now all modal expiry inputs (duration or datetime) are captured in one place.
 
-Remove this block:
+✅ Proper fallback defaults: duration unit defaults to "days", warning value defaults to 7.
 
-elif du_raw not in VALID_EXPIRY_UNITS or wu_raw not in VALID_EXPIRY_UNITS:
-    pass
+⚠ Minor: parseInt is used for both duration and warning. Make sure decimals aren’t allowed (or intentionally truncated). This is consistent with your previous step quantity pattern, so probably okay.
 
-Because:
+✅ You correctly handle both "duration" and "datetime" modes with a single path.
 
-Validation is already handled earlier.
+3️⃣ Frontend JS — Payload Assignment
+if (mode === 'set_at_execution' && typeof window.collectExecutionOutputExpiryPayload === 'function') {
+    const payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
+    if (payload) outPayload.custom_expiry_input = payload;
+}
+Observations:
 
-Leaving this is confusing and risks future regression.
+✅ Correctly uses the single shared collector.
 
-⚠️ Issue 2 — Duplicate Payload Construction Paths (Frontend)
+⚠ Redundant Try Block: You still have two identical try blocks in the snippet you pasted. One is enough.
 
-This is the biggest remaining architectural smell.
+⚠ Could be simplified:
 
-You are still constructing expiry payloads in two different loops.
+const ce = outputDef?.extra_data?.custom_expiry;
+if (ce?.enabled && ce.mode === 'set_at_execution' && typeof window.collectExecutionOutputExpiryPayload === 'function') {
+    const payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
+    if (payload) outPayload.custom_expiry_input = payload;
+}
 
-You have:
-Path A
-
-Inside execution modal collector:
-
-outputInputs.forEach(...)
-
-Builds payload.
-
-Path B
-
-Inside expiry capture block:
-
-if (mode === 'set_at_execution')
-
-Builds payload again.
-
-Risk
-
-If expiry schema changes later:
-
-You must update two code locations.
-
-This is exactly the type of bug you were trying to eliminate.
-
-Recommended Fix (Important)
-
-Create one function:
-
-window.collectExecutionOutputExpiryPayload = function(modal, outputDef) {
-    // All expiry payload extraction logic goes here
-};
-
-Then replace both collectors.
-
-This will remove ~120 lines of JS duplication.
-
-⚠️ Issue 3 — Lookup Logic Has One Small Identity Escape Path
-
-You correctly switched to:
-
-outputId
-
-BUT this pattern still exists in one place:
-
-return id === outName || nm === outName;
-
-This must be removed.
-
-Correct Pattern
-
-Always:
-
-return dataset.outputId === outputId;
-
-No fallback to name matching.
-
-Remove This Completely
-
-Search frontend code for:
-
-dataset.outputName
-
-Delete usage.
-
-⚠️ Issue 4 — Minor Backend Behaviour Consistency
-
-This block:
-
-if du_raw not in VALID_EXPIRY_UNITS:
-    execution_errors.append(...)
-
-is good.
-
-But later you still have:
-
-_duration_to_timedelta(...)
-
-which silently assumes unit validity.
-
-Better pattern:
-
-if validation_errors:
-    return failure
-
-Then never reach conversion stage.
+This removes duplication and reduces nesting.

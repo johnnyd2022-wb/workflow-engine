@@ -969,20 +969,21 @@ def complete_step(execution_id: str, execution_step_id: str):
                                         f"Output '{output_name}': expiry duration must be positive."
                                     )
                                 elif du_raw in VALID_EXPIRY_UNITS and wu_raw in VALID_EXPIRY_UNITS:
-                                    expiry_delta = _duration_to_timedelta(dv_int, du_raw)
-                                    warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
-                                    if warning_delta > expiry_delta:
-                                        execution_errors.append(
-                                            f"Output '{output_name}': warning period cannot exceed expiry period."
-                                        )
-                                    else:
-                                        extra_data["custom_expiry_actual"] = {
-                                            "mode": "duration",
-                                            "duration_value": dv_int,
-                                            "duration_unit": du_raw,
-                                            "warning_value": warn_val_int,
-                                            "warning_unit": wu_raw,
-                                        }
+                                    if dv_int is not None and warn_val_int is not None:
+                                        expiry_delta = _duration_to_timedelta(dv_int, du_raw)
+                                        warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
+                                        if warning_delta > expiry_delta:
+                                            execution_errors.append(
+                                                f"Output '{output_name}': warning period cannot exceed expiry period."
+                                            )
+                                        else:
+                                            extra_data["custom_expiry_actual"] = {
+                                                "mode": "duration",
+                                                "duration_value": dv_int,
+                                                "duration_unit": du_raw,
+                                                "warning_value": warn_val_int,
+                                                "warning_unit": wu_raw,
+                                            }
                             elif in_mode == "datetime":
                                 raw = ce_in.get("expiry_at")
                                 expiry_iso = None

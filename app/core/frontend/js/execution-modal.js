@@ -1431,14 +1431,11 @@
         };
         if (untrackedItemId) outPayload.untracked_item_id = untrackedItemId;
         // If expiry is set during execution, capture operator selection for backend persistence (single shared collector)
-        try {
-          const ce = outputDef && outputDef.extra_data ? (outputDef.extra_data.custom_expiry || null) : null;
-          const mode = ce && ce.enabled ? (ce.mode || null) : null;
-          if (mode === 'set_at_execution' && typeof window.collectExecutionOutputExpiryPayload === 'function') {
-            const payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
-            if (payload) outPayload.custom_expiry_input = payload;
-          }
-        } catch (e) {}
+        const ce = outputDef?.extra_data?.custom_expiry;
+        if (ce?.enabled && ce?.mode === 'set_at_execution' && typeof window.collectExecutionOutputExpiryPayload === 'function') {
+          const payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
+          if (payload) outPayload.custom_expiry_input = payload;
+        }
         actualOutputs.push(outPayload);
         variableOutputNames.add(name);
       });
