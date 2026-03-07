@@ -526,6 +526,76 @@ if (typeof window !== 'undefined') {
         };
     })();
 
+    // Shared invariant: when both expiry and ready date are set, expiry cannot be before ready date
+    window.ExpiryReadyDateValidation = window.ExpiryReadyDateValidation || (function () {
+        function readyDurationToHours(value, unit) {
+            if (value == null || value === '' || isNaN(Number(value)) || Number(value) < 0) return null;
+            var v = Number(value);
+            switch ((unit || 'days').toLowerCase()) {
+                case 'days': return v * 24;
+                case 'weeks': return v * 24 * 7;
+                case 'months': return v * 24 * 30;
+                case 'years': return v * 24 * 365;
+                default: return v * 24;
+            }
+        }
+        function expiryDurationToHours(value, unit) {
+            if (value == null || value === '' || isNaN(Number(value)) || Number(value) < 0) return null;
+            var v = Number(value);
+            switch ((unit || 'days').toLowerCase()) {
+                case 'hours': return v;
+                case 'days': return v * 24;
+                case 'weeks': return v * 24 * 7;
+                case 'months': return v * 24 * 30;
+                default: return v * 24;
+            }
+        }
+        // Step modal: when both are fixed duration, require ready duration <= expiry duration
+        function validateExpiryAfterReadyDuration(outputs) {
+            for (var i = 0; i < (outputs || []).length; i++) {
+                var out = outputs[i] || {};
+                var ce = (out.extra_data || {}).custom_expiry;
+                var rd = (out.extra_data || {}).ready_date;
+                if (!ce || !ce.enabled || (ce.mode || '') !== 'fixed_duration') continue;
+                if (!rd || !rd.enabled || (rd.mode || '') !== 'fixed_duration') continue;
+                var readyVal = rd.duration_value;
+                var readyUnit = rd.duration_unit || 'days';
+                var expVal = ce.duration_value;
+                var expUnit = ce.duration_unit || 'days';
+                var readyHours = readyDurationToHours(readyVal, readyUnit);
+                var expHours = expiryDurationToHours(expVal, expUnit);
+                if (readyHours == null || expHours == null) continue;
+                if (readyHours > expHours) {
+                    var outName = out.name || 'this output';
+                    return {
+                        valid: false,
+                        outputName: outName,
+                        message: 'For output "' + outName + '", expiry must be on or after the ready date. Increase the expiry period or reduce the ready period so the product is usable for at least one day.',
+                    };
+                }
+            }
+            return { valid: true };
+        }
+        // Execution modal: when both are dates (ISO strings), require ready <= expiry
+        function validateExpiryAfterReadyDates(outputName, readyDateIso, expiryDateIso) {
+            if (!readyDateIso || !expiryDateIso) return { valid: true };
+            var readyMs = new Date(readyDateIso.replace('Z', '+00:00')).getTime();
+            var expiryMs = new Date(expiryDateIso.replace('Z', '+00:00')).getTime();
+            if (isNaN(readyMs) || isNaN(expiryMs)) return { valid: true };
+            if (readyMs > expiryMs) {
+                return {
+                    valid: false,
+                    message: 'For output "' + (outputName || 'this output') + '", expiry date cannot be before the ready date. Set an expiry on or after the date when the output can be used.',
+                };
+            }
+            return { valid: true };
+        }
+        return {
+            validateExpiryAfterReadyDuration: validateExpiryAfterReadyDuration,
+            validateExpiryAfterReadyDates: validateExpiryAfterReadyDates,
+        };
+    })();
+
     window.getExecutionOutputId = function(output) {
         if (!output) return 'out-unknown';
         if (output.id != null && String(output.id).trim() !== '') return String(output.id);

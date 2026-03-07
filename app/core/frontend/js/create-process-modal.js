@@ -1195,6 +1195,63 @@
           }
         }
       }
+      // When both expiry and ready date are set (fixed duration), expiry cannot be before ready date (shared config)
+      const outputsWithBothExpiryAndReady = [];
+      outputElements.forEach(function (outputEl) {
+        const name = outputEl.querySelector('.guided-output-name')?.value.trim() || '';
+        const expiryModeEl = outputEl.querySelector('.guided-output-expiry-mode');
+        const expiryValueEl = outputEl.querySelector('.guided-output-expiry-value');
+        const expiryUnitEl = outputEl.querySelector('.guided-output-expiry-unit');
+        const expiryWarningValueEl = outputEl.querySelector('.guided-output-expiry-warning-value');
+        const expiryWarningUnitEl = outputEl.querySelector('.guided-output-expiry-warning-unit');
+        const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
+        const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
+        const readyDateUnitEl = outputEl.querySelector('.guided-output-ready-date-unit');
+        const readyDateWarnValueEl = outputEl.querySelector('.guided-output-ready-date-warning-value');
+        const readyDateWarnUnitEl = outputEl.querySelector('.guided-output-ready-date-warning-unit');
+        const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
+        const readyMode = readyDateModeEl ? readyDateModeEl.value : 'none';
+        if (expiryMode !== 'fixed_duration' || readyMode !== 'fixed_duration') return;
+        const expiryValue = (expiryValueEl && expiryValueEl.value.trim()) ? parseInt(expiryValueEl.value, 10) : 0;
+        if (!expiryValue || isNaN(expiryValue)) return;
+        const expiryUnit = (expiryUnitEl && expiryUnitEl.value) || 'days';
+        const expiryWarningValue = (expiryWarningValueEl && expiryWarningValueEl.value.trim() !== '') ? parseInt(expiryWarningValueEl.value, 10) : 0;
+        const expiryWarningUnit = (expiryWarningUnitEl && expiryWarningUnitEl.value) || 'days';
+        const readyValue = (readyDateValueEl && readyDateValueEl.value.trim()) ? parseInt(readyDateValueEl.value, 10) : 0;
+        const readyUnit = (readyDateUnitEl && readyDateUnitEl.value) || 'days';
+        const readyWarningValue = (readyDateWarnValueEl && readyDateWarnValueEl.value.trim() !== '') ? parseInt(readyDateWarnValueEl.value, 10) : 0;
+        const readyWarningUnit = (readyDateWarnUnitEl && readyDateWarnUnitEl.value) || 'days';
+        outputsWithBothExpiryAndReady.push({
+          name: name,
+          extra_data: {
+            custom_expiry: { enabled: true, mode: 'fixed_duration', duration_value: expiryValue, duration_unit: expiryUnit, warning_value: isNaN(expiryWarningValue) ? 0 : expiryWarningValue, warning_unit: expiryWarningUnit },
+            ready_date: { enabled: true, mode: 'fixed_duration', duration_value: readyValue, duration_unit: readyUnit, warning_value: isNaN(readyWarningValue) ? 0 : readyWarningValue, warning_unit: readyWarningUnit }
+          }
+        });
+      });
+      if (outputsWithBothExpiryAndReady.length > 0 && window.ExpiryReadyDateValidation && typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration === 'function') {
+        const erResult = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration(outputsWithBothExpiryAndReady);
+        if (!erResult.valid) {
+          if (window.showNotification) {
+            window.showNotification('error', 'Expiry and ready date', erResult.message);
+          } else {
+            alert(erResult.message);
+          }
+          try {
+            const match = Array.from(outputElements).find(function (el) {
+              const n = el.querySelector('.guided-output-name')?.value.trim() || '';
+              return erResult.outputName && n === erResult.outputName;
+            });
+            if (match) {
+              if (match.dataset && match.dataset.expanded === 'false' && typeof toggleOutputExpand === 'function') {
+                toggleOutputExpand(match.id);
+              }
+              match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          } catch (e) {}
+          return;
+        }
+      }
     }
     
     if (currentStep < totalSteps) {
@@ -3077,6 +3134,58 @@
     });
     readyDatePane.appendChild(readyDateFieldsWrap);
     contentArea.appendChild(readyDatePane);
+
+    // Inline warning: when both expiry and ready date are fixed duration, expiry must be >= ready (show before Next)
+    const expiryReadyErrorEl = document.createElement('div');
+    expiryReadyErrorEl.className = 'guided-output-expiry-ready-validation-error';
+    expiryReadyErrorEl.style.cssText = 'display: none; margin-top: 12px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500; line-height: 1.4;';
+    expiryReadyErrorEl.setAttribute('role', 'alert');
+    contentArea.appendChild(expiryReadyErrorEl);
+
+    function syncExpiryReadyValidation() {
+      expiryReadyErrorEl.style.display = 'none';
+      expiryReadyErrorEl.textContent = '';
+      expiryPane.style.borderColor = '';
+      expiryPane.style.boxShadow = '';
+      readyDatePane.style.borderColor = '';
+      readyDatePane.style.boxShadow = '';
+      const expiryMode = expiryModeSelect.value;
+      const readyMode = readyDateModeSelect.value;
+      const fixedExpiry = (window.EXPIRY_MODES && window.EXPIRY_MODES.FIXED) || 'fixed_duration';
+      const fixedReady = (window.READY_DATE_MODES && window.READY_DATE_MODES.FIXED) || 'fixed_duration';
+      if (expiryMode !== fixedExpiry || readyMode !== fixedReady) return;
+      const nameEl = outputContainer.querySelector('.guided-output-name');
+      const outName = (nameEl && nameEl.value && nameEl.value.trim()) ? nameEl.value.trim() : 'this output';
+      const expiryVal = parseInt(expiryValueInput.value, 10);
+      const expiryUnit = (expiryUnitSelect.value || 'days').trim();
+      const readyVal = parseInt(readyDateValueInput.value, 10);
+      const readyUnit = (readyDateUnitSelect.value || 'days').trim();
+      if ((!expiryVal || isNaN(expiryVal)) && (!readyVal || isNaN(readyVal))) return;
+      const payload = [{
+        name: outName,
+        extra_data: {
+          custom_expiry: { enabled: true, mode: 'fixed_duration', duration_value: expiryVal || 0, duration_unit: expiryUnit },
+          ready_date: { enabled: true, mode: 'fixed_duration', duration_value: readyVal || 0, duration_unit: readyUnit }
+        }
+      }];
+      if (window.ExpiryReadyDateValidation && typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration === 'function') {
+        const res = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration(payload);
+        if (!res.valid) {
+          expiryReadyErrorEl.textContent = res.message || 'Expiry must be on or after the ready date.';
+          expiryReadyErrorEl.style.display = 'block';
+          expiryPane.style.borderColor = 'var(--error, #ef4444)';
+          expiryPane.style.boxShadow = '0 0 0 1px var(--error, #ef4444)';
+          readyDatePane.style.borderColor = 'var(--error, #ef4444)';
+          readyDatePane.style.boxShadow = '0 0 0 1px var(--error, #ef4444)';
+        }
+      }
+    }
+    [expiryModeSelect, readyDateModeSelect, expiryValueInput, expiryUnitSelect, readyDateValueInput, readyDateUnitSelect].forEach(function (el) {
+      if (el) {
+        el.addEventListener('input', syncExpiryReadyValidation);
+        el.addEventListener('change', syncExpiryReadyValidation);
+      }
+    });
     
     outputContainer.appendChild(contentArea);
     document.getElementById('guided-outputs-list').appendChild(outputContainer);

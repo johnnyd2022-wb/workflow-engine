@@ -865,10 +865,12 @@
             }
           }
         }
+        var expiryReadyValidationErrorHtml = (expiryInputHtml && readyDateHtml) ? ('<div class="execute-output-expiry-ready-validation-error" data-output-id="' + escapeHtml(outputId) + '" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>') : '';
         outputSection.innerHTML = `
           ${customExpiryHtml}
           ${readyDateHtml}
           ${expiryInputHtml}
+          ${expiryReadyValidationErrorHtml}
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               ${escapeHtml(output.name)}
@@ -974,6 +976,47 @@
                 modeSel.addEventListener('change', runValidation);
               })();
             }
+          }
+          // When both expiry and ready date are set at execution, highlight "expiry before ready" before submit
+          var readyDateBox = outputSection.querySelector('.execute-output-ready-date-input');
+          if (expiryBox && readyDateBox && typeof window.ExpiryReadyDateValidation !== 'undefined' && typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDates === 'function') {
+            var expiryReadyErrEl = outputSection.querySelector('.execute-output-expiry-ready-validation-error');
+            var readyDateInputEl = readyDateBox.querySelector('.execute-output-ready-date-date');
+            function runExpiryReadyValidation() {
+              if (!expiryReadyErrEl) return;
+              expiryReadyErrEl.style.display = 'none';
+              expiryReadyErrEl.textContent = '';
+              expiryBox.style.borderColor = '';
+              expiryBox.style.boxShadow = '';
+              readyDateBox.style.borderColor = '';
+              readyDateBox.style.boxShadow = '';
+              var modeSel = expiryBox.querySelector('.execute-output-expiry-input-mode');
+              var inputMode = modeSel ? (modeSel.value || 'duration') : 'duration';
+              if (inputMode !== 'datetime') return;
+              var dtEl = expiryBox.querySelector('.execute-output-expiry-datetime');
+              var expiryRaw = dtEl ? (dtEl.value || '').trim() : '';
+              var readyRaw = readyDateInputEl ? (readyDateInputEl.value || '').trim() : '';
+              if (!expiryRaw || !readyRaw) return;
+              var readyIso = readyRaw ? (new Date(readyRaw + 'T00:00:00Z')).toISOString() : null;
+              var expiryIso = expiryRaw ? (new Date(expiryRaw)).toISOString() : null;
+              if (!readyIso || !expiryIso) return;
+              var res = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDates(outName, readyIso, expiryIso);
+              if (!res.valid) {
+                expiryReadyErrEl.textContent = res.message || 'Expiry date cannot be before the ready date.';
+                expiryReadyErrEl.style.display = 'block';
+                expiryBox.style.borderColor = 'var(--error, #ef4444)';
+                expiryBox.style.boxShadow = '0 0 0 1px var(--error, #ef4444)';
+                readyDateBox.style.borderColor = 'var(--error, #ef4444)';
+                readyDateBox.style.boxShadow = '0 0 0 1px var(--error, #ef4444)';
+              }
+            }
+            if (readyDateInputEl) {
+              readyDateInputEl.addEventListener('input', runExpiryReadyValidation);
+              readyDateInputEl.addEventListener('change', runExpiryReadyValidation);
+            }
+            [expiryBox.querySelector('.execute-output-expiry-datetime'), expiryBox.querySelector('.execute-output-expiry-input-mode')].forEach(function(el) {
+              if (el) { el.addEventListener('input', runExpiryReadyValidation); el.addEventListener('change', runExpiryReadyValidation); }
+            });
           }
         } catch (e) {}
 
@@ -1474,6 +1517,33 @@
         var firstReadyBox = modal.querySelector('.execute-output-ready-date-input');
         if (firstReadyBox) firstReadyBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
+      }
+
+      // When both expiry and ready date are set at execution, expiry cannot be before ready date (shared config)
+      var getOutputIdForValidation = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
+      if (typeof window.ExpiryReadyDateValidation !== 'undefined' && typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDates === 'function') {
+        for (var ei = 0; ei < (allStepOutputs || []).length; ei++) {
+          var outputDef = allStepOutputs[ei];
+          var rd = (outputDef.extra_data || {}).ready_date;
+          var ce = (outputDef.extra_data || {}).custom_expiry;
+          if (!rd || !rd.enabled || (rd.mode || '') !== 'set_at_execution') continue;
+          if (!ce || !ce.enabled || (ce.mode || '') !== 'set_at_execution') continue;
+          var outputId = getOutputIdForValidation(outputDef);
+          var readyPayload = typeof window.collectExecutionOutputReadyDatePayload === 'function' ? window.collectExecutionOutputReadyDatePayload(modal, outputId) : null;
+          var expiryPayload = typeof window.collectExecutionOutputExpiryPayload === 'function' ? window.collectExecutionOutputExpiryPayload(modal, outputId) : null;
+          var readyIso = readyPayload && readyPayload.date ? readyPayload.date : null;
+          var expiryIso = expiryPayload && expiryPayload.mode === 'datetime' && expiryPayload.expiry_at ? expiryPayload.expiry_at : null;
+          if (readyIso && expiryIso) {
+            var outName = (outputDef.name || '').trim();
+            var erResult = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDates(outName, readyIso, expiryIso);
+            if (!erResult.valid) {
+              showNotification('error', 'Expiry and ready date', erResult.message);
+              var firstReadyBoxEl = modal.querySelector('.execute-output-ready-date-input');
+              if (firstReadyBoxEl) firstReadyBoxEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              return;
+            }
+          }
+        }
       }
 
       // First, collect variable outputs (user-entered quantities). Always include each variable output
