@@ -443,6 +443,61 @@ if (typeof window !== 'undefined') {
             validateFixedExpiryWarning: validateFixedExpiryWarning,
         };
     })();
+
+    window.getExecutionOutputId = function(output) {
+        if (!output) return 'out-unknown';
+        if (output.id != null && String(output.id).trim() !== '') return String(output.id);
+        return output.name ? 'out-' + String(output.name).replace(/\s+/g, '-') : 'out-unknown';
+    };
+
+    // Single source of truth for execution expiry UI markup (used by both execution-modal.js and shared/execution-modal.js)
+    window.renderExecutionExpiryUI = function(output, escapeHtml) {
+        if (!output || typeof escapeHtml !== 'function') return '';
+        var outputId = window.getExecutionOutputId(output);
+        var enc = function(s) { return escapeHtml(s == null ? '' : String(s)); };
+        return '<div class="execute-output-expiry-input" data-output-id="' + enc(outputId) + '" style="margin-bottom: 12px; padding: 12px 16px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md);">' +
+            '<div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; margin-bottom: 8px;">' +
+            '<div style="font-weight: 700; color: #92400e; font-size: 13px;">Set expiry for this output</div>' +
+            '<div style="font-size: 12px; color: #92400e;">Required for compliance</div>' +
+            '</div>' +
+            '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Expiry type</label>' +
+            '<select class="execute-output-expiry-input-mode form-select" data-output-id="' + enc(outputId) + '" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px; margin-bottom: 10px;">' +
+            '<option value="duration">Duration</option>' +
+            '<option value="datetime">Set a specific time and date</option>' +
+            '</select>' +
+            '<div class="execute-output-expiry-duration-fields" style="display:block; margin-bottom: 10px;">' +
+            '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Duration</label>' +
+            '<div style="display:flex; gap: 10px; align-items:center;">' +
+            '<input type="number" min="1" class="execute-output-expiry-duration-value" data-output-id="' + enc(outputId) + '" placeholder="30" style="flex:1; width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+            '<select class="execute-output-expiry-duration-unit form-select" data-output-id="' + enc(outputId) + '" style="width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;">' +
+            '<option value="hours">Hours</option>' +
+            '<option value="days" selected>Days</option>' +
+            '<option value="weeks">Weeks</option>' +
+            '<option value="months">Months</option>' +
+            '</select>' +
+            '</div>' +
+            '</div>' +
+            '<div class="execute-output-expiry-datetime-fields" style="display:none; margin-bottom: 0;">' +
+            '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Expiry date and time</label>' +
+            '<input type="datetime-local" class="execute-output-expiry-datetime" data-output-id="' + enc(outputId) + '" style="width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+            '<p class="execute-output-expiry-datetime-hint" style="margin: 6px 0 0 0; font-size: 12px; color: #92400e; opacity: 0.9;">Click on the calendar icon to set a date and time</p>' +
+            '</div>' +
+            '<div class="execute-output-expiry-warning-fields" style="display:none; margin-top: 10px;">' +
+            '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Warn before expiry</label>' +
+            '<div style="display:flex; gap: 10px; align-items:center;">' +
+            '<input type="number" min="0" class="execute-output-expiry-warning-value" data-output-id="' + enc(outputId) + '" placeholder="7" value="7" style="flex:1; width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+            '<select class="execute-output-expiry-warning-unit form-select" data-output-id="' + enc(outputId) + '" style="width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;">' +
+            '<option value="hours">Hours</option>' +
+            '<option value="days" selected>Days</option>' +
+            '<option value="weeks">Weeks</option>' +
+            '<option value="months">Months</option>' +
+            '</select>' +
+            '</div>' +
+            '<div class="execute-output-expiry-warning-hint" style="margin-top: 6px; font-size: 12px; color: #92400e; opacity: 0.9;">Shown as a warning when this amount of time remains until expiry. Must be the same or less than the expiry period.</div>' +
+            '<div class="execute-output-expiry-validation-error" style="display:none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626);" role="alert"></div>' +
+            '</div>' +
+            '</div>';
+    };
 }
 
 

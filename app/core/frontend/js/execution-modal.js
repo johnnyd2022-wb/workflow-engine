@@ -831,50 +831,9 @@
             var msg = 'Output must be consumed in ' + String(v != null ? v : 'X') + ' ' + String(u) + '.';
             customExpiryHtml = '<div class="execute-output-expiry-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Custom expiry rule applies:</strong> ' + escapeHtml(msg) + '</div>';
           } else if (mode === 'set_at_execution') {
-            // Operator sets expiry at execution: duration (hours/days/weeks/months) OR specific date/time
-            expiryInputHtml =
-              '<div class="execute-output-expiry-input" data-output-id="' + escapeHtml(outputId) + '" data-output-name="' + escapeHtml(outName) + '" style="margin-bottom: 12px; padding: 12px 16px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md);">' +
-                '<div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; margin-bottom: 8px;">' +
-                  '<div style="font-weight: 700; color: #92400e; font-size: 13px;">Set expiry for this output</div>' +
-                  '<div style="font-size: 12px; color: #92400e;">Required for compliance</div>' +
-                '</div>' +
-                '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Expiry type</label>' +
-                '<select class="execute-output-expiry-input-mode form-select" data-output-id="' + escapeHtml(outputId) + '" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px; margin-bottom: 10px;">' +
-                  '<option value="duration">Duration</option>' +
-                  '<option value="datetime">Set a specific time and date</option>' +
-                '</select>' +
-                '<div class="execute-output-expiry-duration-fields" style="display:block; margin-bottom: 10px;">' +
-                  '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Duration</label>' +
-                  '<div style="display:flex; gap: 10px; align-items:center;">' +
-                    '<input type="number" min="1" class="execute-output-expiry-duration-value" data-output-id="' + escapeHtml(outputId) + '" placeholder="30" style="flex:1; width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
-                    '<select class="execute-output-expiry-duration-unit form-select" data-output-id="' + escapeHtml(outputId) + '" style="width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;">' +
-                      '<option value="hours">Hours</option>' +
-                      '<option value="days" selected>Days</option>' +
-                      '<option value="weeks">Weeks</option>' +
-                      '<option value="months">Months</option>' +
-                    '</select>' +
-                  '</div>' +
-                '</div>' +
-                '<div class="execute-output-expiry-datetime-fields" style="display:none; margin-bottom: 0;">' +
-                  '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Expiry date and time</label>' +
-                  '<input type="datetime-local" class="execute-output-expiry-datetime" data-output-id="' + escapeHtml(outputId) + '" style="width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
-                  '<p class="execute-output-expiry-datetime-hint" style="margin: 6px 0 0 0; font-size: 12px; color: #92400e; opacity: 0.9;">Click on the calendar icon to set a date and time</p>' +
-                '</div>' +
-                '<div class="execute-output-expiry-warning-fields" style="display:none; margin-top: 10px;">' +
-                  '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Warn before expiry</label>' +
-                  '<div style="display:flex; gap: 10px; align-items:center;">' +
-                    '<input type="number" min="0" class="execute-output-expiry-warning-value" data-output-id="' + escapeHtml(outputId) + '" placeholder="7" value="7" style="flex:1; width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
-                    '<select class="execute-output-expiry-warning-unit form-select" data-output-id="' + escapeHtml(outputId) + '" style="width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;">' +
-                      '<option value="hours">Hours</option>' +
-                      '<option value="days" selected>Days</option>' +
-                      '<option value="weeks">Weeks</option>' +
-                      '<option value="months">Months</option>' +
-                    '</select>' +
-                  '</div>' +
-                  '<div class="execute-output-expiry-warning-hint" style="margin-top: 6px; font-size: 12px; color: #92400e; opacity: 0.9;">Shown as a warning when this amount of time remains until expiry. Must be the same or less than the expiry period.</div>' +
-                  '<div class="execute-output-expiry-validation-error" style="display:none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626);" role="alert"></div>' +
-                '</div>' +
-              '</div>';
+            expiryInputHtml = (typeof window.renderExecutionExpiryUI === 'function')
+              ? window.renderExecutionExpiryUI(output, escapeHtml)
+              : '';
           }
         }
         outputSection.innerHTML = `
@@ -885,10 +844,10 @@
               ${escapeHtml(output.name)}
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${output.quantity || '0'} ${output.unit || ''})</span>
             </label>
-            <input type="number" class="form-input execute-output-quantity-input" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <input type="number" class="form-input execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
-            <div class="execute-reconcile-untracked-wrapper" data-output-name="${escapeHtml(outName)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
-              <input type="hidden" class="execute-reconcile-untracked-value" data-output-name="${escapeHtml(outName)}" value="${escapeHtml(defaultId)}">
+            <div class="execute-reconcile-untracked-wrapper" data-output-id="${escapeHtml(outputId)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
+              <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
               <label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 8px;">Reconcile to untracked item (optional)</label>
               <p style="margin: 0 0 8px 0; color: #92400e; font-size: 12px;">Choose an item from the dropdown to reconcile when you complete the step.</p>
               <div class="execute-reconcile-untracked-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
@@ -965,7 +924,7 @@
                   }
                   if (typeof validator.validateWarnNotLongerThanExpiry === 'function') {
                     var res = validator.validateWarnNotLongerThanExpiry({
-                      outputName: (expiryBox.dataset.outputName || expiryBox.dataset.outputId || '').trim(),
+                      outputName: outName,
                       warnValue: isNaN(warnVal) ? null : warnVal,
                       warnUnit: warnUnit,
                       expiryHours: expiryHours,
@@ -1396,10 +1355,10 @@
         var ce = (outputDef.extra_data || {}).custom_expiry;
         if (!ce || !ce.enabled || (ce.mode || '') !== 'set_at_execution') return;
         var outName = (outputDef.name || '').trim();
+        var getOutputId = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
+        var outId = getOutputId(outputDef);
         var box = Array.from(modal.querySelectorAll('.execute-output-expiry-input')).find(function(b) {
-          var id = (b.dataset.outputId || '').trim();
-          var nm = (b.dataset.outputName || '').trim();
-          return id === outName || nm === outName;
+          return (b.dataset.outputId || '').trim() === outId;
         });
         if (!box) return;
         var modeSel = box.querySelector('.execute-output-expiry-input-mode');
@@ -1449,17 +1408,20 @@
       // so reconciliation selection (untracked_item_id) is never dropped when quantity is empty.
       const outputInputs = modal.querySelectorAll('.execute-output-quantity-input');
       const variableOutputNames = new Set();
+      const getOutputIdForPayload = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
       outputInputs.forEach(input => {
-        const name = (input.dataset.outputName || '').trim();
-        if (!name) return;
-        const outputDef = allStepOutputs.find(o => o.name === name);
+        const outputId = (input.dataset.outputId || '').trim();
+        if (!outputId) return;
+        const outputDef = allStepOutputs.find(o => getOutputIdForPayload(o) === outputId);
+        if (!outputDef) return;
+        const name = outputDef.name;
         let quantity = parseFloat(input.value);
         if (isNaN(quantity) || quantity < 0) {
           quantity = outputDef && (outputDef.quantity != null) ? parseFloat(outputDef.quantity) : 0;
           if (isNaN(quantity) || quantity < 0) quantity = 0;
         }
         const reconcileInput = Array.from(modal.querySelectorAll('.execute-reconcile-untracked-value')).find(function(el) {
-          return (el.dataset.outputName || '').trim() === name;
+          return (el.dataset.outputId || '').trim() === outputId;
         });
         const untrackedItemId = (reconcileInput && reconcileInput.value && reconcileInput.value.trim()) ? reconcileInput.value.trim() : null;
         const outPayload = {
@@ -1473,8 +1435,7 @@
           const ce = outputDef && outputDef.extra_data ? (outputDef.extra_data.custom_expiry || null) : null;
           const mode = ce && ce.enabled ? (ce.mode || null) : null;
             if (mode === 'set_at_execution') {
-              var outId = (outputDef.id != null && String(outputDef.id).trim() !== '') ? String(outputDef.id) : (name ? 'out-' + name.replace(/\s+/g, '-') : 'out-unknown');
-              var matchById = function(el) { return (el.dataset.outputId || '').trim() === outId; };
+              var matchById = function(el) { return (el.dataset.outputId || '').trim() === outputId; };
               var modeSel = Array.from(modal.querySelectorAll('.execute-output-expiry-input-mode')).find(matchById);
               var inputMode = modeSel ? (modeSel.value || 'duration') : 'duration';
               if (inputMode === 'duration') {

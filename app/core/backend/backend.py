@@ -935,13 +935,17 @@ def complete_step(execution_id: str, execution_step_id: str):
                             )
                         else:
                             in_mode = ce_in.get("mode")
-                            # Normalize and validate units
+                            # Validate units (reject invalid instead of normalizing)
                             du_raw = (ce_in.get("duration_unit") or "days").strip().lower()
                             wu_raw = (ce_in.get("warning_unit") or ce_cfg.get("warning_unit") or "days").strip().lower()
                             if du_raw not in VALID_EXPIRY_UNITS:
-                                du_raw = "days"
+                                execution_errors.append(
+                                    f"Output '{output_name}': invalid expiry duration unit."
+                                )
                             if wu_raw not in VALID_EXPIRY_UNITS:
-                                wu_raw = "days"
+                                execution_errors.append(
+                                    f"Output '{output_name}': invalid warning duration unit."
+                                )
                             # Warning fallback from step config
                             warn_val = ce_in.get("warning_value")
                             if warn_val is None:
@@ -968,8 +972,8 @@ def complete_step(execution_id: str, execution_step_id: str):
                                     execution_errors.append(
                                         f"Output '{output_name}': expiry duration must be positive."
                                     )
-                                elif du_raw not in VALID_EXPIRY_UNITS:
-                                    execution_errors.append(f"Output '{output_name}': invalid expiry duration unit.")
+                                elif du_raw not in VALID_EXPIRY_UNITS or wu_raw not in VALID_EXPIRY_UNITS:
+                                    pass  # already appended above
                                 else:
                                     expiry_delta = _duration_to_timedelta(dv_int, du_raw)
                                     warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
@@ -998,6 +1002,8 @@ def complete_step(execution_id: str, execution_step_id: str):
                                     execution_errors.append(
                                         f"Output '{output_name}' has invalid expiry date/time. Choose a valid date/time."
                                     )
+                                elif wu_raw not in VALID_EXPIRY_UNITS:
+                                    pass  # already appended above
                                 else:
                                     extra_data["custom_expiry_actual"] = {
                                         "mode": "datetime",
