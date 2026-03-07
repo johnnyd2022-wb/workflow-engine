@@ -144,6 +144,11 @@ const CoreAPI = {
         return this.request('/inventory/untracked-items');
     },
 
+    /** Get output ready date findings (outputs not yet usable). */
+    async getOutputReadyDate() {
+        return this.request('/inventory/output-ready-date');
+    },
+
     /** Get untracked items matching name and unit (for Add to Inventory and execution modal reconciliation).
      * When executionId is provided, includes items with qty 0 that were consumed in that execution. */
     async getMatchingUntracked(name, unit, processId = null, executionId = null) {
@@ -355,6 +360,11 @@ if (typeof window !== 'undefined') {
         EXECUTION: 'set_at_execution',
         NONE: 'none'
     };
+    window.READY_DATE_MODES = window.READY_DATE_MODES || {
+        FIXED: 'fixed_duration',
+        EXECUTION: 'set_at_execution',
+        NONE: 'none'
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -444,6 +454,164 @@ if (typeof window !== 'undefined') {
         };
     })();
 
+    // Ready date validation (days, weeks, months, years) — warn period must not exceed ready period
+    window.ReadyDateValidation = window.ReadyDateValidation || (function () {
+        function durationToHours(value, unit) {
+            if (value == null || value === '' || isNaN(Number(value)) || Number(value) < 0) return null;
+            var v = Number(value);
+            switch ((unit || 'days').toLowerCase()) {
+                case 'days': return v * 24;
+                case 'weeks': return v * 24 * 7;
+                case 'months': return v * 24 * 30;
+                case 'years': return v * 24 * 365;
+                default: return v * 24;
+            }
+        }
+
+        function formatDurationLabel(value, unit) {
+            var v = (value == null) ? '' : String(value);
+            var u = (unit || 'days');
+            return (v + ' ' + u).trim();
+        }
+
+        function validateWarnNotLongerThanReadyPeriod(opts) {
+            opts = opts || {};
+            var warnValue = opts.warnValue;
+            var warnUnit = opts.warnUnit || 'days';
+            var readyHours = opts.readyHours;
+            var readyLabel = opts.readyLabel || 'the ready period';
+            var warnHours = durationToHours(warnValue, warnUnit);
+            if (warnHours == null || readyHours == null) return { valid: true };
+            if (warnHours > readyHours) {
+                var warnLabel = formatDurationLabel(warnValue, warnUnit);
+                return {
+                    valid: false,
+                    message: 'The warn-before-ready period (' + warnLabel + ') cannot be longer than ' + readyLabel + '. Please set the warning to the same duration or less.',
+                };
+            }
+            return { valid: true };
+        }
+
+        function validateFixedReadyDateWarning(outputs) {
+            for (var i = 0; i < (outputs || []).length; i++) {
+                var out = outputs[i] || {};
+                var rd = (out.extra_data || {}).ready_date;
+                if (!rd || rd.mode !== 'fixed_duration') continue;
+                var readyVal = rd.duration_value;
+                var readyUnit = rd.duration_unit || 'days';
+                var warnVal = rd.warning_value;
+                var warnUnit = rd.warning_unit || 'days';
+                var readyHours = durationToHours(readyVal, readyUnit);
+                if (readyHours != null && readyHours <= 0) continue;
+                var outName = out.name || 'this output';
+                var readyLabel = 'the ready period (' + formatDurationLabel(readyVal, readyUnit) + ')';
+                var r = validateWarnNotLongerThanReadyPeriod({
+                    warnValue: warnVal,
+                    warnUnit: warnUnit,
+                    readyHours: readyHours,
+                    readyLabel: readyLabel,
+                });
+                if (!r.valid) {
+                    return { valid: false, outputName: outName, message: r.message };
+                }
+            }
+            return { valid: true };
+        }
+
+        return {
+            durationToHours: durationToHours,
+            formatDurationLabel: formatDurationLabel,
+            validateWarnNotLongerThanReadyPeriod: validateWarnNotLongerThanReadyPeriod,
+            validateFixedReadyDateWarning: validateFixedReadyDateWarning,
+        };
+    })();
+
+    // Shared invariant: when both expiry and ready date are set, expiry cannot be before ready date
+    window.ExpiryReadyDateValidation = window.ExpiryReadyDateValidation || (function () {
+        function readyDurationToHours(value, unit) {
+            if (value == null || value === '' || isNaN(Number(value)) || Number(value) < 0) return null;
+            var v = Number(value);
+            switch ((unit || 'days').toLowerCase()) {
+                case 'days': return v * 24;
+                case 'weeks': return v * 24 * 7;
+                case 'months': return v * 24 * 30;
+                case 'years': return v * 24 * 365;
+                default: return v * 24;
+            }
+        }
+        function expiryDurationToHours(value, unit) {
+            if (value == null || value === '' || isNaN(Number(value)) || Number(value) < 0) return null;
+            var v = Number(value);
+            switch ((unit || 'days').toLowerCase()) {
+                case 'hours': return v;
+                case 'days': return v * 24;
+                case 'weeks': return v * 24 * 7;
+                case 'months': return v * 24 * 30;
+                default: return v * 24;
+            }
+        }
+        // Step modal: when both are fixed duration, require ready duration <= expiry duration
+        function validateExpiryAfterReadyDuration(outputs) {
+            for (var i = 0; i < (outputs || []).length; i++) {
+                var out = outputs[i] || {};
+                var ce = (out.extra_data || {}).custom_expiry;
+                var rd = (out.extra_data || {}).ready_date;
+                if (!ce || !ce.enabled || (ce.mode || '') !== 'fixed_duration') continue;
+                if (!rd || !rd.enabled || (rd.mode || '') !== 'fixed_duration') continue;
+                var readyVal = rd.duration_value;
+                var readyUnit = rd.duration_unit || 'days';
+                var expVal = ce.duration_value;
+                var expUnit = ce.duration_unit || 'days';
+                var readyHours = readyDurationToHours(readyVal, readyUnit);
+                var expHours = expiryDurationToHours(expVal, expUnit);
+                if (readyHours == null || expHours == null) continue;
+                if (readyHours > expHours) {
+                    var outName = out.name || 'this output';
+                    return {
+                        valid: false,
+                        outputName: outName,
+                        message: 'For output "' + outName + '", expiry must be on or after the ready date. Increase the expiry period or reduce the ready period so the product is usable for at least one day.',
+                    };
+                }
+            }
+            return { valid: true };
+        }
+        // Execution modal: when both are dates (ISO strings), require ready <= expiry
+        function validateExpiryAfterReadyDates(outputName, readyDateIso, expiryDateIso) {
+            if (!readyDateIso || !expiryDateIso) return { valid: true };
+            var readyMs = window.parseISODate && window.parseISODate(readyDateIso);
+            var expiryMs = window.parseISODate && window.parseISODate(expiryDateIso);
+            if (readyMs == null || expiryMs == null) return { valid: true };
+            if (readyMs > expiryMs) {
+                return {
+                    valid: false,
+                    message: 'For output "' + (outputName || 'this output') + '", expiry date cannot be before the ready date. Set an expiry on or after the date when the output can be used.',
+                };
+            }
+            return { valid: true };
+        }
+        return {
+            validateExpiryAfterReadyDuration: validateExpiryAfterReadyDuration,
+            validateExpiryAfterReadyDates: validateExpiryAfterReadyDates,
+        };
+    })();
+
+    /**
+     * Parse an ISO date/datetime string (backend or input). Prefer over string concat to avoid breakage if format changes.
+     * @param {string} isoString - ISO 8601 or date-only (e.g. YYYY-MM-DD)
+     * @returns {number|null} Timestamp in ms, or null if invalid
+     */
+    window.parseISODate = function(isoString) {
+        if (isoString == null || typeof isoString !== 'string' || !isoString.trim()) return null;
+        var s = isoString.trim();
+        var t = Date.parse(s);
+        if (isNaN(t)) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) t = Date.parse(s + 'T00:00:00.000Z');
+            if (isNaN(t)) return null;
+        }
+        return t;
+    };
+
     window.getExecutionOutputId = function(output) {
         if (!output) return 'out-unknown';
         if (output.id != null && String(output.id).trim() !== '') return String(output.id);
@@ -494,7 +662,7 @@ if (typeof window !== 'undefined') {
             '</select>' +
             '</div>' +
             '<div class="execute-output-expiry-warning-hint" style="margin-top: 6px; font-size: 12px; color: #92400e; opacity: 0.9;">Shown as a warning when this amount of time remains until expiry. Must be the same or less than the expiry period.</div>' +
-            '<div class="execute-output-expiry-validation-error" style="display:none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626);" role="alert"></div>' +
+            '<div class="execute-output-expiry-validation-error" style="display:none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626);" role="alert" aria-live="polite"></div>' +
             '</div>' +
             '</div>';
     };
@@ -547,6 +715,110 @@ if (typeof window !== 'undefined') {
         if (!ce || !ce.enabled || ce.mode !== 'set_at_execution' || typeof window.collectExecutionOutputExpiryPayload !== 'function') return;
         var payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
         if (payload) outPayload.custom_expiry_input = payload;
+    };
+
+    // Ready date at execution: single date-of-availability picker (used when step output ready_date.mode === 'set_at_execution')
+    window.renderExecutionReadyDateUI = function(output, escapeHtml) {
+        if (!output || typeof escapeHtml !== 'function') return '';
+        var outputId = window.getExecutionOutputId(output);
+        var enc = function(s) { return escapeHtml(s == null ? '' : String(s)); };
+        return '<div class="execute-output-ready-date-input" data-output-id="' + enc(outputId) + '" style="margin-bottom: 12px; padding: 12px 16px; background: hsl(220, 92%, 95%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md);">' +
+            '<div style="font-weight: 700; color: #1e40af; font-size: 13px; margin-bottom: 8px;">Set date of availability for this output</div>' +
+            '<label style="display:block; font-size: 12px; color: #1e40af; margin-bottom: 4px;">Date when this output can be used</label>' +
+            '<input type="date" class="execute-output-ready-date-date" data-output-id="' + enc(outputId) + '" style="width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+            '<p style="margin: 6px 0 0 0; font-size: 12px; color: #1e40af; opacity: 0.9;">Required — output cannot be consumed before this date.</p>' +
+            '</div>';
+    };
+
+    window.collectExecutionOutputReadyDatePayload = function(modal, outputId) {
+        if (!modal || !outputId) return null;
+        var id = String(outputId).trim();
+        var matchById = function(el) { return (el.dataset.outputId || '').trim() === id; };
+        var dateEl = Array.from(modal.querySelectorAll('.execute-output-ready-date-date')).find(matchById);
+        var raw = dateEl ? (dateEl.value || '').trim() : '';
+        if (!raw) return null;
+        var ts = window.parseISODate && window.parseISODate(raw);
+        if (ts == null) return null;
+        return { date: new Date(ts).toISOString() };
+    };
+
+    /**
+     * Centralized renderer for ready date status (single source for copy; avoids drift).
+     * @param {{ state: string, readyDate: string, outputName: string, severity: string, detail?: string, processStep?: string }} opts
+     * @param {function(string): string} escapeHtml
+     * @returns {string} HTML for one item
+     */
+    window.renderReadyDateStatus = function(opts, escapeHtml) {
+        if (!opts || typeof escapeHtml !== 'function') return '';
+        var state = (opts.state && opts.state.trim()) ? opts.state.trim() : 'Not ready';
+        var readyDate = opts.readyDate;
+        var readyFrom = readyDate
+            ? (function() {
+                var t = window.parseISODate && window.parseISODate(readyDate);
+                return t != null ? escapeHtml(new Date(t).toLocaleDateString(undefined, { dateStyle: 'medium' })) : escapeHtml(String(readyDate));
+            })()
+            : '—';
+        var outputName = escapeHtml(opts.outputName || '—');
+        var severityColor = (opts.severity === 'amber') ? 'var(--warning, #f59e0b)' : 'var(--error, #ef4444)';
+        var detail = (opts.detail && opts.detail.trim()) ? escapeHtml(opts.detail.trim()) : 'Output not yet ready.';
+        var processStep = (opts.processStep && opts.processStep.trim()) ? '<p style="margin: 0 0 4px 0; color: var(--text-secondary); font-size: 12px;">' + escapeHtml(opts.processStep) + '</p>' : '';
+        return '<p style="margin: 0 0 4px 0; font-weight: 600;">' + outputName + '</p>' +
+            processStep +
+            '<p style="margin: 4px 0 0 0; font-size: 12px;">&#x26A0;&#xFE0F; Ready from: ' + readyFrom + '</p>' +
+            '<p style="margin: 2px 0 0 0; font-size: 12px;"><span style="color: ' + severityColor + ';">Status: ' + escapeHtml(state) + '</span></p>' +
+            '<p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary);">Detail: ' + detail + '</p>';
+    };
+
+    window.applyExecutionOutputReadyDateToPayload = function(modal, outputId, outputDef, outPayload) {
+        if (!modal || !outputId || !outputDef || !outPayload) return;
+        var rd = outputDef.extra_data && outputDef.extra_data.ready_date;
+        if (!rd || !rd.enabled || rd.mode !== 'set_at_execution' || typeof window.collectExecutionOutputReadyDatePayload !== 'function') return;
+        var payload = window.collectExecutionOutputReadyDatePayload(modal, outputId);
+        if (payload) outPayload.ready_date_input = payload;
+    };
+
+    /**
+     * Show the styled "product not yet ready" confirmation modal (replaces browser confirm).
+     * @param {Array<{inputName: string, itemName: string, reason: string}>} notReadyUsed
+     * @returns {Promise<boolean>} Resolves to true if user clicks "Use anyway", false if Cancel or backdrop.
+     */
+    window.showReadyDateConfirmModal = function(notReadyUsed) {
+        var modal = document.getElementById('ready-date-confirm-modal');
+        var bodyEl = document.getElementById('ready-date-confirm-body');
+        if (!modal || !bodyEl) return Promise.resolve(false);
+        function escapeHtml(text) {
+            if (text == null) return '';
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        var count = (notReadyUsed || []).length;
+        var summaryHtml = '<p class="ready-date-confirm-summary" style="margin: 0 0 12px 0; font-weight: 600; font-size: 14px;">' + count + ' output(s) are not yet ready for use.</p>';
+        var listHtml = '<ul style="margin: 0; padding-left: 20px;">' +
+            (notReadyUsed || []).map(function(u) {
+                return '<li style="margin-bottom: 6px;"><strong>' + escapeHtml(u.inputName) + ':</strong> ' + escapeHtml(u.itemName) + ' &mdash; <span style="color: var(--text-secondary);">' + escapeHtml(u.reason) + '</span></li>';
+            }).join('') + '</ul>';
+        bodyEl.innerHTML = summaryHtml + listHtml;
+        modal.style.display = 'flex';
+        return new Promise(function(resolve) {
+            var resolved = false;
+            function done(useAnyway) {
+                if (resolved) return;
+                resolved = true;
+                modal.style.display = 'none';
+                resolve(useAnyway);
+            }
+            var cancelBtn = document.getElementById('ready-date-confirm-cancel');
+            var useBtn = document.getElementById('ready-date-confirm-use');
+            function onCancel() { done(false); }
+            function onUse() { done(true); }
+            function onBackdrop(ev) {
+                if (ev.target === modal) onCancel();
+            }
+            if (cancelBtn) cancelBtn.addEventListener('click', onCancel, { once: true });
+            if (useBtn) useBtn.addEventListener('click', onUse, { once: true });
+            modal.addEventListener('click', onBackdrop, { once: true });
+        });
     };
 }
 

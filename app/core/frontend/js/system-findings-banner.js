@@ -192,6 +192,44 @@
             '</div>');
         });
       }
+    } else if (checkId === 'output_ready_date') {
+      var items = data.output_ready_date_items;
+      if (Array.isArray(items) && items.length > 0) {
+        var seenIds = new Set();
+        items = items.filter(function (x) {
+          var id = x && (x.inventory_item_id || x.id);
+          if (!id || seenIds.has(id)) return false;
+          seenIds.add(id);
+          return true;
+        });
+        parts.push('<p class="system-findings-item__detail-section"><strong>Output ready date:</strong></p>');
+        items.forEach(function (x) {
+          var name = (x && x.item_name) ? x.item_name : (x.inventory_item_id || '—');
+          var processStep = [x.process_name, x.step_name].filter(Boolean).join(' · ');
+          var innerHtml = typeof window.renderReadyDateStatus === 'function'
+            ? window.renderReadyDateStatus(
+                { state: x.state, readyDate: x.ready_date, outputName: name, severity: x.severity, detail: x.message, processStep: processStep },
+                escapeHtml
+              )
+            : (function () {
+                var readyFrom = x.ready_date
+                  ? (window.parseISODate && window.parseISODate(x.ready_date) != null
+                    ? escapeHtml(new Date(window.parseISODate(x.ready_date)).toLocaleDateString(undefined, { dateStyle: 'medium' }))
+                    : escapeHtml(String(x.ready_date)))
+                  : '—';
+                var stateLabel = (x.state && x.state.trim()) ? x.state.trim() : ((x.severity === 'amber') ? 'Nearing ready' : 'Not ready');
+                var severityColor = (x.severity === 'amber') ? 'var(--warning, #f59e0b)' : 'var(--error, #ef4444)';
+                var detail = (x.message && x.message.trim()) ? escapeHtml(x.message.trim()) : 'Output not yet ready.';
+                return '<p style="margin: 0 0 4px 0; font-weight: 600;">' + escapeHtml(name) + '</p>' +
+                  '<p style="margin: 4px 0 0 0; font-size: 12px;">&#x26A0;&#xFE0F; Ready from: ' + readyFrom + '</p>' +
+                  '<p style="margin: 2px 0 0 0; font-size: 12px;"><span style="color: ' + severityColor + ';">Status: ' + escapeHtml(stateLabel) + '</span></p>' +
+                  '<p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-secondary);">Detail: ' + detail + '</p>';
+              })();
+          parts.push('<div class="system-findings-output-ready-date-item" style="margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--border-default); border-radius: 6px; font-size: 13px;">' +
+            innerHtml +
+            '</div>');
+        });
+      }
     } else if (checkId === 'untracked_items') {
       var untracked = data.untracked_items;
       if (Array.isArray(untracked) && untracked.length > 0) {

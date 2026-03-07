@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
+from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution
 from app.core.backend.process_docs import process_docs_routes
@@ -23,7 +24,9 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
+from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates, assert_expiry_after_ready_duration
 from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
+from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
@@ -53,6 +56,31 @@ def validate_custom_expiry_warning_not_exceed_duration(
     tests call this to safeguard the validation.
     """
     return assert_warning_within_expiry(output_name, duration_value, duration_unit, warning_value, warning_unit)
+
+
+def _validate_step_outputs_expiry_after_ready(outputs: list) -> list[str]:
+    """Validate that for any output with both expiry and ready date (fixed duration), expiry >= ready. Returns list of error messages."""
+    errors: list[str] = []
+    for out in outputs or []:
+        if not isinstance(out, dict):
+            continue
+        extra = out.get("extra_data") or {}
+        ce = extra.get("custom_expiry")
+        rd = extra.get("ready_date")
+        if not ce or not ce.get("enabled") or (ce.get("mode") or "").strip() != "fixed_duration":
+            continue
+        if not rd or not rd.get("enabled") or (rd.get("mode") or "").strip() != "fixed_duration":
+            continue
+        out_name = (out.get("name") or "").strip() or "output"
+        try:
+            rv = int(rd.get("duration_value") or 0)
+            ru = (rd.get("duration_unit") or "days").strip().lower()
+            ev = int(ce.get("duration_value") or 0)
+            eu = (ce.get("duration_unit") or "days").strip().lower()
+        except (TypeError, ValueError):
+            continue
+        errors.extend(assert_expiry_after_ready_duration(out_name, rv, ru, ev, eu))
+    return errors
 
 
 @core_bp.route("/core", methods=["GET"])
@@ -410,6 +438,11 @@ def add_step(process_id: str):
     if step_number is None or name is None:
         return jsonify({"error": "step_number and name are required"}), 400
 
+    outputs = data.get("outputs", [])
+    expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
+    if expiry_ready_errors:
+        return jsonify({"error": expiry_ready_errors[0]}), 400
+
     repo = ProcessRepository(db_session)
     step = repo.add_step(
         process_id=process_uuid,
@@ -453,6 +486,12 @@ def update_step(process_id: str, step_id: str):
         return jsonify({"error": "Invalid process or step ID"}), 400
 
     data = request.get_json()
+    outputs = data.get("outputs")
+    if outputs is not None:
+        expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
+        if expiry_ready_errors:
+            return jsonify({"error": expiry_ready_errors[0]}), 400
+
     repo = ProcessRepository(db_session)
     step = repo.update_step(
         step_id=step_uuid,
@@ -683,10 +722,11 @@ def complete_step(execution_id: str, execution_step_id: str):
     except ValueError:
         return jsonify({"error": "Invalid execution or step ID"}), 400
 
-    data = request.get_json()
+    data = request.get_json() or {}
     actual_inputs = data.get("actual_inputs", [])
     actual_outputs = data.get("actual_outputs", [])
     execution_data = data.get("execution_data", {})
+    allow_consumption_override = data.get("allow_consumption_override") is True
 
     # Get current user from Flask g and always store in execution_data for accuracy
     # TODO: execution_data is becoming a structured contract with known fields:
@@ -748,12 +788,22 @@ def complete_step(execution_id: str, execution_step_id: str):
 
                 if inventory_item_id:
                     try:
-                        inventory_item = inventory_repo.get_inventory_item_by_id(UUID(inventory_item_id), org_id)
+                        # Lock row (SELECT ... FOR UPDATE) to prevent double-spend / race when concurrent requests consume same item.
+                        inventory_item = inventory_repo.get_inventory_item_by_id_for_update(
+                            UUID(inventory_item_id), org_id
+                        )
                         if not inventory_item:
                             execution_warnings.append(
                                 f"Inventory item {inventory_item_id} not found for input '{input_data.get('name', 'Unknown')}'"
                             )
                             continue
+
+                        # Execution consumption guard: block consuming not-ready inventory (ready date) unless override allowed
+                        if not allow_consumption_override:
+                            ready_ok, ready_err = is_inventory_item_ready_for_consumption(db_session, inventory_item)
+                            if not ready_ok and ready_err:
+                                execution_errors.append(ready_err)
+                                continue
 
                         # QUANTITY PRECISION: Use Decimal for safe arithmetic.
                         # TODO: Standardize all inventory quantity handling on Decimal; some paths still use float(quantity).
@@ -1002,6 +1052,83 @@ def complete_step(execution_id: str, execution_step_id: str):
                                 execution_errors.append(
                                     f"Output '{output_name}' has invalid expiry selection. Choose duration or date/time."
                                 )
+
+                # Ready date: if configured as set_at_execution, require and persist operator-set date
+                rd_cfg = None
+                for od in step_outputs_def or []:
+                    if isinstance(od, dict) and (od.get("name") or "").strip() == output_name:
+                        candidate = (od.get("extra_data") or {}).get("ready_date")
+                        if (
+                            candidate
+                            and candidate.get("enabled")
+                            and (candidate.get("mode") or "").strip() == "set_at_execution"
+                        ):
+                            rd_cfg = candidate
+                            break
+                if rd_cfg:
+                    rd_in = output.get("ready_date_input")
+                    if not isinstance(rd_in, dict) or not rd_in.get("date"):
+                        execution_errors.append(
+                            f"Output '{output_name}' requires a date of availability to be set during execution."
+                        )
+                    else:
+                        raw = rd_in.get("date")
+                        ready_iso = None
+                        # Validate ISO parseability; optional future: reject past dates if policy requires future-only.
+                        if isinstance(raw, str) and raw.strip():
+                            try:
+                                ready_iso = datetime.fromisoformat(raw.strip().replace("Z", "+00:00")).isoformat()
+                            except Exception:
+                                ready_iso = None
+                        if not ready_iso:
+                            execution_errors.append(
+                                f"Output '{output_name}' has invalid ready date. Choose a valid date."
+                            )
+                        else:
+                            extra_data["ready_date_actual"] = {"date": ready_iso}
+
+                # When both expiry and ready date are set, expiry cannot be before ready date (shared invariant)
+                ready_iso_val = (extra_data.get("ready_date_actual") or {}).get("date")
+                if ready_iso_val:
+                    expiry_iso_val = None
+                    ce_actual = extra_data.get("custom_expiry_actual") or {}
+                    if ce_actual.get("mode") == "datetime" and ce_actual.get("expiry_at"):
+                        expiry_iso_val = ce_actual.get("expiry_at")
+                    elif ce_actual.get("mode") == "duration" and execution_step.completed_at:
+                        try:
+                            dv = int(ce_actual.get("duration_value") or 0)
+                            du = (ce_actual.get("duration_unit") or "days").strip().lower()
+                            if du in VALID_EXPIRY_UNITS and dv > 0:
+                                delta = expiry_duration_to_timedelta(dv, du)
+                                expiry_dt = execution_step.completed_at + delta
+                                expiry_iso_val = expiry_dt.isoformat()
+                        except (TypeError, ValueError):
+                            pass
+                    else:
+                        # Step-level fixed expiry (no custom_expiry_actual): compute from step output config
+                        for od in step_outputs_def or []:
+                            if isinstance(od, dict) and (od.get("name") or "").strip() == output_name:
+                                ce_cfg = (od.get("extra_data") or {}).get("custom_expiry")
+                                if (
+                                    ce_cfg
+                                    and ce_cfg.get("enabled")
+                                    and (ce_cfg.get("mode") or "").strip() == "fixed_duration"
+                                    and execution_step.completed_at
+                                ):
+                                    try:
+                                        dv = int(ce_cfg.get("duration_value") or 0)
+                                        du = (ce_cfg.get("duration_unit") or "days").strip().lower()
+                                        if du in VALID_EXPIRY_UNITS and dv > 0:
+                                            delta = expiry_duration_to_timedelta(dv, du)
+                                            expiry_dt = execution_step.completed_at + delta
+                                            expiry_iso_val = expiry_dt.isoformat()
+                                    except (TypeError, ValueError):
+                                        pass
+                                break
+                    if ready_iso_val and expiry_iso_val:
+                        execution_errors.extend(
+                            assert_expiry_after_ready_dates(output_name, ready_iso_val, expiry_iso_val)
+                        )
 
                 # Optional: map this output to an untracked item (reconcile at completion)
                 untracked_item_id_raw = output.get("untracked_item_id")

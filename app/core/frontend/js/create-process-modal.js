@@ -107,6 +107,31 @@
               if (warningUnitEl) warningUnitEl.value = 'days';
             }
           }
+          // Restore ready date sub-pane for this output (mode: none | fixed_duration | set_at_execution)
+          const rd = (output.extra_data || {}).ready_date;
+          const readyDateModeEl = lastOutputContainer.querySelector('.guided-output-ready-date-mode');
+          const readyDateValueEl = lastOutputContainer.querySelector('.guided-output-ready-date-value');
+          const readyDateUnitEl = lastOutputContainer.querySelector('.guided-output-ready-date-unit');
+          const readyDateWarnValueEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-value');
+          const readyDateWarnUnitEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-unit');
+          const readyDateFieldsEl = lastOutputContainer.querySelector('.guided-output-ready-date-fields');
+          const readyDateFixedEl = lastOutputContainer.querySelector('.guided-output-ready-date-fixed-fields');
+          const readyDateExecHintEl = lastOutputContainer.querySelector('.guided-output-ready-date-exec-hint');
+          const readyDateWarnWrapEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-wrap');
+          if (readyDateModeEl) {
+            const mode = (rd && rd.enabled && rd.mode) ? rd.mode : 'none';
+            readyDateModeEl.value = mode;
+            if (readyDateFieldsEl) readyDateFieldsEl.style.display = mode !== 'none' ? 'block' : 'none';
+            if (readyDateFixedEl) readyDateFixedEl.style.display = mode === 'fixed_duration' ? 'block' : 'none';
+            if (readyDateExecHintEl) readyDateExecHintEl.style.display = mode === 'set_at_execution' ? 'block' : 'none';
+            if (readyDateWarnWrapEl) readyDateWarnWrapEl.style.display = mode === 'fixed_duration' ? 'block' : 'none';
+          }
+          if (rd && (rd.mode === 'fixed_duration' || (rd.enabled && rd.duration_value != null))) {
+            if (readyDateValueEl && rd.duration_value != null) readyDateValueEl.value = String(rd.duration_value);
+            if (readyDateUnitEl && rd.duration_unit) readyDateUnitEl.value = rd.duration_unit;
+            if (readyDateWarnValueEl && rd.warning_value != null) readyDateWarnValueEl.value = String(rd.warning_value);
+            if (readyDateWarnUnitEl && rd.warning_unit) readyDateWarnUnitEl.value = rd.warning_unit;
+          }
         }
       }
     }
@@ -1091,6 +1116,141 @@
           }
         } catch (e) {}
         return;
+      }
+      // Validate ready date: fixed_duration requires duration > 0 and warn <= ready period
+      const readyDateValidation = window.ReadyDateValidation;
+      const validateFixedReadyDateWarning = (readyDateValidation && typeof readyDateValidation.validateFixedReadyDateWarning === 'function')
+        ? readyDateValidation.validateFixedReadyDateWarning
+        : function () { return { valid: true }; };
+      const outputsWithReadyDate = [];
+      outputElements.forEach(function (outputEl) {
+        const name = outputEl.querySelector('.guided-output-name')?.value.trim() || '';
+        const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
+        const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
+        const readyDateUnitEl = outputEl.querySelector('.guided-output-ready-date-unit');
+        const readyDateWarnValueEl = outputEl.querySelector('.guided-output-ready-date-warning-value');
+        const readyDateWarnUnitEl = outputEl.querySelector('.guided-output-ready-date-warning-unit');
+        const mode = readyDateModeEl ? readyDateModeEl.value : 'none';
+        const durationValue = (readyDateValueEl && mode === 'fixed_duration') ? parseInt(readyDateValueEl.value, 10) : null;
+        const durationUnit = (readyDateUnitEl && mode === 'fixed_duration') ? (readyDateUnitEl.value || 'days').trim() : 'days';
+        const warningValue = (readyDateWarnValueEl && mode === 'fixed_duration') ? parseInt(readyDateWarnValueEl.value, 10) : 0;
+        const warningUnit = (readyDateWarnUnitEl && mode === 'fixed_duration') ? (readyDateWarnUnitEl.value || 'days').trim() : 'days';
+        const outObj = { name: name };
+        if (mode === 'fixed_duration' && durationValue > 0) {
+          outObj.extra_data = {
+            ready_date: {
+              enabled: true,
+              mode: 'fixed_duration',
+              duration_value: durationValue,
+              duration_unit: durationUnit,
+              warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 0,
+              warning_unit: warningUnit,
+              rule_type: 'custom_ready_date'
+            }
+          };
+        }
+        outputsWithReadyDate.push(outObj);
+      });
+      const rdValidation = validateFixedReadyDateWarning(outputsWithReadyDate);
+      if (!rdValidation.valid) {
+        if (window.showNotification) {
+          window.showNotification('error', 'Invalid ready date settings', rdValidation.message);
+        } else {
+          alert(rdValidation.message);
+        }
+        try {
+          const match = Array.from(outputElements).find(function (el) {
+            const n = el.querySelector('.guided-output-name')?.value.trim() || '';
+            return rdValidation.outputName && n === rdValidation.outputName;
+          });
+          if (match) {
+            if (match.dataset && match.dataset.expanded === 'false' && typeof toggleOutputExpand === 'function') {
+              toggleOutputExpand(match.id);
+            }
+            match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        } catch (e) {}
+        return;
+      }
+      for (let i = 0; i < outputElements.length; i++) {
+        const outputEl = outputElements[i];
+        const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
+        const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
+        const mode = readyDateModeEl ? readyDateModeEl.value : 'none';
+        if (mode === 'fixed_duration') {
+          if (!readyDateValueEl || !readyDateValueEl.value.trim() || parseInt(readyDateValueEl.value, 10) <= 0) {
+            const outputName = outputEl.querySelector('.guided-output-name')?.value.trim() || '';
+            if (window.showNotification) {
+              window.showNotification('error', 'Ready date required', 'Output "' + outputName + '" has fixed ready date; please set a positive period.');
+            } else {
+              alert('Output "' + outputName + '" has fixed ready date; please set a positive period.');
+            }
+            try {
+              if (outputEl.dataset && outputEl.dataset.expanded === 'false' && typeof toggleOutputExpand === 'function') {
+                toggleOutputExpand(outputEl.id);
+              }
+              outputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (e) {}
+            return;
+          }
+        }
+      }
+      // When both expiry and ready date are set (fixed duration), expiry cannot be before ready date (shared config)
+      const outputsWithBothExpiryAndReady = [];
+      outputElements.forEach(function (outputEl) {
+        const name = outputEl.querySelector('.guided-output-name')?.value.trim() || '';
+        const expiryModeEl = outputEl.querySelector('.guided-output-expiry-mode');
+        const expiryValueEl = outputEl.querySelector('.guided-output-expiry-value');
+        const expiryUnitEl = outputEl.querySelector('.guided-output-expiry-unit');
+        const expiryWarningValueEl = outputEl.querySelector('.guided-output-expiry-warning-value');
+        const expiryWarningUnitEl = outputEl.querySelector('.guided-output-expiry-warning-unit');
+        const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
+        const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
+        const readyDateUnitEl = outputEl.querySelector('.guided-output-ready-date-unit');
+        const readyDateWarnValueEl = outputEl.querySelector('.guided-output-ready-date-warning-value');
+        const readyDateWarnUnitEl = outputEl.querySelector('.guided-output-ready-date-warning-unit');
+        const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
+        const readyMode = readyDateModeEl ? readyDateModeEl.value : 'none';
+        if (expiryMode !== 'fixed_duration' || readyMode !== 'fixed_duration') return;
+        const expiryValue = (expiryValueEl && expiryValueEl.value.trim()) ? parseInt(expiryValueEl.value, 10) : 0;
+        if (!expiryValue || isNaN(expiryValue)) return;
+        const expiryUnit = (expiryUnitEl && expiryUnitEl.value) || 'days';
+        const expiryWarningValue = (expiryWarningValueEl && expiryWarningValueEl.value.trim() !== '') ? parseInt(expiryWarningValueEl.value, 10) : 0;
+        const expiryWarningUnit = (expiryWarningUnitEl && expiryWarningUnitEl.value) || 'days';
+        const readyValue = (readyDateValueEl && readyDateValueEl.value.trim()) ? parseInt(readyDateValueEl.value, 10) : 0;
+        const readyUnit = (readyDateUnitEl && readyDateUnitEl.value) || 'days';
+        const readyWarningValue = (readyDateWarnValueEl && readyDateWarnValueEl.value.trim() !== '') ? parseInt(readyDateWarnValueEl.value, 10) : 0;
+        const readyWarningUnit = (readyDateWarnUnitEl && readyDateWarnUnitEl.value) || 'days';
+        outputsWithBothExpiryAndReady.push({
+          name: name,
+          extra_data: {
+            custom_expiry: { enabled: true, mode: 'fixed_duration', duration_value: expiryValue, duration_unit: expiryUnit, warning_value: isNaN(expiryWarningValue) ? 0 : expiryWarningValue, warning_unit: expiryWarningUnit },
+            ready_date: { enabled: true, mode: 'fixed_duration', duration_value: readyValue, duration_unit: readyUnit, warning_value: isNaN(readyWarningValue) ? 0 : readyWarningValue, warning_unit: readyWarningUnit }
+          }
+        });
+      });
+      if (outputsWithBothExpiryAndReady.length > 0 && window.ExpiryReadyDateValidation && typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration === 'function') {
+        const erResult = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration(outputsWithBothExpiryAndReady);
+        if (!erResult.valid) {
+          if (window.showNotification) {
+            window.showNotification('error', 'Expiry and ready date', erResult.message);
+          } else {
+            alert(erResult.message);
+          }
+          try {
+            const match = Array.from(outputElements).find(function (el) {
+              const n = el.querySelector('.guided-output-name')?.value.trim() || '';
+              return erResult.outputName && n === erResult.outputName;
+            });
+            if (match) {
+              if (match.dataset && match.dataset.expanded === 'false' && typeof toggleOutputExpand === 'function') {
+                toggleOutputExpand(match.id);
+              }
+              match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          } catch (e) {}
+          return;
+        }
       }
     }
     
@@ -2760,6 +2920,7 @@
     expiryWarningError.className = 'guided-output-expiry-warning-error';
     expiryWarningError.style.cssText = 'display: none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626); line-height: 1.4;';
     expiryWarningError.setAttribute('role', 'alert');
+    expiryWarningError.setAttribute('aria-live', 'polite');
     warningWrap.appendChild(expiryWarningError);
     const validator = window.CustomExpiryValidation;
     function syncExpiryWarningValidation() {
@@ -2814,6 +2975,220 @@
     });
     expiryPane.appendChild(expiryFieldsWrap);
     contentArea.appendChild(expiryPane);
+
+    // Ready date — sub-pane (same pattern as custom expiry: none | fixed_duration | set_at_execution)
+    const READY_DATE_MODES = window.READY_DATE_MODES || { NONE: 'none', FIXED: 'fixed_duration', EXECUTION: 'set_at_execution' };
+    const readyDatePane = document.createElement('div');
+    readyDatePane.className = 'guided-output-ready-date-pane';
+    readyDatePane.style.cssText = 'margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);';
+    const readyDateLabel = document.createElement('label');
+    readyDateLabel.style.cssText = 'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;';
+    readyDateLabel.textContent = 'Ready date';
+    readyDatePane.appendChild(readyDateLabel);
+    const readyDateDesc = document.createElement('p');
+    readyDateDesc.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;';
+    readyDateDesc.textContent = 'When can this output be used? No restriction, a fixed period after completion, or set by the operator at execution.';
+    readyDatePane.appendChild(readyDateDesc);
+    const readyDateModeSelect = document.createElement('select');
+    readyDateModeSelect.className = 'guided-output-ready-date-mode form-select';
+    readyDateModeSelect.style.cssText = 'width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 14px; box-sizing: border-box;';
+    const noReadyOpt = document.createElement('option');
+    noReadyOpt.value = READY_DATE_MODES.NONE;
+    noReadyOpt.textContent = 'No ready date needed — product is available for use immediately';
+    readyDateModeSelect.appendChild(noReadyOpt);
+    const fixedReadyOpt = document.createElement('option');
+    fixedReadyOpt.value = READY_DATE_MODES.FIXED;
+    fixedReadyOpt.textContent = 'Fixed ready date — cannot be consumed for a fixed period';
+    readyDateModeSelect.appendChild(fixedReadyOpt);
+    const execReadyOpt = document.createElement('option');
+    execReadyOpt.value = READY_DATE_MODES.EXECUTION;
+    execReadyOpt.textContent = 'Set ready date during execution';
+    readyDateModeSelect.appendChild(execReadyOpt);
+    readyDatePane.appendChild(readyDateModeSelect);
+    const readyDateFieldsWrap = document.createElement('div');
+    readyDateFieldsWrap.className = 'guided-output-ready-date-fields';
+    readyDateFieldsWrap.style.cssText = 'margin-top: 12px; padding: 12px; background: var(--bg-card, #fff); border-radius: var(--radius-md); border: 1px solid var(--border-default); display: none;';
+    const readyDateTimeUnits = [
+      { value: 'days', label: 'Days' },
+      { value: 'weeks', label: 'Weeks' },
+      { value: 'months', label: 'Months' },
+      { value: 'years', label: 'Years' }
+    ];
+    const readyDateFixedWrap = document.createElement('div');
+    readyDateFixedWrap.className = 'guided-output-ready-date-fixed-fields';
+    readyDateFixedWrap.style.cssText = 'display: none; margin-bottom: 12px;';
+    const readyDateDurationLabel = document.createElement('label');
+    readyDateDurationLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;';
+    readyDateDurationLabel.textContent = 'Ready after (period from step completion)';
+    readyDateFixedWrap.appendChild(readyDateDurationLabel);
+    const readyDateDurationRow = document.createElement('div');
+    readyDateDurationRow.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+    const readyDateValueInput = document.createElement('input');
+    readyDateValueInput.type = 'number';
+    readyDateValueInput.className = 'guided-output-ready-date-value';
+    readyDateValueInput.min = '1';
+    readyDateValueInput.placeholder = '7';
+    readyDateValueInput.style.cssText = 'flex: 1; width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+    readyDateDurationRow.appendChild(readyDateValueInput);
+    const readyDateUnitSelect = document.createElement('select');
+    readyDateUnitSelect.className = 'guided-output-ready-date-unit form-select';
+    readyDateUnitSelect.style.cssText = 'width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+    readyDateTimeUnits.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.value;
+      opt.textContent = u.label;
+      readyDateUnitSelect.appendChild(opt);
+    });
+    readyDateUnitSelect.value = 'days';
+    readyDateDurationRow.appendChild(readyDateUnitSelect);
+    readyDateFixedWrap.appendChild(readyDateDurationRow);
+    readyDateFieldsWrap.appendChild(readyDateFixedWrap);
+    const readyDateExecHint = document.createElement('p');
+    readyDateExecHint.className = 'guided-output-ready-date-exec-hint';
+    readyDateExecHint.style.cssText = 'display: none; margin: 0 0 12px 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
+    readyDateExecHint.textContent = 'You will be prompted for a date of availability each time you execute this step.';
+    readyDateFieldsWrap.appendChild(readyDateExecHint);
+    const readyDateWarnWrap = document.createElement('div');
+    readyDateWarnWrap.className = 'guided-output-ready-date-warning-wrap';
+    readyDateWarnWrap.style.cssText = 'display: none;';
+    const readyDateWarnLabel = document.createElement('label');
+    readyDateWarnLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;';
+    readyDateWarnLabel.textContent = 'Warn before ready';
+    readyDateWarnLabel.title = 'Alert the user ahead of time that their output will be ready in X period (e.g. 1 day, 1 week). Must be the same or less than the ready period.';
+    readyDateWarnWrap.appendChild(readyDateWarnLabel);
+    const readyDateWarnRow = document.createElement('div');
+    readyDateWarnRow.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+    const readyDateWarnValueInput = document.createElement('input');
+    readyDateWarnValueInput.type = 'number';
+    readyDateWarnValueInput.className = 'guided-output-ready-date-warning-value';
+    readyDateWarnValueInput.min = '0';
+    readyDateWarnValueInput.placeholder = '1';
+    readyDateWarnValueInput.style.cssText = 'flex: 1; width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+    readyDateWarnRow.appendChild(readyDateWarnValueInput);
+    const readyDateWarnUnitSelect = document.createElement('select');
+    readyDateWarnUnitSelect.className = 'guided-output-ready-date-warning-unit form-select';
+    readyDateWarnUnitSelect.style.cssText = 'width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+    readyDateTimeUnits.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.value;
+      opt.textContent = u.label;
+      readyDateWarnUnitSelect.appendChild(opt);
+    });
+    readyDateWarnUnitSelect.value = 'days';
+    readyDateWarnRow.appendChild(readyDateWarnUnitSelect);
+    readyDateWarnWrap.appendChild(readyDateWarnRow);
+    readyDateFieldsWrap.appendChild(readyDateWarnWrap);
+    const readyDateWarnError = document.createElement('div');
+    readyDateWarnError.className = 'guided-output-ready-date-warning-error';
+    readyDateWarnError.style.cssText = 'display: none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626); line-height: 1.4;';
+    readyDateWarnError.setAttribute('role', 'alert');
+    readyDateWarnError.setAttribute('aria-live', 'polite');
+    readyDateWarnWrap.appendChild(readyDateWarnError);
+    const readyDateValidator = window.ReadyDateValidation;
+    function syncReadyDateWarnValidation() {
+      const mode = readyDateModeSelect.value;
+      const fixedMode = READY_DATE_MODES.FIXED || 'fixed_duration';
+      if (mode !== fixedMode) {
+        readyDateWarnError.style.display = 'none';
+        readyDateWarnError.textContent = '';
+        readyDateWarnValueInput.style.borderColor = '';
+        readyDateWarnUnitSelect.style.borderColor = '';
+        return;
+      }
+      const readyVal = parseInt(readyDateValueInput.value, 10);
+      const readyUnit = (readyDateUnitSelect.value || 'days').trim();
+      const warnVal = parseInt(readyDateWarnValueInput.value, 10);
+      const warnUnit = (readyDateWarnUnitSelect.value || 'days').trim();
+      const readyHours = readyDateValidator && typeof readyDateValidator.durationToHours === 'function'
+        ? readyDateValidator.durationToHours(isNaN(readyVal) ? null : readyVal, readyUnit)
+        : null;
+      const result = readyDateValidator && typeof readyDateValidator.validateWarnNotLongerThanReadyPeriod === 'function'
+        ? readyDateValidator.validateWarnNotLongerThanReadyPeriod({
+            warnValue: isNaN(warnVal) ? null : warnVal,
+            warnUnit: warnUnit,
+            readyHours: readyHours,
+            readyLabel: (readyVal != null ? readyVal : '') + ' ' + readyUnit,
+          })
+        : { valid: true };
+      if (!result.valid) {
+        readyDateWarnError.textContent = result.message || 'Warn period must not be longer than the ready period.';
+        readyDateWarnError.style.display = 'block';
+        readyDateWarnValueInput.style.borderColor = 'var(--danger, #dc2626)';
+        readyDateWarnUnitSelect.style.borderColor = 'var(--danger, #dc2626)';
+      } else {
+        readyDateWarnError.style.display = 'none';
+        readyDateWarnError.textContent = '';
+        readyDateWarnValueInput.style.borderColor = '';
+        readyDateWarnUnitSelect.style.borderColor = '';
+      }
+    }
+    [readyDateValueInput, readyDateUnitSelect, readyDateWarnValueInput, readyDateWarnUnitSelect].forEach(el => {
+      el.addEventListener('input', syncReadyDateWarnValidation);
+      el.addEventListener('change', syncReadyDateWarnValidation);
+    });
+    readyDateModeSelect.addEventListener('change', function () {
+      const mode = readyDateModeSelect.value;
+      readyDateFieldsWrap.style.display = mode !== (READY_DATE_MODES.NONE || 'none') ? 'block' : 'none';
+      readyDateFixedWrap.style.display = mode === (READY_DATE_MODES.FIXED || 'fixed_duration') ? 'block' : 'none';
+      readyDateExecHint.style.display = mode === (READY_DATE_MODES.EXECUTION || 'set_at_execution') ? 'block' : 'none';
+      readyDateWarnWrap.style.display = mode === (READY_DATE_MODES.FIXED || 'fixed_duration') ? 'block' : 'none';
+      syncReadyDateWarnValidation();
+    });
+    readyDatePane.appendChild(readyDateFieldsWrap);
+    contentArea.appendChild(readyDatePane);
+
+    // Inline warning: when both expiry and ready date are fixed duration, expiry must be >= ready (show before Next)
+    const expiryReadyErrorEl = document.createElement('div');
+    expiryReadyErrorEl.className = 'guided-output-expiry-ready-validation-error';
+    expiryReadyErrorEl.style.cssText = 'display: none; margin-top: 12px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500; line-height: 1.4;';
+    expiryReadyErrorEl.setAttribute('role', 'alert');
+    expiryReadyErrorEl.setAttribute('aria-live', 'polite');
+    contentArea.appendChild(expiryReadyErrorEl);
+
+    function syncExpiryReadyValidation() {
+      expiryReadyErrorEl.style.display = 'none';
+      expiryReadyErrorEl.textContent = '';
+      expiryPane.style.borderColor = '';
+      expiryPane.style.boxShadow = '';
+      readyDatePane.style.borderColor = '';
+      readyDatePane.style.boxShadow = '';
+      const expiryMode = expiryModeSelect.value;
+      const readyMode = readyDateModeSelect.value;
+      const fixedExpiry = (window.EXPIRY_MODES && window.EXPIRY_MODES.FIXED) || 'fixed_duration';
+      const fixedReady = (window.READY_DATE_MODES && window.READY_DATE_MODES.FIXED) || 'fixed_duration';
+      if (expiryMode !== fixedExpiry || readyMode !== fixedReady) return;
+      const nameEl = outputContainer.querySelector('.guided-output-name');
+      const outName = (nameEl && nameEl.value && nameEl.value.trim()) ? nameEl.value.trim() : 'this output';
+      const expiryVal = parseInt(expiryValueInput.value, 10);
+      const expiryUnit = (expiryUnitSelect.value || 'days').trim();
+      const readyVal = parseInt(readyDateValueInput.value, 10);
+      const readyUnit = (readyDateUnitSelect.value || 'days').trim();
+      if ((!expiryVal || isNaN(expiryVal)) && (!readyVal || isNaN(readyVal))) return;
+      const payload = [{
+        name: outName,
+        extra_data: {
+          custom_expiry: { enabled: true, mode: 'fixed_duration', duration_value: expiryVal || 0, duration_unit: expiryUnit },
+          ready_date: { enabled: true, mode: 'fixed_duration', duration_value: readyVal || 0, duration_unit: readyUnit }
+        }
+      }];
+      if (window.ExpiryReadyDateValidation && typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration === 'function') {
+        const res = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration(payload);
+        if (!res.valid) {
+          expiryReadyErrorEl.textContent = res.message || 'Expiry must be on or after the ready date.';
+          expiryReadyErrorEl.style.display = 'block';
+          expiryPane.style.borderColor = 'var(--error, #ef4444)';
+          expiryPane.style.boxShadow = '0 0 0 1px var(--error, #ef4444)';
+          readyDatePane.style.borderColor = 'var(--error, #ef4444)';
+          readyDatePane.style.boxShadow = '0 0 0 1px var(--error, #ef4444)';
+        }
+      }
+    }
+    [expiryModeSelect, readyDateModeSelect, expiryValueInput, expiryUnitSelect, readyDateValueInput, readyDateUnitSelect].forEach(function (el) {
+      if (el) {
+        el.addEventListener('input', syncExpiryReadyValidation);
+        el.addEventListener('change', syncExpiryReadyValidation);
+      }
+    });
     
     outputContainer.appendChild(contentArea);
     document.getElementById('guided-outputs-list').appendChild(outputContainer);
@@ -3173,7 +3548,13 @@
         const expiryUnitEl = outputEl.querySelector('.guided-output-expiry-unit');
         const warningValueEl = outputEl.querySelector('.guided-output-expiry-warning-value');
         const warningUnitEl = outputEl.querySelector('.guided-output-expiry-warning-unit');
+        const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
+        const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
+        const readyDateUnitEl = outputEl.querySelector('.guided-output-ready-date-unit');
+        const readyDateWarnValueEl = outputEl.querySelector('.guided-output-ready-date-warning-value');
+        const readyDateWarnUnitEl = outputEl.querySelector('.guided-output-ready-date-warning-unit');
         const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
+        const readyDateMode = readyDateModeEl ? readyDateModeEl.value : 'none';
         const expiryValueRaw = expiryValueEl && expiryMode === 'fixed_duration' ? expiryValueEl.value.trim() : '';
         const expiryValue = expiryValueRaw !== '' ? parseInt(expiryValueRaw, 10) : null;
         const expiryUnit = expiryUnitEl && expiryMode === 'fixed_duration' ? ((expiryUnitEl.value || 'days') + '').trim() : 'days';
@@ -3202,6 +3583,33 @@
             warning_unit: null,
             expiry_at: null,
             rule_type: 'custom_output_expiry'
+          };
+        }
+        if (readyDateMode === 'fixed_duration' && readyDateValueEl && readyDateValueEl.value.trim()) {
+          const rdVal = parseInt(readyDateValueEl.value, 10);
+          if (!isNaN(rdVal) && rdVal > 0) {
+            const rdUnit = (readyDateUnitEl && readyDateUnitEl.value) ? readyDateUnitEl.value.trim() : 'days';
+            const rdWarnVal = (readyDateWarnValueEl && readyDateWarnValueEl.value.trim() !== '') ? parseInt(readyDateWarnValueEl.value, 10) : 0;
+            const rdWarnUnit = (readyDateWarnUnitEl && readyDateWarnUnitEl.value) ? readyDateWarnUnitEl.value.trim() : 'days';
+            extra_data.ready_date = {
+              enabled: true,
+              mode: 'fixed_duration',
+              duration_value: rdVal,
+              duration_unit: rdUnit,
+              warning_value: (typeof rdWarnVal === 'number' && !isNaN(rdWarnVal) && rdWarnVal >= 0) ? rdWarnVal : 0,
+              warning_unit: rdWarnUnit,
+              rule_type: 'custom_ready_date'
+            };
+          }
+        } else if (readyDateMode === 'set_at_execution') {
+          extra_data.ready_date = {
+            enabled: true,
+            mode: 'set_at_execution',
+            duration_value: null,
+            duration_unit: null,
+            warning_value: null,
+            warning_unit: null,
+            rule_type: 'custom_ready_date'
           };
         }
         const outObj = {

@@ -11,6 +11,7 @@ import pytest
 
 from app.core.backend.checks.expired_materials import run_expired_materials_check
 from app.core.backend.checks.output_expiry_check import run_output_expiry_check
+from app.core.backend.checks.output_ready_date_check import run_output_ready_date_check
 from app.core.backend.corechecks import CoreChecksRunner
 from app.core.db import db_session
 from app.core.db.models.execution import Execution
@@ -23,6 +24,11 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.core.domain.ready_date_rules import (
+    VALID_READY_DATE_UNITS,
+    assert_warning_within_ready_period,
+    duration_to_timedelta,
+)
 from app.core.utils.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
 
 
@@ -494,3 +500,339 @@ class TestOutputExpiryCheck:
             assert item["execution_id"] == str(execution.id)
         finally:
             _cleanup_output_expiry_fixture(db, org_id, process, execution, inv_item)
+
+
+# Ready date domain rules (single source of truth)
+class TestReadyDateRulesDomain:
+    """Domain module app.core.domain.ready_date_rules: invariant and duration math."""
+
+    def test_duration_to_timedelta_units(self):
+        assert duration_to_timedelta(1, "days").days == 1
+        assert duration_to_timedelta(2, "weeks").days == 14
+        assert duration_to_timedelta(1, "months").days == 30
+        assert duration_to_timedelta(1, "years").days == 365
+
+    def test_assert_warning_within_ready_period_valid(self):
+        errs = assert_warning_within_ready_period("Out", 7, "days", 1, "days")
+        assert errs == []
+        errs = assert_warning_within_ready_period("Out", 2, "weeks", 1, "weeks")
+        assert errs == []
+
+    def test_assert_warning_within_ready_period_invalid(self):
+        errs = assert_warning_within_ready_period("Out", 3, "days", 7, "days")
+        assert len(errs) == 1
+        assert "warn-before-ready" in errs[0]
+        assert "Out" in errs[0]
+
+    def test_valid_ready_date_units(self):
+        assert "days" in VALID_READY_DATE_UNITS
+        assert "years" in VALID_READY_DATE_UNITS
+        assert "hours" not in VALID_READY_DATE_UNITS
+
+
+# Ready date test output name and fixture
+TEST_READY_DATE_OUTPUT_NAME = "Ready Date Test Output"
+
+
+def _make_output_ready_date_fixture(db, org_id, ready_date_days_ahead=7, use_fixed_duration=True):
+    """
+    Create minimal process/step/execution/execution_step/inventory for output_ready_date check.
+    ready_date_days_ahead: when use_fixed_duration=False (legacy), ready_date is this many days ahead.
+    When use_fixed_duration=True, duration is set so ready = completed_at + duration (e.g. 7 days),
+    so with completed_at 1 day ago, ready is 6 days in the future.
+    Returns (process, step, execution, execution_step, inventory_item).
+    """
+    now = datetime.now(timezone.utc)
+    process_repo = ProcessRepository(db)
+    exec_repo = ExecutionRepository(db)
+    inv_repo = InventoryRepository(db)
+    completed_at_override = now - timedelta(days=1)
+    if use_fixed_duration:
+        # fixed_duration: ready = completed_at + 7 days -> 6 days in future from now
+        step_output = {
+            "name": TEST_READY_DATE_OUTPUT_NAME,
+            "quantity": 1,
+            "unit": "kg",
+            "extra_data": {
+                "ready_date": {
+                    "enabled": True,
+                    "mode": "fixed_duration",
+                    "duration_value": 7,
+                    "duration_unit": "days",
+                    "warning_value": 1,
+                    "warning_unit": "days",
+                    "rule_type": "custom_ready_date",
+                }
+            },
+        }
+        extra_data = None
+    else:
+        ready_dt = now + timedelta(days=ready_date_days_ahead)
+        step_output = {
+            "name": TEST_READY_DATE_OUTPUT_NAME,
+            "quantity": 1,
+            "unit": "kg",
+            "extra_data": {
+                "ready_date": {
+                    "enabled": True,
+                    "date": ready_dt.isoformat(),
+                    "prompt": "Output cannot be used until ready date",
+                    "rule_type": "custom_ready_date",
+                }
+            },
+        }
+        extra_data = None
+
+    process = process_repo.create_process(
+        org_id=org_id,
+        name="Output Ready Date Test Process",
+        description="For output_ready_date check tests",
+        is_draft=False,
+    )
+    step = process_repo.add_step(
+        process_id=process.id,
+        org_id=org_id,
+        step_number=1,
+        name="Single Step",
+        description="One output with ready date",
+        inputs=[],
+        outputs=[step_output],
+        execution_prompts=[],
+    )
+    assert step is not None
+
+    execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
+    execution_steps = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.execution_id == execution.id)
+        .order_by(ExecutionStep.step_number)
+        .all()
+    )
+    assert len(execution_steps) == 1
+    exec_step = execution_steps[0]
+
+    exec_repo.complete_step(
+        execution_step_id=exec_step.id,
+        org_id=org_id,
+        actual_inputs=[],
+        actual_outputs=[{"name": TEST_READY_DATE_OUTPUT_NAME, "quantity": 10, "unit": "kg"}],
+        execution_data={},
+        completed_at_override=completed_at_override,
+    )
+
+    inventory_item = inv_repo.create_inventory_item(
+        org_id=org_id,
+        name=TEST_READY_DATE_OUTPUT_NAME,
+        quantity="10",
+        unit="kg",
+        inventory_type=InventoryType.WORK_IN_PROGRESS.value,
+        supplier=None,
+        purchase_date=None,
+        supplier_batch_number=None,
+        expiry_date=None,
+        source_execution_id=execution.id,
+        source_execution_step_id=exec_step.id,
+        source_step_name=step.name,
+        extra_data=extra_data,
+    )
+    return process, step, execution, exec_step, inventory_item
+
+
+def _make_output_ready_date_set_at_execution_fixture(db, org_id, ready_date_days_ahead=7):
+    """Fixture with mode set_at_execution; ready_date_actual on inventory item."""
+    now = datetime.now(timezone.utc)
+    process_repo = ProcessRepository(db)
+    exec_repo = ExecutionRepository(db)
+    inv_repo = InventoryRepository(db)
+    completed_at_override = now - timedelta(days=1)
+    ready_dt = now + timedelta(days=ready_date_days_ahead)
+    step_output = {
+        "name": TEST_READY_DATE_OUTPUT_NAME,
+        "quantity": 1,
+        "unit": "kg",
+        "extra_data": {
+            "ready_date": {
+                "enabled": True,
+                "mode": "set_at_execution",
+                "rule_type": "custom_ready_date",
+            }
+        },
+    }
+    process = process_repo.create_process(
+        org_id=org_id,
+        name="Output Ready Date Set-At-Execution Process",
+        description="For output_ready_date set_at_execution tests",
+        is_draft=False,
+    )
+    step = process_repo.add_step(
+        process_id=process.id,
+        org_id=org_id,
+        step_number=1,
+        name="Single Step",
+        description="One output with ready date set at execution",
+        inputs=[],
+        outputs=[step_output],
+        execution_prompts=[],
+    )
+    assert step is not None
+    execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
+    execution_steps = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.execution_id == execution.id)
+        .order_by(ExecutionStep.step_number)
+        .all()
+    )
+    assert len(execution_steps) == 1
+    exec_step = execution_steps[0]
+    exec_repo.complete_step(
+        execution_step_id=exec_step.id,
+        org_id=org_id,
+        actual_inputs=[],
+        actual_outputs=[{"name": TEST_READY_DATE_OUTPUT_NAME, "quantity": 10, "unit": "kg"}],
+        execution_data={},
+        completed_at_override=completed_at_override,
+    )
+    inventory_item = inv_repo.create_inventory_item(
+        org_id=org_id,
+        name=TEST_READY_DATE_OUTPUT_NAME,
+        quantity="10",
+        unit="kg",
+        inventory_type=InventoryType.WORK_IN_PROGRESS.value,
+        supplier=None,
+        purchase_date=None,
+        supplier_batch_number=None,
+        expiry_date=None,
+        source_execution_id=execution.id,
+        source_execution_step_id=exec_step.id,
+        source_step_name=step.name,
+        extra_data={"ready_date_actual": {"date": ready_dt.isoformat()}},
+    )
+    return process, step, execution, exec_step, inventory_item
+
+
+def _cleanup_output_ready_date_fixture(db, org_id, process, execution, inventory_item):
+    """Remove fixture data for ready date tests."""
+    db.query(InventoryItem).filter(InventoryItem.id == inventory_item.id).delete(synchronize_session=False)
+    db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).delete(synchronize_session=False)
+    db.query(Execution).filter(Execution.id == execution.id).delete(synchronize_session=False)
+    db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
+    db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
+    db.commit()
+
+
+class TestOutputReadyDateCheck:
+    """Output ready date check: registered, shape, and integration."""
+
+    def test_output_ready_date_registered_and_shape(self, db, demo_data):
+        """output_ready_date check is registered and returns output_ready_date_items list."""
+        org_id = demo_data["org_id"]
+        runner = CoreChecksRunner(org_id=org_id, session=db)
+        result = runner.run_check("output_ready_date")
+        assert result is not None
+        assert result.check_id == "output_ready_date"
+        assert result.data is not None
+        assert "output_ready_date_items" in result.data
+        assert isinstance(result.data["output_ready_date_items"], list)
+
+    def test_output_ready_date_result_item_shape(self, db, demo_data):
+        """Every item in output_ready_date_items has required keys and ready_date is valid ISO."""
+        org_id = demo_data["org_id"]
+        process, step, execution, exec_step, inv_item = _make_output_ready_date_fixture(
+            db, org_id, ready_date_days_ahead=7
+        )
+        try:
+            result = run_output_ready_date_check(org_id, db)
+            items = result.data.get("output_ready_date_items") or []
+            assert len(items) >= 1
+            for item in items:
+                assert isinstance(item, dict)
+                for key in (
+                    "type",
+                    "severity",
+                    "state",
+                    "message",
+                    "execution_id",
+                    "process_id",
+                    "step_id",
+                    "inventory_item_id",
+                    "item_name",
+                    "unit",
+                    "ready_date",
+                ):
+                    assert key in item, f"output_ready_date item missing key: {key}"
+                assert item["type"] == "ready_date"
+                assert item["severity"] in ("red", "amber")
+                assert item["state"] in ("Not ready", "Nearing ready")
+                raw = item["ready_date"]
+                assert isinstance(raw, str), "ready_date must be string"
+                datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        finally:
+            _cleanup_output_ready_date_fixture(db, org_id, process, execution, inv_item)
+
+    def test_output_ready_date_future_flags_item(self, db, demo_data):
+        """When ready_date is in the future, item is included in output_ready_date_items."""
+        org_id = demo_data["org_id"]
+        process, step, execution, exec_step, inv_item = _make_output_ready_date_fixture(
+            db, org_id, ready_date_days_ahead=14
+        )
+        try:
+            result = run_output_ready_date_check(org_id, db)
+            items = result.data.get("output_ready_date_items") or []
+            found = [i for i in items if i.get("inventory_item_id") == str(inv_item.id)]
+            assert len(found) == 1, "expected one output_ready_date item for our fixture inventory"
+            assert found[0]["severity"] == "red"
+            assert TEST_READY_DATE_OUTPUT_NAME in (found[0].get("message") or "")
+        finally:
+            _cleanup_output_ready_date_fixture(db, org_id, process, execution, inv_item)
+
+    def test_output_ready_date_past_not_flagged(self, db, demo_data):
+        """When ready_date is in the past, item is not in output_ready_date_items."""
+        org_id = demo_data["org_id"]
+        process, step, execution, exec_step, inv_item = _make_output_ready_date_fixture(
+            db, org_id, ready_date_days_ahead=-1, use_fixed_duration=False
+        )
+        try:
+            result = run_output_ready_date_check(org_id, db)
+            items = result.data.get("output_ready_date_items") or []
+            found = [i for i in items if i.get("inventory_item_id") == str(inv_item.id)]
+            assert len(found) == 0, "item with past ready_date must not be flagged"
+        finally:
+            _cleanup_output_ready_date_fixture(db, org_id, process, execution, inv_item)
+
+    def test_output_ready_date_integration_via_runner(self, db, demo_data):
+        """Full integration: runner.run_check('output_ready_date') returns fixture item when ready_date in future."""
+        org_id = demo_data["org_id"]
+        runner = CoreChecksRunner(org_id=org_id, session=db)
+        process, step, execution, exec_step, inv_item = _make_output_ready_date_fixture(
+            db, org_id, ready_date_days_ahead=7
+        )
+        try:
+            result = runner.run_check("output_ready_date")
+            assert result is not None
+            assert result.check_id == "output_ready_date"
+            items = result.data.get("output_ready_date_items") or []
+            ids = [i.get("inventory_item_id") for i in items]
+            assert str(inv_item.id) in ids
+            found = [i for i in items if i.get("inventory_item_id") == str(inv_item.id)]
+            assert len(found) == 1
+            assert found[0]["process_id"] == str(process.id)
+            assert found[0]["step_id"] == str(step.id)
+            assert found[0]["execution_id"] == str(execution.id)
+        finally:
+            _cleanup_output_ready_date_fixture(db, org_id, process, execution, inv_item)
+
+    def test_output_ready_date_set_at_execution_from_actual(self, db, demo_data):
+        """When mode is set_at_execution and item has ready_date_actual, check uses that date."""
+        org_id = demo_data["org_id"]
+        process, step, execution, exec_step, inv_item = _make_output_ready_date_set_at_execution_fixture(
+            db, org_id, ready_date_days_ahead=5
+        )
+        try:
+            result = run_output_ready_date_check(org_id, db)
+            items = result.data.get("output_ready_date_items") or []
+            found = [i for i in items if i.get("inventory_item_id") == str(inv_item.id)]
+            assert len(found) == 1
+            assert found[0]["severity"] in ("red", "amber")
+            assert TEST_READY_DATE_OUTPUT_NAME in (found[0].get("message") or "")
+        finally:
+            _cleanup_output_ready_date_fixture(db, org_id, process, execution, inv_item)
