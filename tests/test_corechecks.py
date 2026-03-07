@@ -14,7 +14,7 @@ from app.core.backend.checks.output_expiry_check import run_output_expiry_check
 from app.core.backend.corechecks import CoreChecksRunner
 from app.core.db import db_session
 from app.core.db.models.execution import Execution
-from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.process import Process
@@ -40,7 +40,6 @@ def db():
 @pytest.fixture
 def ensure_demo_user(db):
     """Ensure demo user exists. Used by demo_data."""
-    from app.core.db.repositories.organisation_repo import OrganisationRepository
     from app.core.db.repositories.user_repo import UserRepository
     from app.core.security.auth_service import AuthService
 
@@ -76,7 +75,6 @@ class TestExpiredMaterialsComplianceSemantics:
 
     def test_expired_raw_with_zero_quantity_not_in_results(self, db):
         """Expired raw with zero quantity: not flagged, not included in expired_raw_materials."""
-        from app.core.db.models.organisation import Organisation
         from app.core.db.repositories.inventory_repo import InventoryRepository
         from app.core.db.repositories.organisation_repo import OrganisationRepository
 
