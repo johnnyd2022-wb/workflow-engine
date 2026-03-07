@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-
 VALID_EXPIRY_UNITS = {"hours", "days", "weeks", "months"}
 
 

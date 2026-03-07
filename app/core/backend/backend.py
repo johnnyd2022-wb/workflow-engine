@@ -1,7 +1,7 @@
 """Core backend API routes for process execution platform"""
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -15,7 +15,6 @@ from app.core.backend.evidence.evidence_service import list_evidence_for_executi
 from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import db_session
-from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.inventory_wastage import InventoryWastage
@@ -24,6 +23,7 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
+from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
@@ -52,9 +52,7 @@ def validate_custom_expiry_warning_not_exceed_duration(
     Delegates to domain rule (single source of truth). Used at execution step completion;
     tests call this to safeguard the validation.
     """
-    return assert_warning_within_expiry(
-        output_name, duration_value, duration_unit, warning_value, warning_unit
-    )
+    return assert_warning_within_expiry(output_name, duration_value, duration_unit, warning_value, warning_unit)
 
 
 @core_bp.route("/core", methods=["GET"])

@@ -1,9 +1,9 @@
 """Domain rules and invariants shared across backend, checks, and UI."""
 
 from app.core.domain.expiry_rules import (
+    VALID_EXPIRY_UNITS,
     assert_warning_within_expiry,
     duration_to_timedelta,
-    VALID_EXPIRY_UNITS,
 )
 
 __all__ = [
