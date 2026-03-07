@@ -1430,44 +1430,14 @@
           unit: (outputDef ? (outputDef.unit || 'units') : 'units').trim()
         };
         if (untrackedItemId) outPayload.untracked_item_id = untrackedItemId;
-        // If expiry is set during execution, capture operator selection for backend persistence
+        // If expiry is set during execution, capture operator selection for backend persistence (single shared collector)
         try {
           const ce = outputDef && outputDef.extra_data ? (outputDef.extra_data.custom_expiry || null) : null;
           const mode = ce && ce.enabled ? (ce.mode || null) : null;
-            if (mode === 'set_at_execution') {
-              var matchById = function(el) { return (el.dataset.outputId || '').trim() === outputId; };
-              var modeSel = Array.from(modal.querySelectorAll('.execute-output-expiry-input-mode')).find(matchById);
-              var inputMode = modeSel ? (modeSel.value || 'duration') : 'duration';
-              if (inputMode === 'duration') {
-                var vEl = Array.from(modal.querySelectorAll('.execute-output-expiry-duration-value')).find(matchById);
-                var uEl = Array.from(modal.querySelectorAll('.execute-output-expiry-duration-unit')).find(matchById);
-                var wvEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-value')).find(matchById);
-                var wuEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-unit')).find(matchById);
-                var vRaw = vEl ? (vEl.value || '').trim() : '';
-                var v = vRaw !== '' ? parseInt(vRaw, 10) : null;
-                var u = (uEl ? (uEl.value || 'days') : 'days').trim();
-                var wvRaw = wvEl ? (wvEl.value || '').trim() : '';
-                var wv = wvRaw !== '' ? parseInt(wvRaw, 10) : 7;
-                var wu = (wuEl ? (wuEl.value || 'days') : 'days').trim();
-                if (v && v > 0) {
-                  outPayload.custom_expiry_input = { mode: 'duration', duration_value: v, duration_unit: u, warning_value: wv, warning_unit: wu };
-                }
-              } else if (inputMode === 'datetime') {
-                var dtEl = Array.from(modal.querySelectorAll('.execute-output-expiry-datetime')).find(matchById);
-                var raw = dtEl ? (dtEl.value || '').trim() : '';
-                if (raw) {
-                  var d = new Date(raw);
-                  if (!isNaN(d.getTime())) {
-                    var wvEl2 = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-value')).find(matchById);
-                    var wuEl2 = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-unit')).find(matchById);
-                    var wvRaw2 = wvEl2 ? (wvEl2.value || '').trim() : '';
-                    var wv2 = wvRaw2 !== '' ? parseInt(wvRaw2, 10) : 7;
-                    var wu2 = (wuEl2 ? (wuEl2.value || 'days') : 'days').trim();
-                    outPayload.custom_expiry_input = { mode: 'datetime', expiry_at: d.toISOString(), warning_value: wv2, warning_unit: wu2 };
-                  }
-                }
-              }
-            }
+          if (mode === 'set_at_execution' && typeof window.collectExecutionOutputExpiryPayload === 'function') {
+            const payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
+            if (payload) outPayload.custom_expiry_input = payload;
+          }
         } catch (e) {}
         actualOutputs.push(outPayload);
         variableOutputNames.add(name);

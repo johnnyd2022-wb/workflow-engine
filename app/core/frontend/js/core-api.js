@@ -498,6 +498,47 @@ if (typeof window !== 'undefined') {
             '</div>' +
             '</div>';
     };
+
+    // Single place for building custom_expiry_input from modal DOM (used by both execution modals)
+    window.collectExecutionOutputExpiryPayload = function(modal, outputId) {
+        if (!modal || !outputId) return null;
+        var id = String(outputId).trim();
+        var matchById = function(el) { return (el.dataset.outputId || '').trim() === id; };
+        var modeSel = Array.from(modal.querySelectorAll('.execute-output-expiry-input-mode')).find(matchById);
+        var inputMode = modeSel ? (modeSel.value || 'duration') : 'duration';
+        if (inputMode === 'duration') {
+            var vEl = Array.from(modal.querySelectorAll('.execute-output-expiry-duration-value')).find(matchById);
+            var uEl = Array.from(modal.querySelectorAll('.execute-output-expiry-duration-unit')).find(matchById);
+            var wvEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-value')).find(matchById);
+            var wuEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-unit')).find(matchById);
+            var vRaw = vEl ? (vEl.value || '').trim() : '';
+            var v = vRaw !== '' ? parseInt(vRaw, 10) : null;
+            var u = (uEl ? (uEl.value || 'days') : 'days').trim();
+            var wvRaw = wvEl ? (wvEl.value || '').trim() : '';
+            var wv = wvRaw !== '' ? parseInt(wvRaw, 10) : 7;
+            var wu = (wuEl ? (wuEl.value || 'days') : 'days').trim();
+            if (v && v > 0) {
+                return { mode: 'duration', duration_value: v, duration_unit: u, warning_value: wv, warning_unit: wu };
+            }
+            return null;
+        }
+        if (inputMode === 'datetime') {
+            var dtEl = Array.from(modal.querySelectorAll('.execute-output-expiry-datetime')).find(matchById);
+            var raw = dtEl ? (dtEl.value || '').trim() : '';
+            if (raw) {
+                var d = new Date(raw);
+                if (!isNaN(d.getTime())) {
+                    var wvEl2 = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-value')).find(matchById);
+                    var wuEl2 = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-unit')).find(matchById);
+                    var wv2 = wvEl2 && (wvEl2.value || '').trim() !== '' ? parseInt((wvEl2.value || '').trim(), 10) : 7;
+                    var wu2 = (wuEl2 ? (wuEl2.value || 'days') : 'days').trim();
+                    return { mode: 'datetime', expiry_at: d.toISOString(), warning_value: wv2, warning_unit: wu2 };
+                }
+            }
+            return null;
+        }
+        return null;
+    };
 }
 
 
