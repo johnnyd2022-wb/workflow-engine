@@ -7,8 +7,8 @@ risk signals only (no inventory modification). Findings appear in system banner 
 
 from __future__ import annotations
 
-import logging
 import calendar
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -224,12 +224,18 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                         expiry_at = _add_duration(completed_dt, dv, du)
                         prompt_text = f"Output must be consumed in {dv} {du}."
                 elif mode == "set_at_execution":
-                    actual = (item.extra_data or {}).get("custom_expiry_actual") if isinstance(item.extra_data, dict) else None
+                    actual = (
+                        (item.extra_data or {}).get("custom_expiry_actual")
+                        if isinstance(item.extra_data, dict)
+                        else None
+                    )
                     if isinstance(actual, dict):
                         a_mode = actual.get("mode")
                         # Allow per-item warning overrides
                         warning_value = _as_int(actual.get("warning_value"), warning_value) or warning_value
-                        warning_unit = (actual.get("warning_unit") or warning_unit or DEFAULT_WARNING_UNIT).strip().lower()
+                        warning_unit = (
+                            (actual.get("warning_unit") or warning_unit or DEFAULT_WARNING_UNIT).strip().lower()
+                        )
                         if warning_unit not in _ALLOWED_UNITS:
                             warning_unit = DEFAULT_WARNING_UNIT
                         if a_mode == "datetime":
@@ -245,7 +251,9 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                 if not expiry_at:
                     continue
 
-                warn_at = _add_duration(expiry_at, -int(warning_value), warning_unit) if int(warning_value) > 0 else expiry_at
+                warn_at = (
+                    _add_duration(expiry_at, -int(warning_value), warning_unit) if int(warning_value) > 0 else expiry_at
+                )
 
                 if now > expiry_at:
                     severity = SEVERITY_EXPIRED
