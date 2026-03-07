@@ -969,9 +969,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                                         f"Output '{output_name}': expiry duration must be positive."
                                     )
                                 elif du_raw not in VALID_EXPIRY_UNITS:
-                                    execution_errors.append(
-                                        f"Output '{output_name}': invalid expiry duration unit."
-                                    )
+                                    execution_errors.append(f"Output '{output_name}': invalid expiry duration unit.")
                                 else:
                                     expiry_delta = _duration_to_timedelta(dv_int, du_raw)
                                     warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)

@@ -213,9 +213,7 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                 break
 
             # Look up inventory from preloaded map (step_id, normalized_name, trimmed unit)
-            items = inventory_map.get(
-                (es.id, _normalize(out_name), out_unit.strip()), []
-            )
+            items = inventory_map.get((es.id, _normalize(out_name), out_unit.strip()), [])
 
             now = datetime.now(timezone.utc) - timedelta(hours=CLOCK_SKEW_BUFFER_HOURS)
 
