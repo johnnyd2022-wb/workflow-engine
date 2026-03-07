@@ -1208,14 +1208,11 @@ class TestCustomExpiryWarningNotExceedDuration:
         assert body is not None
         details = body.get("details") or []
         assert any(
-            "warning period cannot exceed expiry period" in (d if isinstance(d, str) else "")
-            for d in details
+            "warning period cannot exceed expiry period" in (d if isinstance(d, str) else "") for d in details
         ), f"expected error message in details, got {details}"
 
         # Teardown: remove execution steps, execution, steps, process
-        db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).delete(
-            synchronize_session=False
-        )
+        db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).delete(synchronize_session=False)
         db.query(Execution).filter(Execution.id == execution.id).delete(synchronize_session=False)
         db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
         db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
