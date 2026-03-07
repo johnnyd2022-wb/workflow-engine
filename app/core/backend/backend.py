@@ -939,13 +939,9 @@ def complete_step(execution_id: str, execution_step_id: str):
                             du_raw = (ce_in.get("duration_unit") or "days").strip().lower()
                             wu_raw = (ce_in.get("warning_unit") or ce_cfg.get("warning_unit") or "days").strip().lower()
                             if du_raw not in VALID_EXPIRY_UNITS:
-                                execution_errors.append(
-                                    f"Output '{output_name}': invalid expiry duration unit."
-                                )
+                                execution_errors.append(f"Output '{output_name}': invalid expiry duration unit.")
                             if wu_raw not in VALID_EXPIRY_UNITS:
-                                execution_errors.append(
-                                    f"Output '{output_name}': invalid warning duration unit."
-                                )
+                                execution_errors.append(f"Output '{output_name}': invalid warning duration unit.")
                             # Warning fallback from step config
                             warn_val = ce_in.get("warning_value")
                             if warn_val is None:
