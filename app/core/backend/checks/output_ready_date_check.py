@@ -117,7 +117,9 @@ def _get_ready_date_config(output: dict) -> dict | None:
     }
 
 
-def _compute_ready_and_warn(config: dict, completed_dt: datetime, item: InventoryItem) -> tuple[datetime | None, datetime | None]:
+def _compute_ready_and_warn(
+    config: dict, completed_dt: datetime, item: InventoryItem
+) -> tuple[datetime | None, datetime | None]:
     """Return (ready_dt, warn_dt). warn_dt = ready_dt - warning_duration (when to start showing amber)."""
     mode = config.get("mode")
     if mode == "fixed_duration":
@@ -246,9 +248,7 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
                     severity = SEVERITY_NEAR_READY
                     message = f"Output '{out_name}' will be ready on {ready_dt.isoformat()}."
 
-                process_name = (
-                    es.execution.process.name if es.execution and es.execution.process else None
-                )
+                process_name = es.execution.process.name if es.execution and es.execution.process else None
                 step_name = es.step.name if es.step else None
 
                 ready_date_items.append(

@@ -1008,7 +1008,11 @@ def complete_step(execution_id: str, execution_step_id: str):
                 for od in step_outputs_def or []:
                     if isinstance(od, dict) and (od.get("name") or "").strip() == output_name:
                         candidate = (od.get("extra_data") or {}).get("ready_date")
-                        if candidate and candidate.get("enabled") and (candidate.get("mode") or "").strip() == "set_at_execution":
+                        if (
+                            candidate
+                            and candidate.get("enabled")
+                            and (candidate.get("mode") or "").strip() == "set_at_execution"
+                        ):
                             rd_cfg = candidate
                             break
                 if rd_cfg:
