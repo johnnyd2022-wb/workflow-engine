@@ -50,7 +50,7 @@ def _normalize_dt(val: Any) -> datetime | None:
     """Parse ISO datetime strings and normalize to UTC-aware datetime if possible."""
     if val is None:
         return None
-    if isinstance(val, (int, float)):
+    if isinstance(val, int | float):
         try:
             return datetime.fromtimestamp(val, tz=timezone.utc)
         except Exception:
