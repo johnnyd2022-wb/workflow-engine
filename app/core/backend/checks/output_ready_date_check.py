@@ -55,7 +55,7 @@ def _as_int(val: Any, default: int | None = None) -> int | None:
 def _normalize_dt(val: Any) -> datetime | None:
     if val is None:
         return None
-    if isinstance(val, (int, float)):
+    if isinstance(val, int | float):
         try:
             return datetime.fromtimestamp(val, tz=timezone.utc)
         except Exception:
