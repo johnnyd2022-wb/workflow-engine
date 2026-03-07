@@ -66,6 +66,8 @@ class CoreChecksRunner:
         from app.core.backend.checks.output_expiry_check import run_output_expiry_check
         from app.core.backend.checks.output_ready_date_check import (
             CHECK_ID as OUTPUT_READY_DATE_CHECK_ID,
+        )
+        from app.core.backend.checks.output_ready_date_check import (
             run_output_ready_date_check,
         )
         from app.core.backend.checks.untracked_items import run_untracked_items_check

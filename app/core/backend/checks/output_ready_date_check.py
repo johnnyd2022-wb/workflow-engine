@@ -189,7 +189,9 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
     now = datetime.now(timezone.utc)
 
     # Restrict to steps that have at least one output with ready_date config (reduces inventory query size).
-    step_ids_with_ready_date = [es.id for es in execution_steps if es.id and es.step and _step_has_ready_date_output(es.step)]
+    step_ids_with_ready_date = [
+        es.id for es in execution_steps if es.id and es.step and _step_has_ready_date_output(es.step)
+    ]
     if not step_ids_with_ready_date:
         _log.debug(
             "output_ready_date check org_id=%s count_flagged=0 (no steps with ready_date)",
