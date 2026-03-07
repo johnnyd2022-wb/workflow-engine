@@ -23,8 +23,9 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
-from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry, duration_to_timedelta as expiry_duration_to_timedelta
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates, assert_expiry_after_ready_duration
+from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
+from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
@@ -77,9 +78,7 @@ def _validate_step_outputs_expiry_after_ready(outputs: list) -> list[str]:
             eu = (ce.get("duration_unit") or "days").strip().lower()
         except (TypeError, ValueError):
             continue
-        errors.extend(
-            assert_expiry_after_ready_duration(out_name, rv, ru, ev, eu)
-        )
+        errors.extend(assert_expiry_after_ready_duration(out_name, rv, ru, ev, eu))
     return errors
 
 
@@ -1098,7 +1097,12 @@ def complete_step(execution_id: str, execution_step_id: str):
                         for od in step_outputs_def or []:
                             if isinstance(od, dict) and (od.get("name") or "").strip() == output_name:
                                 ce_cfg = (od.get("extra_data") or {}).get("custom_expiry")
-                                if ce_cfg and ce_cfg.get("enabled") and (ce_cfg.get("mode") or "").strip() == "fixed_duration" and execution_step.completed_at:
+                                if (
+                                    ce_cfg
+                                    and ce_cfg.get("enabled")
+                                    and (ce_cfg.get("mode") or "").strip() == "fixed_duration"
+                                    and execution_step.completed_at
+                                ):
                                     try:
                                         dv = int(ce_cfg.get("duration_value") or 0)
                                         du = (ce_cfg.get("duration_unit") or "days").strip().lower()
