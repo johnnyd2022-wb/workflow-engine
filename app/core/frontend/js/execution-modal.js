@@ -1373,13 +1373,13 @@
         notReadyUsed.push({ inputName: inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Not ready' });
       }
     });
-    var confirmNotReadyConsumption = false;
+    var allowConsumptionOverride = false;
     if (notReadyUsed.length > 0) {
       var confirmed = typeof window.showReadyDateConfirmModal === 'function'
         ? await window.showReadyDateConfirmModal(notReadyUsed)
         : false;
       if (!confirmed) return;
-      confirmNotReadyConsumption = true;
+      allowConsumptionOverride = true;
     }
 
     try {
@@ -1603,12 +1603,12 @@
       executionData.completed_by_email = user.email;
       executionData.completed_at = new Date().toISOString();
 
-      // Complete the step (send confirm_not_ready_consumption when user confirmed "Use anyway" for not-ready items)
+      // Complete the step (send allow_consumption_override when user confirmed "Use anyway" for not-ready items)
       const completeResult = await CoreAPI.completeStep(executionId, executionStepId, {
         actual_inputs: actualInputs,
         actual_outputs: actualOutputs,
         execution_data: executionData,
-        confirm_not_ready_consumption: confirmNotReadyConsumption || undefined
+        allow_consumption_override: allowConsumptionOverride || undefined
       });
       
       // Close modal

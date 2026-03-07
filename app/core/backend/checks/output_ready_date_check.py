@@ -143,6 +143,8 @@ def is_inventory_item_ready_for_consumption(
     """
     Execution consumption guard: return (True, None) if the item can be consumed (no ready date or ready_dt <= now),
     else (False, error_message). Used by complete_step to block consuming not-ready inventory when API is called directly.
+
+    Invariant (locked): now < ready_dt → not ready; now >= ready_dt → ready (inclusive).
     """
     if now is None:
         now = datetime.now(timezone.utc)
@@ -151,6 +153,7 @@ def is_inventory_item_ready_for_consumption(
     actual = extra.get("ready_date_actual")
     if isinstance(actual, dict) and actual.get("date"):
         ready_dt = _normalize_dt(actual.get("date"))
+        # now < ready_dt → not ready; now >= ready_dt → ready (inclusive)
         if ready_dt and now < ready_dt:
             return (
                 False,
@@ -185,6 +188,7 @@ def is_inventory_item_ready_for_consumption(
         if not config:
             return (True, None)
         ready_dt, _ = _compute_ready_and_warn(config, completed_dt, item)
+        # now < ready_dt → not ready; now >= ready_dt → ready (inclusive)
         if ready_dt and now < ready_dt:
             return (
                 False,
@@ -345,6 +349,7 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
                 if not ready_dt:
                     continue
 
+                # Invariant: now < ready_dt → not ready; now >= ready_dt → ready (inclusive). Skip if already ready.
                 if now >= ready_dt:
                     continue
 

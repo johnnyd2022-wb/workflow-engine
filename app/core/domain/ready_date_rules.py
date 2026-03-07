@@ -3,9 +3,10 @@ Single source of truth for output ready date rules.
 
 Invariants (lock these for compliance; do not change semantics without explicit change control):
 
-1. Readiness: A product is usable when current_time >= ready_time (inclusive).
-   So the product is not usable when current_time < ready_time.
-   Equality (current_time == ready_time) counts as ready.
+1. Readiness — date boundary (do not change):
+   - now < ready_dt  → not ready (product cannot be consumed).
+   - now >= ready_dt → ready (inclusive; product is usable).
+   Equality (now == ready_dt) counts as ready.
 
 2. Warn-before-ready: warning_delta <= ready_delta
    (i.e. "warn before ready" period must not exceed the ready period).

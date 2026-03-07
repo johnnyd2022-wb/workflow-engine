@@ -726,7 +726,7 @@ def complete_step(execution_id: str, execution_step_id: str):
     actual_inputs = data.get("actual_inputs", [])
     actual_outputs = data.get("actual_outputs", [])
     execution_data = data.get("execution_data", {})
-    confirm_not_ready_consumption = data.get("confirm_not_ready_consumption") is True
+    allow_consumption_override = data.get("allow_consumption_override") is True
 
     # Get current user from Flask g and always store in execution_data for accuracy
     # TODO: execution_data is becoming a structured contract with known fields:
@@ -788,15 +788,18 @@ def complete_step(execution_id: str, execution_step_id: str):
 
                 if inventory_item_id:
                     try:
-                        inventory_item = inventory_repo.get_inventory_item_by_id(UUID(inventory_item_id), org_id)
+                        # Lock row (SELECT ... FOR UPDATE) to prevent double-spend / race when concurrent requests consume same item.
+                        inventory_item = inventory_repo.get_inventory_item_by_id_for_update(
+                            UUID(inventory_item_id), org_id
+                        )
                         if not inventory_item:
                             execution_warnings.append(
                                 f"Inventory item {inventory_item_id} not found for input '{input_data.get('name', 'Unknown')}'"
                             )
                             continue
 
-                        # Execution consumption guard: block consuming not-ready inventory (ready date) unless UI confirmed
-                        if not confirm_not_ready_consumption:
+                        # Execution consumption guard: block consuming not-ready inventory (ready date) unless override allowed
+                        if not allow_consumption_override:
                             ready_ok, ready_err = is_inventory_item_ready_for_consumption(db_session, inventory_item)
                             if not ready_ok and ready_err:
                                 execution_errors.append(ready_err)

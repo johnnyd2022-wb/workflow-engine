@@ -1,256 +1,186 @@
-🔴 Potential Logical Gap — Enforcement Boundary
+⭐ The Single Most Important Feedback (Do Not Skip)
+🔴 You are very close to a subtle race condition in execution consumption guard
 
-Right now enforcement exists in:
+This is the only serious architectural risk remaining.
 
-UI
+Problem
 
-✔ Modal validation
-✔ Confirmation gating
+You added:
 
-Backend
+is_inventory_item_ready_for_consumption()
 
-✔ Findings detection
-✔ Payload construction validation
+and call it inside step completion.
 
-⚠️ Missing Layer (Critical in compliance systems)
+Good.
 
-You do NOT yet have:
+BUT…
 
-👉 Execution mutation guard in backend write path
+You are still trusting client-sent payload ordering.
 
-Meaning:
+If someone builds a malicious client or retries requests:
 
-If someone calls API directly bypassing frontend:
+They can attempt double consumption timing windows.
 
-They might still submit consumption of not-ready inventory.
+⭐ Correct Pattern (If This Platform Matters Commercially)
 
-⭐ If This Were My Platform
-
-I would add:
-
-ExecutionOutputConsumptionValidator
-
-Triggered inside:
+Inside:
 
 ExecutionRepository.complete_step()
 
-Before commit.
+You should lock inventory rows.
 
-This is the highest value improvement you can make.
+Example concept:
 
-Do this if this platform has regulatory exposure.
+SELECT ... FOR UPDATE
 
-⭐ Domain Model Design — Very Good
+Or ORM equivalent.
 
-You are treating ready date as:
+Why?
 
-A consumability restriction window
+Because consumable inventory workflows are classical double-spend surfaces.
 
-Correct.
+You are building something close to ERP semantics.
 
-You are not mixing it with expiry semantics.
+⭐ JSONB Filter — Very Good Decision
 
-Excellent separation.
+This is probably the smartest performance decision in the whole code.
 
-One Small Semantic Suggestion
+You used:
 
-Currently you use messaging like:
+jsonb_path_exists
 
-Not ready
+to prune step search.
 
-Cannot be consumed
+This is exactly how you scale multi-tenant workflow systems.
 
-Ready from
+No criticism here.
 
-Consider defining canonical states:
+⭐ Metadata Versioning — Excellent Addition
 
-READY_STATE = {
-    PENDING_READY
-    NEAR_READY
-    READY
-}
+You added:
 
-Then derive UI text.
+evaluated_at
+rule_version
 
-This avoids drift.
+This is professional audit design.
 
-⭐ Backend Code Review
-✅ Good Practices
-Defensive parsing
+If this platform ever enters:
 
-You correctly normalise:
+Food safety compliance
 
-datetime strings
+Manufacturing certification
 
-timezone
+Export regulatory domains
 
-numeric inputs
+You are already prepared.
 
-Excellent.
+⭐ UI Renderer Centralization — Good Move
 
-🟠 Minor Backend Performance Note
+This is underrated but very important.
 
-This part:
+You created:
 
-load inventory_items
-build map
-scan steps
+renderReadyDateStatus()
 
-Is acceptable for now.
+This prevents copy-paste UI drift.
 
-But watch org size growth.
+Very good frontend governance.
 
-If inventory > ~50k records, consider DB joins.
+⭐ Confirm Not Ready Consumption Flag
 
-⭐ Frontend Code Review
-🔴 UX Consistency Issue (Most Visible Future Problem)
+This is well designed.
 
-You currently have multiple message forms:
+You are implementing:
 
-Example variations:
+Explicit human override acknowledgement
 
-Status: Not ready
+Which is exactly how regulated workflows work.
 
-Output cannot be consumed…
+Small Suggestion
 
-Ready from: X
+Rename:
 
-Nearing ready
+confirm_not_ready_consumption
 
-Prompt text
+to:
 
-This will eventually feel unpolished.
+allow_consumption_override
 
-Recommendation
+Why?
 
-Introduce one renderer:
+Because the current name is slightly negative-semantic.
 
-renderReadyDateStatus({
-   state,
-   readyDate,
-   outputName,
-   severity
-})
+Platform APIs age better with permissive verbs.
 
-Centralize messaging.
+⭐ One Minor Backend Risk — Date Boundary Logic
 
-🟠 Confirmation Modal Logic
+You are using:
 
-This pattern is good:
+now < ready_dt
 
-system findings → user confirmation → proceed
+Good.
 
-This is how controlled safety workflows should work.
+But be explicit about equality.
 
-One improvement:
+Right now semantics are:
 
-Add count summary:
+Condition	Result
+now < ready_dt	Not ready
+now >= ready_dt	Ready
 
-Instead of:
+You are correct.
 
-List 5 items
+Just add comment locking this invariant.
 
-Consider:
+Future engineers will thank you.
 
-5 outputs are not yet ready for use.
+⭐ Frontend Parsing Layer — Very Good Improvement
 
-Then optionally expand details.
+This is excellent:
 
-Better UX.
+window.parseISODate
 
-⭐ Critical Hidden Bug Risk — Date Comparison
+You eliminated string concatenation date bugs.
 
-You have several patterns like:
+This is surprisingly common failure in workflow SaaS.
 
-new Date(raw + 'T00:00:00Z')
+Good engineering maturity signal.
 
-and
+⭐ Accessibility Work — Nice Detail
 
-replace('Z', '+00:00')
+You added:
 
-⚠ This is fragile.
-
-If backend ever changes ISO format → break.
-
-Better Pattern (Strongly Recommend)
-
-Use:
-
-Date.parse(isoString)
-
-or a utility parser wrapper.
-
-⭐ Validation Logic Quality — 9.5 / 10
-
-You correctly enforce:
-
-Warn period invariant
-warn ≤ ready period
-
-Good domain safety.
-
-Cross-rule invariant
-expiry ≥ ready
-
-Excellent.
-
-This is audit-quality thinking.
-
-⭐ The Only Real Missing Enterprise Feature (Very Important)
-Audit Traceability Metadata
-
-You currently log findings but do not propagate:
-
-Rule version
-
-Validation timestamp
-
-Rule hash
-
-If this platform may be audited:
-
-Add:
-
-metadata: {
-   rule_type,
-   evaluated_at,
-   rule_version
-}
-
-To check outputs.
-
-This is big in compliance SaaS.
-
-⭐ Accessibility
-
-Minor but nice improvement:
-
-Add:
+role="alert"
 
 aria-live="polite"
 
-To validation error containers.
+This is production UX quality.
 
-⭐ Code Complexity Score
-Area	Score
-Domain modeling	9.5
-Safety guarantees	9.2
-UX integration	9.0
-Maintainability	8.8 (due to messaging duplication)
-Scalability	8.7 (data loading pattern)
-⭐ If This Were My Platform (Senior Staff Engineer Answer)
+⭐ Scalability Projection (Important)
 
-If I were leading this system, I would add one more concept:
+If orgs grow large, bottlenecks will be:
 
-⭐ Consumability Policy Engine
+Current potential hotspots
 
-Instead of hardcoding checks:
+Inventory query filtering
 
-Create rule objects:
+ExecutionStep hydration
 
-ConsumabilityRule
-    evaluate(context) → Finding | None
+JSONB path scanning
 
-Then register rules.
+If You Expect > 50k executions per org
 
-You are very close already.
+Add indexes:
+
+PostgreSQL
+CREATE INDEX idx_execution_org_completed
+ON execution(org_id, id)
+WHERE completed_at IS NOT NULL;
+
+And:
+
+CREATE INDEX idx_step_outputs_ready_gin
+ON step
+USING gin (outputs jsonb_path_ops);
+
+(Confirm schema names)
