@@ -13,7 +13,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.backend.corechecks import CheckResult
@@ -35,6 +34,9 @@ _ALLOWED_UNITS = {"hours", "days", "weeks", "months"}
 
 # Buffer to reduce false-positives from clock skew / delayed commits
 CLOCK_SKEW_BUFFER_HOURS = 0.5
+
+# Cap number of expiry items returned to avoid huge API responses
+MAX_EXPIRY_ITEMS = 500
 
 
 def _as_int(val: Any, default: int | None = None) -> int | None:
@@ -164,7 +166,24 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
     )
 
     output_expiry_items: list[dict[str, Any]] = []
-    seen_item_ids: set[str] = set()
+    seen_item_ids: set[UUID] = set()
+
+    # Load all inventory for these execution steps once to avoid N+1
+    step_ids = [es.id for es in execution_steps if es.id]
+    inventory_items = (
+        session.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id)
+        .filter(InventoryItem.source_execution_step_id.in_(step_ids))
+        .all()
+    )
+    inventory_map: dict[tuple[UUID, str, str], list[InventoryItem]] = {}
+    for item in inventory_items:
+        key = (
+            item.source_execution_step_id,
+            _normalize(item.name or ""),
+            (item.unit or "").strip(),
+        )
+        inventory_map.setdefault(key, []).append(item)
 
     for es in execution_steps:
         if not es.step:
@@ -174,7 +193,9 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
         completed_at = es.completed_at
         if not completed_at:
             continue
-        completed_dt = _normalize_dt(completed_at) or datetime.now(timezone.utc)
+        completed_dt = _normalize_dt(completed_at)
+        if not completed_dt:
+            continue
 
         for out_def in step_outputs:
             if not isinstance(out_def, dict):
@@ -188,20 +209,18 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
             if not out_name:
                 continue
 
-            # Inventory items produced by this execution step; filter by name/unit in SQL
-            items = (
-                session.query(InventoryItem)
-                .filter(InventoryItem.org_id == org_id)
-                .filter(InventoryItem.source_execution_step_id == es.id)
-                .filter(func.lower(InventoryItem.name) == _normalize(out_name))
-                .filter(func.trim(InventoryItem.unit) == out_unit)
-                .all()
+            if len(output_expiry_items) >= MAX_EXPIRY_ITEMS:
+                break
+
+            # Look up inventory from preloaded map (step_id, normalized_name, trimmed unit)
+            items = inventory_map.get(
+                (es.id, _normalize(out_name), out_unit.strip()), []
             )
 
             now = datetime.now(timezone.utc) - timedelta(hours=CLOCK_SKEW_BUFFER_HOURS)
 
             for item in items:
-                if str(item.id) in seen_item_ids:
+                if item.id in seen_item_ids:
                     continue
                 try:
                     qty = float(item.quantity) if item.quantity is not None else 0
@@ -210,7 +229,7 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                 if qty <= 0:
                     continue
 
-                seen_item_ids.add(str(item.id))
+                seen_item_ids.add(item.id)
 
                 expiry_at: datetime | None = None
                 warning_value = config.get("warning_value", DEFAULT_WARNING_VALUE)
@@ -289,6 +308,8 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                         "metadata": {"rule_type": config.get("rule_type", "custom_output_expiry")},
                     }
                 )
+        if len(output_expiry_items) >= MAX_EXPIRY_ITEMS:
+            break
 
     flagged = len(output_expiry_items) > 0
     message = None

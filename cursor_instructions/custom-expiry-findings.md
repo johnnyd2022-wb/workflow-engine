@@ -1,158 +1,503 @@
-✅ Phase 1 — Fix Database Query Performance (Do This First)
-Step 1.1: Remove Python-side filtering in run_output_expiry_check
+Step-by-Step Implementation Plan
+1. Stop Fabricating completed_at Timestamps
+Problem
+
+If completed_at is invalid or missing, the code replaces it with the current time:
+
+completed_dt = _normalize_dt(completed_at) or datetime.now(timezone.utc)
+
+This hides data corruption and produces incorrect expiry calculations.
+
+Fix
+
+Replace this logic with a skip.
+
+Change
 
 Locate:
 
-items = session.query(InventoryItem)...all()
-items = [i for i in items if ...]
-
-Replace with SQL-filtered query:
-
-from sqlalchemy import func
-
-items = (
-    session.query(InventoryItem)
-    .filter(InventoryItem.org_id == org_id)
-    .filter(InventoryItem.source_execution_step_id == es.id)
-    .filter(func.lower(InventoryItem.name) == _normalize(out_name))
-    .filter(func.trim(InventoryItem.unit) == out_unit)
-    .all()
-)
-Step 1.2: Add Composite Index (Very Important)
-
-Run migration to add index:
-
-CREATE INDEX idx_inventory_expiry_lookup
-ON inventory_item (
-    org_id,
-    source_execution_step_id,
-    lower(name),
-    trim(unit)
-);
-Step 1.3: Remove Post Query Filtering Block
-
-Delete this block:
-
-items = [
-    i
-    for i in items
-    if _normalize(i.name or "") == _normalize(out_name)
-]
-✅ Phase 2 — Improve Timestamp Handling
-Step 2.1 Replace UTC Construction
-
-Search:
-
-datetime.utcnow().replace(tzinfo=timezone.utc)
-
-Replace everywhere with:
-
-datetime.now(timezone.utc)
-Step 2.2 Update Normalization Helper
-
-Modify _normalize_dt:
-
-Add branch:
-
-if isinstance(val, (int, float)):
-    return datetime.fromtimestamp(val, tz=timezone.utc)
-
-This protects against frontend epoch payloads.
-
-✅ Phase 3 — Frontend Schema Consistency Hardening
-Step 3.1 Make Payload Shape Canonical
-
-Ensure frontend always emits:
-
-custom_expiry: {
-    enabled: true,
-    mode: "fixed_duration" | "set_at_execution",
-    duration_value: number | null,
-    duration_unit: string | null,
-    warning_value: number | null,
-    warning_unit: string | null,
-    expiry_at: ISO8601 | null
-}
-Step 3.2 Remove Backend Mode Guessing Logic
-
-Delete fallback inference like:
-
-if not mode:
-    if duration_value is not None ...
-
-Replace with strict validation:
-
-if mode not in {"fixed_duration", "set_at_execution"}:
-    return None
-✅ Phase 4 — Add Backend Invariant Validation (Security Critical)
-
-Inside _get_custom_expiry_config, add:
-
-After parsing config:
-
-if config["mode"] == "fixed_duration":
-    if not config["duration_value"] or config["duration_value"] <= 0:
-        return None
-
-if config["warning_value"] and config["warning_value"] < 0:
-    config["warning_value"] = DEFAULT_WARNING_VALUE
-✅ Phase 5 — Add Clock Skew Protection
-
-Modify expiry comparison logic:
-
-Find:
-
-now = datetime.utcnow().replace(tzinfo=timezone.utc)
+completed_dt = _normalize_dt(completed_at) or datetime.now(timezone.utc)
 
 Replace with:
 
-CLOCK_SKEW_BUFFER_HOURS = 0.5
+completed_dt = _normalize_dt(completed_at)
+if not completed_dt:
+    continue
+2. Normalize Output Unit Comparison
+Problem
 
-now = datetime.now(timezone.utc) - timedelta(hours=CLOCK_SKEW_BUFFER_HOURS)
-✅ Phase 6 — Audit Logging Monitoring
+InventoryItem.unit is trimmed in SQL but the step definition value is not.
 
-Inside audit exception block, add:
+Fix
 
-_log.warning(
-    "Audit log failure",
-    exc_info=True,
-    extra={"event": "custom_output_expiry_audit_failure"}
+Ensure the configuration value is trimmed before comparison.
+
+Change
+
+Locate the unit comparison query:
+
+func.trim(InventoryItem.unit) == out_unit
+
+Replace with:
+
+func.trim(InventoryItem.unit) == out_unit.strip()
+3. Remove Unnecessary UUID String Conversions
+Problem
+
+seen_item_ids stores string versions of UUIDs which creates unnecessary allocations.
+
+Fix
+
+Store UUIDs directly.
+
+Change
+
+Locate:
+
+seen_item_ids: set[str] = set()
+
+Replace with:
+
+seen_item_ids: set[UUID] = set()
+
+Locate:
+
+item_id_str = str(item.id)
+
+if item_id_str in seen_item_ids:
+    continue
+
+seen_item_ids.add(item_id_str)
+
+Replace with:
+
+item_id = item.id
+
+if item_id in seen_item_ids:
+    continue
+
+seen_item_ids.add(item_id)
+4. Prevent Potential N+1 Inventory Queries
+Problem
+
+Inventory queries run inside nested loops:
+
+execution_steps
+  → step outputs
+       → inventory query
+
+This can produce hundreds of SQL queries.
+
+Fix
+
+Load all relevant inventory items once and group them in memory.
+
+Implementation
+
+Before the loops, collect all execution step IDs.
+
+Add:
+
+step_ids = [es.step_id for es in execution_steps if es.step_id]
+
+Load all inventory items once:
+
+inventory_items = (
+    session.query(InventoryItem)
+    .filter(InventoryItem.source_step_id.in_(step_ids))
+    .all()
 )
-✅ Phase 7 — Remove Redundant Frontend Validation Copies (Medium Priority)
 
-You currently validate warning ≤ expiry in:
+Group by (step_id, unit):
 
-Step builder
+inventory_map = {}
 
-Execution modal
+for item in inventory_items:
+    key = (item.source_step_id, (item.unit or "").strip())
+    inventory_map.setdefault(key, []).append(item)
 
-Collection pipeline
+Then replace the inner query with:
 
-Keep only:
+items = inventory_map.get((step_id, out_unit.strip()), [])
 
-✅ Live UI hint validation
-❌ Hard enforcement duplicated in multiple JS locations
+Remove the original SQL query from inside the loop.
 
-Leave backend as authoritative validator.
+5. Limit Expiry Results to Prevent Huge Responses
+Problem
 
-✅ Phase 8 — Optional (Strongly Recommended for Scale)
+The API can return extremely large lists of expired items.
 
-If system volume grows:
+Fix
 
-Add cached check results table:
+Add a hard cap on returned items.
 
-system_risk_signal_cache
--------------------------
-org_id
-check_id
-entity_id
-severity
-message
-expires_at
-last_evaluated_at
+Implementation
 
-Then:
+Add constant:
 
-Background worker refreshes signals
+MAX_EXPIRY_ITEMS = 500
 
-UI reads cache instead of computing checks synchronously
+Inside the item loop, add:
+
+if len(output_expiry_items) >= MAX_EXPIRY_ITEMS:
+    break
+
+Apply this check in the outer loops as well to fully stop processing once limit is reached.
+
+6. Add Backend Validation for Custom Expiry Inputs
+Problem
+
+The backend currently trusts frontend validation.
+
+Fix
+
+Validate execution-time expiry input server-side.
+
+Implementation
+
+When processing custom_expiry_input:
+
+Add checks:
+
+- duration_value must be > 0
+- duration_unit must be one of: days, weeks, months
+- warning_value must be >= 0
+- warning_unit must be one of: days, weeks, months
+- warning duration must not exceed expiry duration
+
+Example validation:
+
+VALID_UNITS = {"days", "weeks", "months"}
+
+if duration_unit not in VALID_UNITS:
+    raise ValueError("Invalid expiry duration unit")
+
+if warning_unit not in VALID_UNITS:
+    raise ValueError("Invalid warning duration unit")
+
+if duration_value <= 0:
+    raise ValueError("Expiry duration must be positive")
+
+if warning_value < 0:
+    raise ValueError("Warning duration must not be negative")
+
+Then ensure:
+
+expiry_delta = _duration_to_timedelta(duration_value, duration_unit)
+warning_delta = _duration_to_timedelta(warning_value, warning_unit)
+
+if warning_delta > expiry_delta:
+    raise ValueError("Warning period cannot exceed expiry period")
+7. Enforce Mode Rules on the Backend
+Problem
+
+Frontend currently decides which expiry mode is allowed.
+
+Fix
+
+Backend must enforce mode.
+
+Implementation
+
+When reading output configuration:
+
+If mode is:
+
+fixed_duration
+
+Reject any incoming execution expiry payload.
+
+Example:
+
+if mode == "fixed_duration" and custom_expiry_input:
+    raise ValueError("Custom expiry not allowed for fixed_duration outputs")
+8. Frontend: Normalize Units Before Sending
+Problem
+
+Unit strings can contain whitespace.
+
+Fix
+
+Trim units before sending API requests.
+
+Implementation
+
+Before submission:
+
+payload.unit = payload.unit?.trim()
+
+Apply to:
+
+output unit
+expiry unit
+warning unit
+9. Frontend: Restrict Expiry Mode Values
+Problem
+
+Mode strings can drift from backend expectations.
+
+Fix
+
+Use constants.
+
+Implementation
+
+Create constants:
+
+export const EXPIRY_MODES = {
+  FIXED: "fixed_duration",
+  EXECUTION: "set_at_execution"
+}
+
+Use these everywhere instead of raw strings.
+
+10. Frontend: Block Custom Expiry UI When Not Allowed
+Problem
+
+Execution UI might allow expiry input even when mode is fixed.
+
+Fix
+
+Conditionally render expiry controls.
+
+Implementation
+
+When rendering execution modal:
+
+if (output.extra_data?.custom_expiry?.mode !== "set_at_execution") {
+  hideExpiryControls()
+}
+11. Frontend: Validate Warning Duration
+Problem
+
+Frontend must enforce the same rule as backend.
+
+Fix
+
+Add validation:
+
+warning duration <= expiry duration
+
+Example:
+
+if (warningDuration > expiryDuration) {
+  throw new Error("Warning period cannot exceed expiry period")
+}
+12. Frontend: Always Send UTC ISO Timestamps
+Problem
+
+Expiry calculations rely on consistent timestamp formats.
+
+Fix
+
+Ensure all timestamps are serialized in UTC ISO format.
+
+Implementation
+
+When sending timestamps:
+
+new Date().toISOString()
+
+Never send:
+
+local time strings
+browser formatted timestamps
+13. Prevent Duplicate Expiry Items in UI
+Problem
+
+Duplicate inventory items may appear if the backend ever returns duplicates.
+
+Fix
+
+Deduplicate on frontend by item ID.
+
+Implementation
+
+When building the expiry list:
+
+const seen = new Set()
+
+items = items.filter(item => {
+  if (seen.has(item.id)) return false
+  seen.add(item.id)
+  return true
+})
+14. Add Expiry Result Pagination Support (Optional)
+Problem
+
+Large expiry lists can degrade UI performance.
+
+Fix
+
+Support optional pagination parameters.
+
+Backend parameters:
+limit
+offset
+
+Example:
+
+GET /expiry-check?limit=100&offset=0
+
+1. Remove Duplicate Expiry UI Rendering Logic
+
+Status: ❌ Not included previously — must be added
+
+Your prior instructions focused on validation and mode enforcement, but did not address duplicate rendering logic.
+
+Since you have multiple blocks generating:
+
+.execute-output-expiry-input
+.execute-output-expiry-duration-fields
+.execute-output-expiry-datetime-fields
+.execute-output-expiry-warning-fields
+
+this should absolutely be centralized.
+
+Additional Instruction for Cursor
+Step A — Locate duplicate blocks
+
+Search the frontend for:
+
+execute-output-expiry-input
+
+Identify all UI sections generating execution expiry controls.
+
+Step B — Extract reusable renderer
+
+Create a reusable function:
+
+function renderExecutionExpiryUI(output) {
+  // existing expiry UI generation logic moved here
+}
+
+Move all markup construction related to execution expiry input into this function.
+
+This includes creation of:
+
+.execute-output-expiry-input
+.execute-output-expiry-duration-fields
+.execute-output-expiry-datetime-fields
+.execute-output-expiry-warning-fields
+Step C — Replace duplicated code
+
+Replace duplicated rendering blocks with:
+
+expiryInputHtml = renderExecutionExpiryUI(output)
+
+or if used inline:
+
+html += renderExecutionExpiryUI(output)
+
+Ensure only one implementation exists.
+
+2. Stop Using Output Name as DOM Lookup Key
+
+Status: ❌ Not included previously — must be added
+
+The prior plan mentioned unit trimming and schema enforcement, but did not address DOM identity issues.
+
+Using:
+
+data-output-name
+
+is unsafe because output names:
+
+are user editable
+
+may not be unique
+
+may contain whitespace differences
+
+The DOM must use stable identifiers.
+
+Additional Instruction for Cursor
+Step A — Replace all data-output-name
+
+Search frontend code for:
+
+data-output-name
+
+Replace with:
+
+data-output-id
+Step B — Update DOM rendering
+
+Change UI markup from:
+
+data-output-name="..."
+
+to:
+
+data-output-id="..."
+
+Example:
+
+const outputId = output.id
+
+'<div class="execute-output-expiry-input" data-output-id="' + escapeHtml(outputId) + '">'
+Step C — Update lookup logic
+
+Replace selectors like:
+
+el.dataset.outputName === name
+
+with:
+
+el.dataset.outputId === outputId
+
+Ensure all DOM lookups use output.id only.
+
+3. Fix Validation Duplication
+
+Status: ⚠️ Partially included but needs stronger enforcement
+
+The previous instruction set included:
+
+Ensure frontend uses same validation rule
+
+But it did not explicitly remove duplicate inline logic.
+
+Your system currently validates expiry in three locations:
+
+1️⃣ Step builder UI
+2️⃣ Execution modal
+3️⃣ Pre-submit validation
+
+If each location contains its own validation logic, they will drift.
+
+Additional Instruction for Cursor
+Step A — Use shared validator everywhere
+
+All expiry validation must call:
+
+window.CustomExpiryValidation.validateWarnNotLongerThanExpiry()
+Step B — Remove inline validation
+
+Search frontend for inline checks such as:
+
+if (warnHours > expiryHours)
+
+or similar variations.
+
+Remove them.
+
+Step C — Replace with shared validator
+
+Replace inline logic with:
+
+window.CustomExpiryValidation.validateWarnNotLongerThanExpiry({
+  expiryValue,
+  expiryUnit,
+  warningValue,
+  warningUnit
+})
+Step D — Ensure validator is used in three locations
+
+The shared validator must be used in:
+
+Step builder UI validation
+Execution modal validation
+Pre-submit validation
+
+No additional validation logic should exist outside this module.

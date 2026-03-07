@@ -1048,10 +1048,10 @@
         const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
         const expiryValueRaw = expiryValueEl && expiryMode === 'fixed_duration' ? expiryValueEl.value.trim() : '';
         const expiryValue = expiryValueRaw !== '' ? parseInt(expiryValueRaw, 10) : null;
-        const expiryUnit = expiryUnitEl && expiryMode === 'fixed_duration' ? (expiryUnitEl.value || 'days') : 'days';
+        const expiryUnit = expiryUnitEl && expiryMode === 'fixed_duration' ? ((expiryUnitEl.value || 'days') + '').trim() : 'days';
         const warningValueRaw = warningValueEl && expiryMode !== 'none' ? warningValueEl.value.trim() : '';
         const warningValue = warningValueRaw !== '' ? parseInt(warningValueRaw, 10) : 7;
-        const warningUnit = warningUnitEl && expiryMode !== 'none' ? (warningUnitEl.value || 'days') : 'days';
+        const warningUnit = warningUnitEl && expiryMode !== 'none' ? ((warningUnitEl.value || 'days') + '').trim() : 'days';
         const outObj = { name: name };
         if (expiryMode === 'fixed_duration' && expiryValue > 0) {
           outObj.extra_data = {
@@ -1059,9 +1059,9 @@
               enabled: true,
               mode: 'fixed_duration',
               duration_value: expiryValue,
-              duration_unit: expiryUnit || 'days',
+              duration_unit: (expiryUnit || 'days').trim(),
               warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 7,
-              warning_unit: warningUnit || 'days',
+              warning_unit: (warningUnit || 'days').trim(),
               expiry_at: null,
               rule_type: 'custom_output_expiry'
             }
@@ -2665,16 +2665,17 @@
     const expiryModeSelect = document.createElement('select');
     expiryModeSelect.className = 'guided-output-expiry-mode form-select';
     expiryModeSelect.style.cssText = 'width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 14px; box-sizing: border-box;';
+    const EXPIRY_MODES = window.EXPIRY_MODES || { NONE: 'none', FIXED: 'fixed_duration', EXECUTION: 'set_at_execution' };
     const noExpiryOpt = document.createElement('option');
-    noExpiryOpt.value = 'none';
+    noExpiryOpt.value = EXPIRY_MODES.NONE;
     noExpiryOpt.textContent = 'No custom expiry — output has no use-by rule';
     expiryModeSelect.appendChild(noExpiryOpt);
     const fixedExpiryOpt = document.createElement('option');
-    fixedExpiryOpt.value = 'fixed_duration';
+    fixedExpiryOpt.value = EXPIRY_MODES.FIXED;
     fixedExpiryOpt.textContent = 'Fixed expiry period — output must be consumed within X time';
     expiryModeSelect.appendChild(fixedExpiryOpt);
     const execExpiryOpt = document.createElement('option');
-    execExpiryOpt.value = 'set_at_execution';
+    execExpiryOpt.value = EXPIRY_MODES.EXECUTION;
     execExpiryOpt.textContent = 'Set expiry during execution';
     expiryModeSelect.appendChild(execExpiryOpt);
     expiryPane.appendChild(expiryModeSelect);
@@ -2760,9 +2761,11 @@
     expiryWarningError.style.cssText = 'display: none; margin-top: 8px; font-size: 12px; color: var(--danger, #dc2626); line-height: 1.4;';
     expiryWarningError.setAttribute('role', 'alert');
     warningWrap.appendChild(expiryWarningError);
+    const validator = window.CustomExpiryValidation;
     function syncExpiryWarningValidation() {
       const mode = expiryModeSelect.value;
-      if (mode !== 'fixed_duration') {
+      const fixedMode = (window.EXPIRY_MODES && window.EXPIRY_MODES.FIXED) || 'fixed_duration';
+      if (mode !== fixedMode) {
         expiryWarningError.style.display = 'none';
         expiryWarningError.textContent = '';
         warningValueInput.style.borderColor = '';
@@ -2770,13 +2773,22 @@
         return;
       }
       const expVal = parseInt(expiryValueInput.value, 10);
-      const expUnit = expiryUnitSelect.value || 'days';
+      const expUnit = (expiryUnitSelect.value || 'days').trim();
       const warnVal = parseInt(warningValueInput.value, 10);
-      const warnUnit = warningUnitSelect.value || 'days';
-      const expHours = durationToHours(isNaN(expVal) ? null : expVal, expUnit);
-      const warnHours = durationToHours(isNaN(warnVal) ? null : warnVal, warnUnit);
-      if (expHours != null && expHours > 0 && warnHours != null && warnHours > expHours) {
-        expiryWarningError.textContent = 'Warn period must not be longer than the expiry period. Set warning to the same or less than the expiry (e.g. ' + (expVal || '') + ' ' + expUnit + ' or less).';
+      const warnUnit = (warningUnitSelect.value || 'days').trim();
+      const expHours = validator && typeof validator.durationToHours === 'function'
+        ? validator.durationToHours(isNaN(expVal) ? null : expVal, expUnit)
+        : null;
+      const result = validator && typeof validator.validateWarnNotLongerThanExpiry === 'function'
+        ? validator.validateWarnNotLongerThanExpiry({
+            warnValue: isNaN(warnVal) ? null : warnVal,
+            warnUnit: warnUnit,
+            expiryHours: expHours,
+            expiryLabel: (expVal != null ? expVal : '') + ' ' + expUnit,
+          })
+        : { valid: true };
+      if (!result.valid) {
+        expiryWarningError.textContent = result.message || 'Warning period must not exceed expiry period.';
         expiryWarningError.style.display = 'block';
         warningValueInput.style.borderColor = 'var(--danger, #dc2626)';
         warningUnitSelect.style.borderColor = 'var(--danger, #dc2626)';
@@ -2793,10 +2805,11 @@
     });
     expiryModeSelect.addEventListener('change', function () {
       const mode = expiryModeSelect.value;
-      expiryFieldsWrap.style.display = mode !== 'none' ? 'block' : 'none';
-      fixedWrap.style.display = mode === 'fixed_duration' ? 'block' : 'none';
-      execHint.style.display = mode === 'set_at_execution' ? 'block' : 'none';
-      warningWrap.style.display = mode === 'fixed_duration' ? 'block' : 'none';
+      const EXP = window.EXPIRY_MODES || { NONE: 'none', FIXED: 'fixed_duration', EXECUTION: 'set_at_execution' };
+      expiryFieldsWrap.style.display = mode !== (EXP.NONE || 'none') ? 'block' : 'none';
+      fixedWrap.style.display = mode === (EXP.FIXED || 'fixed_duration') ? 'block' : 'none';
+      execHint.style.display = mode === (EXP.EXECUTION || 'set_at_execution') ? 'block' : 'none';
+      warningWrap.style.display = mode === (EXP.FIXED || 'fixed_duration') ? 'block' : 'none';
       syncExpiryWarningValidation();
     });
     expiryPane.appendChild(expiryFieldsWrap);
@@ -3148,7 +3161,7 @@
     outputElements.forEach(outputEl => {
       const name = outputEl.querySelector('.guided-output-name')?.value.trim();
       const unitSelect = outputEl.querySelector('.guided-output-unit');
-      const unit = unitSelect ? unitSelect.value : '';
+      const unit = unitSelect ? (unitSelect.value || '').trim() : '';
       const quantityInput = outputEl.querySelector('.guided-output-quantity');
       const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
       if (name && unit) {
@@ -3163,19 +3176,19 @@
         const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
         const expiryValueRaw = expiryValueEl && expiryMode === 'fixed_duration' ? expiryValueEl.value.trim() : '';
         const expiryValue = expiryValueRaw !== '' ? parseInt(expiryValueRaw, 10) : null;
-        const expiryUnit = expiryUnitEl && expiryMode === 'fixed_duration' ? (expiryUnitEl.value || 'days') : 'days';
+        const expiryUnit = expiryUnitEl && expiryMode === 'fixed_duration' ? ((expiryUnitEl.value || 'days') + '').trim() : 'days';
         const warningValueRaw = warningValueEl && expiryMode === 'fixed_duration' ? warningValueEl.value.trim() : '';
         const warningValue = warningValueRaw !== '' ? parseInt(warningValueRaw, 10) : 7;
-        const warningUnit = warningUnitEl && expiryMode === 'fixed_duration' ? (warningUnitEl.value || 'days') : 'days';
+        const warningUnit = warningUnitEl && expiryMode === 'fixed_duration' ? ((warningUnitEl.value || 'days') + '').trim() : 'days';
         const extra_data = {};
         if (expiryMode === 'fixed_duration' && expiryValue > 0) {
           extra_data.custom_expiry = {
             enabled: true,
             mode: 'fixed_duration',
             duration_value: expiryValue,
-            duration_unit: expiryUnit || 'days',
+            duration_unit: (expiryUnit || 'days').trim(),
             warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 7,
-            warning_unit: warningUnit || 'days',
+            warning_unit: (warningUnit || 'days').trim(),
             expiry_at: null,
             rule_type: 'custom_output_expiry'
           };

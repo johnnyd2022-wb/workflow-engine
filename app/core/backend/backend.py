@@ -1,7 +1,7 @@
 """Core backend API routes for process execution platform"""
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -37,6 +37,25 @@ core_bp = Blueprint(
     static_folder="../frontend",
     static_url_path="/static",
 )
+
+VALID_EXPIRY_UNITS = {"hours", "days", "weeks", "months"}
+
+
+def _duration_to_timedelta(value: int | float, unit: str) -> timedelta:
+    """Convert duration value + unit to timedelta (months approximated as 30 days)."""
+    u = (unit or "days").strip().lower()
+    if u not in VALID_EXPIRY_UNITS:
+        u = "days"
+    v = int(value) if value is not None else 0
+    if u == "hours":
+        return timedelta(hours=v)
+    if u == "days":
+        return timedelta(days=v)
+    if u == "weeks":
+        return timedelta(weeks=v)
+    if u == "months":
+        return timedelta(days=v * 30)
+    return timedelta(days=v)
 
 
 @core_bp.route("/core", methods=["GET"])
@@ -903,7 +922,12 @@ def complete_step(execution_id: str, execution_step_id: str):
                     cfg_mode = (ce_cfg.get("mode") or "").strip()
                     if cfg_mode not in {"fixed_duration", "set_at_execution"}:
                         cfg_mode = ""
-                    if cfg_mode == "set_at_execution":
+                    # Reject execution-time expiry payload when step is configured as fixed_duration
+                    if cfg_mode == "fixed_duration" and output.get("custom_expiry_input"):
+                        execution_errors.append(
+                            f"Output '{output_name}' is configured for fixed expiry; custom expiry input is not allowed."
+                        )
+                    elif cfg_mode == "set_at_execution":
                         ce_in = output.get("custom_expiry_input")
                         if not isinstance(ce_in, dict) or not ce_in.get("mode"):
                             execution_errors.append(
@@ -911,45 +935,58 @@ def complete_step(execution_id: str, execution_step_id: str):
                             )
                         else:
                             in_mode = ce_in.get("mode")
-                            allowed_units = {"hours", "days", "weeks", "months"}
-                            # Warning is primarily set by operator when selecting a specific date/time.
-                            # Fallback to step config (if present) or default to 7 days.
+                            # Normalize and validate units
+                            du_raw = (ce_in.get("duration_unit") or "days").strip().lower()
+                            wu_raw = (ce_in.get("warning_unit") or ce_cfg.get("warning_unit") or "days").strip().lower()
+                            if du_raw not in VALID_EXPIRY_UNITS:
+                                du_raw = "days"
+                            if wu_raw not in VALID_EXPIRY_UNITS:
+                                wu_raw = "days"
+                            # Warning fallback from step config
                             warn_val = ce_in.get("warning_value")
-                            warn_unit = ce_in.get("warning_unit") or None
                             if warn_val is None:
-                                warn_val = ce_cfg.get("warning_value")
-                            if warn_val is None:
-                                warn_val = ce_cfg.get("warning_days")
-                            if not warn_unit:
-                                warn_unit = ce_cfg.get("warning_unit") or "days"
-                            if warn_unit not in allowed_units:
-                                warn_unit = "days"
+                                warn_val = ce_cfg.get("warning_value") or ce_cfg.get("warning_days")
+                            if not warn_val and warn_val != 0:
+                                warn_val = 7
                             try:
-                                warn_val_int = int(warn_val) if warn_val is not None else 7
+                                warn_val_int = int(warn_val)
                                 if warn_val_int < 0:
+                                    execution_errors.append(
+                                        f"Output '{output_name}': warning duration must not be negative."
+                                    )
                                     warn_val_int = 7
-                            except Exception:
+                            except (TypeError, ValueError):
                                 warn_val_int = 7
 
                             if in_mode == "duration":
                                 dv = ce_in.get("duration_value")
-                                du = ce_in.get("duration_unit") or "days"
                                 try:
-                                    dv_int = int(dv)
-                                except Exception:
+                                    dv_int = int(dv) if dv is not None else 0
+                                except (TypeError, ValueError):
                                     dv_int = 0
-                                if dv_int <= 0 or du not in allowed_units:
+                                if dv_int <= 0:
                                     execution_errors.append(
-                                        f"Output '{output_name}' has invalid expiry duration. Provide a positive number and unit."
+                                        f"Output '{output_name}': expiry duration must be positive."
+                                    )
+                                elif du_raw not in VALID_EXPIRY_UNITS:
+                                    execution_errors.append(
+                                        f"Output '{output_name}': invalid expiry duration unit."
                                     )
                                 else:
-                                    extra_data["custom_expiry_actual"] = {
-                                        "mode": "duration",
-                                        "duration_value": dv_int,
-                                        "duration_unit": du,
-                                        "warning_value": warn_val_int,
-                                        "warning_unit": warn_unit,
-                                    }
+                                    expiry_delta = _duration_to_timedelta(dv_int, du_raw)
+                                    warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
+                                    if warning_delta > expiry_delta:
+                                        execution_errors.append(
+                                            f"Output '{output_name}': warning period cannot exceed expiry period."
+                                        )
+                                    else:
+                                        extra_data["custom_expiry_actual"] = {
+                                            "mode": "duration",
+                                            "duration_value": dv_int,
+                                            "duration_unit": du_raw,
+                                            "warning_value": warn_val_int,
+                                            "warning_unit": wu_raw,
+                                        }
                             elif in_mode == "datetime":
                                 raw = ce_in.get("expiry_at")
                                 expiry_iso = None
@@ -968,7 +1005,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                                         "mode": "datetime",
                                         "expiry_at": expiry_iso,
                                         "warning_value": warn_val_int,
-                                        "warning_unit": warn_unit,
+                                        "warning_unit": wu_raw,
                                     }
                             else:
                                 execution_errors.append(

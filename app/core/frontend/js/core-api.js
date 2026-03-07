@@ -347,6 +347,17 @@ if (typeof window !== 'undefined') {
 }
 
 // ---------------------------------------------------------------------------
+// Custom expiry mode constants (must match backend)
+// ---------------------------------------------------------------------------
+if (typeof window !== 'undefined') {
+    window.EXPIRY_MODES = window.EXPIRY_MODES || {
+        FIXED: 'fixed_duration',
+        EXECUTION: 'set_at_execution',
+        NONE: 'none'
+    };
+}
+
+// ---------------------------------------------------------------------------
 // Custom expiry validation helpers (shared by step builder + execution modal)
 // ---------------------------------------------------------------------------
 if (typeof window !== 'undefined') {
@@ -402,7 +413,7 @@ if (typeof window !== 'undefined') {
             for (var i = 0; i < (outputs || []).length; i++) {
                 var out = outputs[i] || {};
                 var ce = (out.extra_data || {}).custom_expiry;
-                if (!ce || ce.mode !== 'fixed_duration') continue;
+                if (!ce || ce.mode !== (window.EXPIRY_MODES && window.EXPIRY_MODES.FIXED)) continue;
                 var expVal = ce.duration_value;
                 var expUnit = ce.duration_unit || 'days';
                 var warnVal = ce.warning_value;
@@ -433,4 +444,5 @@ if (typeof window !== 'undefined') {
         };
     })();
 }
+
 

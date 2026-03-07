@@ -171,6 +171,13 @@
     } else if (checkId === 'output_expiry') {
       var items = data.output_expiry_items;
       if (Array.isArray(items) && items.length > 0) {
+        var seenIds = new Set();
+        items = items.filter(function (x) {
+          var id = x && (x.inventory_item_id || x.id);
+          if (!id || seenIds.has(id)) return false;
+          seenIds.add(id);
+          return true;
+        });
         parts.push('<p class="system-findings-item__detail-section"><strong>Custom output expiry (expired or near expiry):</strong></p>');
         items.forEach(function (x) {
           var name = escapeHtml(x && x.item_name ? x.item_name : x.inventory_item_id || '—');

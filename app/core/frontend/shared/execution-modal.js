@@ -458,22 +458,23 @@
             customExpiryHtml = '<div class="execute-output-expiry-warning" style="margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;"><strong>⚠️ Custom expiry rule applies:</strong> ' + escapeHtml(msg) + '</div>';
           } else if (mode === 'set_at_execution') {
             const outName = output.name || '';
+            const outputId = (output.id != null && String(output.id).trim() !== '') ? String(output.id) : (outName ? 'out-' + outName.replace(/\s+/g, '-') : 'out-unknown');
             expiryInputHtml =
-              '<div class="execute-output-expiry-input" data-output-name="' + escapeHtml(outName) + '" style="margin-bottom: 12px; padding: 12px 16px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md);">' +
+              '<div class="execute-output-expiry-input" data-output-id="' + escapeHtml(outputId) + '" data-output-name="' + escapeHtml(outName) + '" style="margin-bottom: 12px; padding: 12px 16px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md);">' +
                 '<div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; margin-bottom: 8px;">' +
                   '<div style="font-weight: 700; color: #92400e; font-size: 13px;">Set expiry for this output</div>' +
                   '<div style="font-size: 12px; color: #92400e;">Required for compliance</div>' +
                 '</div>' +
                 '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Expiry type</label>' +
-                '<select class="execute-output-expiry-input-mode form-select" data-output-name="' + escapeHtml(outName) + '" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px; margin-bottom: 10px;">' +
+                '<select class="execute-output-expiry-input-mode form-select" data-output-id="' + escapeHtml(outputId) + '" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px; margin-bottom: 10px;">' +
                   '<option value="duration">Duration</option>' +
                   '<option value="datetime">Set a specific time and date</option>' +
                 '</select>' +
                 '<div class="execute-output-expiry-duration-fields" style="display:block; margin-bottom: 10px;">' +
                   '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Duration</label>' +
                   '<div style="display:flex; gap: 10px; align-items:center;">' +
-                    '<input type="number" min="1" class="execute-output-expiry-duration-value" data-output-name="' + escapeHtml(outName) + '" placeholder="30" style="flex:1; width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
-                    '<select class="execute-output-expiry-duration-unit form-select" data-output-name="' + escapeHtml(outName) + '" style="width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;">' +
+                    '<input type="number" min="1" class="execute-output-expiry-duration-value" data-output-id="' + escapeHtml(outputId) + '" placeholder="30" style="flex:1; width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+                    '<select class="execute-output-expiry-duration-unit form-select" data-output-id="' + escapeHtml(outputId) + '" style="width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;">' +
                       '<option value="hours">Hours</option>' +
                       '<option value="days" selected>Days</option>' +
                       '<option value="weeks">Weeks</option>' +
@@ -483,14 +484,14 @@
                 '</div>' +
                 '<div class="execute-output-expiry-datetime-fields" style="display:none; margin-bottom: 0;">' +
                   '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Expiry date and time</label>' +
-                  '<input type="datetime-local" class="execute-output-expiry-datetime" data-output-name="' + escapeHtml(outName) + '" style="width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+                  '<input type="datetime-local" class="execute-output-expiry-datetime" data-output-id="' + escapeHtml(outputId) + '" style="width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
                   '<p class="execute-output-expiry-datetime-hint" style="margin: 6px 0 0 0; font-size: 12px; color: #92400e; opacity: 0.9;">Click on the calendar icon to set a date and time</p>' +
                 '</div>' +
                 '<div class="execute-output-expiry-warning-fields" style="display:none; margin-top: 10px;">' +
                   '<label style="display:block; font-size: 12px; color: #92400e; margin-bottom: 4px;">Warn before expiry</label>' +
                   '<div style="display:flex; gap: 10px; align-items:center;">' +
-                    '<input type="number" min="0" class="execute-output-expiry-warning-value" data-output-name="' + escapeHtml(outName) + '" placeholder="7" value="7" style="flex:1; width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
-                    '<select class="execute-output-expiry-warning-unit form-select" data-output-name="' + escapeHtml(outName) + '" style="width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;">' +
+                    '<input type="number" min="0" class="execute-output-expiry-warning-value" data-output-id="' + escapeHtml(outputId) + '" placeholder="7" value="7" style="flex:1; width:100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+                    '<select class="execute-output-expiry-warning-unit form-select" data-output-id="' + escapeHtml(outputId) + '" style="width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;">' +
                       '<option value="hours">Hours</option>' +
                       '<option value="days" selected>Days</option>' +
                       '<option value="weeks">Weeks</option>' +
@@ -511,7 +512,7 @@
               ${escapeHtml(output.name)} 
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${output.quantity || '0'} ${output.unit || ''})</span>
             </label>
-            <input type="number" class="form-input execute-output-quantity-input" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <input type="number" class="form-input execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" data-output-name="${escapeHtml(output.name)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
           </div>
         `;
@@ -536,17 +537,7 @@
               modeSel.addEventListener('change', apply);
               apply();
               (function() {
-                function durationToHours(val, unit) {
-                  if (val == null || val === '' || isNaN(Number(val)) || Number(val) < 0) return null;
-                  const v = Number(val);
-                  switch (unit) {
-                    case 'hours': return v;
-                    case 'days': return v * 24;
-                    case 'weeks': return v * 24 * 7;
-                    case 'months': return v * 24 * 30;
-                    default: return v * 24;
-                  }
-                }
+                const validator = window.CustomExpiryValidation;
                 function runValidation() {
                   const v = modeSel.value;
                   const errEl = expiryBox.querySelector('.execute-output-expiry-validation-error');
@@ -559,15 +550,18 @@
                   warnUnitEl.style.borderColor = '';
                   if (v !== 'duration' && v !== 'datetime') return;
                   const warnVal = parseInt(warnValEl.value, 10);
-                  const warnUnit = (warnUnitEl.value || 'days');
-                  const warnHours = durationToHours(isNaN(warnVal) ? null : warnVal, warnUnit);
+                  const warnUnit = (warnUnitEl.value || 'days').trim();
                   let expiryHours = null;
+                  let expiryLabel = 'the expiry period';
                   if (v === 'duration') {
                     const durValEl = expiryBox.querySelector('.execute-output-expiry-duration-value');
                     const durUnitEl = expiryBox.querySelector('.execute-output-expiry-duration-unit');
                     const durVal = durValEl ? parseInt(durValEl.value, 10) : null;
-                    const durUnit = durUnitEl ? (durUnitEl.value || 'days') : 'days';
-                    expiryHours = durationToHours(durVal != null && !isNaN(durVal) ? durVal : null, durUnit);
+                    const durUnit = (durUnitEl ? (durUnitEl.value || 'days') : 'days').trim();
+                    expiryHours = validator && typeof validator.durationToHours === 'function'
+                      ? validator.durationToHours(durVal != null && !isNaN(durVal) ? durVal : null, durUnit)
+                      : null;
+                    expiryLabel = (durVal != null ? durVal : '') + ' ' + durUnit;
                   } else {
                     const dtEl = expiryBox.querySelector('.execute-output-expiry-datetime');
                     const raw = dtEl ? (dtEl.value || '').trim() : '';
@@ -575,6 +569,7 @@
                       const expiryAt = new Date(raw);
                       if (!isNaN(expiryAt.getTime())) {
                         expiryHours = (expiryAt.getTime() - Date.now()) / (1000 * 60 * 60);
+                        expiryLabel = 'the expiry date/time';
                       }
                     }
                   }
@@ -583,8 +578,16 @@
                     errEl.style.display = 'block';
                     return;
                   }
-                  if (expiryHours != null && warnHours != null && warnHours > expiryHours) {
-                    errEl.textContent = 'Warn period must not be longer than the expiry period. Set warning to the same or less.';
+                  const result = validator && typeof validator.validateWarnNotLongerThanExpiry === 'function'
+                    ? validator.validateWarnNotLongerThanExpiry({
+                        warnValue: isNaN(warnVal) ? null : warnVal,
+                        warnUnit: warnUnit,
+                        expiryHours: expiryHours,
+                        expiryLabel: expiryLabel,
+                      })
+                    : { valid: true };
+                  if (!result.valid) {
+                    errEl.textContent = result.message || 'Warn period must not be longer than the expiry period.';
                     errEl.style.display = 'block';
                     warnValEl.style.borderColor = 'var(--danger, #dc2626)';
                     warnUnitEl.style.borderColor = 'var(--danger, #dc2626)';
@@ -841,53 +844,62 @@
       const actualOutputs = [];
       const allStepOutputs = stepDefinitionForOutputs.outputs || [];
 
-      // Validate set_at_execution expiry: warn must not exceed expiry period (duration or time until datetime)
-      function durationToHours(val, unit) {
-        if (val == null || val === '' || isNaN(Number(val)) || Number(val) < 0) return null;
-        const v = Number(val);
-        switch (unit) {
-          case 'hours': return v;
-          case 'days': return v * 24;
-          case 'weeks': return v * 24 * 7;
-          case 'months': return v * 24 * 30;
-          default: return v * 24;
-        }
-      }
+      // Validate set_at_execution expiry: warn must not exceed expiry period (use shared validator)
+      const expiryValidator = window.CustomExpiryValidation;
       const expiryValidationErrors = [];
       (allStepOutputs || []).forEach(function(outputDef) {
         const ce = (outputDef.extra_data || {}).custom_expiry;
         if (!ce || !ce.enabled || (ce.mode || '') !== 'set_at_execution') return;
         const outName = (outputDef.name || '').trim();
-        const box = Array.from(modal.querySelectorAll('.execute-output-expiry-input')).find(function(b) { return (b.dataset.outputName || '').trim() === outName; });
+        const box = Array.from(modal.querySelectorAll('.execute-output-expiry-input')).find(function(b) {
+          const id = (b.dataset.outputId || '').trim();
+          const name = (b.dataset.outputName || '').trim();
+          return id === outName || name === outName;
+        });
         if (!box) return;
         const modeSel = box.querySelector('.execute-output-expiry-input-mode');
         const inputMode = modeSel ? (modeSel.value || 'duration') : 'duration';
         const warnValEl = box.querySelector('.execute-output-expiry-warning-value');
         const warnUnitEl = box.querySelector('.execute-output-expiry-warning-unit');
         const warnVal = warnValEl ? parseInt((warnValEl.value || '').trim(), 10) : 0;
-        const warnUnit = (warnUnitEl && warnUnitEl.value) || 'days';
-        const warnHours = durationToHours(isNaN(warnVal) ? null : warnVal, warnUnit);
+        const warnUnit = ((warnUnitEl && warnUnitEl.value) || 'days').trim();
         let expiryHours = null;
+        let expiryLabel = 'the expiry period';
         if (inputMode === 'duration') {
           const dvEl = box.querySelector('.execute-output-expiry-duration-value');
           const duEl = box.querySelector('.execute-output-expiry-duration-unit');
           const dv = dvEl ? parseInt((dvEl.value || '').trim(), 10) : null;
-          const du = (duEl && duEl.value) || 'days';
-          expiryHours = durationToHours(dv != null && !isNaN(dv) ? dv : null, du);
+          const du = ((duEl && duEl.value) || 'days').trim();
+          expiryHours = expiryValidator && typeof expiryValidator.durationToHours === 'function'
+            ? expiryValidator.durationToHours(dv != null && !isNaN(dv) ? dv : null, du)
+            : null;
+          expiryLabel = (dv != null ? dv : '') + ' ' + du;
         } else {
           const dtEl = box.querySelector('.execute-output-expiry-datetime');
           const raw = dtEl ? (dtEl.value || '').trim() : '';
           if (raw) {
             const expiryAt = new Date(raw);
-            if (!isNaN(expiryAt.getTime())) expiryHours = (expiryAt.getTime() - Date.now()) / (1000 * 60 * 60);
+            if (!isNaN(expiryAt.getTime())) {
+              expiryHours = (expiryAt.getTime() - Date.now()) / (1000 * 60 * 60);
+              expiryLabel = 'the expiry date/time';
+            }
           }
         }
         if (expiryHours != null && expiryHours <= 0 && inputMode === 'datetime') {
           expiryValidationErrors.push('Output "' + outName + '": expiry date and time must be in the future.');
           return;
         }
-        if (expiryHours != null && warnHours != null && warnHours > expiryHours) {
-          expiryValidationErrors.push('Output "' + outName + '": warn period must not be longer than the expiry period. Set warning to the same or less.');
+        const result = expiryValidator && typeof expiryValidator.validateWarnNotLongerThanExpiry === 'function'
+          ? expiryValidator.validateWarnNotLongerThanExpiry({
+              outputName: outName,
+              warnValue: isNaN(warnVal) ? null : warnVal,
+              warnUnit: warnUnit,
+              expiryHours: expiryHours,
+              expiryLabel: expiryLabel,
+            })
+          : { valid: true };
+        if (!result.valid) {
+          expiryValidationErrors.push(result.message || 'Output "' + outName + '": warn period must not be longer than the expiry period.');
         }
       });
       if (expiryValidationErrors.length > 0) {
@@ -908,56 +920,42 @@
           const outPayload = {
             name: name,
             quantity: quantity,
-            unit: outputDef ? (outputDef.unit || 'units') : 'units'
+            unit: (outputDef ? (outputDef.unit || 'units') : 'units').trim()
           };
           // Capture operator-set expiry when configured as set_at_execution
           try {
             const ce = outputDef && outputDef.extra_data ? (outputDef.extra_data.custom_expiry || null) : null;
             const mode = ce && ce.enabled ? (ce.mode || null) : null;
             if (mode === 'set_at_execution') {
-              const modeSel = Array.from(modal.querySelectorAll('.execute-output-expiry-input-mode')).find(function(el) {
-                return (el.dataset.outputName || '').trim() === name;
-              });
+              const outId = (outputDef.id != null && String(outputDef.id).trim() !== '') ? String(outputDef.id) : (name ? 'out-' + name.replace(/\s+/g, '-') : 'out-unknown');
+              const matchById = function(el) { return (el.dataset.outputId || '').trim() === outId; };
+              const modeSel = Array.from(modal.querySelectorAll('.execute-output-expiry-input-mode')).find(matchById);
               const inputMode = modeSel ? (modeSel.value || 'duration') : 'duration';
               if (inputMode === 'duration') {
-                const vEl = Array.from(modal.querySelectorAll('.execute-output-expiry-duration-value')).find(function(el) {
-                  return (el.dataset.outputName || '').trim() === name;
-                });
-                const uEl = Array.from(modal.querySelectorAll('.execute-output-expiry-duration-unit')).find(function(el) {
-                  return (el.dataset.outputName || '').trim() === name;
-                });
-                const wvEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-value')).find(function(el) {
-                  return (el.dataset.outputName || '').trim() === name;
-                });
-                const wuEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-unit')).find(function(el) {
-                  return (el.dataset.outputName || '').trim() === name;
-                });
+                const vEl = Array.from(modal.querySelectorAll('.execute-output-expiry-duration-value')).find(matchById);
+                const uEl = Array.from(modal.querySelectorAll('.execute-output-expiry-duration-unit')).find(matchById);
+                const wvEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-value')).find(matchById);
+                const wuEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-unit')).find(matchById);
                 const vRaw = vEl ? (vEl.value || '').trim() : '';
                 const v = vRaw !== '' ? parseInt(vRaw, 10) : null;
-                const u = uEl ? (uEl.value || 'days') : 'days';
+                const u = (uEl ? (uEl.value || 'days') : 'days').trim();
                 const wvRaw = wvEl ? (wvEl.value || '').trim() : '';
                 const wv = wvRaw !== '' ? parseInt(wvRaw, 10) : 7;
-                const wu = wuEl ? (wuEl.value || 'days') : 'days';
+                const wu = (wuEl ? (wuEl.value || 'days') : 'days').trim();
                 if (v && v > 0) {
                   outPayload.custom_expiry_input = { mode: 'duration', duration_value: v, duration_unit: u, warning_value: wv, warning_unit: wu };
                 }
               } else if (inputMode === 'datetime') {
-                const dtEl = Array.from(modal.querySelectorAll('.execute-output-expiry-datetime')).find(function(el) {
-                  return (el.dataset.outputName || '').trim() === name;
-                });
+                const dtEl = Array.from(modal.querySelectorAll('.execute-output-expiry-datetime')).find(matchById);
                 const raw = dtEl ? (dtEl.value || '').trim() : '';
                 if (raw) {
                   const d = new Date(raw);
                   if (!isNaN(d.getTime())) {
-                      const wvEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-value')).find(function(el) {
-                        return (el.dataset.outputName || '').trim() === name;
-                      });
-                      const wuEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-unit')).find(function(el) {
-                        return (el.dataset.outputName || '').trim() === name;
-                      });
+                      const wvEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-value')).find(matchById);
+                      const wuEl = Array.from(modal.querySelectorAll('.execute-output-expiry-warning-unit')).find(matchById);
                       const wvRaw = wvEl ? (wvEl.value || '').trim() : '';
                       const wv = wvRaw !== '' ? parseInt(wvRaw, 10) : 7;
-                      const wu = wuEl ? (wuEl.value || 'days') : 'days';
+                      const wu = (wuEl ? (wuEl.value || 'days') : 'days').trim();
                       outPayload.custom_expiry_input = { mode: 'datetime', expiry_at: d.toISOString(), warning_value: wv, warning_unit: wu };
                   }
                 }
@@ -976,7 +974,7 @@
           actualOutputs.push({
             name: outputDef.name,
             quantity: outputDef.quantity || 0,
-            unit: outputDef.unit || 'units'
+            unit: (outputDef.unit || 'units').trim()
           });
         }
       });
