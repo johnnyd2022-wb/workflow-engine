@@ -1,7 +1,7 @@
 """Core backend API routes for process execution platform"""
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -23,6 +23,7 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
+from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
@@ -38,24 +39,20 @@ core_bp = Blueprint(
     static_url_path="/static",
 )
 
-VALID_EXPIRY_UNITS = {"hours", "days", "weeks", "months"}
 
-
-def _duration_to_timedelta(value: int | float, unit: str) -> timedelta:
-    """Convert duration value + unit to timedelta (months approximated as 30 days)."""
-    u = (unit or "days").strip().lower()
-    if u not in VALID_EXPIRY_UNITS:
-        u = "days"
-    v = int(value) if value is not None else 0
-    if u == "hours":
-        return timedelta(hours=v)
-    if u == "days":
-        return timedelta(days=v)
-    if u == "weeks":
-        return timedelta(weeks=v)
-    if u == "months":
-        return timedelta(days=v * 30)
-    return timedelta(days=v)
+def validate_custom_expiry_warning_not_exceed_duration(
+    output_name: str,
+    duration_value: int | None,
+    duration_unit: str,
+    warning_value: int | None,
+    warning_unit: str,
+) -> list[str]:
+    """
+    Validate that warning period does not exceed expiry period for custom output expiry.
+    Delegates to domain rule (single source of truth). Used at execution step completion;
+    tests call this to safeguard the validation.
+    """
+    return assert_warning_within_expiry(output_name, duration_value, duration_unit, warning_value, warning_unit)
 
 
 @core_bp.route("/core", methods=["GET"])
@@ -969,21 +966,18 @@ def complete_step(execution_id: str, execution_step_id: str):
                                         f"Output '{output_name}': expiry duration must be positive."
                                     )
                                 elif du_raw in VALID_EXPIRY_UNITS and wu_raw in VALID_EXPIRY_UNITS:
-                                    if dv_int is not None and warn_val_int is not None:
-                                        expiry_delta = _duration_to_timedelta(dv_int, du_raw)
-                                        warning_delta = _duration_to_timedelta(warn_val_int, wu_raw)
-                                        if warning_delta > expiry_delta:
-                                            execution_errors.append(
-                                                f"Output '{output_name}': warning period cannot exceed expiry period."
-                                            )
-                                        else:
-                                            extra_data["custom_expiry_actual"] = {
-                                                "mode": "duration",
-                                                "duration_value": dv_int,
-                                                "duration_unit": du_raw,
-                                                "warning_value": warn_val_int,
-                                                "warning_unit": wu_raw,
-                                            }
+                                    duration_errors = validate_custom_expiry_warning_not_exceed_duration(
+                                        output_name, dv_int, du_raw, warn_val_int, wu_raw
+                                    )
+                                    execution_errors.extend(duration_errors)
+                                    if not duration_errors:
+                                        extra_data["custom_expiry_actual"] = {
+                                            "mode": "duration",
+                                            "duration_value": dv_int,
+                                            "duration_unit": du_raw,
+                                            "warning_value": warn_val_int,
+                                            "warning_unit": wu_raw,
+                                        }
                             elif in_mode == "datetime":
                                 raw = ce_in.get("expiry_at")
                                 expiry_iso = None
@@ -1037,6 +1031,14 @@ def complete_step(execution_id: str, execution_step_id: str):
                         "quantity_decimal": quantity_decimal,
                     }
                 )
+
+        # Block inventory creation when output validation failed (e.g. custom_expiry warning > duration)
+        if execution_errors:
+            if not execution_step.execution_data:
+                execution_step.execution_data = {}
+            execution_step.execution_data["execution_errors"] = execution_errors
+            db_session.commit()
+            return jsonify({"error": "Execution failed", "details": execution_errors}), 400
 
         # FAILURE HANDLING: Persist warnings to execution_data for audit trail
         if execution_warnings:

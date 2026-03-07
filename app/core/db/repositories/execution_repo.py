@@ -1,5 +1,6 @@
 """Execution repository with tenancy enforcement"""
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -128,14 +129,15 @@ class ExecutionRepository:
         actual_outputs: list | None = None,
         execution_data: dict | None = None,
         commit: bool = True,
+        completed_at_override: datetime | None = None,
     ) -> ExecutionStep | None:
         """Complete an execution step and advance execution.
 
         Enforces step order: all prior steps must be completed before this step can be completed.
         If commit=False, caller is responsible for commit (e.g. atomic reconciliation).
+        completed_at_override: optional datetime for tests/fixtures that need a specific completion time
+        (e.g. expired output expiry); when None, uses utcnow().
         """
-        from datetime import datetime
-
         execution_step = (
             self.db.query(ExecutionStep)
             .join(Execution)
@@ -173,7 +175,9 @@ class ExecutionRepository:
         execution_step.actual_inputs = actual_inputs or []
         execution_step.actual_outputs = actual_outputs or []
         execution_step.execution_data = execution_data or {}
-        execution_step.completed_at = datetime.utcnow()
+        execution_step.completed_at = (
+            completed_at_override if completed_at_override is not None else datetime.now(timezone.utc)
+        )
 
         # Advance execution: mark next steps as ready
         execution = execution_step.execution
@@ -218,7 +222,5 @@ class ExecutionRepository:
         # Check if execution is complete (all steps completed)
         all_completed = all(es.status == ExecutionStepStatus.COMPLETED for es in execution_steps)
         if all_completed and execution.status != ExecutionStatus.COMPLETED:
-            from datetime import datetime
-
             execution.status = ExecutionStatus.COMPLETED
-            execution.completed_at = datetime.utcnow()
+            execution.completed_at = datetime.now(timezone.utc)

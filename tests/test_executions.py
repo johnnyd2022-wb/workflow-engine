@@ -13,8 +13,8 @@ from uuid import uuid4
 import pytest
 
 from app.core.db import db_session
-from app.core.db.models.execution import ExecutionStatus
-from app.core.db.models.execution_step import ExecutionStepStatus
+from app.core.db.models.execution import Execution, ExecutionStatus
+from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.process import Process
 from app.core.db.models.step import Step
@@ -1041,6 +1041,182 @@ class TestCompleteStepNegative:
                 actual_inputs=[],
                 actual_outputs=[],
             )
+
+
+# ---------------------------------------------------------------------------
+# Custom expiry validation (execution complete-step API safeguard)
+# ---------------------------------------------------------------------------
+
+
+class TestCustomExpiryWarningNotExceedDuration:
+    """
+    Safeguard: completing a step with custom_expiry_input where warning > duration
+    must be rejected. Validation lives in backend complete-step route; we test the
+    extracted validator so regressions are caught at pace.
+    """
+
+    def test_warning_exceeds_duration_returns_error(self):
+        """warning_value > duration_value must produce 'warning period cannot exceed expiry period'."""
+        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+
+        errors = validate_custom_expiry_warning_not_exceed_duration(
+            output_name="Batch Output",
+            duration_value=5,
+            duration_unit="days",
+            warning_value=10,
+            warning_unit="days",
+        )
+        assert len(errors) == 1
+        assert "warning period cannot exceed expiry period" in errors[0]
+        assert "Batch Output" in errors[0]
+
+    def test_warning_equals_duration_allowed(self):
+        """warning_value == duration_value is valid (no error)."""
+        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+
+        errors = validate_custom_expiry_warning_not_exceed_duration(
+            output_name="Out",
+            duration_value=7,
+            duration_unit="days",
+            warning_value=7,
+            warning_unit="days",
+        )
+        assert errors == []
+
+    def test_warning_less_than_duration_allowed(self):
+        """warning_value < duration_value is valid (no error)."""
+        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+
+        errors = validate_custom_expiry_warning_not_exceed_duration(
+            output_name="Out",
+            duration_value=10,
+            duration_unit="days",
+            warning_value=3,
+            warning_unit="days",
+        )
+        assert errors == []
+
+    def test_different_units_warning_exceeds_duration_returns_error(self):
+        """When units differ, warning period > expiry period still triggers error."""
+        from app.core.backend.backend import validate_custom_expiry_warning_not_exceed_duration
+
+        # 2 weeks = 14 days > 5 days expiry
+        errors = validate_custom_expiry_warning_not_exceed_duration(
+            output_name="Out",
+            duration_value=5,
+            duration_unit="days",
+            warning_value=2,
+            warning_unit="weeks",
+        )
+        assert len(errors) == 1
+        assert "warning period cannot exceed expiry period" in errors[0]
+
+    def test_warning_exceeds_duration_rejected_at_execution_save_time(self, db, demo_data):
+        """Compliance: completing a step with custom_expiry_input (warning > duration) returns 400 at save time."""
+        import json
+
+        from flask import g
+
+        from app.core.backend.backend import complete_step
+        from app.core.db.repositories.user_repo import UserRepository
+
+        org_id = demo_data["org_id"]
+        user_repo = UserRepository(db)
+        user = user_repo.get_user_by_email(DEMO_USER_EMAIL)
+        assert user is not None, "demo user must exist for execution save test"
+
+        # Process with one step: output has custom_expiry set_at_execution
+        process_repo = ProcessRepository(db)
+        exec_repo = ExecutionRepository(db)
+        output_name = "Expiry Output"
+        step_output = {
+            "name": output_name,
+            "quantity": 1,
+            "unit": "kg",
+            "extra_data": {
+                "custom_expiry": {
+                    "enabled": True,
+                    "mode": "set_at_execution",
+                    "warning_value": 7,
+                    "warning_unit": "days",
+                },
+            },
+        }
+        process = process_repo.create_process(
+            org_id=org_id,
+            name="Expiry Save Test Process",
+            description="",
+            is_draft=False,
+        )
+        step = process_repo.add_step(
+            process_id=process.id,
+            org_id=org_id,
+            step_number=1,
+            name="Step",
+            inputs=[],
+            outputs=[step_output],
+            execution_prompts=[],
+        )
+        assert step is not None
+        execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
+        exec_steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
+        exec_step = exec_steps[0]
+        db.commit()
+
+        # Payload: warning 10 days > duration 5 days → must be rejected
+        payload = {
+            "actual_inputs": [],
+            "actual_outputs": [
+                {
+                    "name": output_name,
+                    "quantity": 10,
+                    "unit": "kg",
+                    "custom_expiry_input": {
+                        "mode": "duration",
+                        "duration_value": 5,
+                        "duration_unit": "days",
+                        "warning_value": 10,
+                        "warning_unit": "days",
+                    },
+                },
+            ],
+            "execution_data": {},
+        }
+        path = f"/api/core/executions/{execution.id}/steps/{exec_step.id}/complete"
+        # Minimal app with only core blueprint so we avoid loading optional features (crm, workflow_engine)
+        from flask import Flask
+
+        from app.core.backend.backend import core_bp
+
+        app = Flask(__name__)
+        app.secret_key = "test-secret"
+        app.register_blueprint(core_bp)
+        with app.app_context():
+            with app.test_request_context(
+                path,
+                method="POST",
+                data=json.dumps(payload),
+                content_type="application/json",
+            ):
+                g.org_id = str(org_id)
+                g.current_user = user
+                g.user_id = str(user.id)
+                g.user_email = getattr(user, "email", None)
+                response, status_code = complete_step(str(execution.id), str(exec_step.id))
+        assert status_code == 400, f"expected 400, got {status_code}: {response.get_json() if response else None}"
+        body = response.get_json()
+        assert body is not None
+        details = body.get("details") or []
+        assert any(
+            "warning period cannot exceed expiry period" in (d if isinstance(d, str) else "") for d in details
+        ), f"expected error message in details, got {details}"
+
+        # Teardown: remove execution steps, execution, steps, process
+        db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).delete(synchronize_session=False)
+        db.query(Execution).filter(Execution.id == execution.id).delete(synchronize_session=False)
+        db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
+        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
+        db.commit()
 
 
 # ---------------------------------------------------------------------------
