@@ -1430,11 +1430,9 @@
           unit: (outputDef ? (outputDef.unit || 'units') : 'units').trim()
         };
         if (untrackedItemId) outPayload.untracked_item_id = untrackedItemId;
-        // If expiry is set during execution, capture operator selection for backend persistence (single shared collector)
-        const ce = outputDef?.extra_data?.custom_expiry;
-        if (ce?.enabled && ce?.mode === 'set_at_execution' && typeof window.collectExecutionOutputExpiryPayload === 'function') {
-          const payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
-          if (payload) outPayload.custom_expiry_input = payload;
+        // If expiry is set during execution, capture operator selection for backend persistence (logic in core-api.js)
+        if (typeof window.applyExecutionOutputExpiryToPayload === 'function') {
+          window.applyExecutionOutputExpiryToPayload(modal, outputId, outputDef, outPayload);
         }
         actualOutputs.push(outPayload);
         variableOutputNames.add(name);

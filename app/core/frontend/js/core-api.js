@@ -539,6 +539,15 @@ if (typeof window !== 'undefined') {
         }
         return null;
     };
+
+    // Single place for "maybe add custom_expiry_input to outPayload" (used by js/ and shared/ execution-modal)
+    window.applyExecutionOutputExpiryToPayload = function(modal, outputId, outputDef, outPayload) {
+        if (!modal || !outputId || !outputDef || !outPayload) return;
+        var ce = outputDef.extra_data && outputDef.extra_data.custom_expiry;
+        if (!ce || !ce.enabled || ce.mode !== 'set_at_execution' || typeof window.collectExecutionOutputExpiryPayload !== 'function') return;
+        var payload = window.collectExecutionOutputExpiryPayload(modal, outputId);
+        if (payload) outPayload.custom_expiry_input = payload;
+    };
 }
 
 
