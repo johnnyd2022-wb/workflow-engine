@@ -15,6 +15,7 @@ from app.core.backend.evidence.evidence_service import list_evidence_for_executi
 from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import db_session
+from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.inventory_wastage import InventoryWastage
@@ -38,25 +39,6 @@ core_bp = Blueprint(
     static_url_path="/static",
 )
 
-VALID_EXPIRY_UNITS = {"hours", "days", "weeks", "months"}
-
-
-def _duration_to_timedelta(value: int | float, unit: str) -> timedelta:
-    """Convert duration value + unit to timedelta (months approximated as 30 days)."""
-    u = (unit or "days").strip().lower()
-    if u not in VALID_EXPIRY_UNITS:
-        u = "days"
-    v = int(value) if value is not None else 0
-    if u == "hours":
-        return timedelta(hours=v)
-    if u == "days":
-        return timedelta(days=v)
-    if u == "weeks":
-        return timedelta(weeks=v)
-    if u == "months":
-        return timedelta(days=v * 30)
-    return timedelta(days=v)
-
 
 def validate_custom_expiry_warning_not_exceed_duration(
     output_name: str,
@@ -67,20 +49,12 @@ def validate_custom_expiry_warning_not_exceed_duration(
 ) -> list[str]:
     """
     Validate that warning period does not exceed expiry period for custom output expiry.
-    Returns a list of error messages (one element if invalid, else empty).
-    Used at execution step completion; tests call this to safeguard the validation.
+    Delegates to domain rule (single source of truth). Used at execution step completion;
+    tests call this to safeguard the validation.
     """
-    if duration_value is None or warning_value is None:
-        return []
-    du = (duration_unit or "days").strip().lower()
-    wu = (warning_unit or "days").strip().lower()
-    if du not in VALID_EXPIRY_UNITS or wu not in VALID_EXPIRY_UNITS:
-        return []
-    expiry_delta = _duration_to_timedelta(duration_value, du)
-    warning_delta = _duration_to_timedelta(warning_value, wu)
-    if warning_delta > expiry_delta:
-        return [f"Output '{output_name}': warning period cannot exceed expiry period."]
-    return []
+    return assert_warning_within_expiry(
+        output_name, duration_value, duration_unit, warning_value, warning_unit
+    )
 
 
 @core_bp.route("/core", methods=["GET"])
