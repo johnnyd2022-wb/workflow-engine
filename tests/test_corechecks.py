@@ -152,11 +152,15 @@ class TestExpiredMaterialsComplianceSemantics:
         assert "connections" in result.data
 
 
+# Output name used by output_expiry fixture and assertions; single constant to avoid drift.
+TEST_EXPIRY_OUTPUT_NAME = "Expiry Test Output"
+
+
 def _make_output_expiry_fixture(db, org_id, mode="set_at_execution", completed_at_days_ago=10, expiry_past_days=5):
     """
     Create minimal process/step/execution/execution_step/inventory for output_expiry check.
     mode: "set_at_execution" or "fixed_duration".
-    completed_at_days_ago: set execution step completed_at this many days in the past.
+    completed_at_days_ago: set execution step completed_at this many days in the past (via repo override).
     expiry_past_days: for datetime mode, expiry_at is this many days in the past (so item is expired).
     Returns (process, step, execution, execution_step, inventory_item) for cleanup and assertions.
     """
@@ -164,9 +168,10 @@ def _make_output_expiry_fixture(db, org_id, mode="set_at_execution", completed_a
     process_repo = ProcessRepository(db)
     exec_repo = ExecutionRepository(db)
     inv_repo = InventoryRepository(db)
+    completed_at_override = now - timedelta(days=completed_at_days_ago)
 
     step_output = {
-        "name": "Expiry Test Output",
+        "name": TEST_EXPIRY_OUTPUT_NAME,
         "quantity": 1,
         "unit": "kg",
         "extra_data": {
@@ -213,12 +218,10 @@ def _make_output_expiry_fixture(db, org_id, mode="set_at_execution", completed_a
         execution_step_id=exec_step.id,
         org_id=org_id,
         actual_inputs=[],
-        actual_outputs=[{"name": "Expiry Test Output", "quantity": 10, "unit": "kg"}],
+        actual_outputs=[{"name": TEST_EXPIRY_OUTPUT_NAME, "quantity": 10, "unit": "kg"}],
         execution_data={},
+        completed_at_override=completed_at_override,
     )
-    db.refresh(exec_step)
-    exec_step.completed_at = now - timedelta(days=completed_at_days_ago)
-    db.commit()
 
     extra_data = None
     if mode == "set_at_execution":
@@ -234,7 +237,7 @@ def _make_output_expiry_fixture(db, org_id, mode="set_at_execution", completed_a
 
     inventory_item = inv_repo.create_inventory_item(
         org_id=org_id,
-        name="Expiry Test Output",
+        name=TEST_EXPIRY_OUTPUT_NAME,
         quantity="10",
         unit="kg",
         inventory_type=InventoryType.WORK_IN_PROGRESS.value,
@@ -370,7 +373,7 @@ class TestOutputExpiryCheck:
             assert item["warning_value"] >= 0
             assert item["warning_unit"] in ("hours", "days", "weeks", "months")
             # Message should reference the output name
-            assert "Expiry Test Output" in (item.get("message") or "")
+            assert TEST_EXPIRY_OUTPUT_NAME in (item.get("message") or "")
         finally:
             _cleanup_output_expiry_fixture(db, org_id, process, execution, inv_item)
 
@@ -381,6 +384,7 @@ class TestOutputExpiryCheck:
         exec_repo = ExecutionRepository(db)
         inv_repo = InventoryRepository(db)
         now = datetime.now(timezone.utc)
+        completed_at_override = now - timedelta(days=10)
         step_output = {
             "name": "Invalid Unit Output",
             "quantity": 1,
@@ -423,10 +427,8 @@ class TestOutputExpiryCheck:
             actual_inputs=[],
             actual_outputs=[{"name": "Invalid Unit Output", "quantity": 5, "unit": "L"}],
             execution_data={},
+            completed_at_override=completed_at_override,
         )
-        db.refresh(exec_step)
-        exec_step.completed_at = now - timedelta(days=10)
-        db.commit()
         inv_item = inv_repo.create_inventory_item(
             org_id=org_id,
             name="Invalid Unit Output",
@@ -484,9 +486,11 @@ class TestOutputExpiryCheck:
             items = result.data.get("output_expiry_items") or []
             ids = [i.get("inventory_item_id") for i in items]
             assert str(inv_item.id) in ids
-            found = next(i for i in items if i.get("inventory_item_id") == str(inv_item.id))
-            assert found["process_id"] == str(process.id)
-            assert found["step_id"] == str(step.id)
-            assert found["execution_id"] == str(execution.id)
+            found = [i for i in items if i.get("inventory_item_id") == str(inv_item.id)]
+            assert len(found) == 1
+            item = found[0]
+            assert item["process_id"] == str(process.id)
+            assert item["step_id"] == str(step.id)
+            assert item["execution_id"] == str(execution.id)
         finally:
             _cleanup_output_expiry_fixture(db, org_id, process, execution, inv_item)

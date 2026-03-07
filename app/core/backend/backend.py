@@ -1060,6 +1060,14 @@ def complete_step(execution_id: str, execution_step_id: str):
                     }
                 )
 
+        # Block inventory creation when output validation failed (e.g. custom_expiry warning > duration)
+        if execution_errors:
+            if not execution_step.execution_data:
+                execution_step.execution_data = {}
+            execution_step.execution_data["execution_errors"] = execution_errors
+            db_session.commit()
+            return jsonify({"error": "Execution failed", "details": execution_errors}), 400
+
         # FAILURE HANDLING: Persist warnings to execution_data for audit trail
         if execution_warnings:
             if not execution_step.execution_data:
