@@ -382,16 +382,22 @@
           return row;
         }
 
+        function nameMatchesInput(invName) {
+          var inName = (input.name || '').toLowerCase();
+          var iName = (invName || '').toLowerCase();
+          return inName && iName && (iName.includes(inName) || inName.includes(iName));
+        }
+
         function isExpectedItem(invId) {
           if (!invId) return false;
           var inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
           if (!inv) return false;
-          var expectedOutId = input.source_output_id ? String(input.source_output_id) : null;
-          var invOutId = (inv.source_output_id != null && inv.source_output_id !== '') ? String(inv.source_output_id) : null;
-          if (expectedOutId) {
-            return invOutId === expectedOutId;
+          var inputIsOutput = (input.source_output_id != null && input.source_output_id !== '');
+          if (inputIsOutput) {
+            return (inv.source_output_id != null && inv.source_output_id !== '') &&
+              String(inv.source_output_id) === String(input.source_output_id);
           }
-          return !invOutId;
+          return nameMatchesInput(inv.name);
         }
 
         function updateSectionQtyExpectedWarning() {
