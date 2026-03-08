@@ -64,16 +64,25 @@
   // ============================================================
   // OPEN EXECUTION MODAL
   // ============================================================
-  window.openExecutionModal = async function(executionId, executionStep, stepDefinition) {
+  window.openExecutionModal = async function(executionId, executionStep, stepDefinition, options) {
     const modal = document.getElementById('execute-step-modal');
     if (!modal) {
       console.error('Execution modal not found');
       return;
     }
-    
+    options = options || {};
+    var isDraft = executionId == null || executionStep == null;
+    if (isDraft && options.processId) {
+      modal.dataset.draftProcessId = options.processId;
+      modal.dataset.executionId = '';
+      modal.dataset.executionStepId = '';
+      executionStep = executionStep || (stepDefinition && { id: null, step_id: stepDefinition.id, step_number: 1 });
+    } else {
+      modal.dataset.draftProcessId = '';
+    }
     // Store current execution context
-    modal.dataset.executionId = executionId;
-    modal.dataset.executionStepId = executionStep.id;
+    modal.dataset.executionId = executionId || '';
+    modal.dataset.executionStepId = (executionStep && executionStep.id) ? executionStep.id : '';
     
     // Set step name
     const stepNameEl = modal.querySelector('#execute-step-name');
@@ -312,93 +321,143 @@
         const safeInputName = (input.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
 
         inputSection.innerHTML = `
-          <div style="margin-bottom: 12px;">
+          <div class="execute-input-section-header" style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               ${escapeHtml(input.name)} 
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${input.quantity || '0'} ${input.unit || ''})</span>
-              <span style="color: var(--error, #ef4444);">*</span>
             </label>
-            <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-required="true" data-quantity="" data-unit="" data-expired-reason="" value="">
-            <div class="execute-inventory-picker-wrapper" style="position: relative;" data-input-name="${escapeHtml(input.name)}">
-              <div class="execute-inventory-picker-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); ${errorStyle} background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
-                <span class="execute-inventory-picker-label" style="flex: 1; text-align: left; min-width: 0;">Select inventory item...</span>
-                <span class="execute-inventory-picker-arrow-box" style="flex-shrink: 0; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-md, 6px); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); color: var(--text-secondary);">
-                  <svg class="execute-inventory-picker-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
-                </span>
-              </div>
-              <div class="execute-inventory-picker-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
-                <div class="execute-inventory-picker-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
-              </div>
-            </div>
-            <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
-            ${errorMessage}
-            ${hasNoInventory ? `<p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-source-step-id="${input.source_step_id ? escapeHtml(String(input.source_step_id)) : ''}" data-source-process-id="${input.source_process_id ? escapeHtml(String(input.source_process_id)) : ''}" style="font-size: 13px;">Add Missing Item</button></p>` : ''}
           </div>
-          <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume <span style="color: var(--error, #ef4444);">*</span></label>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <input type="number" class="form-input execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0.01" style="flex: 1; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
+          <div class="execute-input-rows-container" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}"></div>
+          <div class="execute-inventory-picker-dropdown-section" style="display: none;">
+            <div class="execute-inventory-picker-dropdown" style="display: none; position: absolute; top: 0; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
+              <div class="execute-inventory-picker-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
             </div>
-            <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">When you select an inventory item, quantity updates to that item's total. You can edit to consume less.</p>
           </div>
+          <div class="execute-add-input-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Add another input</label>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;">Add one or more inputs to meet step quantity (e.g. multiple batches) or to record an additional material when inputs are not always set per execution.</p>
+            <button type="button" class="btn btn-secondary btn-sm execute-add-another-input-btn" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}" style="font-size: 13px;">+ Add another input</button>
+          </div>
+          <div class="execute-input-qty-expected-warning" style="display: none; margin-top: 12px; padding: 10px 12px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); color: #92400e; font-size: 13px; font-weight: 500;" role="status"></div>
+          <div class="execute-input-unexpected-material-warning" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
+          ${errorMessage}
+          ${hasNoInventory ? `<p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-source-step-id="${input.source_step_id ? escapeHtml(String(input.source_step_id)) : ''}" data-source-process-id="${input.source_process_id ? escapeHtml(String(input.source_process_id)) : ''}" style="font-size: 13px;">Add Missing Item</button></p>` : ''}
         `;
 
-        const hiddenInput = inputSection.querySelector('.execute-inventory-select');
-        const quantityInput = inputSection.querySelector('.execute-quantity-input');
-        const unitDisplay = inputSection.querySelector('.execute-quantity-unit-display');
-        const wrapper = inputSection.querySelector('.execute-inventory-picker-wrapper');
-        const trigger = inputSection.querySelector('.execute-inventory-picker-trigger');
-        const triggerLabel = inputSection.querySelector('.execute-inventory-picker-label');
-        const triggerArrow = inputSection.querySelector('.execute-inventory-picker-arrow');
+        const rowsContainer = inputSection.querySelector('.execute-input-rows-container');
+        const dropdownSection = inputSection.querySelector('.execute-inventory-picker-dropdown-section');
         const dropdown = inputSection.querySelector('.execute-inventory-picker-dropdown');
         const cardsContainer = inputSection.querySelector('.execute-inventory-picker-cards');
-        const expiredWarningEl = inputSection.querySelector('.execute-input-expired-warning');
+        if (dropdownSection) dropdownSection._executeInputSectionRef = inputSection;
+        let rowIndex = 0;
 
-        function getInventorySelectionLabel(invId) {
-          if (!invId) return 'Select inventory item...';
-          const inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
-          if (!inv) return 'Select inventory item...';
-          const productName = inv.process_name ? escapeHtml(inv.process_name) + ' - ' + escapeHtml(inv.name) : escapeHtml(inv.name);
-          return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+        function createInputRow(isFirst) {
+          const rowId = 'execute-input-row-' + safeInputName + '-' + rowIndex++;
+          const row = document.createElement('div');
+          row.className = 'execute-input-row';
+          row.id = rowId;
+          row.dataset.inputName = input.name;
+          row.innerHTML = `
+            <div style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+              <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-quantity="" data-unit="" data-expired-reason="" value="">
+              <div class="execute-inventory-picker-wrapper" style="position: relative;" data-input-name="${escapeHtml(input.name)}">
+                <div class="execute-inventory-picker-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); ${isFirst ? errorStyle : ''} background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
+                  <span class="execute-inventory-picker-label" style="flex: 1; text-align: left; min-width: 0;">Select inventory item...</span>
+                  <span class="execute-inventory-picker-arrow-box" style="flex-shrink: 0; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-md, 6px); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); color: var(--text-secondary);">
+                    <svg class="execute-inventory-picker-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+                  </span>
+                </div>
+              </div>
+              <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
+            </div>
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume</label>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="number" class="form-input execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="flex: 1; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
+              </div>
+            </div>
+            ${!isFirst ? '<button type="button" class="execute-remove-input-row-btn btn btn-secondary btn-sm" style="margin-top: 8px; font-size: 12px;">Remove this input</button>' : ''}
+          `;
+          return row;
         }
 
-        function closeInventoryDropdown() {
-          if (dropdown) dropdown.style.display = 'none';
-          if (triggerArrow) triggerArrow.style.transform = 'rotate(0deg)';
-          document.removeEventListener('click', closeInventoryDropdownOutside);
+        function isExpectedItem(invId) {
+          if (!invId) return false;
+          var inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
+          if (!inv) return false;
+          var expectedOutId = input.source_output_id ? String(input.source_output_id) : null;
+          var invOutId = (inv.source_output_id != null && inv.source_output_id !== '') ? String(inv.source_output_id) : null;
+          if (expectedOutId) {
+            return invOutId === expectedOutId;
+          }
+          return !invOutId;
         }
-        function closeInventoryDropdownOutside(e) {
-          if (wrapper && !wrapper.contains(e.target)) closeInventoryDropdown();
+
+        function updateSectionQtyExpectedWarning() {
+          var qtyWarningEl = inputSection.querySelector('.execute-input-qty-expected-warning');
+          if (!qtyWarningEl) return;
+          var expectedNum = parseFloat(input.quantity);
+          if (isNaN(expectedNum) || expectedNum <= 0) {
+            qtyWarningEl.style.display = 'none';
+            qtyWarningEl.textContent = '';
+            return;
+          }
+          var totalExpectedQty = 0;
+          inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
+            var sel = row.querySelector('.execute-inventory-select');
+            var qtyInput = row.querySelector('.execute-quantity-input');
+            if (sel && sel.value && qtyInput && isExpectedItem(sel.value)) {
+              var v = parseFloat(qtyInput.value);
+              if (!isNaN(v) && v > 0) totalExpectedQty += v;
+            }
+          });
+          var fmt = function(n) { return Number(n.toFixed(3)); };
+          var unit = (input.unit || '').trim() || 'units';
+          if (totalExpectedQty < expectedNum) {
+            var moreNeeded = expectedNum - totalExpectedQty;
+            qtyWarningEl.textContent = fmt(moreNeeded) + ' ' + unit + ' more needed to meet expected quantity (' + fmt(expectedNum) + ' ' + unit + ') for this input.';
+            qtyWarningEl.style.display = 'block';
+          } else if (totalExpectedQty > expectedNum) {
+            var over = totalExpectedQty - expectedNum;
+            qtyWarningEl.textContent = fmt(over) + ' ' + unit + ' over expected quantity (' + fmt(expectedNum) + ' ' + unit + ') for this input.';
+            qtyWarningEl.style.display = 'block';
+          } else {
+            qtyWarningEl.style.display = 'none';
+            qtyWarningEl.textContent = '';
+          }
         }
-        function openInventoryDropdown() {
-          if (dropdown) dropdown.style.display = 'block';
-          if (triggerArrow) triggerArrow.style.transform = 'rotate(180deg)';
-          setTimeout(function() { document.addEventListener('click', closeInventoryDropdownOutside); }, 0);
+
+        function updateUnexpectedMaterialWarning() {
+          var unexpectedEl = inputSection.querySelector('.execute-input-unexpected-material-warning');
+          if (!unexpectedEl) return;
+          var hasUnexpected = false;
+          inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
+            var sel = row.querySelector('.execute-inventory-select');
+            if (sel && sel.value && !isExpectedItem(sel.value)) hasUnexpected = true;
+          });
+          if (hasUnexpected) {
+            unexpectedEl.textContent = 'You have added one or more materials that are not the expected input for this step. This is acceptable; this message is for your awareness only.';
+            unexpectedEl.style.display = 'block';
+          } else {
+            unexpectedEl.style.display = 'none';
+            unexpectedEl.textContent = '';
+          }
         }
-        function setInventorySelection(invId) {
+
+        function setRowSelection(rowEl, invId) {
+          if (!rowEl) return;
+          const hiddenInput = rowEl.querySelector('.execute-inventory-select');
+          const triggerLabel = rowEl.querySelector('.execute-inventory-picker-label');
+          const quantityInput = rowEl.querySelector('.execute-quantity-input');
+          const unitDisplay = rowEl.querySelector('.execute-quantity-unit-display');
+          const expiredWarningEl = rowEl.querySelector('.execute-input-expired-warning');
+          if (!hiddenInput) return;
           hiddenInput.value = invId || '';
           hiddenInput.dataset.quantity = '';
           hiddenInput.dataset.unit = '';
           hiddenInput.dataset.expiredReason = '';
           if (triggerLabel) triggerLabel.textContent = getInventorySelectionLabel(invId);
-          if (wrapper) {
-            wrapper.querySelectorAll('.execute-inventory-input-card').forEach(function(c) {
-              var id = c.dataset.inventoryId || '';
-              var selected = id === (invId || '');
-              c.classList.toggle('execute-reconcile-card-selected', selected);
-              c.style.borderColor = selected ? 'var(--primary, #2563eb)' : '';
-              c.style.boxShadow = selected ? '0 0 0 2px rgba(37, 99, 235, 0.25)' : '';
-            });
-          }
-          if (trigger) {
-            trigger.style.border = '';
-            trigger.style.boxShadow = '';
-          }
-          if (expiredWarningEl) {
-            expiredWarningEl.style.display = 'none';
-            expiredWarningEl.textContent = '';
-          }
           if (!invId) {
             if (unitDisplay && quantityInput) {
               unitDisplay.textContent = quantityInput.dataset.stepUnit || input.unit || '';
@@ -406,7 +465,9 @@
               quantityInput.dataset.originalQuantity = input.quantity || '';
               quantityInput.dataset.inventoryUnit = '';
             }
-            closeInventoryDropdown();
+            if (expiredWarningEl) { expiredWarningEl.style.display = 'none'; expiredWarningEl.textContent = ''; }
+            updateSectionQtyExpectedWarning();
+            updateUnexpectedMaterialWarning();
             return;
           }
           const inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
@@ -425,25 +486,94 @@
               expiredWarningEl.textContent = 'Check: ' + reason;
               expiredWarningEl.style.display = 'block';
             }
+            const wrapper = rowEl.querySelector('.execute-inventory-picker-wrapper');
+            const trigger = rowEl.querySelector('.execute-inventory-picker-trigger');
             if (trigger) {
               trigger.style.border = reason ? '2px solid var(--error, #ef4444)' : '';
               trigger.style.boxShadow = reason ? '0 0 0 1px var(--error, #ef4444)' : '';
             }
           }
           if (quantityInput) quantityInput.style.border = '';
-          const submitBtn = modal.querySelector('#execute-step-submit-btn');
-          if (submitBtn && submitBtn.disabled) {
-            const allRequired = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
-            let allHave = true;
-            allRequired.forEach(function(s) { if (!s.value || s.value === '') allHave = false; });
-            if (allHave) {
-              submitBtn.disabled = false;
-              submitBtn.style.opacity = '1';
-              submitBtn.style.cursor = 'pointer';
-              submitBtn.title = '';
+          updateSectionQtyExpectedWarning();
+          updateUnexpectedMaterialWarning();
+        }
+
+        const firstRow = createInputRow(true);
+        rowsContainer.appendChild(firstRow);
+
+        const hiddenInput = firstRow.querySelector('.execute-inventory-select');
+        const quantityInput = firstRow.querySelector('.execute-quantity-input');
+        const unitDisplay = firstRow.querySelector('.execute-quantity-unit-display');
+        const wrapper = firstRow.querySelector('.execute-inventory-picker-wrapper');
+        const trigger = firstRow.querySelector('.execute-inventory-picker-trigger');
+        const triggerLabel = firstRow.querySelector('.execute-inventory-picker-label');
+        const triggerArrow = firstRow.querySelector('.execute-inventory-picker-arrow');
+        const expiredWarningEl = firstRow.querySelector('.execute-input-expired-warning');
+
+        function getInventorySelectionLabel(invId) {
+          if (!invId) return 'Select inventory item...';
+          const inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
+          if (!inv) return 'Select inventory item...';
+          const productName = inv.process_name ? escapeHtml(inv.process_name) + ' - ' + escapeHtml(inv.name) : escapeHtml(inv.name);
+          return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+        }
+
+        function closeInventoryDropdown() {
+          if (dropdown) dropdown.style.display = 'none';
+          if (dropdownSection) {
+            dropdownSection.style.display = 'none';
+            var ref = dropdownSection._executeInputSectionRef;
+            var addPane = ref ? ref.querySelector('.execute-add-input-pane') : null;
+            if (ref && addPane && dropdownSection.parentNode !== ref) {
+              ref.insertBefore(dropdownSection, addPane);
             }
           }
-          closeInventoryDropdown();
+          if (modal._editingInputRow) {
+            var arrow = modal._editingInputRow.querySelector('.execute-inventory-picker-arrow');
+            if (arrow) arrow.style.transform = 'rotate(0deg)';
+            modal._editingInputRow = null;
+          }
+          document.removeEventListener('click', closeInventoryDropdownOutside);
+        }
+        function closeInventoryDropdownOutside(e) {
+          if (inputSection && !inputSection.contains(e.target)) closeInventoryDropdown();
+        }
+        function getSelectedInventoryIdsExcludingRow(excludeRowEl) {
+          var ids = new Set();
+          inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
+            if (row === excludeRowEl) return;
+            var sel = row.querySelector('.execute-inventory-select');
+            if (sel && sel.value) ids.add(String(sel.value));
+          });
+          return ids;
+        }
+        function openDropdownForRow(rowEl) {
+          modal._editingInputRow = rowEl;
+          var pickerWrapper = rowEl ? rowEl.querySelector('.execute-inventory-picker-wrapper') : null;
+          if (dropdownSection && pickerWrapper) {
+            if (dropdownSection.parentNode !== pickerWrapper) {
+              if (dropdownSection.parentNode) dropdownSection.parentNode.removeChild(dropdownSection);
+              pickerWrapper.appendChild(dropdownSection);
+            }
+            dropdownSection.style.position = 'absolute';
+            dropdownSection.style.top = '100%';
+            dropdownSection.style.left = '0';
+            dropdownSection.style.width = '100%';
+            dropdownSection.style.minWidth = '280px';
+            dropdownSection.style.display = 'block';
+          }
+          var selectedElsewhere = getSelectedInventoryIdsExcludingRow(rowEl);
+          if (cardsContainer) {
+            cardsContainer.querySelectorAll('.execute-inventory-input-card').forEach(function(card) {
+              var id = card.dataset.inventoryId || '';
+              card.style.display = id && selectedElsewhere.has(id) ? 'none' : '';
+            });
+          }
+          if (dropdown) dropdown.style.display = 'block';
+          inputSection.querySelectorAll('.execute-input-row .execute-inventory-picker-arrow').forEach(function(a) { a.style.transform = 'rotate(0deg)'; });
+          var rowArrow = rowEl && rowEl.querySelector('.execute-inventory-picker-arrow');
+          if (rowArrow) rowArrow.style.transform = 'rotate(180deg)';
+          setTimeout(function() { document.addEventListener('click', closeInventoryDropdownOutside); }, 0);
         }
 
         function toggleInventoryCardDetails(cardId) {
@@ -455,10 +585,23 @@
           arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
         }
 
-        if (trigger) {
-          trigger.addEventListener('click', function(e) { e.stopPropagation(); if (dropdown.style.display === 'block') closeInventoryDropdown(); else openInventoryDropdown(); });
-          trigger.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (dropdown.style.display === 'block') closeInventoryDropdown(); else openInventoryDropdown(); } });
+        function bindTriggerForRow(rowEl) {
+          var t = rowEl.querySelector('.execute-inventory-picker-trigger');
+          if (!t) return;
+          t.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
+            else openDropdownForRow(rowEl);
+          });
+          t.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
+              else openDropdownForRow(rowEl);
+            }
+          });
         }
+        bindTriggerForRow(firstRow);
         if (dropdown) dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
 
         var noneCard = document.createElement('div');
@@ -466,7 +609,7 @@
         noneCard.dataset.inventoryId = '';
         noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
         noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
-        noneCard.onclick = function(e) { e.stopPropagation(); setInventorySelection(''); };
+        noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(modal._editingInputRow, ''); closeInventoryDropdown(); };
         cardsContainer.appendChild(noneCard);
 
         sortedInventory.forEach(function(inv) {
@@ -518,7 +661,8 @@
               toggleInventoryCardDetails(id);
               return;
             }
-            setInventorySelection(id);
+            setRowSelection(modal._editingInputRow, id);
+            closeInventoryDropdown();
           };
           cardsContainer.appendChild(card);
         });
@@ -529,6 +673,33 @@
           }
           quantityInput.addEventListener('input', function() {
             if (parseFloat(this.value) > 0) this.style.border = '';
+            updateSectionQtyExpectedWarning();
+            updateUnexpectedMaterialWarning();
+          });
+        }
+
+        var addAnotherBtn = inputSection.querySelector('.execute-add-another-input-btn');
+        if (addAnotherBtn) {
+          addAnotherBtn.addEventListener('click', function() {
+            var newRow = createInputRow(false);
+            rowsContainer.appendChild(newRow);
+            bindTriggerForRow(newRow);
+            var qInput = newRow.querySelector('.execute-quantity-input');
+            if (qInput) {
+              qInput.addEventListener('input', function() {
+                if (parseFloat(this.value) > 0) this.style.border = '';
+                updateSectionQtyExpectedWarning();
+                updateUnexpectedMaterialWarning();
+              });
+            }
+            var removeBtn = newRow.querySelector('.execute-remove-input-row-btn');
+            if (removeBtn) {
+              removeBtn.addEventListener('click', function() {
+                newRow.remove();
+                updateSectionQtyExpectedWarning();
+                updateUnexpectedMaterialWarning();
+              });
+            }
           });
         }
         
@@ -1164,42 +1335,13 @@
       outputsContainer.innerHTML = '<p style="color: var(--text-secondary); font-size: 14px; padding: 16px;">No variable outputs for this step.</p>';
     }
     
-    // Check if any required inputs have no available inventory
-    let hasMissingInventory = false;
-    const missingInventoryInputs = [];
-    const allInputSections = inputsContainer.querySelectorAll('.execute-input-section');
-    allInputSections.forEach(section => {
-      const hiddenInput = section.querySelector('.execute-inventory-select');
-      if (hiddenInput && hiddenInput.dataset.required === 'true') {
-        const cardsContainer = section.querySelector('.execute-inventory-picker-cards');
-        const allCards = cardsContainer ? cardsContainer.querySelectorAll('.execute-inventory-input-card') : [];
-        const validCards = Array.from(allCards).filter(function(c) { return (c.dataset.inventoryId || '') !== ''; });
-        if (validCards.length === 0) {
-          hasMissingInventory = true;
-          const inputName = hiddenInput.dataset.inputName;
-          missingInventoryInputs.push(inputName);
-        }
-      }
-    });
-    
-    // Disable submit button if required inventory is missing
+    // Submit button is always enabled; we do not enforce strict quantity or require every input to have a selection
     const submitButton = modal.querySelector('#execute-step-submit-btn');
     if (submitButton) {
-      if (hasMissingInventory) {
-        submitButton.disabled = true;
-        submitButton.style.opacity = '0.5';
-        submitButton.style.cursor = 'not-allowed';
-        const missingList = missingInventoryInputs.map(name => `"${name}"`).join(', ');
-        submitButton.title = `Cannot execute: Required inventory items are not available for: ${missingList}. Please add inventory before executing this step.`;
-        
-        // Show a warning notification
-        showNotification('error', 'Missing Inventory', `Cannot execute: No matching inventory found for required inputs: ${missingList}. Please add inventory items before executing this step.`);
-      } else {
-        submitButton.disabled = false;
-        submitButton.style.opacity = '1';
-        submitButton.style.cursor = 'pointer';
-        submitButton.title = '';
-      }
+      submitButton.disabled = false;
+      submitButton.style.opacity = '1';
+      submitButton.style.cursor = 'pointer';
+      submitButton.title = '';
     }
     
     // Show modal
@@ -1214,56 +1356,62 @@
     const modal = document.getElementById('execute-step-modal');
     if (!modal) return;
     
-    const executionId = modal.dataset.executionId;
-    const executionStepId = modal.dataset.executionStepId;
-    
+    var executionId = modal.dataset.executionId;
+    var executionStepId = modal.dataset.executionStepId;
+    var draftProcessId = modal.dataset.draftProcessId;
+
+    if (draftProcessId) {
+      try {
+        var createResult = await CoreAPI.createExecution(draftProcessId);
+        executionId = createResult.id || createResult.execution_id || (createResult.execution && createResult.execution.id);
+        if (!executionId) {
+          showNotification('error', 'Error', 'Could not create execution.');
+          return;
+        }
+        var executionData = await CoreAPI.getExecution(executionId);
+        var steps = executionData.execution_steps || [];
+        var readyStep = steps.find(function(es) { return es.status === 'ready' || es.status === 'READY'; });
+        if (!readyStep || !readyStep.id) {
+          showNotification('error', 'Error', 'Could not find step to complete.');
+          return;
+        }
+        executionStepId = readyStep.id;
+        modal.dataset.executionId = executionId;
+        modal.dataset.executionStepId = executionStepId;
+        modal.dataset.draftProcessId = '';
+      } catch (err) {
+        showNotification('error', 'Failed to start execution', err && err.message ? err.message : 'Please try again.');
+        return;
+      }
+    }
+
     if (!executionId || !executionStepId) {
       showNotification('error', 'Error', 'Execution context missing.');
       return;
     }
     
-    // VALIDATION: Check required variable inputs
+    // VALIDATION: For each input row that has an inventory selected, require valid quantity (no strict match to step expected)
     const validationErrors = [];
-    
-    // Check inventory selections for variable inputs
-    const inventorySelects = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
-    inventorySelects.forEach(select => {
+    const inputRows = modal.querySelectorAll('.execute-input-row');
+    inputRows.forEach(row => {
+      const select = row.querySelector('.execute-inventory-select');
+      const quantityInput = row.querySelector('.execute-quantity-input');
+      if (!select || !quantityInput) return;
       const inventoryId = select.value;
       const inputName = select.dataset.inputName;
-      
-      // Check if inventory is selected
-      if (!inventoryId || inventoryId === '') {
-        validationErrors.push(`Please select inventory for "${inputName}"`);
-        const triggerEl = select.closest('.execute-input-section') && select.closest('.execute-input-section').querySelector('.execute-inventory-picker-trigger');
-        if (triggerEl) triggerEl.style.border = '2px solid var(--error, #ef4444)';
+      if (!inventoryId || inventoryId === '') return;
+      const quantity = parseFloat(quantityInput.value);
+      if (!quantity || isNaN(quantity) || quantity <= 0) {
+        validationErrors.push(`Please enter a valid quantity for "${inputName}" (selected row)`);
+        quantityInput.style.border = '2px solid var(--error, #ef4444)';
       } else {
-        const triggerEl = select.closest('.execute-input-section') && select.closest('.execute-input-section').querySelector('.execute-inventory-picker-trigger');
-        if (triggerEl) {
-          triggerEl.style.border = '';
-          triggerEl.style.boxShadow = '';
-        }
-        
-        // Check quantity
-        const quantityInput = modal.querySelector(`.execute-quantity-input[data-input-name="${inputName}"]`);
-        if (quantityInput) {
-          const quantity = parseFloat(quantityInput.value);
-          if (!quantity || isNaN(quantity) || quantity <= 0) {
-            validationErrors.push(`Please enter a valid quantity for "${inputName}"`);
-            quantityInput.style.border = '2px solid var(--error, #ef4444)';
-          } else {
-            quantityInput.style.border = '';
-            
-            // Check if quantity exceeds available inventory (use data on hidden input)
-            const availableQty = parseFloat(select.dataset.quantity);
-            if (!isNaN(availableQty)) {
-              const inventoryUnit = select.dataset.unit || '';
-              const quantityUnit = quantityInput.dataset.inventoryUnit || inventoryUnit;
-              if (quantity > availableQty) {
-                validationErrors.push(`Quantity for "${inputName}" (${quantity} ${quantityUnit}) exceeds available inventory (${availableQty} ${inventoryUnit})`);
-                quantityInput.style.border = '2px solid var(--error, #ef4444)';
-              }
-            }
-          }
+        quantityInput.style.border = '';
+        const availableQty = parseFloat(select.dataset.quantity);
+        if (!isNaN(availableQty) && quantity > availableQty) {
+          const inventoryUnit = select.dataset.unit || '';
+          const quantityUnit = quantityInput.dataset.inventoryUnit || inventoryUnit;
+          validationErrors.push(`Quantity for "${inputName}" (${quantity} ${quantityUnit}) exceeds available inventory (${availableQty} ${inventoryUnit})`);
+          quantityInput.style.border = '2px solid var(--error, #ef4444)';
         }
       }
     });
@@ -1335,34 +1483,11 @@
       return;
     }
     
-    // Additional check: Ensure all required variable inputs have inventory selected
-    const requiredSelects = modal.querySelectorAll('.execute-inventory-select[data-required="true"]');
-    const missingSelections = [];
-    for (const select of requiredSelects) {
-      if (!select.value || select.value === '') {
-        missingSelections.push(select.dataset.inputName);
-        const triggerEl = select.closest('.execute-input-section') && select.closest('.execute-input-section').querySelector('.execute-inventory-picker-trigger');
-        if (triggerEl) triggerEl.style.border = '2px solid var(--error, #ef4444)';
-      }
-    }
-    
-    if (missingSelections.length > 0) {
-      const missingList = missingSelections.map(name => `"${name}"`).join(', ');
-      showNotification('error', 'Validation Error', `Please select inventory for all required inputs: ${missingList}.`);
-      const firstMissing = modal.querySelector('.execute-inventory-select[data-required="true"]');
-      if (firstMissing && (!firstMissing.value || firstMissing.value === '')) {
-        const trigger = firstMissing.closest('.execute-input-section') && firstMissing.closest('.execute-input-section').querySelector('.execute-inventory-picker-trigger');
-        if (trigger) {
-          trigger.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          trigger.focus();
-        }
-      }
-      return;
-    }
-
     var invList = modal._inventoryForSubmit || [];
     var notReadyUsed = [];
-    inventorySelects.forEach(function(select) {
+    modal.querySelectorAll('.execute-input-row').forEach(function(row) {
+      var select = row.querySelector('.execute-inventory-select');
+      if (!select) return;
       var invId = select.value;
       if (!invId) return;
       var item = invList.find(function(i) { return String(i.id) === String(invId); });
@@ -1383,22 +1508,22 @@
     }
 
     try {
-      // Collect variable inputs (inventory selections)
+      // Collect variable inputs from all input rows (multiple rows per step input allowed)
       const actualInputs = [];
-      inventorySelects.forEach(select => {
+      modal.querySelectorAll('.execute-input-row').forEach(row => {
+        const select = row.querySelector('.execute-inventory-select');
+        const quantityInput = row.querySelector('.execute-quantity-input');
+        if (!select || !quantityInput) return;
         const inventoryId = select.value;
-        if (inventoryId) {
-          const quantityInput = modal.querySelector(`.execute-quantity-input[data-input-name="${select.dataset.inputName}"]`);
-          const quantity = quantityInput ? parseFloat(quantityInput.value) : 0;
-          const unit = select.dataset.unit || '';
-          
-          actualInputs.push({
-            name: select.dataset.inputName,
-            inventory_item_id: inventoryId,
-            quantity: quantity,
-            unit: unit
-          });
-        }
+        if (!inventoryId) return;
+        const quantity = parseFloat(quantityInput.value);
+        const unit = select.dataset.unit || '';
+        actualInputs.push({
+          name: select.dataset.inputName,
+          inventory_item_id: inventoryId,
+          quantity: isNaN(quantity) ? 0 : quantity,
+          unit: unit
+        });
       });
       
       // Collect confirm inputs (editable quantity/unit)

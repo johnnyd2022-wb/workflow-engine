@@ -1655,40 +1655,43 @@
       return null;
     }
     
-    // Helper to get execution prompt data for an inventory item
+    // Helper to get execution prompt and trace data for an inventory item (full audit-style traceability)
     function getExecutionPromptData(inventoryItem) {
       if (!inventoryItem || !inventoryItem.source_execution_step_id) return null;
+      // Prefer extra_data.execution_trace + execution_prompts when present (from list_inventory)
+      const extra = inventoryItem.extra_data || {};
+      const trace = extra.execution_trace || {};
+      const prompts = extra.execution_prompts || {};
+      const merged = {};
+      for (const [k, v] of Object.entries(prompts)) {
+        if (v != null && v !== '') merged[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      }
+      for (const [k, v] of Object.entries(trace)) {
+        if (v != null && v !== '') merged[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      }
+      if (Object.keys(merged).length > 0) return merged;
+      // Fallback: find from allExecutions (execution_steps[].execution_data)
       if (!allExecutions || !Array.isArray(allExecutions)) return null;
-      
-      // Fields to exclude from display
-      const excludeFields = ['completed_by_email', 'completed_by_user_id'];
-      // Fields to rename for better display
       const renameFields = {
-        'completed_by': 'Completed by'
+        'completed_by': 'Completed by',
+        'completed_at': 'Completed at',
+        'execution_errors': 'Execution errors',
+        'execution_warnings': 'Execution warnings'
       };
-      
-      // Find the execution step
       for (const exec of allExecutions) {
         if (!exec || !exec.execution_steps || !Array.isArray(exec.execution_steps)) continue;
         const step = exec.execution_steps.find(es => es && es.id === inventoryItem.source_execution_step_id);
         if (step && step.execution_data) {
-          // execution_data contains prompt values as key-value pairs
-          // Format: { "prompt_label_1": "value1", "prompt_label_2": "value2", ... }
           const promptData = {};
           for (const [key, value] of Object.entries(step.execution_data)) {
-            // Skip excluded fields
-            if (excludeFields.includes(key)) continue;
-            
-            // Only include non-empty string values (prompt responses)
-            if (typeof value === 'string' && value.trim()) {
-              // Rename field if needed
-              const displayKey = renameFields[key] || key;
-              promptData[displayKey] = value;
-            }
+            if (value == null || value === '') continue;
+            const displayKey = renameFields[key] || key.replace(/_/g, ' ');
+            promptData[displayKey] = typeof value === 'object' ? JSON.stringify(value) : String(value);
           }
-          if (Object.keys(promptData).length > 0) {
-            return promptData;
+          if (step.completed_at && !promptData['Completed at']) {
+            promptData['Completed at'] = typeof step.completed_at === 'string' ? step.completed_at : (step.completed_at && step.completed_at.toISOString ? step.completed_at.toISOString() : '');
           }
+          if (Object.keys(promptData).length > 0) return promptData;
         }
       }
       return null;

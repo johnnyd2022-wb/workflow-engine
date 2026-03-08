@@ -778,99 +778,111 @@ def complete_step(execution_id: str, execution_step_id: str):
         execution_errors = []
 
         # Consume inventory for variable inputs
+        # Aggregate by inventory_item_id so the same item cannot be consumed more than available across multiple inputs
         # TRANSACTION INTEGRITY: Collect all inventory updates first, then commit atomically
         inventory_updates = []
         if actual_inputs:
+            consumption_by_item = {}
             for input_data in actual_inputs:
                 inventory_item_id = input_data.get("inventory_item_id")
-                quantity_consumed = input_data.get("quantity", 0)
-                consumed_unit = input_data.get("unit", "")
+                if not inventory_item_id:
+                    continue
+                key = str(inventory_item_id)
+                if key not in consumption_by_item:
+                    consumption_by_item[key] = []
+                consumption_by_item[key].append(
+                    (
+                        input_data.get("quantity", 0),
+                        input_data.get("unit", ""),
+                        input_data.get("name", "Unknown"),
+                    )
+                )
 
-                if inventory_item_id:
-                    try:
-                        # Lock row (SELECT ... FOR UPDATE) to prevent double-spend / race when concurrent requests consume same item.
-                        inventory_item = inventory_repo.get_inventory_item_by_id_for_update(
-                            UUID(inventory_item_id), org_id
+            for item_id_str, consumptions in consumption_by_item.items():
+                try:
+                    inventory_item_id = UUID(item_id_str)
+                except (ValueError, TypeError):
+                    execution_errors.append(f"Invalid inventory item id: {item_id_str}")
+                    continue
+                try:
+                    inventory_item = inventory_repo.get_inventory_item_by_id_for_update(
+                        inventory_item_id, org_id
+                    )
+                    if not inventory_item:
+                        execution_warnings.append(
+                            f"Inventory item {item_id_str} not found for input(s)"
                         )
-                        if not inventory_item:
-                            execution_warnings.append(
-                                f"Inventory item {inventory_item_id} not found for input '{input_data.get('name', 'Unknown')}'"
-                            )
+                        continue
+
+                    if not allow_consumption_override:
+                        ready_ok, ready_err = is_inventory_item_ready_for_consumption(
+                            db_session, inventory_item
+                        )
+                        if not ready_ok and ready_err:
+                            execution_errors.append(ready_err)
                             continue
 
-                        # Execution consumption guard: block consuming not-ready inventory (ready date) unless override allowed
-                        if not allow_consumption_override:
-                            ready_ok, ready_err = is_inventory_item_ready_for_consumption(db_session, inventory_item)
-                            if not ready_ok and ready_err:
-                                execution_errors.append(ready_err)
-                                continue
+                    try:
+                        current_quantity = Decimal(str(inventory_item.quantity))
+                    except (InvalidOperation, ValueError, TypeError):
+                        execution_errors.append(
+                            f"Invalid quantity format for inventory item {item_id_str}: {inventory_item.quantity}"
+                        )
+                        continue
 
-                        # QUANTITY PRECISION: Use Decimal for safe arithmetic.
-                        # TODO: Standardize all inventory quantity handling on Decimal; some paths still use float(quantity).
-                        # Current usage here is arithmetic; elsewhere may be comparison-only. Do not refactor broadly yet.
-                        try:
-                            current_quantity = Decimal(str(inventory_item.quantity))
-                        except (InvalidOperation, ValueError, TypeError):
-                            execution_errors.append(
-                                f"Invalid quantity format for inventory item {inventory_item_id}: {inventory_item.quantity}"
-                            )
-                            continue
+                    inventory_unit = inventory_item.unit or ""
+                    total_converted = Decimal("0")
 
-                        inventory_unit = inventory_item.unit or ""
-
-                        # Check if units are compatible
+                    for quantity_consumed, consumed_unit, input_name in consumptions:
                         if consumed_unit and inventory_unit:
                             if not are_units_compatible(consumed_unit, inventory_unit):
                                 execution_errors.append(
                                     f"Cannot consume {quantity_consumed} {consumed_unit} from inventory "
-                                    f"item {inventory_item_id} (unit: {inventory_unit}): units are incompatible"
+                                    f"item {item_id_str} (unit: {inventory_unit}): units are incompatible"
                                 )
-                                continue
-
-                            # Convert consumed quantity to inventory unit (Decimal-only for precision)
+                                break
                             try:
-                                quantity_consumed_decimal = Decimal(str(quantity_consumed))
-                                quantity_consumed_converted = convert_to_inventory_unit_decimal(
-                                    quantity_consumed_decimal, consumed_unit, inventory_unit
+                                qty_decimal = Decimal(str(quantity_consumed))
+                                converted = convert_to_inventory_unit_decimal(
+                                    qty_decimal, consumed_unit, inventory_unit
                                 )
                             except (ValueError, InvalidOperation) as conv_error:
                                 execution_errors.append(
                                     f"Failed to convert {quantity_consumed} {consumed_unit} to {inventory_unit}: {conv_error}"
                                 )
-                                continue
+                                break
                         else:
-                            # If no unit specified, assume same unit (backward compatibility)
                             try:
-                                quantity_consumed_converted = Decimal(str(quantity_consumed))
+                                converted = Decimal(str(quantity_consumed))
                             except (InvalidOperation, ValueError, TypeError):
                                 execution_errors.append(
-                                    f"Invalid quantity format for input '{input_data.get('name', 'Unknown')}': {quantity_consumed}"
+                                    f"Invalid quantity format for input '{input_name}': {quantity_consumed}"
                                 )
-                                continue
+                                break
+                        total_converted += converted
+                    else:
+                        if total_converted > current_quantity:
+                            execution_errors.append(
+                                f"Total quantity requested for inventory item (batch) exceeds available: "
+                                f"requested {total_converted} {inventory_unit or 'units'}, available {current_quantity} {inventory_unit or 'units'}"
+                            )
+                            continue
 
-                        # Decrease inventory quantity using Decimal arithmetic
-                        new_quantity = max(Decimal("0"), current_quantity - quantity_consumed_converted)
-
-                        # Format quantity deterministically (audit-safe)
-                        # Always set to exactly "0" string if quantity is effectively zero
+                        new_quantity = max(Decimal("0"), current_quantity - total_converted)
                         if abs(new_quantity) < Decimal("0.0001"):
                             formatted_qty = "0"
                         else:
-                            # Format to remove unnecessary trailing zeros while preserving precision
                             formatted_qty = str(new_quantity.normalize())
-                            # Remove trailing .0 if present
                             if formatted_qty.endswith(".0"):
                                 formatted_qty = formatted_qty[:-2]
-
-                        # Store update for atomic commit
                         inventory_updates.append((inventory_item, formatted_qty))
 
-                    except Exception as e:
-                        import logging
+                except Exception as e:
+                    import logging
 
-                        logger = logging.getLogger(__name__)
-                        logger.exception(f"Unexpected error consuming inventory {inventory_item_id}")
-                        execution_errors.append(f"Failed to consume inventory {inventory_item_id}: {str(e)}")
+                    logger = logging.getLogger(__name__)
+                    logger.exception(f"Unexpected error consuming inventory {item_id_str}")
+                    execution_errors.append(f"Failed to consume inventory {item_id_str}: {str(e)}")
 
         # FAILURE HANDLING: Block execution if critical errors occurred
         if execution_errors:
@@ -917,6 +929,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                 # EXTRA_DATA DISCIPLINE: Store only source execution data (not derived data)
                 # extra_data schema:
                 # - execution_prompts: Source data from execution_step.execution_data (user-entered metadata)
+                # - execution_trace: All system/audit metadata for sourcemap traceability (completed_by, completed_at, errors, warnings)
                 # - variable_inputs: Source data from execution_step.actual_inputs (what was consumed)
                 # - variable_output: Source data from execution_step.actual_outputs (this specific output)
                 # NOTE: previous_steps_data is derived/read-only and should NEVER be persisted here
@@ -924,21 +937,31 @@ def complete_step(execution_id: str, execution_step_id: str):
                 # Get execution_data from the execution_step (read from DB after refresh)
                 step_execution_data = execution_step.execution_data if execution_step.execution_data else {}
                 if step_execution_data:
-                    # Store execution prompts (metadata captured during execution)
-                    # Keep completed_by for user tracing, but filter out email and user_id
+                    # Store execution prompts (user-entered metadata only)
                     execution_prompts = {}
-                    internal_fields = {
-                        "completed_by_email",
-                        "completed_by_user_id",
-                        "completed_at",
-                        "execution_errors",
-                        "execution_warnings",
+                    prompt_exclude = {
+                        "completed_by", "completed_by_email", "completed_by_user_id",
+                        "completed_at", "execution_errors", "execution_warnings",
                     }
                     for key, value in step_execution_data.items():
-                        if key not in internal_fields and value is not None and value != "":
+                        if key not in prompt_exclude and value is not None and value != "":
                             execution_prompts[key] = value
                     if execution_prompts:
                         extra_data["execution_prompts"] = execution_prompts
+                    # Store full execution trace for sourcemap/audit-style traceability (completed_by is the display identity; no need for email/user_id)
+                    execution_trace = {}
+                    if step_execution_data.get("completed_by") is not None:
+                        execution_trace["completed_by"] = step_execution_data["completed_by"]
+                    if step_execution_data.get("completed_at") is not None:
+                        execution_trace["completed_at"] = step_execution_data["completed_at"]
+                    elif execution_step.completed_at:
+                        execution_trace["completed_at"] = execution_step.completed_at.isoformat()
+                    if step_execution_data.get("execution_errors") is not None:
+                        execution_trace["execution_errors"] = step_execution_data["execution_errors"]
+                    if step_execution_data.get("execution_warnings") is not None:
+                        execution_trace["execution_warnings"] = step_execution_data["execution_warnings"]
+                    if execution_trace:
+                        extra_data["execution_trace"] = execution_trace
 
                 # Store variable inputs used to produce this output
                 # Get actual_inputs from the execution_step (it was stored when the step was completed)
@@ -1338,14 +1361,31 @@ def list_inventory():
                     db_session.query(ExecutionStep).filter(ExecutionStep.id == item.source_execution_step_id).first()
                 )
                 if execution_step and execution_step.execution_data:
-                    # Build execution_prompts from execution_data, keeping completed_by for tracing
+                    # Build execution_prompts (user-entered) and execution_trace (full audit) for sourcemap traceability
                     execution_prompts = {}
-                    internal_fields = {"completed_by_email", "completed_by_user_id", "completed_at"}
+                    prompt_exclude = {
+                        "completed_by", "completed_by_email", "completed_by_user_id",
+                        "completed_at", "execution_errors", "execution_warnings",
+                    }
                     for key, value in execution_step.execution_data.items():
-                        if key not in internal_fields and value is not None and value != "":
+                        if key not in prompt_exclude and value is not None and value != "":
                             execution_prompts[key] = value
                     if execution_prompts:
                         extra_data["execution_prompts"] = execution_prompts
+                    execution_trace = {}
+                    ed = execution_step.execution_data
+                    if ed.get("completed_by") is not None:
+                        execution_trace["completed_by"] = ed["completed_by"]
+                    if ed.get("completed_at") is not None:
+                        execution_trace["completed_at"] = ed["completed_at"]
+                    elif execution_step.completed_at:
+                        execution_trace["completed_at"] = execution_step.completed_at.isoformat()
+                    if ed.get("execution_errors") is not None:
+                        execution_trace["execution_errors"] = ed["execution_errors"]
+                    if ed.get("execution_warnings") is not None:
+                        execution_trace["execution_warnings"] = ed["execution_warnings"]
+                    if execution_trace:
+                        extra_data["execution_trace"] = execution_trace
 
                     # Also include variable inputs and outputs if not already in extra_data
                     # This is important for existing items that may not have variable_inputs populated
@@ -1467,24 +1507,29 @@ def list_inventory():
                     if input_unit:
                         step_data["input_unit"] = input_unit
 
-                    # Add execution prompts from this step
+                    # Add full execution metadata for sourcemap/audit traceability (every piece traceable)
                     if input_execution_step.execution_data:
                         prev_execution_prompts = {}
-                        # Exclude internal fields and completed_by (we display it separately)
-                        internal_fields = {
-                            "completed_by",
-                            "completed_by_email",
-                            "completed_by_user_id",
-                            "completed_at",
+                        prompt_exclude = {
+                            "completed_by", "completed_by_email", "completed_by_user_id",
+                            "completed_at", "execution_errors", "execution_warnings",
                         }
                         for key, value in input_execution_step.execution_data.items():
-                            if key not in internal_fields and value is not None and value != "":
+                            if key not in prompt_exclude and value is not None and value != "":
                                 prev_execution_prompts[key] = value
                         if prev_execution_prompts:
                             step_data["execution_prompts"] = prev_execution_prompts
-                        # Include completed_by for tracing (displayed separately)
-                        if "completed_by" in input_execution_step.execution_data:
-                            step_data["completed_by"] = input_execution_step.execution_data["completed_by"]
+                        ed = input_execution_step.execution_data
+                        if ed.get("completed_by") is not None:
+                            step_data["completed_by"] = ed["completed_by"]
+                        if ed.get("completed_at") is not None:
+                            step_data["completed_at"] = ed["completed_at"]
+                        elif input_execution_step.completed_at:
+                            step_data["completed_at"] = input_execution_step.completed_at.isoformat()
+                        if ed.get("execution_errors") is not None:
+                            step_data["execution_errors"] = ed["execution_errors"]
+                        if ed.get("execution_warnings") is not None:
+                            step_data["execution_warnings"] = ed["execution_warnings"]
 
                     # Add this step to the list
                     steps_data.append(step_data)
@@ -1610,6 +1655,7 @@ def list_inventory():
                 "source_execution_step_id": str(item.source_execution_step_id)
                 if item.source_execution_step_id
                 else None,
+                "source_output_id": str(item.source_output_id) if item.source_output_id else None,
                 "source_step_name": item.source_step_name,
                 "process_name": process_name,
                 "producing_step_id": str(producing_step_id) if producing_step_id else None,
