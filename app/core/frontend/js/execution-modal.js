@@ -369,6 +369,7 @@
                 </div>
               </div>
               <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
+              <div class="execute-input-unexpected-row-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
             </div>
             <div>
               <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume</label>
@@ -382,22 +383,63 @@
           return row;
         }
 
-        function nameMatchesInput(invName) {
-          var inName = (input.name || '').toLowerCase();
-          var iName = (invName || '').toLowerCase();
-          return inName && iName && (iName.includes(inName) || inName.includes(iName));
+        function nameMatchesExact(invName) {
+          var a = (input.name || '').trim().toLowerCase();
+          var b = (invName || '').trim().toLowerCase();
+          return a.length > 0 && a === b;
+        }
+
+        function itemIsOutput(inv) {
+          return inv && (inv.source_output_id != null && inv.source_output_id !== '');
+        }
+
+        function inputExpectsOutput() {
+          return (input.source_output_id != null && input.source_output_id !== '');
+        }
+
+        function isUnexpectedType(inv) {
+          if (!inv) return false;
+          var expectsOutput = inputExpectsOutput();
+          var invIsOutput = itemIsOutput(inv);
+          if (expectsOutput) return !invIsOutput || String(inv.source_output_id) !== String(input.source_output_id);
+          return invIsOutput;
+        }
+
+        function isUnexpectedItem(inv) {
+          if (!inv) return false;
+          if (isUnexpectedType(inv)) return true;
+          return !nameMatchesExact(inv.name);
         }
 
         function isExpectedItem(invId) {
           if (!invId) return false;
           var inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
           if (!inv) return false;
-          var inputIsOutput = (input.source_output_id != null && input.source_output_id !== '');
-          if (inputIsOutput) {
-            return (inv.source_output_id != null && inv.source_output_id !== '') &&
-              String(inv.source_output_id) === String(input.source_output_id);
+          if (inputExpectsOutput()) {
+            return itemIsOutput(inv) && String(inv.source_output_id) === String(input.source_output_id) && nameMatchesExact(inv.name);
           }
-          return nameMatchesInput(inv.name);
+          return !itemIsOutput(inv) && nameMatchesExact(inv.name);
+        }
+
+        function updateRowUnexpectedWarning(rowEl) {
+          var el = rowEl ? rowEl.querySelector('.execute-input-unexpected-row-warning') : null;
+          var sel = rowEl ? rowEl.querySelector('.execute-inventory-select') : null;
+          var invId = sel && sel.value ? sel.value : null;
+          var inv = invId ? sortedInventory.find(function(i) { return String(i.id) === String(invId); }) : null;
+          var unexpected = inv && isUnexpectedItem(inv);
+          if (!el) return;
+          if (!sel || !invId) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+          }
+          if (!inv || !unexpected) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+          }
+          el.textContent = 'This selection is not the expected input for this step. This is acceptable; for your awareness only.';
+          el.style.display = 'block';
         }
 
         function updateSectionQtyExpectedWarning() {
@@ -436,18 +478,23 @@
 
         function updateUnexpectedMaterialWarning() {
           var unexpectedEl = inputSection.querySelector('.execute-input-unexpected-material-warning');
-          if (!unexpectedEl) return;
           var hasUnexpected = false;
           inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
             var sel = row.querySelector('.execute-inventory-select');
-            if (sel && sel.value && !isExpectedItem(sel.value)) hasUnexpected = true;
+            if (sel && sel.value) {
+              var inv = sortedInventory.find(function(i) { return String(i.id) === String(sel.value); });
+              if (inv && isUnexpectedItem(inv)) hasUnexpected = true;
+            }
+            updateRowUnexpectedWarning(row);
           });
-          if (hasUnexpected) {
-            unexpectedEl.textContent = 'You have added one or more materials that are not the expected input for this step. This is acceptable; this message is for your awareness only.';
-            unexpectedEl.style.display = 'block';
-          } else {
-            unexpectedEl.style.display = 'none';
-            unexpectedEl.textContent = '';
+          if (unexpectedEl) {
+            if (hasUnexpected) {
+              unexpectedEl.textContent = 'You have added one or more materials that are not the expected input for this step. This is acceptable; this message is for your awareness only.';
+              unexpectedEl.style.display = 'block';
+            } else {
+              unexpectedEl.style.display = 'none';
+              unexpectedEl.textContent = '';
+            }
           }
         }
 
