@@ -413,7 +413,7 @@
 
         function isExpectedItem(invId) {
           if (!invId) return false;
-          var inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
+          var inv = allInventory.find(function(i) { return String(i.id) === String(invId); });
           if (!inv) return false;
           if (inputExpectsOutput()) {
             return itemIsOutput(inv) && String(inv.source_output_id) === String(input.source_output_id) && nameMatchesExact(inv.name);
@@ -425,7 +425,7 @@
           var el = rowEl ? rowEl.querySelector('.execute-input-unexpected-row-warning') : null;
           var sel = rowEl ? rowEl.querySelector('.execute-inventory-select') : null;
           var invId = sel && sel.value ? sel.value : null;
-          var inv = invId ? sortedInventory.find(function(i) { return String(i.id) === String(invId); }) : null;
+          var inv = invId ? allInventory.find(function(i) { return String(i.id) === String(invId); }) : null;
           var unexpected = inv && isUnexpectedItem(inv);
           if (!el) return;
           if (!sel || !invId) {
@@ -438,7 +438,7 @@
             el.textContent = '';
             return;
           }
-          el.textContent = 'This selection is not the expected input for this step. This is acceptable; for your awareness only.';
+          el.textContent = 'Warning - this selection is not the expected input for this step';
           el.style.display = 'block';
         }
 
@@ -482,14 +482,14 @@
           inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
             var sel = row.querySelector('.execute-inventory-select');
             if (sel && sel.value) {
-              var inv = sortedInventory.find(function(i) { return String(i.id) === String(sel.value); });
+              var inv = allInventory.find(function(i) { return String(i.id) === String(sel.value); });
               if (inv && isUnexpectedItem(inv)) hasUnexpected = true;
             }
             updateRowUnexpectedWarning(row);
           });
           if (unexpectedEl) {
             if (hasUnexpected) {
-              unexpectedEl.textContent = 'You have added one or more materials that are not the expected input for this step. This is acceptable; this message is for your awareness only.';
+              unexpectedEl.textContent = 'Warning - one or more selections are not the expected input for this step';
               unexpectedEl.style.display = 'block';
             } else {
               unexpectedEl.style.display = 'none';
@@ -523,7 +523,7 @@
             updateUnexpectedMaterialWarning();
             return;
           }
-          const inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
+          const inv = allInventory.find(function(i) { return String(i.id) === String(invId); });
           if (inv && unitDisplay && quantityInput) {
             quantityInput.value = inv.quantity != null && inv.quantity !== '' ? inv.quantity : quantityInput.value;
             quantityInput.dataset.originalQuantity = inv.quantity != null ? String(inv.quantity) : '';
@@ -565,7 +565,7 @@
 
         function getInventorySelectionLabel(invId) {
           if (!invId) return 'Select inventory item...';
-          const inv = sortedInventory.find(function(i) { return String(i.id) === String(invId); });
+          const inv = allInventory.find(function(i) { return String(i.id) === String(invId); });
           if (!inv) return 'Select inventory item...';
           const productName = inv.process_name ? escapeHtml(inv.process_name) + ' - ' + escapeHtml(inv.name) : escapeHtml(inv.name);
           return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
@@ -600,76 +600,13 @@
           });
           return ids;
         }
-        function openDropdownForRow(rowEl) {
-          modal._editingInputRow = rowEl;
-          var pickerWrapper = rowEl ? rowEl.querySelector('.execute-inventory-picker-wrapper') : null;
-          if (dropdownSection && pickerWrapper) {
-            if (dropdownSection.parentNode !== pickerWrapper) {
-              if (dropdownSection.parentNode) dropdownSection.parentNode.removeChild(dropdownSection);
-              pickerWrapper.appendChild(dropdownSection);
-            }
-            dropdownSection.style.position = 'absolute';
-            dropdownSection.style.top = '100%';
-            dropdownSection.style.left = '0';
-            dropdownSection.style.width = '100%';
-            dropdownSection.style.minWidth = '280px';
-            dropdownSection.style.display = 'block';
-          }
-          var selectedElsewhere = getSelectedInventoryIdsExcludingRow(rowEl);
-          if (cardsContainer) {
-            cardsContainer.querySelectorAll('.execute-inventory-input-card').forEach(function(card) {
-              var id = card.dataset.inventoryId || '';
-              card.style.display = id && selectedElsewhere.has(id) ? 'none' : '';
-            });
-          }
-          if (dropdown) dropdown.style.display = 'block';
-          inputSection.querySelectorAll('.execute-input-row .execute-inventory-picker-arrow').forEach(function(a) { a.style.transform = 'rotate(0deg)'; });
-          var rowArrow = rowEl && rowEl.querySelector('.execute-inventory-picker-arrow');
-          if (rowArrow) rowArrow.style.transform = 'rotate(180deg)';
-          setTimeout(function() { document.addEventListener('click', closeInventoryDropdownOutside); }, 0);
-        }
-
-        function toggleInventoryCardDetails(cardId) {
-          var details = inputSection.querySelector('#execute-inv-details-' + safeInputName + '-' + cardId);
-          var arrow = inputSection.querySelector('#execute-inv-arrow-' + safeInputName + '-' + cardId);
-          if (!details || !arrow) return;
-          var isExpanded = details.style.display === 'block';
-          details.style.display = isExpanded ? 'none' : 'block';
-          arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
-        }
-
-        function bindTriggerForRow(rowEl) {
-          var t = rowEl.querySelector('.execute-inventory-picker-trigger');
-          if (!t) return;
-          t.addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
-            else openDropdownForRow(rowEl);
-          });
-          t.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
-              else openDropdownForRow(rowEl);
-            }
-          });
-        }
-        bindTriggerForRow(firstRow);
-        if (dropdown) dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
-
-        var noneCard = document.createElement('div');
-        noneCard.className = 'execute-inventory-input-card execute-reconcile-untracked-card' + (sortedInventory.length > 0 ? '' : ' execute-reconcile-card-selected');
-        noneCard.dataset.inventoryId = '';
-        noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
-        noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
-        noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(modal._editingInputRow, ''); closeInventoryDropdown(); };
-        cardsContainer.appendChild(noneCard);
-
-        sortedInventory.forEach(function(inv) {
+        function createCardForInv(inv) {
           var id = String(inv.id);
           var card = document.createElement('div');
           card.className = 'execute-inventory-input-card card card-interactive execute-reconcile-untracked-card';
           card.dataset.inventoryId = id;
+          var searchParts = [inv.name, inv.process_name, inv.unit, inv.supplier, inv.supplier_batch_number].filter(Boolean);
+          card.dataset.searchText = (searchParts.join(' ') || '').toLowerCase();
           card.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; overflow: hidden;';
           var createdStr = '';
           if (inv.created_at) {
@@ -717,8 +654,208 @@
             setRowSelection(modal._editingInputRow, id);
             closeInventoryDropdown();
           };
-          cardsContainer.appendChild(card);
-        });
+          return card;
+        }
+
+        function appendSectionHeader(container, title) {
+          var h = document.createElement('div');
+          h.className = 'execute-inventory-dropdown-section-header';
+          h.style.cssText = 'font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 6px 0; padding: 0 4px;';
+          h.textContent = title;
+          container.appendChild(h);
+        }
+
+        function filterAddAnotherDropdown() {
+          var searchEl = dropdown ? dropdown.querySelector('.execute-addanother-search') : null;
+          if (!cardsContainer || !searchEl) return;
+          var searchVal = (searchEl.value || '').trim().toLowerCase();
+          var selectedElsewhere = modal._editingInputRow ? getSelectedInventoryIdsExcludingRow(modal._editingInputRow) : new Set();
+          var children = cardsContainer.children;
+          for (var i = 0; i < children.length; i++) {
+            var el = children[i];
+            if (el.classList.contains('execute-inventory-dropdown-section-header')) continue;
+            if (el.classList.contains('execute-inventory-input-card')) {
+              var id = el.dataset.inventoryId;
+              if (id === '' || id === undefined) {
+                el.style.display = '';
+                continue;
+              }
+              if (selectedElsewhere.has(id)) {
+                el.style.display = 'none';
+                continue;
+              }
+              var text = (el.dataset.searchText || '');
+              el.style.display = !searchVal || (text && text.indexOf(searchVal) !== -1) ? '' : 'none';
+            }
+          }
+          for (var i = 0; i < children.length; i++) {
+            var el = children[i];
+            if (!el.classList.contains('execute-inventory-dropdown-section-header')) continue;
+            var hasVisible = false;
+            for (var j = i + 1; j < children.length; j++) {
+              var next = children[j];
+              if (next.classList.contains('execute-inventory-dropdown-section-header')) break;
+              if (next.classList.contains('execute-inventory-input-card') && next.dataset.inventoryId && next.style.display !== 'none') {
+                hasVisible = true;
+                break;
+              }
+            }
+            el.style.display = hasVisible ? '' : 'none';
+          }
+        }
+
+        function ensureAddAnotherSearchRow(show) {
+          var wrap = dropdown ? dropdown.querySelector('.execute-addanother-search-wrap') : null;
+          if (show) {
+            if (!wrap) {
+              wrap = document.createElement('div');
+              wrap.className = 'execute-addanother-search-wrap';
+              wrap.style.cssText = 'flex-shrink: 0; padding: 0 0 8px 0; border-bottom: 1px solid var(--border-default, #e5e7eb); margin-bottom: 8px;';
+              var inp = document.createElement('input');
+              inp.type = 'text';
+              inp.className = 'execute-addanother-search';
+              inp.placeholder = 'Type to filter…';
+              inp.autocomplete = 'off';
+              inp.style.cssText = 'width: 100%; box-sizing: border-box; padding: 6px 10px; border: 1px solid var(--border-default); border-radius: var(--radius-md); font-size: 13px; background: var(--bg-card); color: var(--text-primary);';
+              inp.addEventListener('input', filterAddAnotherDropdown);
+              inp.addEventListener('click', function(e) { e.stopPropagation(); });
+              wrap.appendChild(inp);
+              dropdown.insertBefore(wrap, cardsContainer);
+              dropdown.style.display = 'flex';
+              dropdown.style.flexDirection = 'column';
+              dropdown.style.height = '320px';
+              dropdown.style.overflow = 'hidden';
+              dropdown.style.overflowY = '';
+              cardsContainer.style.flex = '1';
+              cardsContainer.style.minHeight = '0';
+              cardsContainer.style.overflowY = 'auto';
+            }
+            for (var c = 0; c < cardsContainer.children.length; c++) {
+              cardsContainer.children[c].style.flexShrink = '0';
+            }
+            var inp = wrap.querySelector('.execute-addanother-search');
+            if (inp) {
+              inp.value = '';
+              filterAddAnotherDropdown();
+              setTimeout(function() { inp.focus(); }, 0);
+            }
+          } else {
+            if (wrap) {
+              wrap.remove();
+              dropdown.style.display = 'block';
+              dropdown.style.height = '';
+              dropdown.style.overflowY = 'auto';
+              dropdown.style.flex = '';
+              dropdown.style.flexDirection = '';
+              cardsContainer.style.flex = '';
+              cardsContainer.style.minHeight = '';
+              cardsContainer.style.overflowY = '';
+            }
+          }
+        }
+
+        function populateDropdownContent(rowEl) {
+          if (!cardsContainer) return;
+          cardsContainer.innerHTML = '';
+          var isFirstRow = rowsContainer && rowsContainer.firstElementChild === rowEl;
+          var noneCard = document.createElement('div');
+          noneCard.className = 'execute-inventory-input-card execute-reconcile-untracked-card';
+          noneCard.dataset.inventoryId = '';
+          noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
+          noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
+          noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(modal._editingInputRow, ''); closeInventoryDropdown(); };
+          cardsContainer.appendChild(noneCard);
+          if (isFirstRow) {
+            sortedInventory.forEach(function(inv) {
+              cardsContainer.appendChild(createCardForInv(inv));
+            });
+          } else {
+            var matchingName = allInventory.filter(function(inv) { return nameMatchesExact(inv.name); });
+            var matchingIds = new Set(matchingName.map(function(i) { return String(i.id); }));
+            var others = allInventory.filter(function(inv) { return !matchingIds.has(String(inv.id)); });
+            if (matchingName.length > 0) {
+              appendSectionHeader(cardsContainer, 'Expected: ' + (input.name || ''));
+              matchingName.forEach(function(inv) {
+                cardsContainer.appendChild(createCardForInv(inv));
+              });
+            }
+            var raw = others.filter(function(inv) { return (inv.inventory_type || 'raw_material') === 'raw_material'; });
+            var wip = others.filter(function(inv) { return inv.inventory_type === 'work_in_progress'; });
+            var fin = others.filter(function(inv) { return inv.inventory_type === 'final_product'; });
+            if (raw.length > 0) {
+              appendSectionHeader(cardsContainer, 'Raw materials');
+              raw.forEach(function(inv) { cardsContainer.appendChild(createCardForInv(inv)); });
+            }
+            if (wip.length > 0) {
+              appendSectionHeader(cardsContainer, 'Intermediate');
+              wip.forEach(function(inv) { cardsContainer.appendChild(createCardForInv(inv)); });
+            }
+            if (fin.length > 0) {
+              appendSectionHeader(cardsContainer, 'Final products');
+              fin.forEach(function(inv) { cardsContainer.appendChild(createCardForInv(inv)); });
+            }
+          }
+        }
+
+        function openDropdownForRow(rowEl) {
+          modal._editingInputRow = rowEl;
+          var isFirstRow = rowsContainer && rowsContainer.firstElementChild === rowEl;
+          populateDropdownContent(rowEl);
+          ensureAddAnotherSearchRow(!isFirstRow);
+          var pickerWrapper = rowEl ? rowEl.querySelector('.execute-inventory-picker-wrapper') : null;
+          if (dropdownSection && pickerWrapper) {
+            if (dropdownSection.parentNode !== pickerWrapper) {
+              if (dropdownSection.parentNode) dropdownSection.parentNode.removeChild(dropdownSection);
+              pickerWrapper.appendChild(dropdownSection);
+            }
+            dropdownSection.style.position = 'absolute';
+            dropdownSection.style.top = '100%';
+            dropdownSection.style.left = '0';
+            dropdownSection.style.width = '100%';
+            dropdownSection.style.minWidth = '280px';
+            dropdownSection.style.display = 'block';
+          }
+          var selectedElsewhere = getSelectedInventoryIdsExcludingRow(rowEl);
+          if (cardsContainer && isFirstRow) {
+            cardsContainer.querySelectorAll('.execute-inventory-input-card').forEach(function(card) {
+              var id = card.dataset.inventoryId || '';
+              card.style.display = id && selectedElsewhere.has(id) ? 'none' : '';
+            });
+          }
+          if (dropdown) dropdown.style.display = (!isFirstRow && dropdown.querySelector('.execute-addanother-search-wrap')) ? 'flex' : 'block';
+          inputSection.querySelectorAll('.execute-input-row .execute-inventory-picker-arrow').forEach(function(a) { a.style.transform = 'rotate(0deg)'; });
+          var rowArrow = rowEl && rowEl.querySelector('.execute-inventory-picker-arrow');
+          if (rowArrow) rowArrow.style.transform = 'rotate(180deg)';
+          setTimeout(function() { document.addEventListener('click', closeInventoryDropdownOutside); }, 0);
+        }
+
+        function toggleInventoryCardDetails(cardId) {
+          var details = inputSection.querySelector('#execute-inv-details-' + safeInputName + '-' + cardId);
+          var arrow = inputSection.querySelector('#execute-inv-arrow-' + safeInputName + '-' + cardId);
+          if (!details || !arrow) return;
+          var isExpanded = details.style.display === 'block';
+          details.style.display = isExpanded ? 'none' : 'block';
+          arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
+        }
+
+        function bindTriggerForRow(rowEl) {
+          var t = rowEl.querySelector('.execute-inventory-picker-trigger');
+          if (!t) return;
+          t.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
+            else openDropdownForRow(rowEl);
+          });
+          t.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
+              else openDropdownForRow(rowEl);
+            }
+          });
+        }
+        bindTriggerForRow(firstRow);
+        if (dropdown) dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
 
         if (quantityInput) {
           if (!quantityInput.dataset.originalQuantity || quantityInput.dataset.originalQuantity === '' || quantityInput.dataset.originalQuantity === 'undefined') {
