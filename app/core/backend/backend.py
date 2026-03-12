@@ -88,9 +88,7 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
     if not execution_data:
         return {}, {}
     prompts = {
-        k: v
-        for k, v in execution_data.items()
-        if k not in _EXECUTION_DATA_TRACE_KEYS and v is not None and v != ""
+        k: v for k, v in execution_data.items() if k not in _EXECUTION_DATA_TRACE_KEYS and v is not None and v != ""
     }
     trace = {}
     if execution_data.get("completed_by") is not None:
@@ -855,19 +853,13 @@ def complete_step(execution_id: str, execution_step_id: str):
                     execution_errors.append(f"Invalid inventory item id: {item_id_str}")
                     continue
                 try:
-                    inventory_item = inventory_repo.get_inventory_item_by_id_for_update(
-                        inventory_item_id, org_id
-                    )
+                    inventory_item = inventory_repo.get_inventory_item_by_id_for_update(inventory_item_id, org_id)
                     if not inventory_item:
-                        execution_warnings.append(
-                            f"Inventory item {item_id_str} not found for input(s)"
-                        )
+                        execution_warnings.append(f"Inventory item {item_id_str} not found for input(s)")
                         continue
 
                     if not allow_consumption_override:
-                        ready_ok, ready_err = is_inventory_item_ready_for_consumption(
-                            db_session, inventory_item
-                        )
+                        ready_ok, ready_err = is_inventory_item_ready_for_consumption(db_session, inventory_item)
                         if not ready_ok and ready_err:
                             execution_errors.append(ready_err)
                             continue
