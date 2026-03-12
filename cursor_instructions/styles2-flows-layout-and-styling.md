@@ -491,7 +491,7 @@ css for styles2.css
   margin-top: 0.25rem;
 }
 
-html for flows2.html
+html for flows.html
 
 <!-- Tabs -->
 <div class="tabs">

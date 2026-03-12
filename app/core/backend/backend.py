@@ -133,18 +133,18 @@ def _validate_step_outputs_expiry_after_ready(outputs: list) -> list[str]:
 @core_bp.route("/core", methods=["GET"])
 @requires_auth
 def core():
-    """Serve the core2.html frontend page"""
+    """Serve the core.html frontend page"""
     user_email = getattr(g, "user_email", None)
     show_reset_db = config.environment in ("test", "local") and user_email == DEMO_USER_EMAIL
-    return render_template("core2.html", active_page="core", show_reset_db=show_reset_db)
+    return render_template("core.html", active_page="core", show_reset_db=show_reset_db)
 
 
 @core_bp.route("/core/flows", methods=["GET"])
 @requires_auth
 def flows():
-    """Serve the flows2.html frontend page"""
+    """Serve the flows.html frontend page"""
     process_id = request.args.get("id")
-    return render_template("flows2.html", active_page="core", process_id=process_id)
+    return render_template("flows.html", active_page="core", process_id=process_id)
 
 
 @core_bp.route("/core/flows/create", methods=["GET"])

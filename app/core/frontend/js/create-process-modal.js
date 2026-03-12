@@ -1268,7 +1268,7 @@
     }
   };
   
-  // Unit groups (matching flows2.html)
+  // Unit groups (matching flows.html)
   const unitGroups = {
     weight: ['kg', 'g'],
     volume: ['L', 'mL'],
@@ -1320,7 +1320,7 @@
     try {
       // Load all inventory types - collect from multiple sources
       let items = [];
-      // Get process ID from URL params (same way as flows2.html)
+      // Get process ID from URL params (same way as flows.html)
       const urlParams = new URLSearchParams(window.location.search);
       const processId = urlParams.get('id') || null;
       
@@ -3688,7 +3688,7 @@
     executionPrompts.length = 0;
     executionPrompts.push(...filteredPrompts);
     
-    // Get process ID from URL params (same way as flows2.html). If missing (e.g. SPA opened at /core/flows/create), create draft first.
+    // Get process ID from URL params (same way as flows.html). If missing (e.g. SPA opened at /core/flows/create), create draft first.
     const urlParams = new URLSearchParams(window.location.search);
     let processId = urlParams.get('id') || null;
     

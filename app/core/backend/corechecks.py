@@ -4,7 +4,7 @@ Core system checks for inventory, processes, and executions.
 Provides a main runner (CoreChecksRunner) that different checks hook into, similar to
 DAGTracer in dagtraversal.py: one entry point, pluggable checks. Used for compliance,
 expiry, and preventing user mistakes. Results drive sourcemap highlighting, pre-execution
-warnings in flows2.html, and top-level banners (e.g. expired materials with stock).
+warnings in flows.html, and top-level banners (e.g. expired materials with stock).
 
 Checks register by id and return a CheckResult (flagged, message, data). The runner
 exposes run_check(check_id) and run_all_checks() for APIs and UI.

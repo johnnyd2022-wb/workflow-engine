@@ -173,7 +173,7 @@
       stroke-width: 3;
     }
     
-    /* Expand/collapse button styling - matches core2.html arrow style */
+    /* Expand/collapse button styling - matches core.html arrow style */
     .flowchart-expand-btn {
       cursor: pointer;
       transition: all 0.2s ease;
@@ -2657,7 +2657,7 @@
         stepData = getStepDataForItem(item);
       }
       
-      // Card-like styling matching core2.html inventory exactly
+      // Card-like styling matching core.html inventory exactly
       // Raw materials: blue tint, Intermediates: amber/yellow tint, Finals: green tint
       // Check if this item needs attention (expired or made with expired)
       const needsCheck = isCheckNeededItem(itemId);
@@ -2687,7 +2687,7 @@
       const expandedContentHeight = calculateExpandedHeight(item, stepData, promptDataForHeight);
       const totalHeight = isExpanded ? itemHeight + expandedContentHeight : itemHeight;
       
-      // Item box - colored background matching core2.html inventory
+      // Item box - colored background matching core.html inventory
       const itemBox = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       itemBox.setAttribute('x', x);
       itemBox.setAttribute('y', y);
@@ -2718,7 +2718,7 @@
         itemBox.setAttribute('data-expired-source', expiredSourceName || '');
       }
       
-      // Left accent bar to indicate type (like core2.html card styling)
+      // Left accent bar to indicate type (like core.html card styling)
       const accentBar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       accentBar.setAttribute('x', x);
       accentBar.setAttribute('y', y);
@@ -2749,7 +2749,7 @@
         clearHighlights();
       });
       
-      // Click on card to expand/collapse (like core2.html)
+      // Click on card to expand/collapse (like core.html)
       itemBox.addEventListener('click', async function(e) {
         e.stopPropagation();
         await toggleItemExpansion(itemId, svg, x, y, width, type, stepData);
@@ -2757,7 +2757,7 @@
       
       itemGroup.appendChild(itemBox);
       
-      // Expand/collapse button (styled like core2.html arrow)
+      // Expand/collapse button (styled like core.html arrow)
       const expandButtonGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       expandButtonGroup.setAttribute('data-inventory-id', itemId);
       expandButtonGroup.setAttribute('class', `flowchart-expand-btn${isExpanded ? ' expanded' : ''}`);
@@ -2781,7 +2781,7 @@
         await toggleItemExpansion(itemId, svg, x, y, width, type, stepData);
       });
       
-      // Arrow icon (→ that rotates 90° when expanded - matches core2.html style)
+      // Arrow icon (→ that rotates 90° when expanded - matches core.html style)
       const arrowGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       arrowGroup.setAttribute('class', 'expand-arrow');
       arrowGroup.setAttribute('data-arrow', itemId);
@@ -3197,7 +3197,7 @@
         }
       };
       
-      // Basic item details section (matching core2.html grid layout)
+      // Basic item details section (matching core.html grid layout)
       const detailsToShow = [];
       
       // Quantity
@@ -3227,7 +3227,7 @@
         if (formattedDate) detailsToShow.push({ label: 'Expiry Date', value: formattedDate });
       }
       
-      // Render details in 2-column grid like core2.html
+      // Render details in 2-column grid like core.html
       if (detailsToShow.length > 0) {
         const colWidth = (width - padding * 3) / 2;
         let col = 0;
@@ -3401,7 +3401,7 @@
         contentHeight += lineHeight + 4;
         
         Object.entries(promptData).forEach(([key, value]) => {
-          // Background box for each prompt (like core2.html)
+          // Background box for each prompt (like core.html)
           const promptBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           promptBg.setAttribute('x', x + padding);
           promptBg.setAttribute('y', currentExpandedY + contentHeight - 10);
@@ -3459,7 +3459,7 @@
       item._expandedHeight = contentHeight;
     }
     
-    // Toggle item expansion - smooth in-place toggle like core2.html
+    // Toggle item expansion - smooth in-place toggle like core.html
     async function toggleItemExpansion(itemId, svgElement, x, y, width, type, stepData) {
       const wasExpanded = expandedItems.has(itemId);
       

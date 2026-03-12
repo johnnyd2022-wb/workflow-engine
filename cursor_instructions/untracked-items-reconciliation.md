@@ -39,7 +39,7 @@ The item physically exists but was never recorded in inventory.
 
 Entry Point
 
-+ Add to Inventory button in core2.html
++ Add to Inventory button in core.html
 
 Required Behavior
 

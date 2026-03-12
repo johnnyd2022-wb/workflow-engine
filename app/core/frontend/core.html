@@ -3,390 +3,2880 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="SupplyFlow - Process Operations Hub for managing manufacturing workflows and executions">
-  <title>Core - Process Hub | SupplyFlow</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <meta name="description" content="SupplyChain V2 - Modern Process Hub for managing manufacturing workflows and executions">
+  <title>Core - Process Hub</title>
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .btn-icon-small {
+      padding: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary, #6b7280);
+      cursor: pointer;
+      border-radius: var(--radius-md, 6px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .btn-icon-small:hover {
+      background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+      color: var(--text-primary, #111827);
+    }
+    .btn-icon-small svg {
+      display: block;
+    }
+    .inventory-items-scroll-container {
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-default, #e5e7eb) transparent;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-thumb {
+      background-color: var(--border-default, #e5e7eb);
+      border-radius: 3px;
+    }
+    .inventory-items-scroll-container::-webkit-scrollbar-thumb:hover {
+      background-color: var(--text-tertiary, #9ca3af);
+    }
+    /* Untracked inventory item (same as sourcemap check-needed) */
+    .inventory-card-untracked {
+      border: 2px solid var(--error, #ef4444);
+      box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3);
+      animation: inventory-untracked-pulse 2s ease-in-out infinite;
+    }
+    @keyframes inventory-untracked-pulse {
+      0%, 100% { box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3); }
+      50% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.5), 0 0 0 1px rgba(239, 68, 68, 0.4); }
+    }
+    /* Guided Create Process modal - responsive */
+    .create-process-guided .modal-card { max-width: 520px; width: 92%; padding: 20px; font-size: 15px; }
+    .create-process-guided .modal-title { font-size: 1.25rem; }
+    .create-process-guided .modal-intro { font-size: 0.9rem; padding: 14px; }
+    .create-process-guided .field-label { font-size: 0.875rem; }
+    .create-process-guided .field-hint { font-size: 0.8rem; }
+    .create-process-guided .help-icon { width: 18px; height: 18px; }
+    @media (min-width: 600px) {
+      .create-process-guided .modal-card { max-width: 560px; padding: 24px; font-size: 15px; }
+      .create-process-guided .modal-title { font-size: 1.35rem; }
+      .create-process-guided .modal-intro { font-size: 0.95rem; padding: 16px; }
+      .create-process-guided .field-label { font-size: 0.9rem; }
+      .create-process-guided .field-hint { font-size: 0.8125rem; }
+      .create-process-guided .help-icon { width: 18px; height: 18px; }
+    }
+    @media (min-width: 1024px) {
+      .create-process-guided .modal-card { max-width: 600px; padding: 28px; font-size: 16px; }
+      .create-process-guided .modal-title { font-size: 1.5rem; }
+      .create-process-guided .modal-intro { font-size: 1rem; padding: 20px; }
+      .create-process-guided .field-label { font-size: 0.9375rem; }
+      .create-process-guided .field-hint { font-size: 0.875rem; }
+      .create-process-guided .help-icon { width: 20px; height: 20px; }
+    }
+    .help-trigger { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: none; background: transparent; color: var(--text-tertiary, #9ca3af); cursor: help; border-radius: 50%; transition: color 0.2s; vertical-align: middle; margin-left: 4px; }
+    .help-trigger:hover { color: var(--primary, #3b82f6); }
+    .help-tooltip { position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 4px; max-width: 280px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
+    .help-tooltip.visible { display: block; }
+    .help-wrapper { position: relative; display: inline-block; }
+    .dopamine-line { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px; }
+    .dopamine-line p { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); line-height: 1.5; }
+    @media (min-width: 600px) { .dopamine-line { padding: 16px 20px; } .dopamine-line p { font-size: 0.95rem; } }
+    @media (min-width: 1024px) { .dopamine-line { padding: 18px 22px; } .dopamine-line p { font-size: 1rem; } }
+    .inventory-entry-hub-btn:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.05)); }
+    .csv-preview-table thead th { position: sticky; top: 0; background: var(--bg-card); z-index: 10; box-shadow: 0 1px 0 var(--border-default); }
+    .csv-preview-wrap { max-height: 280px; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .csv-preview-table { table-layout: fixed; width: 100%; }
+    .csv-preview-table th:nth-child(1), .csv-preview-table td:nth-child(1) { width: 12%; }
+    .csv-preview-table th:nth-child(2), .csv-preview-table td:nth-child(2) { width: 28%; }
+    .csv-preview-table th:nth-child(3), .csv-preview-table td:nth-child(3) { width: 14%; }
+    .csv-preview-table th:nth-child(4), .csv-preview-table td:nth-child(4) { width: 18%; }
+    .csv-preview-table th:nth-child(5), .csv-preview-table td:nth-child(5) { width: 28%; }
+    .csv-preview-table td { overflow: hidden; }
+    .csv-preview-table .csv-preview-input,
+    .csv-preview-table .csv-preview-select { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); }
+    .csv-upload-modal-card { width: calc(100vw - 24px); max-width: 96vw; }
+    @media (min-width: 600px) {
+      .csv-preview-wrap { max-height: 320px; }
+      .csv-upload-modal-card { width: 92%; max-width: 720px; }
+    }
+    @media (min-width: 1024px) {
+      .csv-preview-wrap { max-height: 400px; }
+      .csv-upload-modal-card { width: 90%; max-width: 880px; }
+    }
+  </style>
 </head>
 <body>
   <div class="app-layout">
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-logo">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
-          </svg>
-        </div>
-        <span class="sidebar-title">SupplyFlow</span>
-      </div>
-      
-      <nav class="sidebar-nav">
-        <div class="nav-group">
-          <div class="nav-group-label">Operations</div>
-          <a href="core.html" class="nav-item active">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-              <line x1="12" y1="22.08" x2="12" y2="12"/>
-            </svg>
-            <span>Core</span>
-          </a>
-        </div>
-        
-        <div class="nav-group">
-          <div class="nav-group-label">Analytics</div>
-          <a href="#" class="nav-item">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="20" x2="18" y2="10"/>
-              <line x1="12" y1="20" x2="12" y2="4"/>
-              <line x1="6" y1="20" x2="6" y2="14"/>
-            </svg>
-            <span>Analytics</span>
-          </a>
-        </div>
-        
-        <div class="nav-group">
-          <div class="nav-group-label">Management</div>
-          <a href="#" class="nav-item">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            <span>Supply Engine</span>
-          </a>
-          <a href="#" class="nav-item">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
-            </svg>
-            <span>Compliance</span>
-          </a>
-          <a href="#" class="nav-item">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-            <span>Sales Data</span>
-          </a>
-        </div>
-      </nav>
-      
-      <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('collapsed'); document.querySelector('.main-content').classList.toggle('sidebar-collapsed');">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"></polyline>
-        </svg>
-      </button>
-    </aside>
+    <!-- Shared Sidebar - V2 Modern Dark -->
+    {% include 'shared/sidebar-v2.html' %}
     
     <!-- Main Content -->
     <div class="main-content">
       <!-- Header -->
-      <header class="header">
-        <h1 class="header-title">Process Operations Hub</h1>
+      <header class="main-header">
+        <div>
+          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">Supply Chain Management</h1>
+          <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Manage and monitor all your operational workflows</p>
+        </div>
         <div class="header-actions">
-          <button class="btn btn-primary" data-modal-open="create-process-modal">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
+          {% if show_reset_db %}
+          <button type="button" id="btn-reset-db" class="header-icon-btn" title="Reset DB (test env only)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
             </svg>
-            Create New Process
+            <span style="margin-left: 4px; font-size: 0.875rem;">Reset DB</span>
+          </button>
+          {% endif %}
+          <button class="header-icon-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span class="header-notification-dot"></span>
+          </button>
+          <button class="header-icon-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
           </button>
         </div>
       </header>
+
+      {% include 'shared/system-findings-banner.html' %}
       
       <!-- Page Content -->
       <main class="page-content">
-        <!-- Summary Metrics -->
-        <section class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-icon primary">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-              </svg>
-            </div>
-            <div class="metric-content">
-              <div class="metric-label">Total Processes</div>
-              <div class="metric-value">3</div>
-              <div class="metric-change positive">+1 this month</div>
+        <div class="max-content">
+          <!-- Page Header -->
+          <div class="page-header">
+            <div class="page-header-content">
+              <h1 class="page-title">Process Hub</h1>
+              <p class="page-subtitle">Manage and monitor all your operational workflows</p>
             </div>
           </div>
           
-          <div class="metric-card">
-            <div class="metric-icon accent">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-              </svg>
-            </div>
-            <div class="metric-content">
-              <div class="metric-label">Active Executions</div>
-              <div class="metric-value">6</div>
-              <div class="metric-change">In progress now</div>
-            </div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-icon success">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                <polyline points="22 4 12 14.01 9 11.01"/>
-              </svg>
-            </div>
-            <div class="metric-content">
-              <div class="metric-label">Completed</div>
-              <div class="metric-value">260</div>
-              <div class="metric-change positive">+12% vs last month</div>
-            </div>
-          </div>
-          
-          <div class="metric-card">
-            <div class="metric-icon warning">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/>
-                <rect x="1" y="10" width="22" height="4" rx="1"/>
-              </svg>
-            </div>
-            <div class="metric-content">
-              <div class="metric-label">Inventory Items</div>
-              <div class="metric-value">10</div>
-              <div class="metric-change">5 raw · 3 WIP · 2 final</div>
-            </div>
-          </div>
-        </section>
-        
-        <!-- Process List -->
-        <section>
-          <div class="section-header">
-            <h2 class="section-title">Your Processes</h2>
-          </div>
-          
-          <div class="process-grid">
-            <!-- Process Card 1 -->
-            <div class="process-card" onclick="navigateToProcess('proc-001')">
-              <div class="process-card-header">
-                <h3 class="process-card-title">Widget Assembly Line A</h3>
-                <p class="process-card-description">Primary assembly process for consumer widgets</p>
-              </div>
-              <div class="process-card-content">
-                <div class="process-stats">
-                  <div class="process-stat">
-                    <span class="process-stat-label">Steps</span>
-                    <span class="process-stat-value">4</span>
-                  </div>
-                  <div class="process-stat">
-                    <span class="process-stat-label">Active</span>
-                    <span class="process-stat-value">3</span>
-                  </div>
-                  <div class="process-stat">
-                    <span class="process-stat-label">Completed</span>
-                    <span class="process-stat-value">47</span>
-                  </div>
+          <!-- Metrics Grid -->
+          <div class="metrics-grid">
+            <div class="card metric-card">
+              <div class="metric-card-content">
+                <div>
+                  <p class="metric-label">Total Processes</p>
+                  <p class="metric-value" id="metric-total-processes">0</p>
                 </div>
-              </div>
-              <div class="process-card-footer">
-                <span class="badge badge-accent">Manufacturing</span>
-                <span class="text-sm text-muted">Created Jan 15, 2024</span>
-              </div>
-            </div>
-            
-            <!-- Process Card 2 -->
-            <div class="process-card" onclick="navigateToProcess('proc-002')">
-              <div class="process-card-header">
-                <h3 class="process-card-title">Chemical Batch Processing</h3>
-                <p class="process-card-description">Controlled chemical mixing and reaction process</p>
-              </div>
-              <div class="process-card-content">
-                <div class="process-stats">
-                  <div class="process-stat">
-                    <span class="process-stat-label">Steps</span>
-                    <span class="process-stat-value">2</span>
-                  </div>
-                  <div class="process-stat">
-                    <span class="process-stat-label">Active</span>
-                    <span class="process-stat-value">1</span>
-                  </div>
-                  <div class="process-stat">
-                    <span class="process-stat-label">Completed</span>
-                    <span class="process-stat-value">124</span>
-                  </div>
-                </div>
-              </div>
-              <div class="process-card-footer">
-                <span class="badge badge-primary">Chemical</span>
-                <span class="text-sm text-muted">Created Feb 20, 2024</span>
-              </div>
-            </div>
-            
-            <!-- Process Card 3 -->
-            <div class="process-card" onclick="navigateToProcess('proc-003')">
-              <div class="process-card-header">
-                <h3 class="process-card-title">Packaging Line B</h3>
-                <p class="process-card-description">Secondary packaging for bulk orders</p>
-              </div>
-              <div class="process-card-content">
-                <div class="process-stats">
-                  <div class="process-stat">
-                    <span class="process-stat-label">Steps</span>
-                    <span class="process-stat-value">1</span>
-                  </div>
-                  <div class="process-stat">
-                    <span class="process-stat-label">Active</span>
-                    <span class="process-stat-value">2</span>
-                  </div>
-                  <div class="process-stat">
-                    <span class="process-stat-label">Completed</span>
-                    <span class="process-stat-value">89</span>
-                  </div>
-                </div>
-              </div>
-              <div class="process-card-footer">
-                <span class="badge badge-success">Packaging</span>
-                <span class="text-sm text-muted">Created Mar 10, 2024</span>
-              </div>
-            </div>
-          </div>
-        </section>
-        
-        <!-- Inventory Overview -->
-        <section class="inventory-section">
-          <div class="section-header">
-            <h2 class="section-title">Live inventory</h2>
-            <button class="btn btn-outline btn-sm" data-modal-open="add-inventory-modal">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Add Raw Material
-            </button>
-          </div>
-          
-          <div class="tabs">
-            <div class="tabs-list">
-              <button class="tab-trigger active" data-tab="tab-raw">Raw Materials</button>
-              <button class="tab-trigger" data-tab="tab-wip">Work in Progress</button>
-              <button class="tab-trigger" data-tab="tab-final">Final Products</button>
-            </div>
-            
-            <div id="tab-raw" class="tab-content active">
-              <div class="inventory-grid mt-4">
-                <div class="inventory-item">
-                  <div class="inventory-item-header">
-                    <span class="inventory-item-name">Aluminum Sheets</span>
-                    <span class="badge badge-primary">2,500 kg</span>
-                  </div>
-                  <div class="inventory-item-details">
-                    <span>Supplier: MetalCorp Inc.</span>
-                    <span>Batch: AL-2024-1215</span>
-                    <span>Purchased: Dec 15, 2024</span>
-                  </div>
-                </div>
-                <div class="inventory-item">
-                  <div class="inventory-item-header">
-                    <span class="inventory-item-name">Plastic Pellets</span>
-                    <span class="badge badge-primary">1,800 kg</span>
-                  </div>
-                  <div class="inventory-item-details">
-                    <span>Supplier: PolymerWorld</span>
-                    <span>Batch: PP-2024-1218</span>
-                    <span>Purchased: Dec 18, 2024</span>
-                  </div>
-                </div>
-                <div class="inventory-item">
-                  <div class="inventory-item-header">
-                    <span class="inventory-item-name">Chemical A</span>
-                    <span class="badge badge-warning">450 L</span>
-                  </div>
-                  <div class="inventory-item-details">
-                    <span>Supplier: ChemSupply Co.</span>
-                    <span>Batch: CA-2024-1220</span>
-                    <span>Expires: Jun 20, 2025</span>
-                  </div>
+                <div class="metric-icon-wrapper blue">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                    <polyline points="2 17 12 22 22 17"/>
+                    <polyline points="2 12 12 17 22 12"/>
+                  </svg>
                 </div>
               </div>
             </div>
             
-            <div id="tab-wip" class="tab-content">
-              <div class="inventory-grid mt-4">
-                <div class="inventory-item">
-                  <div class="inventory-item-header">
-                    <span class="inventory-item-name">Aluminum Parts</span>
-                    <span class="badge badge-accent">850 pcs</span>
-                  </div>
-                  <div class="inventory-item-details">
-                    <span>From: Widget Assembly Line A</span>
-                    <span>Created: Dec 27, 2024</span>
-                  </div>
+            <div class="card metric-card">
+              <div class="metric-card-content">
+                <div>
+                  <p class="metric-label">Active Executions</p>
+                  <p class="metric-value" id="metric-active-executions">0</p>
+                  <p class="metric-subtext">In-flight</p>
                 </div>
-                <div class="inventory-item">
-                  <div class="inventory-item-header">
-                    <span class="inventory-item-name">Plastic Housings</span>
-                    <span class="badge badge-accent">920 pcs</span>
-                  </div>
-                  <div class="inventory-item-details">
-                    <span>From: Widget Assembly Line A</span>
-                    <span>Created: Dec 27, 2024</span>
-                  </div>
+                <div class="metric-icon-wrapper amber">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
                 </div>
               </div>
             </div>
             
-            <div id="tab-final" class="tab-content">
-              <div class="inventory-grid mt-4">
-                <div class="inventory-item">
-                  <div class="inventory-item-header">
-                    <span class="inventory-item-name">Approved Widgets</span>
-                    <span class="badge badge-success">4,250 units</span>
-                  </div>
-                  <div class="inventory-item-details">
-                    <span>From: Widget Assembly Line A</span>
-                    <span>Created: Dec 28, 2024</span>
-                  </div>
+            <div class="card metric-card">
+              <div class="metric-card-content">
+                <div>
+                  <p class="metric-label">Completed</p>
+                  <p class="metric-value" id="metric-completed">0</p>
+                  <p class="metric-subtext">All time</p>
                 </div>
-                <div class="inventory-item">
-                  <div class="inventory-item-header">
-                    <span class="inventory-item-name">Packaged Bulk Orders</span>
-                    <span class="badge badge-success">89 boxes</span>
-                  </div>
-                  <div class="inventory-item-details">
-                    <span>From: Packaging Line B</span>
-                    <span>Created: Dec 28, 2024</span>
-                  </div>
+                <div class="metric-icon-wrapper green">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
                 </div>
               </div>
             </div>
+            
+            <div class="card metric-card">
+              <div class="metric-card-content">
+                <div>
+                  <p class="metric-label">Inventory Items</p>
+                  <p class="metric-value" id="metric-inventory">0</p>
+                  <p class="metric-subtext">Tracked</p>
+                </div>
+                <div class="metric-icon-wrapper blue">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
+                  </svg>
+                </div>
+            </div>
           </div>
-        </section>
+          </div>
+          
+          <!-- Source Map Section -->
+          <section class="card" style="margin-top: 24px; margin-bottom: 24px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 20px;">
+              <div style="flex: 1; min-width: 0;">
+                <h2 class="card-title">Source Map</h2>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Leverage source map for end to end traceability of any inventory item, execution or custom field you define in your processes.</p>
+              </div>
+              <a href="/core/sourcemap" class="btn btn-primary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 3h8v8H3z"/>
+                  <path d="M14 3h7v7h-7z"/>
+                  <path d="M14 14h7v7h-7z"/>
+                  <path d="M3 14h8v8H3z"/>
+                </svg>
+                Open Source Map
+              </a>
+            </div>
+          </section>
+          
+          <!-- Inventory Section -->
+          <section class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h2 class="card-title">Inventory</h2>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Monitor your inventory with real-time visibility across your entire supply chain.</p>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" data-modal-open="inventory-entry-hub-modal" style="margin-top: 0; min-height: 44px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Add to Inventory
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="record-wastage-btn" style="margin-top: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                  </svg>
+                  Dispose of inventory item
+                </button>
+              </div>
+            </div>
+            <div class="card-content">
+              <div class="inventory-category-grid" id="inventory-grid">
+                <!-- Inventory will be loaded dynamically from backend -->
+              </div>
+            </div>
+          </section>
+          
+          <!-- Processes Section -->
+          <section class="card" style="margin-top: 32px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <h2 class="card-title">Processes</h2>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Create your custom processes to gain real-time operational insights into batch production.</p>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" data-modal-open="create-process-modal" style="margin-top: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Create New Process
+                </button>
+                <a href="/core/flows/create" class="btn btn-ghost btn-sm" style="margin-top: 0;" title="Create process and define steps on a full page">
+                  Define steps (full page)
+                </a>
+              </div>
+            </div>
+            <div class="card-content">
+              <div class="processes-grid" id="processes-grid">
+                <!-- Processes will be loaded dynamically from backend -->
+              </div>
+            </div>
+          </section>
+        </div>
       </main>
     </div>
   </div>
   
-  <!-- Create Process Modal -->
-  <div class="modal-overlay" id="create-process-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title">Create New Process</h2>
-        <button class="modal-close" data-modal-close>
+  <!-- Backend Integration Scripts -->
+  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='core.js') }}"></script>
+  <script src="/ui/shared/account-info.js"></script>
+  <script>
+    // Configure execution modal callbacks before loading shared script
+    window.ExecutionModalConfig = {
+      onStepCompleted: async function() {
+        // Reload inventory to reflect consumed items and new outputs
+        await loadInventoryV2();
+      }
+    };
+  </script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-modal.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
+  <script>
+    // Global variable for notification timeout
+    let notificationTimeout = null;
+    
+    // Define showNotification FIRST so overrides can use it immediately
+    // Auto-dismissing toast notification
+    window.showNotification = function(type, title, message) {
+      const modal = document.getElementById('notification-modal');
+      if (!modal) {
+        console.log(`${type}: ${title} - ${message}`);
+        return;
+      }
+      
+      // Clear any existing timeout
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+      
+      const titleEl = document.getElementById('notification-title');
+      const messageEl = document.getElementById('notification-message');
+      const iconEl = document.getElementById('notification-icon');
+      
+      if (titleEl) titleEl.textContent = title;
+      if (messageEl) messageEl.textContent = message;
+      
+      // Set icon and colors based on type
+      if (type === 'success' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--success, #10b981)';
+      } else if (type === 'error' && iconEl) {
+        iconEl.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        `;
+        iconEl.style.color = 'var(--error, #ef4444)';
+      }
+      
+      // Show notification
+      modal.style.display = 'flex';
+      // Don't block body overflow - allow user to see the page
+      
+      // Auto-dismiss: errors stay longer (8 seconds), success messages (6 seconds)
+      const timeoutDuration = type === 'error' ? 8000 : 6000;
+      notificationTimeout = setTimeout(() => {
+        closeNotification();
+      }, timeoutDuration);
+    };
+    
+    // Immediately override showSuccess and showError from core.js
+    // This must happen synchronously right after core.js loads, before DOMContentLoaded
+    window.showSuccess = function(message) {
+      window.showNotification('success', 'Success', message);
+    };
+    
+    window.showError = function(message) {
+      window.showNotification('error', 'Error', message);
+    };
+    
+    // Initialize account info component and Reset DB button (test env only)
+    function initCore2Page() {
+      if (window.initAccountInfo) {
+        window.initAccountInfo('account-info-container');
+      }
+      const btnResetDb = document.getElementById('btn-reset-db');
+      if (btnResetDb) {
+        btnResetDb.addEventListener('click', function() {
+          const modal = document.getElementById('reset-db-modal');
+          if (modal) modal.style.display = 'flex';
+        });
+      }
+    }
+    
+    window.closeResetDbModal = function() {
+      const modal = document.getElementById('reset-db-modal');
+      if (modal) modal.style.display = 'none';
+      const btn = document.getElementById('reset-db-confirm-btn');
+      if (btn) btn.disabled = false;
+    };
+    
+    window.confirmResetDb = async function() {
+      const btn = document.getElementById('reset-db-confirm-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const result = await CoreAPI.resetDemoDb();
+        closeResetDbModal();
+        if (result && result.success) {
+          window.showSuccess(result.message || 'Demo DB reset successfully.');
+          setTimeout(function() { window.location.reload(); }, 1500);
+        } else {
+          window.showError(result && result.message ? result.message : 'Reset failed.');
+        }
+      } catch (err) {
+        closeResetDbModal();
+        window.showError(err.message || 'Reset demo DB failed.');
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCore2Page);
+    } else {
+      initCore2Page();
+    }
+    
+    // Update metrics for V2 Modern design
+    function updateMetricsV2(metrics) {
+      const totalProcessesEl = document.getElementById('metric-total-processes');
+      const activeExecutionsEl = document.getElementById('metric-active-executions');
+      const completedEl = document.getElementById('metric-completed');
+      const inventoryEl = document.getElementById('metric-inventory');
+      
+      if (totalProcessesEl) totalProcessesEl.textContent = metrics.total_processes || 0;
+      if (activeExecutionsEl) activeExecutionsEl.textContent = metrics.active_executions || 0;
+      if (completedEl) completedEl.textContent = metrics.completed_executions || 0;
+      if (inventoryEl) inventoryEl.textContent = metrics.inventory_items?.total || 0;
+    }
+    
+    // Render processes for V2 Modern design
+    function renderProcessesV2(processes) {
+      const processGrid = document.getElementById('processes-grid');
+      if (!processGrid) return;
+      
+      processGrid.innerHTML = '';
+      
+      if (!processes || processes.length === 0) {
+        processGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
+            <p style="color: var(--text-secondary);">No processes yet. Create your first process to get started.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      processes.forEach(process => {
+        const processCard = createProcessCardV2(process);
+        processGrid.appendChild(processCard);
+      });
+    }
+    
+    // Optimistic rendering helpers
+    function prependProcessCardV2(process) {
+      const grid = document.getElementById('processes-grid');
+      if (!grid) return;
+
+      // Clear empty state message if present
+      if (grid.innerHTML.includes('No processes yet')) {
+        grid.innerHTML = '';
+      }
+
+      const card = renderSingleProcessCardV2(process);
+      card.dataset.processId = process.id;
+
+      if (process.__optimistic) {
+        card.style.opacity = '0.6';
+      }
+
+      grid.prepend(card);
+    }
+
+    function replaceOptimisticProcessV2(tempId, realProcess) {
+      const card = document.querySelector(`[data-process-id="${tempId}"]`);
+      if (!card) return;
+
+      const newCard = renderSingleProcessCardV2(realProcess);
+      newCard.dataset.processId = realProcess.id;
+
+      card.replaceWith(newCard);
+    }
+
+    function removeOptimisticProcessV2(tempId) {
+      const card = document.querySelector(`[data-process-id="${tempId}"]`);
+      if (card) card.remove();
+    }
+    
+    function renderSingleProcessCardV2(process) {
+      const card = document.createElement('div');
+      card.className = 'card card-interactive process-card';
+      
+      const categoryBadgeClass = {
+        'manufacturing': 'default',
+        'chemical': 'default',
+        'packaging': 'default',
+        'assembly': 'default',
+        'other': 'default',
+      }[process.category] || 'default';
+      
+      card.innerHTML = `
+        <div class="process-card-header">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="navigateToProcess('${process.id}')">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <h3 class="process-title">${escapeHtml(process.name)}</h3>
+              ${process.is_draft ? '<span class="badge" style="background: var(--warning, #f59e0b); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">DRAFT</span>' : ''}
+            </div>
+            <p class="process-description">${escapeHtml(process.description || '')}</p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditProcessModal('${process.id}')" title="Edit process">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteConfirmation('${process.id}', '${escapeHtml(process.name)}')" title="Delete process">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer;" onclick="navigateToProcess('${process.id}')">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </div>
+        </div>
+        <div class="process-card-footer">
+          <span class="process-badge ${categoryBadgeClass}">${process.step_count || 0} steps</span>
+          ${process.active_executions > 0 ? `
+            <span class="process-badge active">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              ${process.active_executions} active
+            </span>
+          ` : ''}
+          <span class="process-completed">${process.completed_executions || 0} completed</span>
+        </div>
+      `;
+      
+      return card;
+    }
+    
+    function createProcessCardV2(process) {
+      return renderSingleProcessCardV2(process);
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    function navigateToProcess(processId) {
+      window.location.href = `/core/flows?id=${processId}`;
+    }
+    
+    // Render inventory for V2 Modern design
+    async function loadInventoryV2() {
+      try {
+        const inventoryData = await CoreAPI.getInventory();
+        renderInventoryV2(inventoryData.inventory_items || []);
+      } catch (error) {
+        console.error('Failed to load inventory:', error);
+      }
+    }
+    
+    function renderInventoryV2(items) {
+      const inventoryGrid = document.getElementById('inventory-grid');
+      if (!inventoryGrid) return;
+      
+      inventoryGrid.innerHTML = '';
+      
+      if (!items || items.length === 0) {
+        // Show empty state
+        inventoryGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
+            <p style="color: var(--text-secondary);">No inventory items yet. Add your first item to get started.</p>
+          </div>
+        `;
+        // Update the summary metric to 0
+        const inventoryEl = document.getElementById('metric-inventory');
+        if (inventoryEl) {
+          inventoryEl.textContent = '0';
+        }
+        return;
+      }
+      
+      // Group by inventory type
+      const grouped = {
+        raw_material: [],
+        work_in_progress: [],
+        final_product: []
+      };
+      
+      // Count items with quantity > 0 for the summary metric
+      let visibleItemCount = 0;
+      
+      items.forEach(item => {
+        // Filter out items with zero or negative quantity
+        // Parse quantity more robustly - handle string "0", "0.0", "0.00", etc.
+        let quantity = 0;
+        try {
+          const qtyStr = String(item.quantity || '0').trim();
+          quantity = parseFloat(qtyStr);
+          if (isNaN(quantity)) {
+            quantity = 0;
+          }
+        } catch (e) {
+          quantity = 0;
+        }
+        
+        // Skip items with zero or negative quantity (including very small numbers due to floating point)
+        if (quantity <= 0 || Math.abs(quantity) < 0.0001) {
+          return; // Skip this item
+        }
+        
+        // Count this item as visible
+        visibleItemCount++;
+        
+        const type = item.inventory_type || 'raw_material';
+        if (grouped[type]) {
+          grouped[type].push(item);
+        }
+      });
+      
+      // Update the summary metric to reflect only visible items (quantity > 0)
+      const inventoryEl = document.getElementById('metric-inventory');
+      if (inventoryEl) {
+        inventoryEl.textContent = visibleItemCount;
+      }
+      
+      // If raw materials exist, show all three categories (even if empty) to help users understand the lifecycle
+      const hasRawMaterials = grouped.raw_material.length > 0;
+      
+      // Calculate totals for final products (grouped by process name and unit)
+      // Structure: { "Process Name": { "unit": total, ... }, ... }
+      const finalProductTotals = {};
+      grouped.final_product.forEach(item => {
+        const processName = item.process_name || 'Unknown Process';
+        const unit = item.unit || 'units';
+        let quantity = 0;
+        try {
+          quantity = parseFloat(item.quantity || '0');
+          if (isNaN(quantity)) {
+            quantity = 0;
+          }
+        } catch (e) {
+          quantity = 0;
+        }
+        if (quantity > 0) {
+          if (!finalProductTotals[processName]) {
+            finalProductTotals[processName] = {};
+          }
+          if (!finalProductTotals[processName][unit]) {
+            finalProductTotals[processName][unit] = 0;
+          }
+          finalProductTotals[processName][unit] += quantity;
+        }
+      });
+      
+      // Always show raw materials if they exist
+      if (hasRawMaterials) {
+        inventoryGrid.appendChild(createInventoryCategoryCard('raw', grouped.raw_material));
+        // Also show intermediate and final product categories even if empty
+        inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
+        inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
+      } else {
+        // Only show categories that have items if no raw materials exist
+        if (grouped.work_in_progress.length > 0) {
+          inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
+        }
+        if (grouped.final_product.length > 0) {
+          inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
+        }
+      }
+    }
+    
+    function createInventoryCategoryCard(type, items) {
+      const card = document.createElement('div');
+      card.className = `inventory-category-card ${type}`;
+      
+      // Icon SVG based on type
+      let iconSvg = '';
+      if (type === 'raw') {
+        iconSvg = '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>';
+      } else if (type === 'intermediate') {
+        iconSvg = '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>';
+      } else if (type === 'final') {
+        iconSvg = '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>';
+      }
+      
+      const categoryTitle = type === 'raw' ? 'Raw Materials' : type === 'intermediate' ? 'Intermediate' : 'Final Products';
+      
+      const itemsContainer = document.createElement('div');
+      itemsContainer.className = 'inventory-category-items';
+      itemsContainer.style.display = 'flex';
+      itemsContainer.style.flexDirection = 'column';
+      itemsContainer.style.gap = '12px';
+      
+      const scrollContainer = document.createElement('div');
+      scrollContainer.className = 'inventory-items-scroll-container';
+      scrollContainer.style.overflowX = 'hidden';
+      
+      // Render all items as individual cards, or show empty state
+      if (items.length > 0) {
+        items.forEach(item => {
+          const itemCard = createInventoryItemCardV2(item);
+          itemsContainer.appendChild(itemCard);
+        });
+      } else {
+        // Show empty state message for empty categories
+        const emptyMessage = document.createElement('div');
+        emptyMessage.style.padding = '16px';
+        emptyMessage.style.textAlign = 'center';
+        emptyMessage.style.color = 'var(--text-secondary, #6b7280)';
+        emptyMessage.style.fontSize = '14px';
+        
+        if (type === 'intermediate') {
+          emptyMessage.textContent = 'Work in progress products will appear here until all process steps are completed';
+        } else if (type === 'final') {
+          emptyMessage.innerHTML = 'Final products in stock will appear here when all process steps are completed';
+        } else {
+          emptyMessage.textContent = 'No items yet';
+        }
+        
+        itemsContainer.appendChild(emptyMessage);
+      }
+      
+      const hasMoreThanThree = items.length > 3;
+      const typeIndex = { raw: 0, intermediate: 1, final: 2 }[type];
+      const categoryId = `category-${type}-${typeIndex}`;
+      scrollContainer.id = `scroll-${categoryId}`;
+      if (!hasMoreThanThree) {
+        scrollContainer.classList.add('expanded');
+      }
+      scrollContainer.appendChild(itemsContainer);
+      
+      // Build card structure
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'inventory-category-header';
+      headerDiv.innerHTML = `
+        <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          ${iconSvg}
+        </svg>
+        <span class="inventory-category-title">${categoryTitle}</span>
+      `;
+      
+      const countP = document.createElement('p');
+      countP.className = 'inventory-category-count';
+      countP.textContent = `${items.length} items`;
+      
+      // Clear card and build structure
+      card.innerHTML = '';
+      card.appendChild(headerDiv);
+      card.appendChild(countP);
+      card.appendChild(scrollContainer);
+      
+      // Store category ID and expanded state
+      card.dataset.categoryId = categoryId;
+      card.dataset.isExpanded = 'false';
+      
+      // Add expand/collapse button if there are more than 3 items
+      if (hasMoreThanThree) {
+        const expandButton = document.createElement('button');
+        expandButton.className = 'btn btn-secondary btn-sm';
+        expandButton.id = `toggle-${categoryId}`;
+        expandButton.setAttribute('role', 'button');
+        expandButton.setAttribute('aria-expanded', 'false');
+        expandButton.setAttribute('aria-controls', `scroll-${categoryId}`);
+        expandButton.style.cssText = 'margin-top: 12px; width: 100%; padding: 8px; font-size: 12px;';
+        expandButton.onclick = () => toggleInventoryCategory(categoryId);
+        expandButton.innerHTML = `
+          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show ${items.length - 3} more
+        `;
+        card.appendChild(expandButton);
+      }
+      
+      return card;
+    }
+    
+    function createInventoryItemCardV2(item) {
+      // Any system check finding: red border and reasons in dropdown (scales for future checks)
+      const systemFindings = Array.isArray(item.system_findings) ? item.system_findings : [];
+      const hasFindings = systemFindings.length > 0;
+      // Backward compat: if API didn't send system_findings but item is untracked, show one reason
+      const effectiveFindings = hasFindings ? systemFindings : (item.extra_data && item.extra_data.untracked === true ? [{ check_id: 'untracked_items', reason: 'Untracked item — reconciliation required' }] : []);
+      const hasAnyFindings = effectiveFindings.length > 0;
+
+      const card = document.createElement('div');
+      card.className = 'card card-interactive process-card inventory-card-collapsed' + (hasAnyFindings ? ' inventory-card-untracked' : '');
+      card.dataset.inventoryId = item.id;
+      card.dataset.isExpanded = 'false';
+      card.style.marginBottom = '0';
+      card.style.wordWrap = 'break-word';
+      card.style.overflowWrap = 'break-word';
+      card.style.display = 'flex';
+      card.style.flexDirection = 'column';
+      card.style.padding = '12px 24px';
+
+      const typeLabel = item.inventory_type === 'raw_material' ? 'Raw Material' :
+                       item.inventory_type === 'work_in_progress' ? 'Work in Progress' :
+                       'Final Product';
+
+      // Format dates
+      const formatDate = (dateStr) => {
+        if (!dateStr) return 'N/A';
+        try {
+          const date = new Date(dateStr);
+          return date.toLocaleDateString();
+        } catch {
+          return dateStr;
+        }
+      };
+
+      // Format quantity to 4 decimal places for accuracy, but only show decimals when needed
+      const formatQuantity = (qtyStr) => {
+        if (!qtyStr) return '0';
+        try {
+          const qty = parseFloat(qtyStr);
+          if (isNaN(qty)) return qtyStr;
+          const rounded = qty.toFixed(4);
+          return parseFloat(rounded).toString();
+        } catch {
+          return qtyStr;
+        }
+      };
+
+      const formattedQuantity = formatQuantity(item.quantity);
+
+      // Format display name: if process_name exists, show "Process: name" on one line and "Output name" on next
+      const titleContent = item.process_name
+        ? `<span style="color: var(--text-secondary); font-size: 12px; font-weight: 500;">Process: ${escapeHtml(item.process_name)}</span><br><span style="color: var(--text-primary);">${escapeHtml(item.name)}</span>`
+        : escapeHtml(item.name);
+
+      // System findings block: one red box listing all reasons (no hardcoding by check_id)
+      const checkReasonBlock = hasAnyFindings
+        ? `<div style="margin-bottom: 12px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px;">
+            <p style="margin: 0 0 6px 0; font-weight: 600;">System findings</p>
+            <ul style="margin: 0; padding-left: 18px;">
+              ${effectiveFindings.map(f => '<li style="margin: 2px 0;">' + escapeHtml(f.reason || 'Check failed') + '</li>').join('')}
+            </ul>
+          </div>`
+        : '';
+      card.innerHTML = `
+        <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
+          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetails('${item.id}')">
+            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
+            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditInventoryModal('${item.id}')" title="Edit inventory item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteInventoryConfirmation('${item.id}', '${escapeHtml(item.name)}')" title="Delete inventory item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" onclick="toggleInventoryItemDetails('${item.id}')" id="arrow-${item.id}">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </div>
+        </div>
+        ${item.source_execution_id ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 20px 4px 24px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 0; flex-shrink: 0;">
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); executeNextStepFromInventory('${item.source_execution_id}', '${(item.producing_step_id || "").replace(/'/g, "\\'")}')" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; border: none; box-shadow: none; line-height: 1.2; height: 18px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: middle;">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Execute next step
+          </button>
+        </div>
+        ` : `
+        <div style="padding: 4px 24px; margin-top: 0; flex-shrink: 0; border-top: 1px solid var(--border-default, #e5e7eb);">
+          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
+        </div>
+        `}
+        <div class="inventory-item-details" id="details-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
+          ${checkReasonBlock}
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Quantity</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formattedQuantity} ${item.unit || ''}</p>
+            </div>
+            ${item.supplier ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Supplier</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(item.supplier)}</p>
+            </div>
+            ` : ''}
+            ${item.purchase_date ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Purchase Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.purchase_date)}</p>
+            </div>
+            ` : ''}
+            ${item.supplier_batch_number ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Batch Number</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(item.supplier_batch_number)}</p>
+            </div>
+            ` : ''}
+            ${item.expiry_date ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Expiry Date</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.expiry_date)}</p>
+            </div>
+            ` : ''}
+            ${item.created_at ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
+              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Created</p>
+              <p style="color: var(--text-primary); margin: 0; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${formatDate(item.created_at)}</p>
+            </div>
+            ` : ''}
+          </div>
+          ${item.extra_data && (item.extra_data.execution_prompts || item.extra_data.variable_inputs || item.extra_data.previous_steps_data) ? `
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb);">
+            <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Execution Metadata</h4>
+            ${item.extra_data.execution_prompts && Object.keys(item.extra_data.execution_prompts).length > 0 ? `
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${Object.entries(item.extra_data.execution_prompts).map(([key, value]) => `
+                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 11px; font-weight: 500;">${escapeHtml(key)}</p>
+                    <p style="color: var(--text-primary); margin: 0; font-size: 13px; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(String(value))}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+            ${item.extra_data.variable_inputs && item.extra_data.variable_inputs.length > 0 ? `
+            <div style="margin-bottom: 12px;">
+              <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; font-weight: 500;">Variable Inputs Used</p>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                ${item.extra_data.variable_inputs.map(input => {
+                  const inputFormattedQty = formatQuantity(input.quantity);
+                  return `
+                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-primary); margin: 0 0 4px 0; font-size: 13px; font-weight: 500; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(input.name || 'Unknown')}</p>
+                    <p style="color: var(--text-secondary); margin: 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">${inputFormattedQty} ${input.unit || ''}</p>
+                  </div>
+                `;
+                }).join('')}
+              </div>
+            </div>
+            ` : ''}
+            ${item.extra_data.previous_steps_data && item.extra_data.previous_steps_data.length > 0 ? `
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb);">
+              <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Previous Steps Data</h4>
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                ${item.extra_data.previous_steps_data.map(prevStep => `
+                  <div style="padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
+                    <p style="color: var(--text-primary); margin: 0 0 8px 0; font-size: 13px; font-weight: 600; word-wrap: break-word; overflow-wrap: break-word;">Step ${prevStep.step_number}: ${escapeHtml(prevStep.step_name || 'Unknown')}</p>
+                    <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Input: ${escapeHtml(prevStep.input_name || 'Unknown')} - ${formatQuantity(prevStep.input_quantity)} ${prevStep.input_unit || ''}</p>
+                    ${prevStep.completed_by ? `
+                      <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed by: ${escapeHtml(prevStep.completed_by)}</p>
+                    ` : ''}
+                    ${prevStep.completed_at ? `
+                      <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">Completed date: ${formatDate(prevStep.completed_at)}</p>
+                    ` : ''}
+                    ${prevStep.execution_prompts && Object.keys(prevStep.execution_prompts).length > 0 ? `
+                      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light, #e5e7eb);">
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                          ${Object.entries(prevStep.execution_prompts).map(([key, value]) => `
+                            <div>
+                              <p style="color: var(--text-secondary); margin: 0 0 2px 0; font-size: 11px; font-weight: 500;">${escapeHtml(key)}</p>
+                              <p style="color: var(--text-primary); margin: 0; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word;">${escapeHtml(String(value))}</p>
+                            </div>
+                          `).join('')}
+                        </div>
+                      </div>
+                    ` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+          ` : ''}
+        </div>
+      `;
+      
+      return card;
+    }
+    
+    function updateScrollContainerState(categoryCard) {
+      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
+      if (!scrollContainer) return;
+      const isCategoryExpanded = categoryCard.dataset.isExpanded === 'true';
+      scrollContainer.classList.toggle('expanded', isCategoryExpanded);
+    }
+    
+    function toggleInventoryItemDetails(itemId) {
+      const card = document.querySelector(`[data-inventory-id="${itemId}"]`);
+      if (!card) return;
+      
+      const details = document.getElementById(`details-${itemId}`);
+      const arrow = document.getElementById(`arrow-${itemId}`);
+      const isExpanded = card.dataset.isExpanded === 'true';
+      const scrollContainer = card.closest('.inventory-items-scroll-container');
+      const categoryCard = scrollContainer && scrollContainer.closest('.inventory-category-card');
+      
+      if (isExpanded) {
+        details.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+        card.classList.remove('inventory-card-expanded');
+        card.classList.add('inventory-card-collapsed');
+        card.dataset.isExpanded = 'false';
+        if (categoryCard) updateScrollContainerState(categoryCard);
+      } else {
+        if (categoryCard && categoryCard.dataset.isExpanded !== 'true') {
+          categoryCard.dataset.isExpanded = 'true';
+          const categoryId = categoryCard.dataset.categoryId;
+          const toggleButton = document.getElementById(`toggle-${categoryId}`);
+          if (toggleButton) {
+            toggleButton.setAttribute('aria-expanded', 'true');
+            toggleButton.innerHTML = `
+              <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              Show less
+            `;
+          }
+          updateScrollContainerState(categoryCard);
+        }
+        details.style.display = 'block';
+        arrow.style.transform = 'rotate(90deg)';
+        card.classList.remove('inventory-card-collapsed');
+        card.classList.add('inventory-card-expanded');
+        card.dataset.isExpanded = 'true';
+        if (scrollContainer) card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+      }
+    }
+    
+    function toggleInventoryCategory(categoryId) {
+      const categoryCard = document.querySelector(`[data-category-id="${categoryId}"]`);
+      if (!categoryCard) return;
+      
+      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
+      const toggleButton = document.getElementById(`toggle-${categoryId}`);
+      const isExpanded = categoryCard.dataset.isExpanded === 'true';
+      
+      if (isExpanded) {
+        categoryCard.dataset.isExpanded = 'false';
+        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'false');
+        updateScrollContainerState(categoryCard);
+        toggleButton.innerHTML = `
+          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show ${parseInt(categoryCard.querySelector('.inventory-category-count').textContent) - 3} more
+        `;
+      } else {
+        categoryCard.dataset.isExpanded = 'true';
+        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'true');
+        updateScrollContainerState(categoryCard);
+        toggleButton.innerHTML = `
+          <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          Show less
+        `;
+      }
+    }
+    
+    // Optimistic inventory rendering helpers
+    function prependInventoryItemV2(item) {
+      // Find the raw materials category card
+      const inventoryGrid = document.getElementById('inventory-grid');
+      if (!inventoryGrid) return;
+
+      // Check if raw materials category exists
+      let rawCategoryCard = null;
+      const categoryCards = inventoryGrid.querySelectorAll('.inventory-category-card');
+      categoryCards.forEach(card => {
+        const title = card.querySelector('.inventory-category-title');
+        if (title && title.textContent === 'Raw Materials') {
+          rawCategoryCard = card;
+        }
+      });
+
+      const itemCard = createInventoryItemCardV2(item);
+      itemCard.dataset.inventoryId = item.id;
+
+      if (item.__optimistic) {
+        itemCard.style.opacity = '0.6';
+      }
+
+      if (rawCategoryCard) {
+        // Add to existing raw materials category
+        const itemsContainer = rawCategoryCard.querySelector('.inventory-category-items');
+        if (itemsContainer) {
+          itemsContainer.prepend(itemCard);
+          // Update count
+          const countEl = rawCategoryCard.querySelector('.inventory-category-count');
+          if (countEl) {
+            const currentCount = parseInt(countEl.textContent) || 0;
+            countEl.textContent = `${currentCount + 1} items`;
+          }
+        }
+      } else {
+        // Create new raw materials category card
+        const newCategoryCard = createInventoryCategoryCard('raw', [item]);
+        inventoryGrid.prepend(newCategoryCard);
+      }
+    }
+
+    function replaceOptimisticInventoryV2(tempId, realItem) {
+      const card = document.querySelector(`[data-inventory-id="${tempId}"]`);
+      if (!card) return;
+
+      const newCard = createInventoryItemCardV2(realItem);
+      newCard.dataset.inventoryId = realItem.id;
+
+      card.replaceWith(newCard);
+    }
+
+    function removeOptimisticInventoryV2(tempId) {
+      const card = document.querySelector(`[data-inventory-id="${tempId}"]`);
+      if (!card) return;
+
+      // Find the category card and update count
+      const categoryCard = card.closest('.inventory-category-card');
+      if (categoryCard) {
+        const countEl = categoryCard.querySelector('.inventory-category-count');
+        if (countEl) {
+          const currentCount = parseInt(countEl.textContent) || 0;
+          if (currentCount > 1) {
+            countEl.textContent = `${currentCount - 1} items`;
+          } else {
+            // Remove the entire category card if it's the last item
+            categoryCard.remove();
+          }
+        }
+      }
+
+      card.remove();
+    }
+    
+    // Load dashboard data on page load (system findings banner is handled by shared system-findings-banner.js)
+    document.addEventListener('DOMContentLoaded', async function() {
+      try {
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        const processesData = await CoreAPI.getProcesses();
+        renderProcessesV2(processesData.processes);
+        await loadInventoryV2();
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      }
+      if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
+      setupModalHandlers();
+      setupInventoryEntryHub();
+    });
+    
+    // Modal handlers
+    function setupModalHandlers() {
+      // Open modal
+      document.querySelectorAll('[data-modal-open]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const modalId = btn.getAttribute('data-modal-open');
+          const modal = document.getElementById(modalId);
+          if (modal) {
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+          }
+        });
+      });
+      
+      // Close modal
+      document.querySelectorAll('[data-modal-close]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const modal = btn.closest('.modal-overlay');
+          if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+          }
+        });
+      });
+      
+      // Close on overlay click - DISABLED to prevent accidental closes
+      // document.querySelectorAll('.modal-overlay').forEach(modal => {
+      //   modal.addEventListener('click', (e) => {
+      //     if (e.target === modal) {
+      //       modal.style.display = 'none';
+      //       document.body.style.overflow = 'auto';
+      //     }
+      //   });
+      // });
+      
+    }
+    
+    // Close modal helper function (like flows2.html)
+    window.closeModal = function(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+    };
+
+    let barcodeCameraCheckPromise = null;
+    const CAMERA_CHECK_TIMEOUT_MS = 3000;
+
+    function isBarcodeCameraAvailable() {
+      if (barcodeCameraCheckPromise) return barcodeCameraCheckPromise;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        barcodeCameraCheckPromise = Promise.resolve(false);
+        return barcodeCameraCheckPromise;
+      }
+      barcodeCameraCheckPromise = new Promise(function(resolve) {
+        var settled = false;
+        var timer = setTimeout(function() {
+          if (settled) return;
+          settled = true;
+          resolve(false);
+        }, CAMERA_CHECK_TIMEOUT_MS);
+        try {
+          navigator.mediaDevices.enumerateDevices()
+            .then(function(devices) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(devices.some(function(d) { return d && d.kind === 'videoinput'; }));
+            })
+            .catch(function() {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolve(false);
+            });
+        } catch (e) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
+        }
+      });
+      return barcodeCameraCheckPromise;
+    }
+
+    function setupInventoryEntryHub() {
+      const hubModal = document.getElementById('inventory-entry-hub-modal');
+      const addInventoryModal = document.getElementById('add-inventory-modal');
+      if (!hubModal) return;
+
+      function resetAddInventoryModalForManual() {
+        window._addInventoryBarcodeLookup = null;
+        var bi = document.getElementById('add-inventory-barcode-input');
+        var bdw = document.getElementById('add-inventory-barcode-display-wrap');
+        var nameEl = document.getElementById('add-inventory-name');
+        var unitEl = document.getElementById('add-inventory-unit');
+        var supplierEl = document.getElementById('add-inventory-supplier');
+        if (bi) bi.value = '';
+        if (bdw) bdw.style.display = 'none';
+        if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; }
+        if (unitEl) { unitEl.disabled = false; unitEl.style.background = ''; }
+        if (supplierEl) { supplierEl.readOnly = false; supplierEl.style.background = ''; }
+      }
+      const manualBtn = document.getElementById('inventory-entry-manual-btn');
+      if (manualBtn) {
+        manualBtn.addEventListener('click', function() {
+          hubModal.style.display = 'none';
+          resetAddInventoryModalForManual();
+          if (addInventoryModal) {
+            addInventoryModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+          }
+        });
+      }
+
+      const csvBtn = document.getElementById('inventory-entry-csv-btn');
+      if (csvBtn) {
+        csvBtn.addEventListener('click', function() {
+          hubModal.style.display = 'none';
+          openCsvUploadModal();
+        });
+      }
+
+      const scanBtn = document.getElementById('inventory-entry-scan-btn');
+      if (scanBtn) {
+        isBarcodeCameraAvailable().then(function(hasCamera) {
+          if (!hasCamera) {
+            scanBtn.disabled = true;
+            scanBtn.style.opacity = '0.5';
+            scanBtn.style.cursor = 'not-allowed';
+            scanBtn.title = 'No camera detected on this device. Use Manual or CSV entry instead.';
+            var label = scanBtn.querySelector('span');
+            if (label) {
+              label.textContent = 'Scan Barcode (Camera unavailable)';
+            }
+          } else {
+            scanBtn.addEventListener('click', function() {
+              hubModal.style.display = 'none';
+              openBarcodeScanModal();
+            });
+          }
+        }).catch(function() {
+          scanBtn.disabled = true;
+          scanBtn.style.opacity = '0.5';
+          scanBtn.style.cursor = 'not-allowed';
+          scanBtn.title = 'No camera detected on this device. Use Manual or CSV entry instead.';
+          var label = scanBtn.querySelector('span');
+          if (label) {
+            label.textContent = 'Scan Barcode (Camera unavailable)';
+          }
+        });
+      }
+    }
+
+    // --- CSV Upload Modal ---
+    const CSV_TEMPLATE_HEADERS = 'Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date';
+    let csvValidatedData = null;
+
+    function openCsvUploadModal() {
+      const modal = document.getElementById('csv-upload-modal');
+      if (!modal) return;
+      csvValidatedData = null;
+      document.getElementById('csv-preview-section').style.display = 'none';
+      document.getElementById('csv-drop-zone').style.display = 'flex';
+      document.getElementById('csv-file-input').value = '';
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeCsvUploadModal() {
+      const modal = document.getElementById('csv-upload-modal');
+      if (modal) { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
+    }
+
+    document.getElementById('csv-download-template')?.addEventListener('click', function(e) {
+      const blob = new Blob([CSV_TEMPLATE_HEADERS + '\nExample Item,10,kg,ACME Ltd,2024-01-15,BATCH-001,2025-12-31'], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      this.href = url;
+      this.download = 'inventory_template.csv';
+      setTimeout(function() { URL.revokeObjectURL(url); }, 100);
+    });
+
+    function handleCsvFile(file) {
+      if (!file || !file.name) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      document.getElementById('csv-drop-zone').style.display = 'none';
+      document.getElementById('csv-preview-section').style.display = 'flex';
+      document.getElementById('csv-preview-tbody').innerHTML = '<tr><td colspan="5" style="padding: 16px; color: var(--text-secondary);">Validating...</td></tr>';
+      CoreAPI.inventoryCsvValidate(formData).then(function(res) {
+        csvValidatedData = res;
+        renderCsvPreview(res);
+      }).catch(function(err) {
+        document.getElementById('csv-preview-tbody').innerHTML = '<tr><td colspan="5" style="padding: 16px; color: var(--error);">' + (err.message || 'Validation failed') + '</td></tr>';
+        document.getElementById('csv-preview-summary').textContent = '';
+      });
+    }
+
+    function renderCsvPreview(res) {
+      const tbody = document.getElementById('csv-preview-tbody');
+      const units = res.allowed_units || [];
+      tbody.innerHTML = '';
+      (res.rows || []).forEach(function(row, idx) {
+        const v = res.validation && res.validation[idx];
+        const status = v && v.status === 'error' ? 'error' : 'ok';
+        const ri = row.row_index;
+        const unitSelect = '<select class="csv-preview-select csv-row-unit" data-row-index="' + ri + '">' +
+          units.map(function(u) { return '<option value="' + (u.value || '') + '"' + (row.unit === u.value ? ' selected' : '') + '>' + (u.label || u.value) + '</option>'; }).join('') + '</select>';
+        const nameInput = '<input type="text" class="csv-preview-input csv-row-name" data-row-index="' + ri + '" value="' + escapeHtml(row.name || '') + '" placeholder="Item name">';
+        const qtyInput = '<input type="text" inputmode="decimal" class="csv-preview-input csv-row-quantity" data-row-index="' + ri + '" value="' + escapeHtml(row.quantity || '') + '" placeholder="0">';
+        const supplierInput = '<input type="text" class="csv-preview-input csv-row-supplier" data-row-index="' + ri + '" value="' + escapeHtml(row.supplier || '') + '" placeholder="Supplier">';
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--border-default)';
+        tr.innerHTML = '<td style="padding: 8px;">' + (status === 'ok' ? '✓' : '⚠') + (v && v.message ? ' ' + escapeHtml(v.message) : '') + '</td><td style="padding: 8px;">' + nameInput + '</td><td style="padding: 8px;">' + qtyInput + '</td><td style="padding: 8px;">' + unitSelect + '</td><td style="padding: 8px;">' + supplierInput + '</td>';
+        tbody.appendChild(tr);
+      });
+      const okCount = (res.validation || []).filter(function(v) { return v.status === 'ok'; }).length;
+      const errCount = (res.validation || []).filter(function(v) { return v.status === 'error'; }).length;
+      var summary = okCount + ' row(s) valid' + (errCount ? ', ' + errCount + ' with errors (fix and confirm)' : '') + '. Edit any field then confirm.';
+      if (res.truncated && res.validated_count != null && res.max_rows_allowed != null) {
+        summary += ' Only first ' + res.validated_count + ' rows validated; maximum ' + res.max_rows_allowed + ' rows per file.';
+      } else if (res.truncated) {
+        summary += ' Only first ' + (res.rows && res.rows.length ? res.rows.length : 500) + ' rows validated; maximum 500 rows per file.';
+      }
+      document.getElementById('csv-preview-summary').textContent = summary;
+    }
+
+    document.getElementById('csv-back-btn')?.addEventListener('click', function() {
+      document.getElementById('csv-preview-section').style.display = 'none';
+      document.getElementById('csv-drop-zone').style.display = 'flex';
+      csvValidatedData = null;
+    });
+
+    document.getElementById('csv-commit-btn')?.addEventListener('click', function() {
+      if (!csvValidatedData || !csvValidatedData.rows) return;
+      const tbody = document.getElementById('csv-preview-tbody');
+      const rows = csvValidatedData.rows.map(function(row) {
+        const ri = row.row_index;
+        const nameEl = tbody.querySelector('.csv-row-name[data-row-index="' + ri + '"]');
+        const qtyEl = tbody.querySelector('.csv-row-quantity[data-row-index="' + ri + '"]');
+        const unitEl = tbody.querySelector('.csv-row-unit[data-row-index="' + ri + '"]');
+        const supplierEl = tbody.querySelector('.csv-row-supplier[data-row-index="' + ri + '"]');
+        return Object.assign({}, row, {
+          name: nameEl ? (nameEl.value || '').trim() : row.name,
+          quantity: qtyEl ? (qtyEl.value || '').trim() : row.quantity,
+          unit: unitEl ? unitEl.value : row.unit,
+          supplier: supplierEl ? (supplierEl.value || '').trim() || null : row.supplier,
+        });
+      });
+      this.disabled = true;
+      CoreAPI.inventoryCsvCommit({ rows: rows }).then(function(res) {
+        closeCsvUploadModal();
+        if (res.created && res.created.length) {
+          showNotification('success', 'Inventory added', res.created.length + ' item(s) added from CSV.');
+          if (typeof loadInventoryV2 === 'function') loadInventoryV2();
+        }
+        if (res.errors && res.errors.length) {
+          showNotification('warning', 'Some rows failed', res.errors.length + ' row(s) could not be added.');
+        }
+      }).catch(function(err) {
+        showNotification('error', 'Upload failed', err.message || 'Could not add inventory.');
+      }).finally(function() {
+        document.getElementById('csv-commit-btn').disabled = false;
+      });
+    });
+
+    document.getElementById('csv-drop-zone')?.addEventListener('click', function() { document.getElementById('csv-file-input').click(); });
+    document.getElementById('csv-file-input')?.addEventListener('change', function() { if (this.files && this.files[0]) handleCsvFile(this.files[0]); });
+    document.getElementById('csv-drop-zone')?.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); this.style.background = 'var(--bg-hover, rgba(0,0,0,0.03))'; });
+    document.getElementById('csv-drop-zone')?.addEventListener('dragleave', function(e) { e.preventDefault(); this.style.background = ''; });
+    document.getElementById('csv-drop-zone')?.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.style.background = '';
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) handleCsvFile(e.dataTransfer.files[0]);
+    });
+    document.getElementById('csv-browse-btn')?.addEventListener('click', function(e) { e.stopPropagation(); document.getElementById('csv-file-input').click(); });
+    document.getElementById('csv-upload-modal-close')?.addEventListener('click', closeCsvUploadModal);
+
+    // --- Barcode Scan Modal ---
+    let barcodeStream = null;
+    let lastBarcodeValue = null;
+    let barcodeScanLoopId = null;
+    let lastCandidateBarcode = null;
+    let barcodeConfidenceCounter = 0;
+    let decodeInProgress = false;
+    let barcodeConsecutiveFailures = 0;
+    let lastBarcodeDecodeTime = 0;
+    let barcodeCandidateHistory = [];
+    let lastFrameQualityScore = null;
+    let lastFrameStabilityScore = null;
+    const BARCODE_SCAN_INTERVAL_MS = 250;
+    const DECODE_TIMEOUT_MS = 800;
+    const BARCODE_QUALITY_MIN_VARIANCE = 30;
+    const BARCODE_MOTION_DIFF_THRESHOLD = 600;
+    const BARCODE_STABILITY_DIFF_THRESHOLD = 40;
+    const BARCODE_CONFIDENCE_THRESHOLD = 0.5;
+    const BARCODE_EXPOSURE_STABILITY_MAX = 60;
+    const BARCODE_HISTORY_LENGTH = 10;
+    const BARCODE_VOTE_QUORUM = 5;
+    const BARCODE_EDGE_VOLATILITY_MAX = 0.45;
+    const BARCODE_CENTER_BORDER_MAX = 90;
+    let lastFrameEdgeScore = null;
+    let lowLightViolationCounter = 0;
+    let motionViolationCounter = 0;
+    const HYSTERESIS_LIMIT = 5;
+    let lastBarcodeStatusMessage = '';
+    let scannerStateEnterTime = Date.now();
+    const STATE_MIN_DWELL_MS = 900;
+
+    var SCANNER_STATE = { SCANNING: 0, VERIFYING: 1, LOW_LIGHT_WARNING: 2, HOLD_STEADY: 3, CONFIRMED: 4 };
+    var scannerState = SCANNER_STATE.SCANNING;
+
+    function transitionScannerState(newState, message) {
+      if (scannerState === newState) return;
+      var now = Date.now();
+      // Prevent rapid oscillation between states
+      if (now - scannerStateEnterTime < STATE_MIN_DWELL_MS) {
+        return;
+      }
+      scannerState = newState;
+      scannerStateEnterTime = now;
+      setBarcodeStatusDebounced(message);
+    }
+
+    function clampConfidence(score) {
+      return Math.max(0.15, Math.min(1, score));
+    }
+
+    function getFrameQualityScore(canvas) {
+      var ctx = canvas.getContext('2d');
+      var w = Math.min(canvas.width, 160);
+      var h = Math.min(canvas.height, 120);
+      var data = ctx.getImageData(0, 0, w, h).data;
+      var sum = 0, sumSq = 0, n = 0;
+      for (var i = 0; i < data.length; i += 4) {
+        var g = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        sum += g;
+        sumSq += g * g;
+        n++;
+      }
+      if (n === 0) return 0;
+      var mean = sum / n;
+      return (sumSq / n) - (mean * mean);
+    }
+
+    function frameStabilityScore(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var cx = 0, cy = 0, total = 0;
+      for (var y = 0; y < canvas.height; y++) {
+        for (var x = 0; x < canvas.width; x++) {
+          var idx = (y * canvas.width + x) * 4;
+          var g = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+          cx += x * g;
+          cy += y * g;
+          total += g;
+        }
+      }
+      if (!total) return 0;
+      cx /= total;
+      cy /= total;
+      return Math.sqrt(cx * cx + cy * cy);
+    }
+
+    function exposureStabilityScore(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var brightnessSamples = [];
+      for (var i = 0; i < d.length; i += 4) {
+        brightnessSamples.push((d[i] + d[i + 1] + d[i + 2]) / 3);
+      }
+      if (!brightnessSamples.length) return 0;
+      var mean = brightnessSamples.reduce(function(a, b) { return a + b; }, 0) / brightnessSamples.length;
+      var variance = brightnessSamples.reduce(function(a, b) { return a + (b - mean) * (b - mean); }, 0) / brightnessSamples.length;
+      return Math.sqrt(variance);
+    }
+
+    function centerBorderLuminanceDiff(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var w = canvas.width;
+      var h = canvas.height;
+      var margin = Math.floor(Math.min(w, h) * 0.15);
+      var cx1 = margin;
+      var cx2 = w - margin;
+      var cy1 = margin;
+      var cy2 = h - margin;
+      var centerSum = 0, centerN = 0;
+      var borderSum = 0, borderN = 0;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          var idx = (y * w + x) * 4;
+          var g = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+          if (x >= cx1 && x < cx2 && y >= cy1 && y < cy2) {
+            centerSum += g;
+            centerN++;
+          } else {
+            borderSum += g;
+            borderN++;
+          }
+        }
+      }
+      var centerMean = centerN ? centerSum / centerN : 128;
+      var borderMean = borderN ? borderSum / borderN : 128;
+      return Math.abs(centerMean - borderMean);
+    }
+
+    function sobelEdgeDensity(canvas) {
+      var ctx = canvas.getContext('2d');
+      var w = canvas.width;
+      var h = canvas.height;
+      var img = ctx.getImageData(0, 0, w, h);
+      var d = img.data;
+      var step = 4;
+      var sum = 0, n = 0;
+      for (var y = 1; y < h - 1; y += step) {
+        for (var x = 1; x < w - 1; x += step) {
+          var idx = (y * w + x) * 4;
+          var g = function(xx, yy) { var i = (yy * w + xx) * 4; return (d[i] + d[i + 1] + d[i + 2]) / 3; };
+          var gx = g(x + 1, y) - g(x - 1, y);
+          var gy = g(x, y + 1) - g(x, y - 1);
+          sum += Math.sqrt(gx * gx + gy * gy);
+          n++;
+        }
+      }
+      return n ? sum / n : 0;
+    }
+
+    function stopBarcodeScanLoop() {
+      if (barcodeScanLoopId != null) {
+        cancelAnimationFrame(barcodeScanLoopId);
+        barcodeScanLoopId = null;
+      }
+    }
+
+    function safeSet(id, value) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+
+    function setBarcodeStatus(msg) {
+      safeSet('barcode-capture-status', msg);
+    }
+
+    function setBarcodeStatusDebounced(msg) {
+      if (msg === lastBarcodeStatusMessage) return;
+      lastBarcodeStatusMessage = msg;
+      setBarcodeStatus(msg);
+    }
+
+    function isBarcodeScanMobile() {
+      return /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+    }
+
+    function startBarcodeScanLoop() {
+      stopBarcodeScanLoop();
+      var video = document.getElementById('barcode-video');
+      var statusEl = document.getElementById('barcode-capture-status');
+      if (!video || !statusEl) return;
+      setBarcodeStatus('Scanning…');
+      function scheduleNext() {
+        if (barcodeScanLoopId != null) cancelAnimationFrame(barcodeScanLoopId);
+        barcodeScanLoopId = requestAnimationFrame(tick);
+      }
+      function tick() {
+        if (barcodeScanLoopId != null) {
+          cancelAnimationFrame(barcodeScanLoopId);
+          barcodeScanLoopId = null;
+        }
+        if (lastBarcodeValue) return;
+        if (!video.videoWidth || !video.readyState || video.readyState < 2) {
+          scheduleNext();
+          return;
+        }
+        if (decodeInProgress) {
+          scheduleNext();
+          return;
+        }
+        var now = Date.now();
+        var intervalMs = barcodeConsecutiveFailures >= 5 ? 600 : (barcodeConfidenceCounter >= 1 ? 300 : BARCODE_SCAN_INTERVAL_MS);
+        if (now - lastBarcodeDecodeTime < intervalMs) {
+          scheduleNext();
+          return;
+        }
+        lastBarcodeDecodeTime = now;
+
+        var canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
+        if (getFrameQualityScore(canvas) <= qualityThreshold) {
+          scheduleNext();
+          return;
+        }
+        lastFrameQualityScore = currentQuality;
+
+        var currentStability = frameStabilityScore(canvas);
+        if (lastFrameStabilityScore != null && Math.abs(currentStability - lastFrameStabilityScore) > BARCODE_STABILITY_DIFF_THRESHOLD) {
+          motionViolationCounter += 0.2;
+          if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
+        } else {
+          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
+        }
+        lastFrameStabilityScore = currentStability;
+
+        var exposureScore = exposureStabilityScore(canvas);
+
+        // ---- Adaptive exposure hysteresis window ----
+        var exposureUpper = BARCODE_EXPOSURE_STABILITY_MAX * 1.5;
+        var exposureLower = BARCODE_EXPOSURE_STABILITY_MAX * 0.8;
+
+        // Only trigger warning if violation persists
+        if (exposureScore > exposureUpper) {
+          lowLightViolationCounter++;
+        } else if (exposureScore < exposureLower) {
+          lowLightViolationCounter = Math.max(0, lowLightViolationCounter - 1);
+        }
+
+        // State transition only after hysteresis stabilization
+        if (lowLightViolationCounter >= HYSTERESIS_LIMIT && scannerState !== SCANNER_STATE.LOW_LIGHT_WARNING) {
+          transitionScannerState(
+            SCANNER_STATE.LOW_LIGHT_WARNING,
+            'Move to brighter area'
+          );
+          var hintEl = document.getElementById('barcode-low-light-hint');
+          if (hintEl) hintEl.style.display = 'block';
+        }
+        if (centerBorderLuminanceDiff(canvas) > BARCODE_CENTER_BORDER_MAX) {
+          lowLightViolationCounter++;
+          if (lowLightViolationCounter >= HYSTERESIS_LIMIT && scannerState !== SCANNER_STATE.LOW_LIGHT_WARNING) {
+            transitionScannerState(SCANNER_STATE.LOW_LIGHT_WARNING, 'Move to brighter area');
+            var hintEl2 = document.getElementById('barcode-low-light-hint');
+            if (hintEl2) hintEl2.style.display = 'block';
+          }
+        } else {
+          lowLightViolationCounter = Math.max(0, lowLightViolationCounter - 0.5);
+        }
+        var currentEdge = sobelEdgeDensity(canvas);
+        var edgeVolatility = lastFrameEdgeScore != null
+          ? Math.abs(currentEdge - lastFrameEdgeScore) / (lastFrameEdgeScore + 1)
+          : 0;
+        if (edgeVolatility > BARCODE_EDGE_VOLATILITY_MAX) {
+          motionViolationCounter += 0.2;
+          if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
+        } else {
+          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
+        }
+        lastFrameEdgeScore = currentEdge;
+
+        var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
+        if (currentQuality <= qualityThreshold) { scheduleNext(); return; }
+
+        decodeInProgress = true;
+        var frameQualityForConfidence = currentQuality;
+        decodeBarcodeFromCanvas(canvas).then(function(value) {
+          decodeInProgress = false;
+          if (value && !lastBarcodeValue) {
+            barcodeCandidateHistory.push(value);
+            if (barcodeCandidateHistory.length > BARCODE_HISTORY_LENGTH) barcodeCandidateHistory.shift();
+            var counts = {};
+            for (var i = 0; i < barcodeCandidateHistory.length; i++) {
+              var v = barcodeCandidateHistory[i];
+              counts[v] = (counts[v] || 0) + 1;
+            }
+            var accepted = null;
+            for (var k in counts) { if (counts[k] >= BARCODE_VOTE_QUORUM) { accepted = k; break; } }
+            if (accepted) {
+              var voteRatio = counts[accepted] / barcodeCandidateHistory.length;
+              var qualityComponent = Math.max(0, Math.min(1, frameQualityForConfidence / 100));
+              var confidenceScore = voteRatio * qualityComponent;
+              confidenceScore = clampConfidence(confidenceScore);
+              var confidenceThreshold = isBarcodeScanMobile() ? 0.35 : 0.5;
+              if (confidenceScore >= confidenceThreshold) {
+                lastBarcodeValue = accepted;
+                barcodeCandidateHistory = [];
+                barcodeConsecutiveFailures = 0;
+                safeSet('barcode-result-value', accepted);
+                var preview = document.getElementById('barcode-result-preview');
+                if (preview) preview.style.display = 'block';
+                var addBtn = document.getElementById('barcode-add-to-inventory-btn');
+                if (addBtn) addBtn.style.display = 'inline-block';
+                transitionScannerState(SCANNER_STATE.CONFIRMED, 'Barcode confirmed.');
+                stopBarcodeScanLoop();
+              } else {
+                transitionScannerState(SCANNER_STATE.VERIFYING, 'Verifying barcode');
+              }
+            } else {
+              transitionScannerState(SCANNER_STATE.VERIFYING, 'Verifying barcode');
+            }
+          } else {
+            barcodeCandidateHistory = [];
+            if (value) { barcodeConsecutiveFailures = 0; }
+            else {
+              barcodeConsecutiveFailures++;
+              if (barcodeConsecutiveFailures >= 8) {
+                transitionScannerState(SCANNER_STATE.LOW_LIGHT_WARNING, 'Move to brighter area');
+                var hintEl = document.getElementById('barcode-low-light-hint');
+                if (hintEl) hintEl.style.display = 'block';
+              } else {
+                transitionScannerState(SCANNER_STATE.SCANNING, 'Scanning…');
+              }
+            }
+          }
+        }).catch(function() {
+          decodeInProgress = false;
+          barcodeConsecutiveFailures++;
+        });
+        scheduleNext();
+      }
+      scheduleNext();
+    }
+
+    function openBarcodeScanModal() {
+      var modal = document.getElementById('barcode-scan-modal');
+      if (!modal) return;
+      lastBarcodeValue = null;
+      lastCandidateBarcode = null;
+      barcodeConfidenceCounter = 0;
+      barcodeConsecutiveFailures = 0;
+      barcodeCandidateHistory = [];
+      lastFrameQualityScore = null;
+      lastFrameStabilityScore = null;
+      lastFrameEdgeScore = null;
+      lowLightViolationCounter = 0;
+      motionViolationCounter = 0;
+      lastBarcodeStatusMessage = '';
+      scannerState = SCANNER_STATE.SCANNING;
+      stopBarcodeScanLoop();
+      var resultPreview = document.getElementById('barcode-result-preview');
+      if (resultPreview) resultPreview.style.display = 'none';
+      var addInvBtn = document.getElementById('barcode-add-to-inventory-btn');
+      if (addInvBtn) addInvBtn.style.display = 'none';
+      var manualInput = document.getElementById('barcode-manual-input');
+      if (manualInput) manualInput.value = '';
+      var lowLightHint = document.getElementById('barcode-low-light-hint');
+      if (lowLightHint) lowLightHint.style.display = 'none';
+      transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      var cam = document.getElementById('barcode-camera-viewport');
+      var video = document.getElementById('barcode-video');
+      cam.style.display = 'block';
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        var constraints = { video: { facingMode: 'environment', width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 } }, audio: false };
+        navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+          barcodeStream = stream;
+          video.srcObject = stream;
+          video.onloadedmetadata = function() {
+            video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
+          };
+        }).catch(function() {
+          navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }).then(function(stream) {
+            barcodeStream = stream;
+            video.srcObject = stream;
+            video.onloadedmetadata = function() {
+              video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
+            };
+          }).catch(function() {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(function(stream) {
+              barcodeStream = stream;
+              video.srcObject = stream;
+              video.onloadedmetadata = function() {
+                video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
+              };
+            }).catch(function() { cam.style.display = 'none'; });
+          });
+        });
+      } else {
+        cam.style.display = 'none';
+      }
+    }
+
+    function closeBarcodeScanModal() {
+      stopBarcodeScanLoop();
+      if (barcodeStream) {
+        barcodeStream.getTracks().forEach(function(t) { t.stop(); });
+        barcodeStream = null;
+      }
+      var vid = document.getElementById('barcode-video');
+      if (vid) vid.srcObject = null;
+      const modal = document.getElementById('barcode-scan-modal');
+      if (modal) { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
+    }
+
+    function resizeCanvas(canvas, scale) {
+      var temp = document.createElement('canvas');
+      temp.width = Math.max(1, Math.floor(canvas.width * scale));
+      temp.height = Math.max(1, Math.floor(canvas.height * scale));
+      temp.getContext('2d').drawImage(canvas, 0, 0, temp.width, temp.height);
+      return temp;
+    }
+
+    function adaptiveContrastEnhance(canvas) {
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var d = img.data;
+      var block = 32;
+      var w = canvas.width;
+      var h = canvas.height;
+
+      function blockMean(x, y) {
+        var sum = 0, n = 0;
+        for (var yy = y; yy < Math.min(y + block, h); yy++) {
+          for (var xx = x; xx < Math.min(x + block, w); xx++) {
+            var idx = (yy * w + xx) * 4;
+            sum += (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
+            n++;
+          }
+        }
+        return n ? sum / n : 128;
+      }
+
+      for (var y = 0; y < h; y += block) {
+        for (var x = 0; x < w; x += block) {
+          var localMean = blockMean(x, y);
+          var gain = 128 / (localMean + 1);
+          for (var yy2 = y; yy2 < Math.min(y + block, h); yy2++) {
+            for (var xx2 = x; xx2 < Math.min(x + block, w); xx2++) {
+              var i = (yy2 * w + xx2) * 4;
+              d[i] = Math.min(255, d[i] * gain);
+              d[i + 1] = Math.min(255, d[i + 1] * gain);
+              d[i + 2] = Math.min(255, d[i + 2] * gain);
+            }
+          }
+        }
+      }
+
+      ctx.putImageData(img, 0, 0);
+      return canvas;
+    }
+
+    function decodeBarcodeFromCanvas(canvas) {
+      canvas = adaptiveContrastEnhance(canvas);
+      var formats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'upc_a', 'upc_e', 'itf', 'codabar', 'pdf417', 'aztec', 'data_matrix'];
+      function tryBarcodeDetector(targetCanvas) {
+        if (typeof BarcodeDetector === 'undefined') return Promise.resolve(null);
+        var detector;
+        try {
+          detector = new BarcodeDetector({ formats: formats });
+        } catch (e) {
+          try { detector = new BarcodeDetector(); } catch (e2) { return Promise.resolve(null); }
+        }
+        return detector.detect(targetCanvas).then(function(results) {
+          return results.length ? results[0].rawValue : null;
+        }).catch(function() { return null; });
+      }
+      function tryZxing(targetCanvas) {
+        return new Promise(function(resolve) {
+          targetCanvas.toBlob(function(blob) {
+            if (!blob) { resolve(null); return; }
+            var url = URL.createObjectURL(blob);
+            var img = new Image();
+            img.onload = function() {
+              URL.revokeObjectURL(url);
+              import('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/+esm').then(function(zxing) {
+                var reader = new zxing.BrowserMultiFormatReader();
+                reader.decodeFromImageElement(img).then(function(result) {
+                  resolve(result ? result.getText() : null);
+                }).catch(function() { resolve(null); });
+              }).catch(function() { resolve(null); });
+            };
+            img.onerror = function() { URL.revokeObjectURL(url); resolve(null); };
+            img.src = url;
+          }, 'image/png');
+        });
+      }
+      function decodeOne(c) {
+        return tryBarcodeDetector(c).then(function(value) {
+          if (value) return value;
+          return tryZxing(c);
+        });
+      }
+      function withTimeout(p) {
+        return new Promise(function(resolve) {
+          var done = false;
+          var t = setTimeout(function() {
+            if (done) return;
+            done = true;
+            resolve(null);
+          }, DECODE_TIMEOUT_MS);
+          p.then(function(v) {
+            if (done) return;
+            done = true;
+            clearTimeout(t);
+            resolve(v);
+          }).catch(function() {
+            if (done) return;
+            done = true;
+            clearTimeout(t);
+            resolve(null);
+          });
+        });
+      }
+      return withTimeout(decodeOne(canvas)).then(function(value) {
+        if (value) return value;
+        return withTimeout(decodeOne(resizeCanvas(canvas, 0.75)));
+      }).then(function(value) {
+        if (value) return value;
+        return withTimeout(decodeOne(resizeCanvas(canvas, 0.5)));
+      });
+    }
+
+    document.getElementById('barcode-capture-btn')?.addEventListener('click', function() {
+      if (lastBarcodeValue) return;
+      const video = document.getElementById('barcode-video');
+      if (!video || !video.videoWidth) return;
+      transitionScannerState(SCANNER_STATE.SCANNING, 'Scanning…');
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      decodeBarcodeFromCanvas(canvas).then(function(value) {
+        if (value) {
+          lastBarcodeValue = value;
+          safeSet('barcode-result-value', value);
+          var prev = document.getElementById('barcode-result-preview');
+          if (prev) prev.style.display = 'block';
+          var addB = document.getElementById('barcode-add-to-inventory-btn');
+          if (addB) addB.style.display = 'inline-block';
+          transitionScannerState(SCANNER_STATE.CONFIRMED, 'Barcode confirmed.');
+          stopBarcodeScanLoop();
+        } else {
+          transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
+          showNotification('info', 'No barcode in shot', 'Hold the barcode in view or tap Capture again.');
+        }
+      }).catch(function(err) {
+        transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
+        showNotification('error', 'Decode failed', err && err.message ? err.message : 'Try manual entry.');
+      });
+    });
+
+    document.getElementById('barcode-manual-input')?.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var v = (this.value || '').trim();
+        if (v) {
+          lastBarcodeValue = v;
+          safeSet('barcode-result-value', v);
+          var resPrev = document.getElementById('barcode-result-preview');
+          if (resPrev) resPrev.style.display = 'block';
+          var addBtn2 = document.getElementById('barcode-add-to-inventory-btn');
+          if (addBtn2) addBtn2.style.display = 'inline-block';
+        }
+      }
+    });
+
+    function attachBarcodeModalHandlers() {
+      var closeBtn = document.getElementById('barcode-scan-modal-close');
+      var backBtn = document.getElementById('barcode-scan-back-btn');
+      var addToInvBtn = document.getElementById('barcode-add-to-inventory-btn');
+      if (closeBtn) closeBtn.addEventListener('click', closeBarcodeScanModal);
+      if (backBtn) backBtn.addEventListener('click', function() { closeBarcodeScanModal(); var hm = document.getElementById('inventory-entry-hub-modal'); if (hm) { hm.style.display = 'flex'; document.body.style.overflow = 'hidden'; } });
+      if (addToInvBtn) {
+        addToInvBtn.addEventListener('click', function() {
+          var code = lastBarcodeValue || (document.getElementById('barcode-result-value') && document.getElementById('barcode-result-value').textContent) || '';
+          closeBarcodeScanModal();
+          var addInventoryModalEl = document.getElementById('add-inventory-modal');
+          if (!addInventoryModalEl) return;
+          window._addInventorySourceMethod = 'barcode_scan';
+          CoreAPI.lookupBarcode(code).then(function(res) {
+            var form = addInventoryModalEl.querySelector('form');
+            var barcodeInput = document.getElementById('add-inventory-barcode-input');
+            var barcodeDisplayWrap = document.getElementById('add-inventory-barcode-display-wrap');
+            var barcodeDisplay = document.getElementById('add-inventory-barcode-display');
+            var nameEl = document.getElementById('add-inventory-name');
+            var unitEl = document.getElementById('add-inventory-unit');
+            var supplierEl = document.getElementById('add-inventory-supplier');
+            if (barcodeInput) barcodeInput.value = code || '';
+            if (barcodeDisplayWrap) barcodeDisplayWrap.style.display = code ? 'block' : 'none';
+            if (barcodeDisplay) barcodeDisplay.textContent = code || '';
+            if (res.exists) {
+              var p = res.product || {};
+              var pName = p.name !== undefined ? p.name : res.name;
+              var pUnit = p.unit !== undefined ? p.unit : res.unit;
+              var pSupplier = (p.supplier !== undefined ? p.supplier : res.supplier) || '';
+              window._addInventoryBarcodeLookup = { name: pName, unit: pUnit, supplier: pSupplier };
+              if (nameEl) { nameEl.value = pName || ''; nameEl.readOnly = true; nameEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              if (unitEl) { unitEl.value = pUnit || ''; unitEl.disabled = true; unitEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              if (supplierEl) { supplierEl.value = pSupplier || ''; supplierEl.readOnly = true; supplierEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
+              if (form) {
+                var q = form.querySelector('[name="quantity"]'); if (q) q.value = '';
+                var pd = form.querySelector('[name="purchaseDate"]'); if (pd) pd.value = '';
+                var bn = form.querySelector('[name="batchNumber"]'); if (bn) bn.value = '';
+                var ed = form.querySelector('[name="expiryDate"]'); if (ed) ed.value = '';
+                form.querySelector('[name="quantity"]').focus();
+              }
+            } else {
+              window._addInventoryBarcodeLookup = null;
+              if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; nameEl.value = ''; }
+              if (unitEl) { unitEl.disabled = false; unitEl.style.background = ''; }
+              if (supplierEl) { supplierEl.readOnly = false; supplierEl.style.background = ''; supplierEl.value = ''; }
+              if (nameEl) nameEl.focus();
+            }
+            addInventoryModalEl.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+          }).catch(function() {
+            window._addInventoryBarcodeLookup = null;
+            var bi = document.getElementById('add-inventory-barcode-input');
+            var bdw = document.getElementById('add-inventory-barcode-display-wrap');
+            var bd = document.getElementById('add-inventory-barcode-display');
+            if (bi) bi.value = code || '';
+            if (bdw) bdw.style.display = code ? 'block' : 'none';
+            if (bd) bd.textContent = code || '';
+            addInventoryModalEl.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            var form = addInventoryModalEl.querySelector('form');
+            if (form) { form.querySelector('[name="name"]').value = ''; form.querySelector('[name="quantity"]').focus(); }
+          });
+        });
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', attachBarcodeModalHandlers);
+    } else {
+      attachBarcodeModalHandlers();
+    }
+    window.openCsvUploadModal = openCsvUploadModal;
+    window.openBarcodeScanModal = openBarcodeScanModal;
+
+    // Attach the Create Process Form Handler Once + help tooltips
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.querySelector('#create-process-modal form') || document.getElementById('create-process-guided-form');
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.createNewProcess(this);
+          return false;
+        });
+      }
+      // Help icon click/hover for guided create process modal
+      document.querySelectorAll('.help-trigger').forEach(btn => {
+        const tooltip = btn.parentElement && btn.parentElement.querySelector('.help-tooltip');
+        if (!tooltip) return;
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          document.querySelectorAll('.help-tooltip.visible').forEach(t => { if (t !== tooltip) t.classList.remove('visible'); });
+          tooltip.classList.toggle('visible');
+        });
+        btn.addEventListener('mouseenter', function () { tooltip.classList.add('visible'); });
+        btn.addEventListener('mouseleave', function () { tooltip.classList.remove('visible'); });
+      });
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('.help-wrapper')) {
+          document.querySelectorAll('.help-tooltip.visible').forEach(t => t.classList.remove('visible'));
+        }
+      });
+      
+      // Attach the Add Inventory Form Handler Once
+      const inventoryForm = document.querySelector('#add-inventory-modal form');
+      if (inventoryForm) {
+        inventoryForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.addInventoryItem(this);
+          return false;
+        });
+      }
+
+      // Dispose of inventory item: open modal, render inventory cards, submit
+      const recordWastageBtn = document.getElementById('record-wastage-btn');
+      const recordWastageModal = document.getElementById('record-wastage-modal');
+      const recordWastageClose = document.getElementById('record-wastage-modal-close');
+      const recordWastageCancel = document.getElementById('record-wastage-cancel');
+      const recordWastageSubmit = document.getElementById('record-wastage-submit');
+      const recordWastageCardsContainer = document.getElementById('record-wastage-cards-container');
+
+      async function openRecordWastageModal(optionalFilterIds) {
+        if (!recordWastageModal || !recordWastageCardsContainer) return;
+        recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">Loading inventory...</p>';
+        recordWastageModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        const filterIds = Array.isArray(optionalFilterIds) ? optionalFilterIds.map(String) : null;
+        try {
+          const data = await CoreAPI.getInventory();
+          let items = (data.inventory_items || []).filter(function(item) {
+            const q = parseFloat(item.quantity);
+            return !isNaN(q) && q > 0;
+          });
+          if (filterIds && filterIds.length > 0) {
+            const idSet = new Set(filterIds);
+            items = items.filter(function(item) { return item && idSet.has(String(item.id)); });
+          }
+          if (items.length === 0) {
+            recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">' + (filterIds ? 'No expired materials with quantity to dispose.' : 'No inventory with quantity to dispose.') + '</p>';
+            return;
+          }
+          recordWastageCardsContainer.innerHTML = '';
+          items.forEach(function(item) {
+            const qtyNum = parseFloat(item.quantity);
+            const unit = item.unit || 'units';
+            const card = document.createElement('div');
+            card.className = 'wastage-card';
+            card.style.cssText = 'border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 14px; background: var(--bg-card); display: flex; flex-direction: column; gap: 10px;';
+            card.dataset.inventoryId = item.id;
+            card.dataset.maxQuantity = String(item.quantity);
+            const nameLine = (item.process_name ? item.process_name + ' – ' : '') + item.name;
+            card.innerHTML =
+              '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">' +
+              '<div><span style="font-weight: 600; color: var(--text-primary);">' + escapeHtml(nameLine) + '</span>' +
+              '<span style="font-size: 12px; color: var(--text-secondary); margin-left: 6px;">Available: ' + escapeHtml(String(item.quantity)) + ' ' + escapeHtml(unit) + '</span></div>' +
+              '</div>' +
+              '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">' +
+              '<label style="font-size: 12px; color: var(--text-secondary);">Quantity to waste</label>' +
+              '<input type="number" class="wastage-qty-input" min="0" max="' + qtyNum + '" step="0.0001" placeholder="0" value="" style="width: 100px; padding: 8px 10px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">' +
+              '<span style="font-size: 13px; color: var(--text-secondary);">' + escapeHtml(unit) + '</span>' +
+              '<button type="button" class="btn btn-secondary btn-sm waste-entire-btn" style="font-size: 12px;">Waste entire item</button>' +
+              '</div>';
+            const qtyInput = card.querySelector('.wastage-qty-input');
+            const wasteEntireBtn = card.querySelector('.waste-entire-btn');
+            wasteEntireBtn.addEventListener('click', function() {
+              qtyInput.value = String(item.quantity);
+            });
+            qtyInput.addEventListener('input', function() {
+              const v = parseFloat(this.value);
+              const max = parseFloat(card.dataset.maxQuantity);
+              if (!isNaN(v) && v > max) this.value = String(max);
+            });
+            recordWastageCardsContainer.appendChild(card);
+          });
+        } catch (e) {
+          console.error('Failed to load inventory for wastage', e);
+          recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--error);">Failed to load inventory.</p>';
+        }
+      }
+
+      function closeRecordWastageModal() {
+        if (recordWastageModal) {
+          recordWastageModal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+        }
+      }
+
+      async function submitRecordWastage() {
+        if (!recordWastageCardsContainer) return;
+        const cards = recordWastageCardsContainer.querySelectorAll('.wastage-card');
+        const entries = [];
+        cards.forEach(function(card) {
+          const id = card.dataset.inventoryId;
+          const input = card.querySelector('.wastage-qty-input');
+          let val = input && parseFloat(input.value);
+          if (id && !isNaN(val) && val > 0) {
+            const max = parseFloat(card.dataset.maxQuantity);
+            if (!isNaN(max) && val > max) {
+              val = max;
+              if (input) input.value = String(max);
+            }
+            entries.push({ inventory_item_id: id, quantity_wasted: val });
+          }
+        });
+        if (entries.length === 0) {
+          showNotification('error', 'No quantity entered', 'Enter quantity to dispose for at least one item.');
+          return;
+        }
+        try {
+          const res = await CoreAPI.recordWastage(entries);
+          closeRecordWastageModal();
+          if (res && res.wastage_records && res.wastage_records.length) {
+            showNotification('success', 'Inventory disposed', res.wastage_records.length + ' item(s) disposed. Quantity deducted from inventory.');
+          }
+          if (typeof loadInventoryV2 === 'function') loadInventoryV2();
+          const metrics = await CoreAPI.getMetrics();
+          if (typeof updateMetricsV2 === 'function') updateMetricsV2(metrics);
+        } catch (e) {
+          showNotification('error', 'Failed to dispose of inventory', e.message || 'Could not dispose of inventory.');
+        }
+      }
+
+      if (recordWastageBtn) recordWastageBtn.addEventListener('click', function() { openRecordWastageModal(); });
+      window.openRecordWastageModalForExpired = function(itemIds) {
+        openRecordWastageModal(itemIds);
+      };
+      if (recordWastageClose) recordWastageClose.addEventListener('click', closeRecordWastageModal);
+      if (recordWastageCancel) recordWastageCancel.addEventListener('click', closeRecordWastageModal);
+      if (recordWastageSubmit) recordWastageSubmit.addEventListener('click', submitRecordWastage);
+    });
+    
+    // Create process handler with optimistic UI
+    window.createNewProcess = function (form) {
+      const formData = new FormData(form);
+      const name = formData.get('name')?.trim();
+      const description = formData.get('description')?.trim() || '';
+      const category = formData.get('category') || 'manufacturing';
+
+      if (!name) {
+        showNotification('error', 'Validation Error', 'Please enter a process name');
+        return false;
+      }
+
+      const tempId = `temp-${Date.now()}`;
+
+      const optimisticProcess = {
+        id: tempId,
+        name,
+        description,
+        category,
+        created_at: new Date().toISOString(),
+        __optimistic: true,
+        step_count: 0,
+        active_executions: 0,
+        completed_executions: 0,
+      };
+
+      // Close modal immediately (like delete does)
+      const modal = document.getElementById('create-process-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+      form.reset();
+
+      // Render immediately
+      prependProcessCardV2(optimisticProcess);
+
+      // Persist asynchronously, then redirect to flows2 with welcome=1
+      (async () => {
+        try {
+          const saved = await CoreAPI.createProcess({
+            name,
+            description,
+            category,
+          });
+
+          replaceOptimisticProcessV2(tempId, saved);
+
+          // Update metrics
+          const metrics = await CoreAPI.getMetrics();
+          updateMetricsV2(metrics);
+
+          // Redirect to process flow page and show "define steps" welcome modal
+          window.location.href = `/core/flows?id=${saved.id}&welcome=1`;
+        } catch (error) {
+          removeOptimisticProcessV2(tempId);
+
+          showNotification(
+            'error',
+            'Failed to Create Process',
+            error.message || 'Failed to create process. Please try again.'
+          );
+        }
+      })();
+
+      return false;
+    };
+    
+    // Edit process handler
+    let currentEditProcessId = null;
+    
+    async function openEditProcessModal(processId) {
+      try {
+        const process = await CoreAPI.getProcess(processId);
+        currentEditProcessId = processId;
+        
+        // Populate form
+        const modal = document.getElementById('edit-process-modal');
+        const form = modal.querySelector('form');
+        form.querySelector('[name="name"]').value = process.name || '';
+        form.querySelector('[name="description"]').value = process.description || '';
+        form.querySelector('[name="category"]').value = process.category || 'manufacturing';
+        
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      } catch (error) {
+        console.error('Failed to load process:', error);
+        showNotification('error', 'Failed to Load Process', error.message || 'Failed to load process. Please try again.');
+      }
+    }
+    
+    async function updateProcess(form) {
+      const formData = new FormData(form);
+      const data = {
+        name: formData.get('name'),
+        description: formData.get('description') || '',
+        category: formData.get('category') || null,
+      };
+      
+      try {
+        await CoreAPI.updateProcess(currentEditProcessId, data);
+        
+        // Close modal
+        const modal = form.closest('.modal-overlay');
+        if (modal) {
+          modal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+        }
+        
+        // Reload processes
+        const processesData = await CoreAPI.getProcesses();
+        renderProcessesV2(processesData.processes);
+        
+        // Reload metrics
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        
+        currentEditProcessId = null;
+        form.reset();
+        return false;
+      } catch (error) {
+        console.error('Failed to update process:', error);
+        showNotification('error', 'Failed to Update Process', error.message || 'Failed to update process. Please try again.');
+        return false;
+      }
+    }
+    
+    // Delete process handler
+    let currentDeleteProcessId = null;
+    let currentDeleteProcessName = null;
+    
+    function showDeleteConfirmation(processId, processName) {
+      currentDeleteProcessId = processId;
+      currentDeleteProcessName = processName;
+      const modal = document.getElementById('delete-process-confirmation-modal');
+      const messageEl = modal.querySelector('#delete-confirmation-message');
+      messageEl.textContent = `Are you sure you want to delete "${processName}"? This action cannot be undone.`;
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    
+    async function confirmDeleteProcess() {
+      if (!currentDeleteProcessId) return;
+      
+      try {
+        await CoreAPI.deleteProcess(currentDeleteProcessId);
+        
+        // Close modal
+        const modal = document.getElementById('delete-process-confirmation-modal');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Reload processes
+        const processesData = await CoreAPI.getProcesses();
+        renderProcessesV2(processesData.processes);
+        
+        // Reload metrics
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        
+        currentDeleteProcessId = null;
+        currentDeleteProcessName = null;
+      } catch (error) {
+        console.error('Failed to delete process:', error);
+        showNotification('error', 'Failed to Delete Process', error.message || 'Failed to delete process. Please try again.');
+      }
+    }
+    
+    function cancelDeleteProcess() {
+      const modal = document.getElementById('delete-process-confirmation-modal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      currentDeleteProcessId = null;
+      currentDeleteProcessName = null;
+    }
+    
+    // showNotification is now defined at the top of the script
+    // This is just a reference comment
+    
+    function closeNotification() {
+      const modal = document.getElementById('notification-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+      if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+      }
+    }
+
+    // Add inventory handler with optimistic UI
+    window.addInventoryItem = function (form) {
+      const formData = new FormData(form);
+      const lookup = window._addInventoryBarcodeLookup;
+      const name = (formData.get('name') || (lookup && lookup.name) || '').trim();
+      const quantity = parseFloat(formData.get('quantity'));
+      const unit = formData.get('unit') || (lookup && lookup.unit) || '';
+      const supplier = (formData.get('supplier') || (lookup && lookup.supplier) || '').trim() || null;
+      const barcode = (formData.get('barcode') || '').trim() || null;
+      const purchaseDate = formData.get('purchaseDate') || null;
+      const batchNumber = formData.get('batchNumber')?.trim() || null;
+      const expiryDate = formData.get('expiryDate') || null;
+
+      if (!name) {
+        showNotification('error', 'Validation Error', 'Please enter an item name');
+        return false;
+      }
+
+      if (!quantity || isNaN(quantity) || quantity <= 0) {
+        showNotification('error', 'Validation Error', 'Please enter a quantity greater than 0');
+        return false;
+      }
+
+      if (!unit) {
+        showNotification('error', 'Validation Error', 'Please select a unit');
+        return false;
+      }
+
+      const tempId = `temp-inv-${Date.now()}`;
+
+      const optimisticItem = {
+        id: tempId,
+        name,
+        quantity: quantity.toString(),
+        unit,
+        inventory_type: 'raw_material', // Always raw_material for manually added items
+        supplier,
+        purchase_date: purchaseDate,
+        supplier_batch_number: batchNumber,
+        expiry_date: expiryDate,
+        created_at: new Date().toISOString(),
+        __optimistic: true,
+      };
+
+      // Close modal immediately
+      const modal = document.getElementById('add-inventory-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
+      form.reset();
+      if (window._addInventoryBarcodeLookup) window._addInventoryBarcodeLookup = null;
+
+      // Render immediately
+      prependInventoryItemV2(optimisticItem);
+
+      // Persist asynchronously
+      (async () => {
+        try {
+          const sourceMethod = window._addInventorySourceMethod || 'manual';
+          if (window._addInventorySourceMethod) window._addInventorySourceMethod = null;
+          const payload = {
+            name,
+            quantity,
+            unit,
+            inventory_type: 'raw_material',
+            supplier,
+            purchase_date: purchaseDate,
+            supplier_batch_number: batchNumber,
+            expiry_date: expiryDate,
+            source_method: sourceMethod,
+          };
+          if (barcode) payload.barcode = barcode;
+          const saved = await CoreAPI.createInventoryItem(payload);
+
+          replaceOptimisticInventoryV2(tempId, saved);
+
+          // If added from execution modal (missing raw material), refresh step dropdown and select new item
+          if (window.addInventoryContext && window.addInventoryContext.fromExecutionModal && typeof window.refreshExecutionModalInventory === 'function') {
+            await window.refreshExecutionModalInventory(saved);
+          }
+
+          // Update metrics
+          const metrics = await CoreAPI.getMetrics();
+          updateMetricsV2(metrics);
+
+          if (saved.quantity_added) {
+            showNotification('success', 'Quantity added', `Quantity added to "${saved.name}".`);
+          } else {
+            showNotification(
+              'success',
+              'Inventory Item Added',
+              `"${name}" has been added to inventory successfully.`
+            );
+          }
+        } catch (error) {
+          removeOptimisticInventoryV2(tempId);
+
+          showNotification(
+            'error',
+            'Failed to Add Inventory Item',
+            error.message || 'Failed to add inventory item. Please try again.'
+          );
+        }
+      })();
+
+      return false;
+    };
+    
+    // Edit inventory handler
+    let currentEditInventoryId = null;
+    
+    async function openEditInventoryModal(itemId) {
+      try {
+        const inventoryData = await CoreAPI.getInventory();
+        const item = inventoryData.inventory_items.find(i => i.id === itemId);
+        
+        if (!item) {
+          showNotification('error', 'Error', 'Inventory item not found');
+          return;
+        }
+        
+        currentEditInventoryId = itemId;
+        
+        // Populate form
+        const modal = document.getElementById('edit-inventory-modal');
+        const form = modal.querySelector('form');
+        form.querySelector('[name="name"]').value = item.name || '';
+        form.querySelector('[name="quantity"]').value = item.quantity || '';
+        form.querySelector('[name="unit"]').value = item.unit || 'kg';
+        form.querySelector('[name="inventoryType"]').value = item.inventory_type || 'raw_material';
+        form.querySelector('[name="supplier"]').value = item.supplier || '';
+        form.querySelector('[name="purchaseDate"]').value = item.purchase_date ? item.purchase_date.split('T')[0] : '';
+        form.querySelector('[name="batchNumber"]').value = item.supplier_batch_number || '';
+        form.querySelector('[name="expiryDate"]').value = item.expiry_date ? item.expiry_date.split('T')[0] : '';
+        
+        // Show modal
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      } catch (error) {
+        console.error('Failed to load inventory item:', error);
+        showNotification('error', 'Failed to Load Inventory Item', error.message || 'Failed to load inventory item. Please try again.');
+      }
+    }
+    
+    async function updateInventoryItem(form) {
+      const formData = new FormData(form);
+      const data = {
+        name: formData.get('name'),
+        quantity: parseFloat(formData.get('quantity')),
+        unit: formData.get('unit'),
+        inventory_type: formData.get('inventoryType') || 'raw_material',
+        supplier: formData.get('supplier') || null,
+        purchase_date: formData.get('purchaseDate') || null,
+        supplier_batch_number: formData.get('batchNumber') || null,
+        expiry_date: formData.get('expiryDate') || null,
+      };
+      
+      try {
+        await CoreAPI.updateInventoryItem(currentEditInventoryId, data);
+        
+        // Close modal
+        const modal = form.closest('.modal-overlay');
+        if (modal) {
+          modal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+        }
+        
+        // Reload inventory
+        await loadInventoryV2();
+        
+        // Reload metrics
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        
+        currentEditInventoryId = null;
+        form.reset();
+        return false;
+      } catch (error) {
+        console.error('Failed to update inventory item:', error);
+        showNotification('error', 'Failed to Update Inventory Item', error.message || 'Failed to update inventory item. Please try again.');
+        return false;
+      }
+    }
+    
+    // Delete inventory handler
+    let currentDeleteInventoryId = null;
+    let currentDeleteInventoryName = null;
+    
+    function showDeleteInventoryConfirmation(itemId, itemName) {
+      currentDeleteInventoryId = itemId;
+      currentDeleteInventoryName = itemName;
+      const modal = document.getElementById('delete-inventory-confirmation-modal');
+      const messageEl = modal.querySelector('#delete-inventory-confirmation-message');
+      messageEl.textContent = `Are you sure you want to delete "${itemName}"? This action cannot be undone.`;
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    
+    async function confirmDeleteInventory() {
+      if (!currentDeleteInventoryId) return;
+      
+      try {
+        await CoreAPI.deleteInventoryItem(currentDeleteInventoryId);
+        
+        // Close modal
+        const modal = document.getElementById('delete-inventory-confirmation-modal');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Reload inventory
+        await loadInventoryV2();
+        
+        // Reload metrics
+        const metrics = await CoreAPI.getMetrics();
+        updateMetricsV2(metrics);
+        
+        currentDeleteInventoryId = null;
+        currentDeleteInventoryName = null;
+      } catch (error) {
+        console.error('Failed to delete inventory item:', error);
+        showNotification('error', 'Failed to Delete Inventory Item', error.message || 'Failed to delete inventory item. Please try again.');
+      }
+    }
+    
+    function cancelDeleteInventory() {
+      const modal = document.getElementById('delete-inventory-confirmation-modal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      currentDeleteInventoryId = null;
+      currentDeleteInventoryName = null;
+    }
+    
+    // ============================================================
+    // EXECUTION FUNCTIONS (from flows2.html)
+    // ============================================================
+    
+    // Get current user
+    let currentUser = null;
+    async function getCurrentUser() {
+      if (currentUser) {
+        return currentUser;
+      }
+      
+      try {
+        const response = await fetch('/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (response.ok) {
+          currentUser = await response.json();
+          return currentUser;
+        } else {
+          return { username: 'Unknown', email: 'unknown@example.com' };
+        }
+      } catch (error) {
+        console.error('Failed to get current user:', error);
+        return { username: 'Unknown', email: 'unknown@example.com' };
+      }
+    }
+    
+    // Execute next step from inventory item
+    // When producingStepId is set (e.g. for untracked items), open that step instead of the "ready" step
+    window.executeNextStepFromInventory = async function(sourceExecutionId, producingStepId) {
+      try {
+        const executionData = await CoreAPI.getExecution(sourceExecutionId);
+        const executionSteps = executionData.execution_steps || [];
+        let targetStep = null;
+
+        if (producingStepId && producingStepId.trim()) {
+          // Untracked/failed-check item: open the step that produces this output (normalize UUID comparison)
+          const wantId = String(producingStepId).trim().toLowerCase();
+          targetStep = executionSteps.find(es => String(es.step_id || '').trim().toLowerCase() === wantId);
+        }
+        if (!targetStep) {
+          // Default: current step to complete (ready step)
+          targetStep = executionSteps.find(es => es.status === 'ready' || es.status === 'READY');
+        }
+
+        if (!targetStep) {
+          showNotification('error', 'No Ready Step', 'There is no step ready to complete for this execution.');
+          return;
+        }
+
+        const processData = await CoreAPI.getProcess(executionData.process_id);
+        const stepDefinition = processData.steps.find(s => s.id === targetStep.step_id);
+
+        if (!stepDefinition) {
+          showNotification('error', 'Step Not Found', 'Step definition not found.');
+          return;
+        }
+
+        if (typeof window.openExecutionModal === 'function') {
+          await window.openExecutionModal(sourceExecutionId, targetStep, stepDefinition);
+        } else {
+          showNotification('error', 'Modal Not Loaded', 'Execution modal functions are not available. Please refresh the page.');
+          console.error('openExecutionModal is not defined. Make sure execution-modal.js is loaded.');
+        }
+      } catch (error) {
+        console.error('Failed to open execution modal:', error);
+        showNotification('error', 'Failed to Open Execution Modal', error.message || 'Failed to open execution modal. Please try again.');
+      }
+    };
+    
+    // ============================================================
+    // EXECUTION MODAL FUNCTIONS
+    // ============================================================
+    // openExecutionModal and submitExecution are now loaded from js/execution-modal.js
+    // Configuration is set above in ExecutionModalConfig
+  </script>
+  
+  <!-- Create Process Modal - Guided flow (like flows2) -->
+  <div class="modal-overlay create-process-guided" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px; overflow-y: auto;">
+    <div class="card modal-card" style="margin: auto;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px;">
+        <div style="flex: 1; min-width: 0;">
+          <h2 class="modal-title" style="font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">Create New Process</h2>
+          <p style="font-size: 0.9rem; color: var(--text-secondary); margin: 0; line-height: 1.45;">Give your workflow a name and category so you can track it and run executions.</p>
+        </div>
+        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
       </div>
-      <form onsubmit="return createNewProcess(this)">
-        <div class="modal-body">
-          <div class="form-group">
-            <label class="form-label">Process Name</label>
-            <input type="text" name="name" class="form-input" placeholder="e.g., Assembly Line C" required>
+
+      <div class="modal-intro" style="background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+        <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">What is a process?</h3>
+        <p style="font-size: inherit; color: var(--text-secondary); margin: 0; line-height: 1.55;">
+          A <strong>process</strong> is a repeatable workflow you run in your business—like a production line, a batch recipe, or a quality check. Once you create it, you can define steps (what happens), inputs and outputs (materials in and out), and run executions to get <strong>traceability</strong>, <strong>live inventory</strong>, and <strong>real-time visibility</strong>.
+        </p>
+        <p style="font-size: 0.85em; color: var(--text-tertiary); margin: 10px 0 0 0; line-height: 1.5;">
+          <strong>Examples:</strong> “Whisky Manufacturing”, “Tablet Production Line”, “Packaging Line”, “Quality Control Process”.
+        </p>
+      </div>
+
+      <div class="dopamine-line">
+        <p>You’re one step away from full visibility over this workflow. Name it and we’ll take you to set up steps and materials.</p>
+      </div>
+
+      <form id="create-process-guided-form">
+        <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
+          <div>
+            <label class="field-label" style="display: block; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Process name <span style="color: var(--error, #ef4444);">*</span>
+              <span class="help-wrapper">
+                <button type="button" class="help-trigger help-icon" aria-label="Help" data-help="name">?</button>
+                <span class="help-tooltip" id="help-name">Use the name of the overall workflow (e.g. “Whisky Manufacturing”, “Packaging Line”). You can change it later.</span>
+              </span>
+            </label>
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 1em; box-sizing: border-box;" placeholder="">
+            <p class="field-hint" style="color: var(--text-secondary); margin: 6px 0 0 0;">Example: <em>Whisky Manufacturing</em>, <em>Packaging Line</em></p>
           </div>
-          <div class="form-group">
-            <label class="form-label">Description</label>
-            <input type="text" name="description" class="form-input" placeholder="Brief description of the process">
+          <div>
+            <label class="field-label" style="display: block; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Description
+              <span class="help-wrapper">
+                <button type="button" class="help-trigger help-icon" aria-label="Help" data-help="description">?</button>
+                <span class="help-tooltip" id="help-description">A short summary helps others understand what this process does. Optional but useful for reports and onboarding.</span>
+              </span>
+            </label>
+            <input type="text" name="description" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 1em; box-sizing: border-box;" placeholder="">
+            <p class="field-hint" style="color: var(--text-secondary); margin: 6px 0 0 0;">Example: <em>Whisky Manufacturing</em> — end-to-end production from mashing to bottling. <em>Packaging Line</em> — filling, labelling, and palletising for finished goods.</p>
           </div>
-          <div class="form-group">
-            <label class="form-label">Category</label>
-            <select name="category" class="form-select">
+          <div>
+            <label class="field-label" style="display: block; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Category
+              <span class="help-wrapper">
+                <button type="button" class="help-trigger help-icon" aria-label="Help" data-help="category">?</button>
+                <span class="help-tooltip" id="help-category">Categories help you filter and report on processes (e.g. Manufacturing, Packaging). You can change this later.</span>
+              </span>
+            </label>
+            <select name="category" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 1em; box-sizing: border-box;">
+              <option value="manufacturing">Manufacturing</option>
+              <option value="chemical">Chemical</option>
+              <option value="packaging">Packaging</option>
+              <option value="assembly">Assembly</option>
+              <option value="other">Other</option>
+            </select>
+            <p class="field-hint" style="color: var(--text-secondary); margin: 6px 0 0 0;">Example: <em>Manufacturing</em> for production lines, <em>Packaging</em> for filling/labelling</p>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Create process</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Edit Process Modal -->
+  <div class="modal-overlay" id="edit-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Edit Process</h2>
+        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form onsubmit="return updateProcess(this)">
+        <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Process Name</label>
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Assembly Line C">
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Description</label>
+            <input type="text" name="description" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Brief description of the process">
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Category</label>
+            <select name="category" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
               <option value="manufacturing">Manufacturing</option>
               <option value="chemical">Chemical</option>
               <option value="packaging">Packaging</option>
@@ -395,40 +2885,121 @@
             </select>
           </div>
         </div>
-        <div class="modal-footer">
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
           <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Process</button>
+          <button type="submit" class="btn btn-primary">Update Process</button>
         </div>
       </form>
     </div>
   </div>
   
-  <!-- Add Inventory Modal -->
-  <div class="modal-overlay" id="add-inventory-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title">Add Raw Material</h2>
-        <button class="modal-close" data-modal-close>
+  <!-- Reset DB Confirmation Modal -->
+  <div class="modal-overlay" id="reset-db-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;" onclick="closeResetDbModal()">
+    <div class="card" style="max-width: 440px; width: 90%; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);" onclick="event.stopPropagation()">
+      <div style="display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px;">
+        <div style="flex-shrink: 0; width: 48px; height: 48px; border-radius: 12px; background: var(--bg-hover, rgba(0,0,0,0.05)); display: flex; align-items: center; justify-content: center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-secondary);">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+          </svg>
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <h2 style="font-size: 18px; font-weight: 600; color: var(--color-text-primary, #111827); margin: 0 0 8px 0;">Reset Demo Database</h2>
+          <p style="color: #111827; font-size: 14px; line-height: 1.5; margin: 0;">This will replace all processes, executions, and inventory for the demo user with fresh distillery sample data. This cannot be undone.</p>
+        </div>
+        <button type="button" onclick="closeResetDbModal()" style="padding: 6px; border: none; background: transparent; color: var(--text-tertiary, #9ca3af); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
       </div>
-      <form onsubmit="return addInventoryItem(this)">
-        <div class="modal-body">
-          <div class="form-group">
-            <label class="form-label">Material Name</label>
-            <input type="text" name="name" class="form-input" placeholder="e.g., Steel Rods" required>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closeResetDbModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="reset-db-confirm-btn" onclick="confirmResetDb()">Reset Database</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Delete Process Confirmation Modal -->
+  <div class="modal-overlay" id="delete-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Process</h2>
+        <button onclick="cancelDeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div style="margin-bottom: 24px;">
+        <p id="delete-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="cancelDeleteProcess()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmDeleteProcess()" style="background: var(--danger, #ef4444);">Delete</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Inventory Entry Hub: choose Manual / CSV / Barcode -->
+  <div class="modal-overlay" id="inventory-entry-hub-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card inventory-entry-hub-card" style="max-width: 420px; width: 95vw; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Add to Inventory</h2>
+        <button type="button" data-modal-close class="btn-icon-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 20px 0;">Choose how you want to add inventory.</p>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <button type="button" id="inventory-entry-manual-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
+          <span style="flex: 1;">Manual Entry</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <button type="button" id="inventory-entry-csv-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
+          <span style="flex: 1;">Upload CSV Template</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <button type="button" id="inventory-entry-scan-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
+          <span style="flex: 1;">Scan Barcode / Camera</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Inventory Modal (Manual Entry) -->
+  <div class="modal-overlay" id="add-inventory-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card" style="max-width: 500px; width: 95vw; padding: 24px; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Add Inventory Item</h2>
+        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form>
+        <input type="hidden" name="barcode" id="add-inventory-barcode-input" value="">
+        <div id="add-inventory-barcode-display-wrap" style="display: none; margin-bottom: 4px;">
+          <span style="font-size: 13px; color: var(--text-secondary);">Barcode: </span><span id="add-inventory-barcode-display" style="font-size: 13px; font-weight: 500; color: var(--text-primary);"></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
+            <input type="text" name="name" id="add-inventory-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Steel Rods">
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Quantity</label>
-              <input type="number" name="quantity" class="form-input" placeholder="0" required>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity</label>
+              <input type="number" name="quantity" required step="0.01" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="0">
             </div>
-            <div class="form-group">
-              <label class="form-label">Unit</label>
-              <select name="unit" class="form-select">
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit</label>
+              <select name="unit" id="add-inventory-unit" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
                 <option value="kg">Kilograms (kg)</option>
                 <option value="g">Grams (g)</option>
                 <option value="L">Liters (L)</option>
@@ -438,34 +3009,278 @@
               </select>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Supplier</label>
-            <input type="text" name="supplier" class="form-input" placeholder="Supplier name" required>
+          <div id="add-inventory-map-untracked-wrapper" style="display: none;">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Map to Untracked Item (optional)</label>
+            <select name="mapToUntrackedItemId" id="add-inventory-map-untracked-select" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="">— No mapping —</option>
+            </select>
+            <p id="add-inventory-untracked-hint" style="font-size: 12px; color: var(--text-secondary); margin-top: 6px; margin-bottom: 0;"></p>
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Purchase Date</label>
-              <input type="date" name="purchaseDate" class="form-input" required>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Category</label>
+            <select name="inventoryType" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="raw_material">Raw material</option>
+              <option value="work_in_progress">Intermediate</option>
+              <option value="final_product">Final product</option>
+            </select>
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Supplier (optional)</label>
+            <input type="text" name="supplier" id="add-inventory-supplier" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Supplier name">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Purchase Date (optional)</label>
+              <input type="date" name="purchaseDate" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
             </div>
-            <div class="form-group">
-              <label class="form-label">Batch Number (optional)</label>
-              <input type="text" name="batchNumber" class="form-input" placeholder="e.g., BN-2024-001">
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Batch Number (optional)</label>
+              <input type="text" name="batchNumber" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., BN-2024-001">
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Expiry Date (optional)</label>
-            <input type="date" name="expiryDate" class="form-input">
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Expiry Date (optional)</label>
+            <input type="date" name="expiryDate" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
           </div>
         </div>
-        <div class="modal-footer">
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" data-modal-close style="min-height: 44px;">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="min-height: 44px;">Add Inventory Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CSV Bulk Upload Inventory Modal -->
+  <div class="modal-overlay" id="csv-upload-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card csv-upload-modal-card" style="max-height: 90vh; display: flex; flex-direction: column; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Upload CSV</h2>
+        <button type="button" id="csv-upload-modal-close" data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px;">
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 4px 0; line-height: 1.5;">Keep the column headers in your file. The template includes an example row for reference—replace it with your own data or remove it before uploading.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+          <a id="csv-download-template" href="#" download="inventory_template.csv" class="btn btn-secondary" style="min-height: 44px;">Download Template</a>
+        </div>
+        <div id="csv-drop-zone" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 24px; text-align: center; background: var(--bg-subtle, #f9fafb); cursor: pointer; min-height: 80px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;">
+          <span style="color: var(--text-secondary); font-size: 14px;">Drop CSV here or</span>
+          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="csv-browse-btn" style="min-height: 44px;">Browse</button>
+        </div>
+        <div id="csv-preview-section" style="display: none; flex: 1; min-height: 0; flex-direction: column;">
+          <div class="csv-preview-wrap" style="border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: auto;">
+            <table class="csv-preview-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border-default);">
+                  <th style="text-align: left; padding: 10px 8px;">Status</th>
+                  <th style="text-align: left; padding: 10px 8px;">Item Name</th>
+                  <th style="text-align: left; padding: 10px 8px;">Quantity</th>
+                  <th style="text-align: left; padding: 10px 8px;">Unit</th>
+                  <th style="text-align: left; padding: 10px 8px;">Supplier</th>
+                </tr>
+              </thead>
+              <tbody id="csv-preview-tbody"></tbody>
+            </table>
+          </div>
+          <p id="csv-preview-summary" style="font-size: 13px; color: var(--text-secondary); margin: 8px 0 0 0;"></p>
+          <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px;">
+            <button type="button" class="btn btn-secondary" id="csv-back-btn" style="min-height: 44px;">Back</button>
+            <button type="button" class="btn btn-primary" id="csv-commit-btn" style="min-height: 44px;">Confirm Add to Inventory</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Barcode / Camera Scan Modal -->
+  <div class="modal-overlay" id="barcode-scan-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+    <div class="card" style="max-width: 520px; width: 95vw; max-height: 90vh; display: flex; flex-direction: column; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Scan Barcode</h2>
+        <button type="button" id="barcode-scan-modal-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="barcode-camera-viewport" style="width: 100%; aspect-ratio: 4/3; background: #000; border-radius: var(--radius-md); overflow: hidden; position: relative; display: none;">
+        <video id="barcode-video" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 12px;">
+        <button type="button" class="btn btn-primary" id="barcode-capture-btn" style="min-height: 44px; flex: 1;">Capture snapshot</button>
+      </div>
+      <p id="barcode-capture-status" style="font-size: 13px; color: var(--text-secondary); margin: 6px 0 0 0; min-height: 20px;">Point camera at barcode</p>
+      <p id="barcode-low-light-hint" style="display: none; font-size: 13px; color: var(--warning, #b45309); margin: 6px 0 0 0;">Lighting may be too low. Try moving closer to a light source.</p>
+      <div style="margin-top: 16px;">
+        <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Or enter barcode manually</label>
+        <input type="text" id="barcode-manual-input" placeholder="Enter barcode" style="width: 100%; padding: 12px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; min-height: 44px;">
+      </div>
+      <div id="barcode-result-preview" style="display: none; margin-top: 16px; padding: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-subtle, #f9fafb);">
+        <p style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Scanned: <span id="barcode-result-value"></span></p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Use the form below to add this item to inventory.</p>
+      </div>
+      <div style="margin-top: 16px; display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" id="barcode-scan-back-btn" style="min-height: 44px;">Back</button>
+        <button type="button" class="btn btn-primary" id="barcode-add-to-inventory-btn" style="min-height: 44px; display: none;">Add to Inventory</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dispose of inventory item modal: scrollable inventory cards, quantity per item, Waste entire item -->
+  <div class="modal-overlay" id="record-wastage-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 560px; width: 90%; padding: 24px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Dispose of inventory item</h2>
+        <button type="button" id="record-wastage-modal-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 16px 0; flex-shrink: 0;">Select item(s) and enter quantity to dispose. Quantity will be deducted from inventory; items at zero will no longer appear in stock.</p>
+      <div id="record-wastage-cards-container" class="guided-inventory-cards-stack" style="flex: 1; min-height: 0; max-height: 320px; overflow-y: auto; padding: 4px 0; display: flex; flex-direction: column; gap: 12px;">
+        <!-- Cards rendered by JS -->
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); flex-shrink: 0;">
+        <button type="button" class="btn btn-secondary" id="record-wastage-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="record-wastage-submit">Dispose of inventory item</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Edit Inventory Modal -->
+  <div class="modal-overlay" id="edit-inventory-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Edit Inventory Item</h2>
+        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form onsubmit="return updateInventoryItem(this)">
+        <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
+            <input type="text" name="name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Steel Rods">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity</label>
+              <input type="number" name="quantity" required step="0.01" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="0">
+            </div>
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit</label>
+              <select name="unit" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                <option value="kg">Kilograms (kg)</option>
+                <option value="g">Grams (g)</option>
+                <option value="L">Liters (L)</option>
+                <option value="mL">Milliliters (mL)</option>
+                <option value="units">Units</option>
+                <option value="pcs">Pieces</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Inventory Type</label>
+            <select name="inventoryType" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+              <option value="raw_material" selected>Raw Material</option>
+              <option value="work_in_progress">Work in Progress</option>
+              <option value="final_product">Final Product</option>
+            </select>
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Supplier (optional)</label>
+            <input type="text" name="supplier" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Supplier name">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Purchase Date (optional)</label>
+              <input type="date" name="purchaseDate" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Batch Number (optional)</label>
+              <input type="text" name="batchNumber" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., BN-2024-001">
+            </div>
+          </div>
+          <div>
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Expiry Date (optional)</label>
+            <input type="date" name="expiryDate" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
           <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
-          <button type="submit" class="btn btn-primary">Add Material</button>
+          <button type="submit" class="btn btn-primary">Update Inventory Item</button>
         </div>
       </form>
     </div>
   </div>
   
-  <script src="{{ url_for('static', filename='mockData.js') }}"></script>
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <!-- Delete Inventory Confirmation Modal -->
+  <div class="modal-overlay" id="delete-inventory-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Inventory Item</h2>
+        <button onclick="cancelDeleteInventory()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div style="margin-bottom: 24px;">
+        <p id="delete-inventory-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="cancelDeleteInventory()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmDeleteInventory()" style="background: var(--danger, #ef4444);">Delete</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Notification Toast (auto-dismissing) -->
+  <div id="notification-modal" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 10000; max-width: 400px; min-width: 300px; animation: slideInRight 0.3s ease-out;">
+    <div class="card" style="padding: 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12)); border: 1px solid var(--border-light, #e5e7eb);">
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div id="notification-icon" style="flex-shrink: 0; margin-top: 2px;">
+          <!-- Icon will be set by JavaScript -->
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
+          <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
+        </div>
+        <button onclick="closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <style>
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    #notification-modal {
+      animation: slideInRight 0.3s ease-out;
+    }
+  </style>
+  
+  <!-- Execute Step Modal (Shared) -->
+  {% include 'shared/execution-modal.html' %}
+  
+  <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
+  <script src="/ui/shared/sidebar-v2.js"></script>
 </body>
 </html>

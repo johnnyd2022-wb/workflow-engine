@@ -1,12 +1,12 @@
-Cursor Instructions — Fix core2.html Only
+Cursor Instructions — Fix core.html Only
 File Scope
 
-Modify only: app/core/frontend/core2.html
+Modify only: app/core/frontend/core.html
 Do not edit any JS, API, or backend files.
 
 Goal
 
-When a user creates a new process in core2.html:
+When a user creates a new process in core.html:
 
 Close the “Create Process” modal immediately
 
@@ -21,7 +21,7 @@ Never hang the page or mutate the DOM in a loop
 Required Fixes
 1. Remove the Source of the Hang (Mandatory)
 
-Delete entirely from core2.html:
+Delete entirely from core.html:
 
 All MutationObserver code
 
@@ -58,7 +58,7 @@ Do not rebind more than once
 
 3. Replace createNewProcess With an Optimistic UI Version
 
-In core2.html, replace the existing window.createNewProcess function with:
+In core.html, replace the existing window.createNewProcess function with:
 
 window.createNewProcess = function (form) {
   const formData = new FormData(form);
@@ -119,7 +119,7 @@ window.createNewProcess = function (form) {
   return false;
 };
 
-4. Add Optimistic Rendering Helpers (core2.html Only)
+4. Add Optimistic Rendering Helpers (core.html Only)
 
 Add the following helpers below renderProcessesV2 (do not modify renderProcessesV2 itself):
 
@@ -169,7 +169,7 @@ function renderSingleProcessCardV2(process) {
 }
 
 
-This must match the existing markup used elsewhere in core2.html.
+This must match the existing markup used elsewhere in core.html.
 
 Explicit Constraints (Must Not Be Violated)
 
@@ -199,4 +199,4 @@ CPU usage remains stable
 
 One-Line Summary for Cursor
 
-Fix core2.html by removing DOM cloning and mutation observers, binding the create-process form submit handler once, closing the modal immediately, and optimistically rendering the new process card before asynchronously saving it to the backend.
+Fix core.html by removing DOM cloning and mutation observers, binding the create-process form submit handler once, closing the modal immediately, and optimistically rendering the new process card before asynchronously saving it to the backend.
