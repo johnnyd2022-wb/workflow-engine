@@ -281,10 +281,7 @@
     // Auto-dismissing toast notification
     window.showNotification = function(type, title, message) {
       const modal = document.getElementById('notification-modal');
-      if (!modal) {
-        console.log(`${type}: ${title} - ${message}`);
-        return;
-      }
+      if (!modal) return;
       
       // Clear any existing timeout
       if (notificationTimeout) {
@@ -1792,7 +1789,7 @@
       }
     }
     
-    // Start execution
+    // Start execution: open step 1 modal without creating an execution; execution is created only when user clicks Complete step
     async function startExecution() {
       if (!processId) {
         showNotification('error', 'Error', 'No process ID available');
@@ -1800,42 +1797,17 @@
       }
 
       try {
-        const result = await CoreAPI.createExecution(processId);
-        const executionId = result.id || result.execution_id || result.execution?.id;
-        
-        showNotification('success', 'Execution Started', 'Execution started successfully!');
-        
-        // Reload executions
-        await loadExecutions();
-        
-        // Open step 1 modal immediately
-        if (executionId) {
-          try {
-            // Get full execution details to find step 1
-            const executionData = await CoreAPI.getExecution(executionId);
-            const executionSteps = executionData.execution_steps || [];
-            
-            // Find the ready step (should be step 1 for a new execution)
-            const readyStep = executionSteps.find(es => es.status === 'ready' || es.status === 'READY');
-            
-            if (readyStep) {
-              // Get the step definition from the process
-              const processData = await CoreAPI.getProcess(executionData.process_id);
-              const stepDefinition = processData.steps.find(s => s.id === readyStep.step_id);
-              
-              if (stepDefinition) {
-                // Open execution modal for step 1
-                openExecutionModal(executionId, readyStep, stepDefinition);
-              }
-            }
-          } catch (modalError) {
-            console.error('Failed to open step 1 modal:', modalError);
-            // Don't show error to user, just log it - execution was created successfully
-          }
+        const processData = await CoreAPI.getProcess(processId);
+        const steps = processData.steps || [];
+        const stepDefinition = steps[0];
+        if (!stepDefinition) {
+          showNotification('error', 'Error', 'Process has no steps.');
+          return;
         }
+        openExecutionModal(null, null, stepDefinition, { processId: processId });
       } catch (error) {
-        console.error('Failed to start execution:', error);
-        showNotification('error', 'Failed to Start Execution', error.message || 'Failed to start execution. Please try again.');
+        console.error('Failed to open execution modal:', error);
+        showNotification('error', 'Failed to Start Execution', error.message || 'Failed to open step. Please try again.');
       }
     }
     
