@@ -83,7 +83,16 @@
     // Store current execution context
     modal.dataset.executionId = executionId || '';
     modal.dataset.executionStepId = (executionStep && executionStep.id) ? executionStep.id : '';
-    
+    // Ensure Cancel/close removes document click listener for inventory dropdown (avoids listener leak)
+    var cancelBtn = modal.querySelector('button[onclick*="execute-step-modal"]');
+    if (cancelBtn && !cancelBtn._closeDropdownBound) {
+      cancelBtn._closeDropdownBound = true;
+      cancelBtn.addEventListener('click', function() {
+        if (modal._closeInventoryDropdown) {
+          try { modal._closeInventoryDropdown(); } finally { modal._closeInventoryDropdown = null; }
+        }
+      }, true);
+    }
     // Set step name
     const stepNameEl = modal.querySelector('#execute-step-name');
     if (stepNameEl) {
@@ -319,6 +328,8 @@
         const errorStyle = hasNoInventory ? 'border: 2px solid var(--error, #ef4444);' : '';
         const errorMessage = hasNoInventory ? `<p class="execute-input-no-inventory-warning" style="color: var(--error, #ef4444); font-size: 12px; margin-top: 4px; font-weight: 500;">⚠️ No matching inventory items found. Please add inventory before executing this step.</p>` : '';
         const safeInputName = (input.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const inventoryById = new Map();
+        allInventory.forEach(function(inv) { inventoryById.set(String(inv.id), inv); });
 
         inputSection.innerHTML = `
           <div class="execute-input-section-header" style="margin-bottom: 12px;">
@@ -413,7 +424,7 @@
 
         function isExpectedItem(invId) {
           if (!invId) return false;
-          var inv = allInventory.find(function(i) { return String(i.id) === String(invId); });
+          var inv = invId ? inventoryById.get(String(invId)) : null;
           if (!inv) return false;
           if (inputExpectsOutput()) {
             return itemIsOutput(inv) && String(inv.source_output_id) === String(input.source_output_id) && nameMatchesExact(inv.name);
@@ -425,7 +436,7 @@
           var el = rowEl ? rowEl.querySelector('.execute-input-unexpected-row-warning') : null;
           var sel = rowEl ? rowEl.querySelector('.execute-inventory-select') : null;
           var invId = sel && sel.value ? sel.value : null;
-          var inv = invId ? allInventory.find(function(i) { return String(i.id) === String(invId); }) : null;
+          var inv = invId ? inventoryById.get(String(invId)) : null;
           var unexpected = inv && isUnexpectedItem(inv);
           if (!el) return;
           if (!sel || !invId) {
@@ -482,7 +493,7 @@
           inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
             var sel = row.querySelector('.execute-inventory-select');
             if (sel && sel.value) {
-              var inv = allInventory.find(function(i) { return String(i.id) === String(sel.value); });
+              var inv = sel.value ? inventoryById.get(String(sel.value)) : null;
               if (inv && isUnexpectedItem(inv)) hasUnexpected = true;
             }
             updateRowUnexpectedWarning(row);
@@ -523,9 +534,11 @@
             updateUnexpectedMaterialWarning();
             return;
           }
-          const inv = allInventory.find(function(i) { return String(i.id) === String(invId); });
+          const inv = invId ? inventoryById.get(String(invId)) : null;
           if (inv && unitDisplay && quantityInput) {
-            quantityInput.value = inv.quantity != null && inv.quantity !== '' ? inv.quantity : quantityInput.value;
+            var expectedQty = parseFloat(input.quantity) || 0;
+            var invQty = inv.quantity != null && inv.quantity !== '' ? parseFloat(inv.quantity) : 0;
+            quantityInput.value = (expectedQty > 0 && invQty > 0) ? Math.min(expectedQty, invQty) : (inv.quantity != null && inv.quantity !== '' ? inv.quantity : quantityInput.value);
             quantityInput.dataset.originalQuantity = inv.quantity != null ? String(inv.quantity) : '';
             unitDisplay.textContent = inv.unit || '';
             quantityInput.dataset.inventoryUnit = inv.unit || '';
@@ -565,7 +578,7 @@
 
         function getInventorySelectionLabel(invId) {
           if (!invId) return 'Select inventory item...';
-          const inv = allInventory.find(function(i) { return String(i.id) === String(invId); });
+          const inv = inventoryById.get(String(invId));
           if (!inv) return 'Select inventory item...';
           const productName = inv.process_name ? escapeHtml(inv.process_name) + ' - ' + escapeHtml(inv.name) : escapeHtml(inv.name);
           return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
@@ -587,6 +600,7 @@
             modal._editingInputRow = null;
           }
           document.removeEventListener('click', closeInventoryDropdownOutside);
+          if (modal._closeInventoryDropdown === closeInventoryDropdown) modal._closeInventoryDropdown = null;
         }
         function closeInventoryDropdownOutside(e) {
           if (inputSection && !inputSection.contains(e.target)) closeInventoryDropdown();
@@ -798,6 +812,7 @@
         }
 
         function openDropdownForRow(rowEl) {
+          modal._closeInventoryDropdown = closeInventoryDropdown;
           modal._editingInputRow = rowEl;
           var isFirstRow = rowsContainer && rowsContainer.firstElementChild === rowEl;
           populateDropdownContent(rowEl);
@@ -1926,7 +1941,10 @@
         allow_consumption_override: allowConsumptionOverride || undefined
       });
       
-      // Close modal
+      // Close modal (clean up dropdown listener first)
+      if (modal._closeInventoryDropdown) {
+        try { modal._closeInventoryDropdown(); } finally { modal._closeInventoryDropdown = null; }
+      }
       modal.style.display = 'none';
       document.body.style.overflow = 'auto';
       
