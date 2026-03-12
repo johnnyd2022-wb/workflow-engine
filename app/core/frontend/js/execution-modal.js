@@ -70,6 +70,27 @@
       console.error('Execution modal not found');
       return;
     }
+    function showModal() {
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    function hideModal() {
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+    }
+    function clearModalSections() {
+      const inputsContainer = modal.querySelector('#execute-inputs-container');
+      const promptsContainer = modal.querySelector('#execute-prompts-container');
+      const outputsContainer = modal.querySelector('#execute-outputs-container');
+      const docsContainer = modal.querySelector('#execute-docs-container');
+      const docsSection = modal.querySelector('#execute-docs-section');
+      if (inputsContainer) inputsContainer.innerHTML = '';
+      if (promptsContainer) promptsContainer.innerHTML = '';
+      if (outputsContainer) outputsContainer.innerHTML = '';
+      if (docsContainer) docsContainer.innerHTML = '';
+      if (docsSection) docsSection.style.display = 'none';
+      return { inputsContainer, promptsContainer, outputsContainer, docsContainer, docsSection };
+    }
     options = options || {};
     var isDraft = executionId == null || executionStep == null;
     if (isDraft && options.processId) {
@@ -100,17 +121,7 @@
     }
     
     // Clear previous content
-    const inputsContainer = modal.querySelector('#execute-inputs-container');
-    const promptsContainer = modal.querySelector('#execute-prompts-container');
-    const outputsContainer = modal.querySelector('#execute-outputs-container');
-    const docsContainer = modal.querySelector('#execute-docs-container');
-    const docsSection = modal.querySelector('#execute-docs-section');
-    
-    if (inputsContainer) inputsContainer.innerHTML = '';
-    if (promptsContainer) promptsContainer.innerHTML = '';
-    if (outputsContainer) outputsContainer.innerHTML = '';
-    if (docsContainer) docsContainer.innerHTML = '';
-    if (docsSection) docsSection.style.display = 'none';
+    const { inputsContainer, promptsContainer, outputsContainer, docsContainer, docsSection } = clearModalSections();
     
     // Load inventory, expired/flagged, untracked, and step documentation in parallel
     const stepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
@@ -361,13 +372,25 @@
         const cardsContainer = inputSection.querySelector('.execute-inventory-picker-cards');
         if (dropdownSection) dropdownSection._executeInputSectionRef = inputSection;
         let rowIndex = 0;
+        if (!modal._inputStateByKey) modal._inputStateByKey = new Map();
 
         function createInputRow(isFirst) {
           const rowId = 'execute-input-row-' + safeInputName + '-' + rowIndex++;
+          const stateKey = safeInputName + '::' + rowId;
           const row = document.createElement('div');
           row.className = 'execute-input-row';
           row.id = rowId;
           row.dataset.inputName = input.name;
+          row.dataset.stateKey = stateKey;
+          if (!modal._inputStateByKey.has(stateKey)) {
+            modal._inputStateByKey.set(stateKey, {
+              input_name: input.name,
+              inventory_item_id: '',
+              quantity: input.quantity != null ? Number(input.quantity) : 0,
+              unit: input.unit || '',
+              expired_reason: '',
+            });
+          }
           row.innerHTML = `
             <div style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
               <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-quantity="" data-unit="" data-expired-reason="" value="">
@@ -391,6 +414,15 @@
             </div>
             ${!isFirst ? '<button type="button" class="execute-remove-input-row-btn btn btn-secondary btn-sm" style="margin-top: 8px; font-size: 12px;">Remove this input</button>' : ''}
           `;
+          var qtyInput = row.querySelector('.execute-quantity-input');
+          if (qtyInput) {
+            qtyInput.addEventListener('input', function() {
+              var st = modal._inputStateByKey.get(stateKey);
+              if (!st) return;
+              var q = parseFloat(qtyInput.value);
+              st.quantity = isNaN(q) ? 0 : q;
+            });
+          }
           return row;
         }
 
@@ -517,6 +549,8 @@
           const unitDisplay = rowEl.querySelector('.execute-quantity-unit-display');
           const expiredWarningEl = rowEl.querySelector('.execute-input-expired-warning');
           if (!hiddenInput) return;
+          var stateKey = rowEl.dataset.stateKey || '';
+          var st = stateKey ? modal._inputStateByKey.get(stateKey) : null;
           hiddenInput.value = invId || '';
           hiddenInput.dataset.quantity = '';
           hiddenInput.dataset.unit = '';
@@ -528,6 +562,13 @@
               quantityInput.value = input.quantity || '';
               quantityInput.dataset.originalQuantity = input.quantity || '';
               quantityInput.dataset.inventoryUnit = '';
+            }
+            if (st) {
+              st.inventory_item_id = '';
+              st.unit = (quantityInput && (quantityInput.dataset.stepUnit || input.unit)) || (input.unit || '');
+              st.expired_reason = '';
+              var qv = quantityInput ? parseFloat(quantityInput.value) : NaN;
+              st.quantity = isNaN(qv) ? 0 : qv;
             }
             if (expiredWarningEl) { expiredWarningEl.style.display = 'none'; expiredWarningEl.textContent = ''; }
             updateSectionQtyExpectedWarning();
@@ -548,6 +589,13 @@
             hiddenInput.dataset.unit = inv.unit || '';
             const reason = getExpiredReason(inv.id);
             hiddenInput.dataset.expiredReason = reason || '';
+            if (st) {
+              st.inventory_item_id = String(inv.id);
+              st.unit = inv.unit || '';
+              st.expired_reason = reason || '';
+              var q = quantityInput ? parseFloat(quantityInput.value) : NaN;
+              st.quantity = isNaN(q) ? 0 : q;
+            }
             if (reason && expiredWarningEl) {
               expiredWarningEl.textContent = 'Check: ' + reason;
               expiredWarningEl.style.display = 'block';
@@ -900,6 +948,8 @@
             var removeBtn = newRow.querySelector('.execute-remove-input-row-btn');
             if (removeBtn) {
               removeBtn.addEventListener('click', function() {
+                var stateKey = newRow.dataset.stateKey || '';
+                if (stateKey && modal._inputStateByKey) modal._inputStateByKey.delete(stateKey);
                 newRow.remove();
                 updateSectionQtyExpectedWarning();
                 updateUnexpectedMaterialWarning();
@@ -1550,8 +1600,7 @@
     }
     
     // Show modal
-    modal.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
+    showModal();
   };
   
   // ============================================================
@@ -1689,20 +1738,37 @@
     }
     
     var invList = modal._inventoryForSubmit || [];
+    var invById = new Map();
+    invList.forEach(function(i) { if (i && i.id != null) invById.set(String(i.id), i); });
     var notReadyUsed = [];
-    modal.querySelectorAll('.execute-input-row').forEach(function(row) {
-      var select = row.querySelector('.execute-inventory-select');
-      if (!select) return;
-      var invId = select.value;
-      if (!invId) return;
-      var item = invList.find(function(i) { return String(i.id) === String(invId); });
-      if (!item || !Array.isArray(item.system_findings)) return;
-      var finding = item.system_findings.find(function(f) { return f && f.check_id === 'output_ready_date'; });
-      if (finding) {
-        var inputName = select.dataset.inputName || 'Input';
-        notReadyUsed.push({ inputName: inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Not ready' });
-      }
-    });
+    var stateIter = (modal._inputStateByKey && modal._inputStateByKey.size > 0)
+      ? Array.from(modal._inputStateByKey.values())
+      : null;
+    if (stateIter) {
+      stateIter.forEach(function(st) {
+        if (!st || !st.inventory_item_id) return;
+        var item = invById.get(String(st.inventory_item_id));
+        if (!item || !Array.isArray(item.system_findings)) return;
+        var finding = item.system_findings.find(function(f) { return f && f.check_id === 'output_ready_date'; });
+        if (finding) {
+          notReadyUsed.push({ inputName: st.input_name || 'Input', itemName: item.name || 'Unknown', reason: finding.reason || 'Not ready' });
+        }
+      });
+    } else {
+      modal.querySelectorAll('.execute-input-row').forEach(function(row) {
+        var select = row.querySelector('.execute-inventory-select');
+        if (!select) return;
+        var invId = select.value;
+        if (!invId) return;
+        var item = invById.get(String(invId));
+        if (!item || !Array.isArray(item.system_findings)) return;
+        var finding = item.system_findings.find(function(f) { return f && f.check_id === 'output_ready_date'; });
+        if (finding) {
+          var inputName = select.dataset.inputName || 'Input';
+          notReadyUsed.push({ inputName: inputName, itemName: item.name || 'Unknown', reason: finding.reason || 'Not ready' });
+        }
+      });
+    }
     var allowConsumptionOverride = false;
     if (notReadyUsed.length > 0) {
       var confirmed = typeof window.showReadyDateConfirmModal === 'function'
@@ -1713,23 +1779,35 @@
     }
 
     try {
-      // Collect variable inputs from all input rows (multiple rows per step input allowed)
+      // Collect variable inputs from state (preferred) or DOM (fallback)
       const actualInputs = [];
-      modal.querySelectorAll('.execute-input-row').forEach(row => {
-        const select = row.querySelector('.execute-inventory-select');
-        const quantityInput = row.querySelector('.execute-quantity-input');
-        if (!select || !quantityInput) return;
-        const inventoryId = select.value;
-        if (!inventoryId) return;
-        const quantity = parseFloat(quantityInput.value);
-        const unit = select.dataset.unit || '';
-        actualInputs.push({
-          name: select.dataset.inputName,
-          inventory_item_id: inventoryId,
-          quantity: isNaN(quantity) ? 0 : quantity,
-          unit: unit
+      if (modal._inputStateByKey && modal._inputStateByKey.size > 0) {
+        Array.from(modal._inputStateByKey.values()).forEach(function(st) {
+          if (!st || !st.inventory_item_id) return;
+          actualInputs.push({
+            name: st.input_name,
+            inventory_item_id: st.inventory_item_id,
+            quantity: st.quantity != null ? st.quantity : 0,
+            unit: st.unit || ''
+          });
         });
-      });
+      } else {
+        modal.querySelectorAll('.execute-input-row').forEach(row => {
+          const select = row.querySelector('.execute-inventory-select');
+          const quantityInput = row.querySelector('.execute-quantity-input');
+          if (!select || !quantityInput) return;
+          const inventoryId = select.value;
+          if (!inventoryId) return;
+          const quantity = parseFloat(quantityInput.value);
+          const unit = select.dataset.unit || '';
+          actualInputs.push({
+            name: select.dataset.inputName,
+            inventory_item_id: inventoryId,
+            quantity: isNaN(quantity) ? 0 : quantity,
+            unit: unit
+          });
+        });
+      }
       
       // Collect confirm inputs (editable quantity/unit)
       const confirmQuantityInputs = modal.querySelectorAll('.execute-confirm-quantity-input');
