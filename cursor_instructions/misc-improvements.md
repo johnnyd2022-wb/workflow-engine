@@ -1,256 +1,311 @@
-1. Execution Data Split Refactor (Excellent)
-
-Your new helpers:
-
-_EXECUTION_DATA_TRACE_KEYS
-_to_iso_timestamp()
-_split_execution_data()
-
-This is exactly the right refactor.
-
-Why this is strong
-
-You eliminated duplication in:
-
-complete_step
-
-list_inventory
-
-previous step metadata reconstruction
-
-Before:
-
-~70 duplicated lines
-3 locations
-
-Now:
-
-execution_prompts, execution_trace = _split_execution_data(...)
-
-This gives you a single contract for execution metadata.
-
-Small Improvement (Optional)
-
-Right now:
-
-if isinstance(ts, str):
-    return ts
-
-This assumes the string is already ISO.
-
-Safer:
-
-try:
-    datetime.fromisoformat(ts)
-    return ts
-except:
-    return str(ts)
-
-Not necessary but prevents bad formats entering the system.
-
-2. Inventory Consumption Logic (Much Improved)
-
-The new logic:
-
-conversion_failed = False
-
-and
-
-if conversion_failed:
-    continue
-
-is the correct fix for the partial-conversion issue.
-
-The flow is now deterministic:
-
-aggregate -> validate conversions -> validate quantity -> apply update
-
-Good.
-
-Unit Enforcement Fix (Correct)
-
-You added:
-
-if inventory_unit and not (consumed_unit or "").strip():
-
-This prevents silent unit mismatch.
-
-That closes a real bug class like:
-
-inventory: 5 kg
-consume: 2
-
-Previously allowed.
-
-Good fix.
-
-3. Decimal Storage Fix (Correct)
-
-You changed:
-
-formatted_qty
-
-to
-
-inventory_updates.append((inventory_item, new_quantity))
-
-This is the correct persistence model.
-
-Numeric columns should receive numeric types.
-
-Display formatting belongs at API/UI boundaries.
-
-4. Transaction Safety Clarification
-
-You added documentation:
-
-# TRANSACTION INTEGRITY: This function must run in a single DB transaction
-
-Good documentation.
-
-But the real guarantee still depends on:
-
-session.commit()
-
-occurring after inventory_updates applied.
-
-Assuming your repo pattern looks like:
-
-for item, qty in inventory_updates:
-    item.quantity = qty
-
-db_session.commit()
-
-then the SELECT FOR UPDATE protection works correctly.
-
-5. Frontend Performance Fix (Very Good)
+1. Modal Lifecycle Refactor (Good)
 
 You introduced:
 
-const inventoryById = new Map();
+showModal()
+hideModal()
+clearModalSections()
 
-and replaced:
-
-allInventory.find(...)
-
-with:
-
-inventoryById.get(...)
-
-This is a major performance improvement.
+This is a good separation of concerns.
 
 Before:
 
-O(n²)
+modal display logic
+modal clearing
+modal rendering
+
+were interwoven.
 
 Now:
 
-O(n)
+modal lifecycle
+    ↓
+clear UI
+    ↓
+render sections
 
-This matters if inventories grow large (1000+ batches).
+This reduces bugs where stale UI elements persist between executions.
 
-Good engineering instinct here.
+One small improvement:
 
-6. Dropdown Listener Leak Fix (Good Catch)
+function hideModal() {
+  modal.style.display = 'none';
+  document.body.style.overflow = 'auto';
+
+  if (modal._inputStateByKey) modal._inputStateByKey.clear();
+}
+
+Otherwise stale state can persist between executions if the modal is reused.
+
+2. Moving Input State Out of the DOM (Major Improvement)
+
+This is the most important change you made:
+
+modal._inputStateByKey = new Map()
+
+Each row now has:
+
+row.dataset.stateKey
+
+and the state lives here:
+
+{
+  input_name,
+  inventory_item_id,
+  quantity,
+  unit,
+  expired_reason
+}
+Why this is a big upgrade
+
+Previously the source of truth was:
+
+DOM inputs
+hidden dataset attributes
+querySelector lookups
+
+Problems with that model:
+
+fragile
+slow
+hard to validate
+hard to diff changes
+
+Now you have:
+
+State → UI
+
+instead of
+
+UI → State
+
+This is essentially a mini React-style state model, implemented manually.
+
+Excellent direction.
+
+3. Deterministic Submission Logic
+
+This block is very good:
+
+var stateIter = (modal._inputStateByKey && modal._inputStateByKey.size > 0)
+
+Meaning:
+
+prefer state
+fallback to DOM
+
+This protects you from:
+
+partial migrations
+future UI refactors
+
+Good defensive coding.
+
+4. Input Row State Initialization
+
+Inside createInputRow:
+
+if (!modal._inputStateByKey.has(stateKey)) {
+
+You correctly prevent overwriting existing state.
+
+This matters for cases like:
+
+inventory selected
+user edits quantity
+dropdown re-renders
+state preserved
+
+Without this guard you'd lose the state.
+
+Good.
+
+5. Quantity Input Sync
 
 You added:
 
-modal._closeInventoryDropdown
+qtyInput.addEventListener('input', function() {
+  var st = modal._inputStateByKey.get(stateKey);
+  var q = parseFloat(qtyInput.value);
+  st.quantity = isNaN(q) ? 0 : q;
+});
 
-and cleanup logic in:
+This is correct.
 
-cancel
-submit
+But one small improvement:
 
-Plus:
+if (!Number.isFinite(q)) q = 0;
 
-document.removeEventListener('click', closeInventoryDropdownOutside);
+parseFloat() can return Infinity in weird cases.
 
-This prevents a classic bug where:
+Not critical but safer.
 
-modal opens
-listener attaches
-modal closes
-listener survives
+6. State Updates on Inventory Selection (Good)
 
-Good lifecycle management.
+When selecting inventory:
 
-7. Quantity Autofill Improvement (Good UX Change)
+st.inventory_item_id = String(inv.id)
+st.unit = inv.unit
+st.expired_reason = reason
 
-You changed:
+This keeps state consistent.
 
-quantityInput.value = inv.quantity
+Good.
 
-to:
+But one improvement:
 
-Math.min(expectedQty, invQty)
+st.unit = inv.unit || st.unit
 
-This is exactly the correct default.
+If inventory unit is empty you currently overwrite the step unit.
 
-Example:
+7. Remove Row Cleanup (Correct)
 
-Expected: 2kg
-Batch: 50kg
+You correctly added:
+
+modal._inputStateByKey.delete(stateKey)
+
+Without this you'd accumulate orphan state objects.
+
+Good catch.
+
+8. Ready Date Validation Refactor (Nice)
+
+This block is much cleaner:
+
+stateIter.forEach(function(st) {
 
 Before:
 
-50kg auto-consumed
+scan DOM rows
+query selectors
+dataset parsing
 
 Now:
 
-2kg suggested
+iterate state objects
 
-Much safer for operators.
+Much faster and less fragile.
 
-8. Execution Metadata Consistency
+9. Inventory Indexing for Submission (Good)
 
-Your _split_execution_data() now ensures:
+You introduced:
 
-execution_trace.completed_at → ISO string
+var invById = new Map()
 
-That means the frontend can rely on:
+This avoids repeated scans when checking:
 
-string timestamp always
+system_findings
+ready date checks
 
-This prevents bugs in:
+Good consistency with earlier Map optimization.
 
-Date parsing
-sorting
-display formatting
+10. A Subtle Bug: State Not Cleared When Modal Opens
 
-Good data contract design.
+You initialize:
 
-9. One Minor Backend Edge Case
+if (!modal._inputStateByKey) modal._inputStateByKey = new Map();
+
+But if the modal opens twice:
+
+old state remains
+
+This can cause phantom inputs during submission.
+
+Better:
+
+modal._inputStateByKey = new Map();
+
+when starting the modal.
+
+You can do this right after:
+
+clearModalSections()
+11. Minor Edge Case in Submission
 
 Inside:
 
-total_converted += converted
+quantity: st.quantity != null ? st.quantity : 0
 
-You assume converted always exists when reaching this line.
+If user clears the input field:
 
-That is true given current logic, but future refactors might break this.
+'' → NaN → stored as 0
 
-Safer:
+This might allow silent zero consumption.
 
-if converted is not None:
-    total_converted += converted
+Safer option:
 
-Not required now — just defensive.
+if (!Number.isFinite(st.quantity) || st.quantity <= 0) return;
 
-10. One Minor Frontend Safety Check
+so only valid quantities submit.
 
-This line:
+12. Performance Improvements from This Change
 
-quantityInput.dataset.originalQuantity = inv.quantity != null ? String(inv.quantity) : '';
+You likely improved:
 
-Later validation uses:
+Before
 
-parseFloat(dataset.originalQuantity)
+Submission logic:
 
-If '' is stored it returns NaN.
+querySelectorAll
+querySelector
+dataset reads
+parseFloat
 
-Safer default:
+For every row.
 
-: '0'
+Complexity:
 
-Not critical, but prevents edge NaN paths.
+O(rows × DOM queries)
+Now
+
+Submission:
+
+Map iteration
+object reads
+
+Complexity:
+
+O(rows)
+
+DOM queries are orders of magnitude slower than JS object access.
+
+13. Code Quality Score
+Area	Rating
+State management	9/10
+UI determinism	9/10
+Performance	9/10
+Robustness	8.5/10
+
+This modal is now much closer to SPA-quality UI architecture.
+
+14. One Architectural Suggestion (Big Future Win)
+
+Right now state looks like:
+
+Map(stateKey → inputState)
+
+You could make it even simpler:
+
+modal._inputs = [
+  {
+    input_name,
+    inventory_item_id,
+    quantity,
+    unit
+  }
+]
+
+And rows just store:
+
+row.dataset.index
+
+Benefits:
+
+simpler iteration
+ordered inputs
+easier validation
+simpler submission payload
+
+Maps are great for lookup but arrays are better for ordered form state.
+
+Not required — just a future improvement.

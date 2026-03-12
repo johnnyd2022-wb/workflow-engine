@@ -122,6 +122,8 @@
     
     // Clear previous content
     const { inputsContainer, promptsContainer, outputsContainer, docsContainer, docsSection } = clearModalSections();
+    // Reset per-open variable input state to avoid phantom submissions across modal sessions
+    modal._inputStateByKey = new Map();
     
     // Load inventory, expired/flagged, untracked, and step documentation in parallel
     const stepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
