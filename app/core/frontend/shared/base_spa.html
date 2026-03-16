@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Flume Workflow Engine{% endblock %}</title>
+
+  {# Core styles & fonts #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  {# Page-level head customisation #}
+  {% block head_extras %}{% endblock %}
+
+  <style>
+    /* SPA page-content fade transitions */
+    #page-content {
+      transition: opacity 0.15s ease;
+    }
+
+    body.htmx-request-loading #page-content {
+      opacity: 0.5;
+    }
+
+    .htmx-indicator {
+      position: fixed;
+      inset-inline-end: 16px;
+      inset-block-start: 16px;
+      z-index: 1200;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      color: #f9fafb;
+      font-size: 12px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .htmx-indicator.htmx-request {
+      display: inline-flex;
+    }
+  </style>
+</head>
+<body
+  hx-boost="true"
+  hx-target="#page-content"
+  hx-push-url="true"
+  x-data
+>
+  <div class="app-layout">
+    {% include 'shared/sidebar-v2.html' %}
+
+    <div class="main-content">
+      <header class="main-header">
+        {% block topbar %}
+        <div>
+          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">
+            Supply Chain Management
+          </h1>
+          <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">
+            Manage and monitor all your operational workflows
+          </p>
+        </div>
+        {% endblock %}
+      </header>
+
+      {% include 'shared/system-findings-banner.html' %}
+
+      <main id="page-content" class="page-content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <div id="loading-indicator" class="htmx-indicator">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10" opacity="0.25"></circle>
+      <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round">
+        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite" />
+      </path>
+    </svg>
+    <span>Loading…</span>
+  </div>
+
+  {# Core JS and shared behaviour #}
+  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
+  <script src="/ui/shared/account-info.js"></script>
+  <script src="/ui/shared/sidebar-v2.js"></script>
+
+  {# HTMX & Alpine for SPA-style navigation and local UI state #}
+  <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-7A+ZrEKeBdJo24fSH9vZzxZX5NqGQ5F+Pp9v0K+t1D3uD7p7qCkKqbvVynQ0LZ87" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/head-support.js"></script>
+  <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+  <script>
+    // Global HTMX indicator wiring
+    document.body.addEventListener('htmx:configRequest', function (evt) {
+      const indicator = document.getElementById('loading-indicator');
+      if (indicator) {
+        evt.detail.elt.setAttribute('hx-indicator', '#loading-indicator');
+      }
+    });
+  </script>
+
+  {# Page-specific scripts go here #}
+  {% block scripts %}{% endblock %}
+</body>
+</html>
+
