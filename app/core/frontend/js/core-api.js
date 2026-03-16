@@ -1,6 +1,6 @@
 // Core API client for connecting frontend to backend
 
-const CoreAPI = {
+window.CoreAPI = window.CoreAPI || {
     baseURL: '/api/core',
     
     async request(endpoint, options = {}) {

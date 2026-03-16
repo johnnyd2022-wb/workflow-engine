@@ -139,6 +139,34 @@ def core():
     return render_template("core2.html", active_page="core", show_reset_db=show_reset_db)
 
 
+@core_bp.route("/core/inventory/add", methods=["GET"])
+@requires_auth
+def inventory_add_hub():
+    """Inventory entry hub: choose manual / CSV / barcode."""
+    return render_template("inventory/add.html", active_page="core")
+
+
+@core_bp.route("/core/inventory/add/manual", methods=["GET"])
+@requires_auth
+def inventory_add_manual():
+    """Add inventory via manual single-item form."""
+    return render_template("inventory/add_manual.html", active_page="core")
+
+
+@core_bp.route("/core/inventory/add/csv", methods=["GET"])
+@requires_auth
+def inventory_add_csv():
+    """Add or update inventory in bulk via CSV upload."""
+    return render_template("inventory/add_csv.html", active_page="core")
+
+
+@core_bp.route("/core/inventory/add/barcode", methods=["GET"])
+@requires_auth
+def inventory_add_barcode():
+    """Add inventory via barcode / camera scan."""
+    return render_template("inventory/add_barcode.html", active_page="core")
+
+
 @core_bp.route("/core/flows", methods=["GET"])
 @requires_auth
 def flows():

@@ -67,8 +67,6 @@
         {% endblock %}
       </header>
 
-      {% include 'shared/system-findings-banner.html' %}
-
       <main id="page-content" class="page-content">
         {% block content %}{% endblock %}
       </main>
@@ -92,8 +90,7 @@
   <script src="/ui/shared/sidebar-v2.js"></script>
 
   {# HTMX & Alpine for SPA-style navigation and local UI state #}
-  <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-7A+ZrEKeBdJo24fSH9vZzxZX5NqGQ5F+Pp9v0K+t1D3uD7p7qCkKqbvVynQ0LZ87" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/head-support.js"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous"></script>
   <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
   <script>

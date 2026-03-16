@@ -1,0 +1,21 @@
+{% macro page_header(title, subtitle="", primary_action_href="", primary_action_label="", primary_action_icon="") %}
+  <div class="page-header">
+    <div class="page-header-content">
+      <h1 class="page-title">{{ title }}</h1>
+      {% if subtitle %}
+        <p class="page-subtitle">{{ subtitle }}</p>
+      {% endif %}
+    </div>
+    {% if primary_action_href and primary_action_label %}
+      <div class="page-header-actions">
+        <a href="{{ primary_action_href }}" class="btn btn-primary">
+          {% if primary_action_icon %}
+            {{ primary_action_icon | safe }}
+          {% endif %}
+          <span>{{ primary_action_label }}</span>
+        </a>
+      </div>
+    {% endif %}
+  </div>
+{% endmacro %}
+
