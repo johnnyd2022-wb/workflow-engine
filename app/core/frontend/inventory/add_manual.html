@@ -11,13 +11,7 @@
     {% import "shared/back_link.html" as back %}
     {% from "shared/primary_card.html" import primary_card %}
 
-    <a href="/core/inventory/add" class="back-link" hx-boost="false">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="19" y1="12" x2="5" y2="12"/>
-        <polyline points="12 19 5 12 12 5"/>
-      </svg>
-      <span>Back to Add Inventory</span>
-    </a>
+    {{ back.back_link("/core/inventory/add", "Back to Add Inventory") }}
 
     {% call primary_card(
       title="Add Inventory Manually",
@@ -86,7 +80,7 @@
           </div>
         </div>
         <div style="display: flex; gap: 12px; justify-content: flex-end;">
-          <a href="/core/inventory/add" hx-boost="false" class="btn btn-secondary" style="min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">
+          <a href="/core/inventory/add" class="btn btn-secondary" style="min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">
             Cancel
           </a>
           <button type="submit" class="btn btn-primary" style="min-height: 44px;">Add Inventory Item</button>

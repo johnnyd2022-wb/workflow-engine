@@ -47,6 +47,7 @@
 <body
   hx-boost="true"
   hx-target="#page-content"
+  hx-select="#page-content"
   hx-push-url="true"
   x-data
 >
@@ -94,11 +95,18 @@
   <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
   <script>
-    // Global HTMX indicator wiring
+    // Global HTMX wiring
     document.body.addEventListener('htmx:configRequest', function (evt) {
       const indicator = document.getElementById('loading-indicator');
       if (indicator) {
         evt.detail.elt.setAttribute('hx-indicator', '#loading-indicator');
+      }
+    });
+
+    // Ensure consistent scroll position when #page-content is swapped
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+      if (evt.detail && evt.detail.target && evt.detail.target.id === 'page-content') {
+        window.scrollTo(0, 0);
       }
     });
   </script>
