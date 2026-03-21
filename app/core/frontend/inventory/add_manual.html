@@ -104,22 +104,16 @@
         </div>
 
         <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
-          <a href="/core/inventory/add" class="btn btn-secondary" style="min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">
-            Cancel
-          </a>
           <button type="submit" class="btn btn-primary" style="min-height: 44px;">Add Inventory Item</button>
         </div>
       </form>
     {% endcall %}
   </div>
-{% endblock %}
-
-{% block scripts %}
-  {{ super() }}
   <script>
     (function() {
       const form = document.getElementById('add-inventory-form');
-      if (!form) return;
+      if (!form || form.getAttribute('data-add-manual-spa-init') === '1') return;
+      form.setAttribute('data-add-manual-spa-init', '1');
 
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -178,4 +172,8 @@
       });
     })();
   </script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
 {% endblock %}
