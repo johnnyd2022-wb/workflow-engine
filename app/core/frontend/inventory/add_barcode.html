@@ -19,14 +19,144 @@
 
     {% call primary_card(
       title="Add Inventory via Barcode",
-      subtitle="Scan a barcode or enter it manually, then confirm the item details before adding to inventory."
+      subtitle="Scan or enter a barcode, then complete the item details below."
     ) %}
-      <div class="spa-card-form">
-        <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
-          This screen will replace the previous barcode modal flow with a full, routeable page.
-        </p>
-        <!-- TODO: migrate existing barcode scan UI and behaviour from core2.html modal into this page -->
+      <div class="spa-card-form" id="barcode-spa-root">
+        <div id="barcode-step-scan">
+          <section class="spa-form-section" aria-labelledby="barcode-spa-scan-heading">
+            <h3 id="barcode-spa-scan-heading" class="spa-form-section-title">Scan</h3>
+            <p id="barcode-no-camera-msg" style="display: none; font-size: 0.875rem; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
+              No camera was detected on this device. Enter the barcode manually below, then continue.
+            </p>
+
+            <div id="barcode-camera-panel" style="display: none;">
+              <div id="barcode-camera-viewport" style="width: 100%; aspect-ratio: 4/3; background: #000; border-radius: var(--radius-lg); overflow: hidden; position: relative; display: none;">
+                <video id="barcode-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+              </div>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <button type="button" class="btn btn-primary" id="barcode-capture-btn" style="min-height: 44px; flex: 1;">Capture snapshot</button>
+              </div>
+              <p id="barcode-capture-status" style="font-size: 0.8125rem; color: var(--text-secondary); margin: 6px 0 0 0; min-height: 20px;">Point camera at barcode</p>
+              <p id="barcode-low-light-hint" style="display: none; font-size: 0.8125rem; color: var(--warning, #b45309); margin: 6px 0 0 0;">Lighting may be too low. Try moving closer to a light source.</p>
+            </div>
+          </section>
+
+          <section class="spa-form-section" aria-labelledby="barcode-spa-manual-heading">
+            <h3 id="barcode-spa-manual-heading" class="spa-form-section-title">Or enter manually</h3>
+            <div>
+              <label class="spa-field-label" for="barcode-manual-input">Barcode</label>
+              <input type="text" id="barcode-manual-input" class="spa-inp" placeholder="Enter barcode" autocomplete="off" inputmode="numeric">
+            </div>
+          </section>
+
+          <div id="barcode-result-preview" style="display: none; margin-top: 4px; padding: 14px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-subtle, #f9fafb);">
+            <p style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Code: <span id="barcode-result-value"></span></p>
+            <p style="font-size: 0.8125rem; color: var(--text-secondary); margin: 0;">Tap Continue to look up this barcode and fill the form.</p>
+          </div>
+
+          <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-primary" id="barcode-continue-btn" style="min-height: 44px;" disabled>Continue</button>
+          </div>
+        </div>
+
+        <div id="barcode-step-form" style="display: none;" x-data="{ advancedOpen: false }">
+          <p style="margin: 0 0 16px 0;">
+            <button type="button" class="btn btn-secondary" id="barcode-change-code-btn" style="min-height: 44px;">← Change barcode</button>
+          </p>
+
+          <form id="barcode-add-inventory-form" class="spa-card-form">
+            <input type="hidden" name="barcode" id="barcode-inv-barcode-input" value="">
+
+            <section class="spa-form-section" aria-labelledby="barcode-inv-section-basic">
+              <h3 id="barcode-inv-section-basic" class="spa-form-section-title">Basic Information</h3>
+              <div>
+                <label class="spa-field-label" for="barcode-inv-name">Item name</label>
+                <input type="text" name="name" id="barcode-inv-name" required class="spa-inp" placeholder="e.g., Steel Rods">
+              </div>
+              <div>
+                <label class="spa-field-label" for="barcode-inv-quantity">Quantity</label>
+                <input type="number" name="quantity" id="barcode-inv-quantity" required step="0.01" class="spa-inp" placeholder="0">
+              </div>
+              <div>
+                <label class="spa-field-label" for="barcode-inv-unit">Unit</label>
+                <select name="unit" id="barcode-inv-unit" required class="spa-inp">
+                  <option value="kg">Kilograms (kg)</option>
+                  <option value="g">Grams (g)</option>
+                  <option value="L">Liters (L)</option>
+                  <option value="mL">Milliliters (mL)</option>
+                  <option value="units">Units</option>
+                  <option value="pcs">Pieces</option>
+                </select>
+              </div>
+            </section>
+
+            <section class="spa-form-section" aria-labelledby="barcode-inv-section-source">
+              <h3 id="barcode-inv-section-source" class="spa-form-section-title">Source</h3>
+              <div>
+                <label class="spa-field-label" for="barcode-inv-supplier">Supplier <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+                <input type="text" name="supplier" id="barcode-inv-supplier" class="spa-inp" placeholder="Who supplied this stock?">
+              </div>
+              <div id="barcode-inv-barcode-display-wrap" style="display: none;">
+                <span class="spa-field-label">Barcode</span>
+                <span id="barcode-inv-barcode-display" style="display: block; font-size: 0.9375rem; font-weight: 500; color: var(--text-primary); line-height: 1.45; margin-top: 4px;"></span>
+              </div>
+            </section>
+
+            <section id="barcode-inv-map-untracked-wrapper" class="spa-form-section spa-form-section--reconciliation" style="display: none;" aria-live="polite" aria-labelledby="barcode-inv-section-reconciliation">
+              <h3 id="barcode-inv-section-reconciliation" class="spa-form-section-title">Reconciliation</h3>
+              <p class="spa-reconciliation-intro">When untracked stock matches this item, map it here so system balances stay accurate.</p>
+              <div>
+                <label class="spa-field-label" for="barcode-inv-map-untracked-select">Map to untracked item <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+                <select name="mapToUntrackedItemId" id="barcode-inv-map-untracked-select" class="spa-inp">
+                  <option value="">— No mapping —</option>
+                </select>
+                <p id="barcode-inv-untracked-hint" style="font-size: 12px; color: var(--text-secondary); margin-top: 8px; margin-bottom: 0;"></p>
+              </div>
+            </section>
+
+            <button
+              type="button"
+              class="spa-advanced-toggle"
+              @click="advancedOpen = !advancedOpen"
+              role="switch"
+              :aria-checked="advancedOpen ? 'true' : 'false'"
+            >
+              <span class="spa-advanced-toggle__label spa-form-section-title">Compliance &amp; Traceability</span>
+              <span
+                class="spa-advanced-toggle__track"
+                :class="{ 'spa-advanced-toggle__track--on': advancedOpen }"
+                aria-hidden="true"
+              >
+                <span class="spa-advanced-toggle__thumb"></span>
+              </span>
+            </button>
+
+            <div x-show="advancedOpen" x-cloak x-transition class="spa-advanced-fields spa-form-section">
+              <div>
+                <label class="spa-field-label" for="barcode-inv-batch">Batch number <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+                <input type="text" name="batchNumber" id="barcode-inv-batch" class="spa-inp" placeholder="e.g., BN-2024-001">
+              </div>
+              <div>
+                <label class="spa-field-label" for="barcode-inv-purchase">Purchase date <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+                <input type="date" name="purchaseDate" id="barcode-inv-purchase" class="spa-inp">
+              </div>
+              <div>
+                <label class="spa-field-label" for="barcode-inv-expiry">Expiry date <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+                <input type="date" name="expiryDate" id="barcode-inv-expiry" class="spa-inp">
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
+              <button type="submit" class="btn btn-primary" style="min-height: 44px;">Add Inventory Item</button>
+            </div>
+          </form>
+        </div>
       </div>
     {% endcall %}
   </div>
+  <script src="{{ url_for('core.serve_core_js', filename='inventory-barcode-spa.js') }}"></script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
 {% endblock %}

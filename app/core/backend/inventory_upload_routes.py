@@ -132,6 +132,7 @@ def register_routes(bp):
                     "name": existing.name,
                     "unit": existing.unit,
                     "supplier": existing.supplier or "",
+                    "quantity": existing.quantity,
                 },
             }
         ), 200
