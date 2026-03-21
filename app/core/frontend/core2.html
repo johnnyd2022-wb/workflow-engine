@@ -1403,7 +1403,8 @@
           if (typeof loadInventoryV2 === 'function') loadInventoryV2();
         }
         if (res.errors && res.errors.length) {
-          showNotification('warning', 'Some rows failed', res.errors.length + ' row(s) could not be added.');
+          var warnDetail = res.error || (res.errors.length + ' row(s) could not be added.');
+          showNotification('warning', 'Some rows failed', warnDetail);
         }
       }).catch(function(err) {
         showNotification('error', 'Upload failed', err.message || 'Could not add inventory.');

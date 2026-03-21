@@ -18,7 +18,7 @@ from flask import g, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
-from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.unit_conversion import CONVERSION_FACTORS, UNIT_DISPLAY_LABELS
@@ -155,7 +155,8 @@ def register_routes(bp):
         - Unit: required, must be in allowed list (see unit_conversion.CONVERSION_FACTORS).
         - Optional columns: Supplier Name, Purchase Date, Batch Number, Expiry Date.
         - Dates: parsed as YYYY-MM-DD, DD/MM/YYYY, or MM/DD/YYYY; invalid dates left empty.
-        - On commit (csv_commit): same checks re-applied; duplicate batch (same org + name + batch number) rejected.
+        - On commit (csv_commit): same checks re-applied; duplicate batch (same org + name + batch number)
+          skips that row; other rows still commit (see csv_commit).
         """
         file = request.files.get("file")
         raw = request.get_data(as_text=True) if not file else None
@@ -240,7 +241,10 @@ def register_routes(bp):
     @bp.route("/api/core/inventory/csv-commit", methods=["POST"])
     @requires_auth
     def csv_commit():
-        """Commit validated CSV rows as inventory items. Re-validates on backend."""
+        """Commit validated CSV rows as inventory items. Re-validates on backend.
+
+        Duplicate (org + item name + batch number) rows are skipped with an error entry; other rows still commit.
+        """
         org_id = UUID(g.org_id)
         data = request.get_json()
         if not data or not isinstance(data.get("rows"), list):
@@ -274,40 +278,15 @@ def register_routes(bp):
         if errors:
             return jsonify({"error": "Validation failed.", "created": [], "errors": errors}), 400
 
-        # Optional pre-commit duplicate detection for clearer UX (DB constraint remains authoritative)
-        for v in validated:
-            batch_number = _sanitize(v["row"].get("batch_number"), 255) or None
-            if batch_number:
-                exists = (
-                    db_session.query(InventoryItem.id)
-                    .filter(
-                        InventoryItem.org_id == org_id,
-                        InventoryItem.name == v["name"],
-                        InventoryItem.supplier_batch_number == batch_number,
-                    )
-                    .limit(1)
-                    .first()
-                )
-                if exists:
-                    return jsonify(
-                        {
-                            "error": "Duplicate batch number (org + name + batch already exists). No rows committed.",
-                            "created": [],
-                            "errors": [
-                                {
-                                    "row_index": v["row"].get("row_index"),
-                                    "error": "Duplicate batch (org + name + batch already exists)",
-                                }
-                            ],
-                        }
-                    ), 409
-
         logger.info(
             "CSV commit batch start org_id=%s source=csv_upload rows=%d",
             org_id,
             len(validated),
         )
         created = []
+        commit_errors: list[dict] = []
+        dup_msg = "Duplicate batch (org + name + batch already exists)"
+
         for v in validated:
             r = v["row"]
             name = v["name"]
@@ -329,55 +308,66 @@ def register_routes(bp):
                 ]
             }
 
-            item = repo.create_inventory_item(
-                org_id=org_id,
-                name=name,
-                quantity=quantity_str,
-                unit=canonical_unit,
-                inventory_type=InventoryType.RAW_MATERIAL.value,
-                supplier=supplier,
-                purchase_date=purchase_date,
-                supplier_batch_number=batch_number,
-                expiry_date=expiry_date,
-                extra_data=extra_data,
-                commit=False,
-            )
-            created.append(
-                {
-                    "id": str(item.id),
-                    "name": item.name,
-                    "quantity": item.quantity,
-                    "unit": item.unit,
-                    "row_index": r.get("row_index"),
-                }
-            )
+            try:
+                with db_session.begin_nested():
+                    item = repo.create_inventory_item(
+                        org_id=org_id,
+                        name=name,
+                        quantity=quantity_str,
+                        unit=canonical_unit,
+                        inventory_type=InventoryType.RAW_MATERIAL.value,
+                        supplier=supplier,
+                        purchase_date=purchase_date,
+                        supplier_batch_number=batch_number,
+                        expiry_date=expiry_date,
+                        extra_data=extra_data,
+                        commit=False,
+                    )
+                    created.append(
+                        {
+                            "id": str(item.id),
+                            "name": item.name,
+                            "quantity": item.quantity,
+                            "unit": item.unit,
+                            "row_index": r.get("row_index"),
+                        }
+                    )
+            except IntegrityError:
+                commit_errors.append(
+                    {"row_index": r.get("row_index"), "error": dup_msg},
+                )
+                logger.warning(
+                    "CSV commit row skipped (duplicate batch) org_id=%s row_index=%s name=%r batch=%r",
+                    org_id,
+                    r.get("row_index"),
+                    name,
+                    batch_number,
+                )
 
         try:
             db_session.commit()
             logger.info(
-                "CSV commit batch success org_id=%s source=csv_upload created=%d",
+                "CSV commit batch success org_id=%s source=csv_upload created=%d skipped=%d",
                 org_id,
                 len(created),
+                len(commit_errors),
             )
-        except IntegrityError:
-            db_session.rollback()
-            logger.warning(
-                "CSV commit batch rollback (duplicate) org_id=%s source=csv_upload",
-                org_id,
-            )
-            return jsonify(
-                {
-                    "error": "Duplicate batch number (org + name + batch already exists). No rows committed.",
-                    "created": [],
-                    "errors": [{"error": "Duplicate batch (unique constraint)"}],
-                }
-            ), 409
         except Exception:
             db_session.rollback()
             logger.exception("CSV commit batch rollback (exception) org_id=%s source=csv_upload", org_id)
             return jsonify({"error": "Commit failed; no rows committed.", "created": [], "errors": []}), 500
 
-        return jsonify({"created": created, "errors": []})
+        body: dict = {"created": created, "errors": commit_errors}
+        if commit_errors and not created:
+            body["error"] = (
+                "No rows could be added: duplicate batch for each row "
+                "(same organisation, item name, and batch number must be unique when batch is set)."
+            )
+        elif commit_errors:
+            body["error"] = (
+                "Some rows were skipped because that item name and batch number already exist for your organisation."
+            )
+        return jsonify(body)
 
     @bp.route("/api/core/inventory/decode-barcode", methods=["POST"])
     @requires_auth

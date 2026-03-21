@@ -5,11 +5,122 @@
 {% block title %}Add Inventory via CSV{% endblock %}
 
 {% block head_extras %}
-  <meta name="description" content="Upload a CSV file to add or update inventory in bulk.">
+  <meta name="description" content="Upload a CSV file to add multiple inventory items at once.">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
 {% endblock %}
 
 {% block content %}
+  <style>
+    .csv-review-progress {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--primary, #3b82f6);
+      margin: 0 0 12px 0;
+      letter-spacing: 0.01em;
+    }
+    @keyframes csv-review-card-leave {
+      from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      to {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.985);
+      }
+    }
+    @keyframes csv-review-card-enter {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.99);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    .csv-review-card.csv-review-card--leave {
+      animation: csv-review-card-leave 0.28s ease forwards;
+      pointer-events: none;
+    }
+    .csv-review-card.csv-review-card--enter {
+      animation: csv-review-card-enter 0.32s ease forwards;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .csv-review-card.csv-review-card--leave,
+      .csv-review-card.csv-review-card--enter {
+        animation: none !important;
+      }
+    }
+    /* Match .spa-card-form spacing: 2.25rem between major blocks (same as add_manual form) */
+    .csv-review-card {
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      background: var(--bg-card);
+      max-width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 2.25rem;
+    }
+    .csv-review-validation-warn {
+      font-size: 0.8125rem;
+      color: var(--warning, #b45309);
+      margin: 0;
+      padding: 8px 10px;
+      border-radius: var(--radius-md);
+      background: rgba(180, 83, 9, 0.08);
+    }
+    .csv-review-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+    #csv-preview-summary {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin: 10px 0 0 0;
+    }
+    #csv-drop-zone.csv-drop-zone--drag { background: var(--bg-hover, rgba(0,0,0,0.03)) !important; }
+    .csv-review-form-error {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--error, #dc2626);
+      background: rgba(220, 38, 38, 0.08);
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .csv-review-form-error__icon {
+      flex-shrink: 0;
+      line-height: 1.45;
+    }
+    .csv-review-form-error__text {
+      flex: 1;
+      min-width: 0;
+    }
+    .csv-review-field-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .spa-inp.csv-review-inp--error {
+      border-color: var(--error, #dc2626) !important;
+      box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.2);
+    }
+    .csv-review-saving {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin: 0;
+      padding: 8px 0;
+    }
+  </style>
   <div class="max-content">
     {% import "shared/back_link.html" as nav %}
     {% from "shared/primary_card.html" import primary_card %}
@@ -19,14 +130,561 @@
 
     {% call primary_card(
       title="Add Inventory via CSV",
-      subtitle="Upload a CSV file to add or update multiple inventory items at once."
+      subtitle="Upload a CSV file to add multiple inventory items at once"
     ) %}
       <div class="spa-card-form">
-        <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
-          This screen will host the CSV upload and mapping flow, migrated from the previous modal.
-        </p>
-        <!-- TODO: migrate existing CSV upload UI and behaviour from the inventory modal in core2.html -->
+        <section class="spa-form-section" aria-labelledby="csv-spa-intro">
+          <h3 id="csv-spa-intro" class="spa-form-section-title">Template</h3>
+          <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+            Keep the column headers in your file. Replace the example row with your own data.
+          </p>
+          <div>
+            <a id="csv-download-template" href="#" download="inventory_template.csv" class="btn btn-secondary" hx-boost="false" style="min-height: 44px; display: inline-flex; align-items: center; justify-content: center;">Download Template</a>
+          </div>
+        </section>
+
+        <div id="csv-drop-zone" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 24px; text-align: center; background: var(--bg-subtle, #f9fafb); cursor: pointer; min-height: 80px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;">
+          <span style="color: var(--text-secondary); font-size: 14px;">Drop CSV here or</span>
+          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="csv-browse-btn" style="min-height: 44px;">Browse</button>
+        </div>
+
+        <div id="csv-preview-section" style="display: none; flex: 1; min-height: 0; flex-direction: column; gap: 12px;">
+          <p id="csv-review-progress" class="csv-review-progress" aria-live="polite" style="display: none;"></p>
+          <div id="csv-review-card-wrap"></div>
+          <p id="csv-preview-summary" style="margin: 0;"></p>
+        </div>
+
+        <div id="csv-drop-zone-actions" style="display: flex; gap: 12px; justify-content: flex-end;">
+          <a href="/core/inventory/add" class="btn btn-secondary" style="min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">Cancel</a>
+        </div>
       </div>
     {% endcall %}
   </div>
+  <script>
+    (function() {
+      var CSV_TEMPLATE_HEADERS = 'Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date';
+      var S = window.__csvInventoryPage = window.__csvInventoryPage || {};
+      S.csvValidatedData = null;
+      S.pendingRows = null;
+      S.acceptedRows = null;
+      S.totalReviewCount = 0;
+
+      var DUP_FORM_SUMMARY = 'This Item name, Supplier and Batch number already exists in inventory. Please review the highlighted fields below.';
+
+      function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+      }
+
+      function showPreview() {
+        var previewSection = document.getElementById('csv-preview-section');
+        var dropZone = document.getElementById('csv-drop-zone');
+        var dropZoneActions = document.getElementById('csv-drop-zone-actions');
+        if (previewSection) previewSection.style.display = 'flex';
+        if (dropZone) dropZone.style.display = 'none';
+        if (dropZoneActions) dropZoneActions.style.display = 'none';
+      }
+
+      function showDropZoneOnly() {
+        var previewSection = document.getElementById('csv-preview-section');
+        var dropZone = document.getElementById('csv-drop-zone');
+        var dropZoneActions = document.getElementById('csv-drop-zone-actions');
+        var fi = document.getElementById('csv-file-input');
+        if (previewSection) previewSection.style.display = 'none';
+        if (dropZone) dropZone.style.display = 'flex';
+        if (dropZoneActions) dropZoneActions.style.display = 'flex';
+        if (fi) fi.value = '';
+        var wrap = document.getElementById('csv-review-card-wrap');
+        var prog = document.getElementById('csv-review-progress');
+        var sum = document.getElementById('csv-preview-summary');
+        if (wrap) wrap.innerHTML = '';
+        if (prog) { prog.textContent = ''; prog.style.display = 'none'; }
+        if (sum) sum.textContent = '';
+        S.csvValidatedData = null;
+        S.pendingRows = null;
+        S.acceptedRows = null;
+        S.totalReviewCount = 0;
+      }
+
+      function validationForRowIndex(rowIndex) {
+        if (!S.csvValidatedData || !S.csvValidatedData.validation) return null;
+        var list = S.csvValidatedData.validation;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].row_index === rowIndex) return list[i];
+        }
+        return null;
+      }
+
+      function unitOptionsHtml(selected) {
+        var units = (S.csvValidatedData && S.csvValidatedData.allowed_units) || [];
+        return units.map(function(u) {
+          var v = u.value || '';
+          var sel = selected === v ? ' selected' : '';
+          return '<option value="' + escapeHtml(v) + '"' + sel + '>' + escapeHtml(u.label || v) + '</option>';
+        }).join('');
+      }
+
+      function rowHasComplianceData(row) {
+        if (!row) return false;
+        if (row.batch_number && String(row.batch_number).trim()) return true;
+        if (row.purchase_date) return true;
+        if (row.expiry_date) return true;
+        return false;
+      }
+
+      function isDuplicateSubmitBlocked() {
+        var row = S.pendingRows && S.pendingRows[0];
+        if (!row || !row._duplicateCommit || !row._dupSnapshot) return false;
+        var snap = row._dupSnapshot;
+        var ne = document.getElementById('csv-review-name');
+        var se = document.getElementById('csv-review-supplier');
+        var be = document.getElementById('csv-review-batch');
+        var name = ne ? (ne.value || '').trim() : '';
+        var sup = se ? (se.value || '').trim() : '';
+        var batch = be ? (be.value || '').trim() : '';
+        return name === snap.name && sup === snap.supplier && batch === snap.batch;
+      }
+
+      function updateDuplicateSubmitState() {
+        var row = S.pendingRows && S.pendingRows[0];
+        var btn = document.getElementById('csv-review-accept');
+        if (!btn) return;
+        if (!row || !row._duplicateCommit) {
+          btn.disabled = false;
+          btn.removeAttribute('aria-disabled');
+          btn.removeAttribute('aria-describedby');
+          return;
+        }
+        if (isDuplicateSubmitBlocked()) {
+          btn.disabled = true;
+          btn.setAttribute('aria-disabled', 'true');
+        } else {
+          row._duplicateCommit = false;
+          delete row._dupSnapshot;
+          btn.disabled = false;
+          btn.removeAttribute('aria-disabled');
+          btn.removeAttribute('aria-describedby');
+          var summary = document.getElementById('csv-review-dup-summary');
+          if (summary) summary.remove();
+          ['csv-review-name', 'csv-review-supplier', 'csv-review-batch'].forEach(function(id) {
+            var inp = document.getElementById(id);
+            if (inp) {
+              inp.classList.remove('csv-review-inp--error');
+              inp.removeAttribute('aria-invalid');
+              inp.removeAttribute('aria-describedby');
+            }
+          });
+        }
+      }
+
+      function renderCurrentReviewCard() {
+        var wrap = document.getElementById('csv-review-card-wrap');
+        var prog = document.getElementById('csv-review-progress');
+        if (!wrap || !S.pendingRows || S.pendingRows.length === 0) {
+          finishReviewQueue();
+          return;
+        }
+
+        var row = S.pendingRows[0];
+        var step = S.totalReviewCount - S.pendingRows.length + 1;
+        if (prog) {
+          prog.style.display = 'block';
+          prog.textContent = 'Reviewing item ' + step + ' of ' + S.totalReviewCount;
+        }
+
+        var v = validationForRowIndex(row.row_index);
+        var warn = v && v.status === 'error' && v.message
+          ? '<div class="csv-review-validation-warn" role="alert">⚠ ' + escapeHtml(v.message) + '</div>'
+          : '';
+
+        var purchaseVal = row.purchase_date ? String(row.purchase_date).slice(0, 10) : '';
+        var expiryVal = row.expiry_date ? String(row.expiry_date).slice(0, 10) : '';
+        var complianceOpen = rowHasComplianceData(row) || !!row._duplicateCommit;
+        var trackClass = 'spa-advanced-toggle__track' + (complianceOpen ? ' spa-advanced-toggle__track--on' : '');
+        var fieldsHidden = complianceOpen ? '' : 'display: none;';
+        var ariaChecked = complianceOpen ? 'true' : 'false';
+
+        var dupSummary = '';
+        if (row._duplicateCommit) {
+          dupSummary =
+            '<div class="csv-review-form-error" role="alert" id="csv-review-dup-summary">' +
+              '<span class="csv-review-form-error__icon" aria-hidden="true">⚠️</span>' +
+              '<span class="csv-review-form-error__text">' + escapeHtml(DUP_FORM_SUMMARY) + '</span>' +
+            '</div>';
+        }
+
+        var nameInpClass = row._duplicateCommit ? 'spa-inp csv-review-inp--error' : 'spa-inp';
+        var supInpClass = row._duplicateCommit ? 'spa-inp csv-review-inp--error' : 'spa-inp';
+        var batchInpClass = row._duplicateCommit ? 'spa-inp csv-review-inp--error' : 'spa-inp';
+        var dupInpAria = row._duplicateCommit ? ' aria-invalid="true" aria-describedby="csv-review-dup-summary"' : '';
+
+        var acceptAttrs = row._duplicateCommit
+          ? ' disabled aria-disabled="true" aria-describedby="csv-review-dup-summary"'
+          : '';
+
+        wrap.innerHTML =
+          '<div class="csv-review-card csv-review-card--enter" id="csv-review-card">' +
+            warn +
+            dupSummary +
+            '<section class="spa-form-section" aria-labelledby="csv-rev-basic">' +
+              '<h3 id="csv-rev-basic" class="spa-form-section-title">Basic Information</h3>' +
+              '<div class="csv-review-field-wrap">' +
+                '<label class="spa-field-label" for="csv-review-name">Item name</label>' +
+                '<input type="text" id="csv-review-name" class="' + nameInpClass + '"' + dupInpAria + ' value="' + escapeHtml(row.name || '') + '" placeholder="e.g., Steel Rods" autocomplete="off">' +
+              '</div>' +
+              '<div>' +
+                '<label class="spa-field-label" for="csv-review-qty">Quantity</label>' +
+                '<input type="text" id="csv-review-qty" class="spa-inp" inputmode="decimal" value="' + escapeHtml(row.quantity || '') + '" placeholder="0" autocomplete="off">' +
+              '</div>' +
+              '<div>' +
+                '<label class="spa-field-label" for="csv-review-unit">Unit</label>' +
+                '<select id="csv-review-unit" class="spa-inp">' + unitOptionsHtml(row.unit) + '</select>' +
+              '</div>' +
+            '</section>' +
+            '<section class="spa-form-section" aria-labelledby="csv-rev-source">' +
+              '<h3 id="csv-rev-source" class="spa-form-section-title">Source</h3>' +
+              '<div class="csv-review-field-wrap">' +
+                '<label class="spa-field-label" for="csv-review-supplier">Supplier <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>' +
+                '<input type="text" id="csv-review-supplier" class="' + supInpClass + '"' + dupInpAria + ' value="' + escapeHtml(row.supplier || '') + '" placeholder="Who supplied this stock?" autocomplete="off">' +
+              '</div>' +
+            '</section>' +
+            '<button type="button" class="spa-advanced-toggle" id="csv-review-compliance-toggle" role="switch" aria-checked="' + ariaChecked + '">' +
+              '<span class="spa-advanced-toggle__label spa-form-section-title">Compliance &amp; Traceability</span>' +
+              '<span class="' + trackClass + '" aria-hidden="true">' +
+                '<span class="spa-advanced-toggle__thumb"></span>' +
+              '</span>' +
+            '</button>' +
+            '<div id="csv-review-compliance-fields" class="spa-advanced-fields spa-form-section" style="' + fieldsHidden + '">' +
+              '<div class="csv-review-field-wrap">' +
+                '<label class="spa-field-label" for="csv-review-batch">Batch number <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>' +
+                '<input type="text" id="csv-review-batch" class="' + batchInpClass + '"' + dupInpAria + ' value="' + escapeHtml(row.batch_number || '') + '" placeholder="e.g., BN-2024-001" autocomplete="off">' +
+              '</div>' +
+              '<div>' +
+                '<label class="spa-field-label" for="csv-review-purchase">Purchase date <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>' +
+                '<input type="date" id="csv-review-purchase" class="spa-inp" value="' + escapeHtml(purchaseVal) + '">' +
+              '</div>' +
+              '<div>' +
+                '<label class="spa-field-label" for="csv-review-expiry">Expiry date <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>' +
+                '<input type="date" id="csv-review-expiry" class="spa-inp" value="' + escapeHtml(expiryVal) + '">' +
+              '</div>' +
+            '</div>' +
+            '<div class="csv-review-actions">' +
+              '<button type="button" class="btn btn-secondary" id="csv-review-skip" style="min-height: 44px;">Do not add to inventory</button>' +
+              '<button type="button" class="btn btn-primary" id="csv-review-accept" style="min-height: 44px;"' + acceptAttrs + '>Add to inventory</button>' +
+            '</div>' +
+          '</div>';
+
+        if (row._duplicateCommit) {
+          setTimeout(function() {
+            updateDuplicateSubmitState();
+            var fe = document.getElementById('csv-review-name');
+            if (fe) fe.focus();
+          }, 0);
+        }
+      }
+
+      function readCurrentRowFromForm() {
+        var row = S.pendingRows && S.pendingRows[0];
+        if (!row) return null;
+        var nameEl = document.getElementById('csv-review-name');
+        var qtyEl = document.getElementById('csv-review-qty');
+        var unitEl = document.getElementById('csv-review-unit');
+        var supEl = document.getElementById('csv-review-supplier');
+        var batchEl = document.getElementById('csv-review-batch');
+        var purEl = document.getElementById('csv-review-purchase');
+        var expEl = document.getElementById('csv-review-expiry');
+        return Object.assign({}, row, {
+          name: nameEl ? (nameEl.value || '').trim() : row.name,
+          quantity: qtyEl ? (qtyEl.value || '').trim() : row.quantity,
+          unit: unitEl ? unitEl.value : row.unit,
+          supplier: supEl ? (supEl.value || '').trim() || null : row.supplier,
+          batch_number: batchEl ? (batchEl.value || '').trim() || null : row.batch_number,
+          purchase_date: purEl && purEl.value ? purEl.value : null,
+          expiry_date: expEl && expEl.value ? expEl.value : null,
+        });
+      }
+
+      function finishReviewQueue() {
+        var wrap = document.getElementById('csv-review-card-wrap');
+        var prog = document.getElementById('csv-review-progress');
+        if (!S.acceptedRows || S.acceptedRows.length === 0) {
+          if (wrap) wrap.innerHTML = '';
+          if (prog) { prog.textContent = ''; prog.style.display = 'none'; }
+          window.showNotification && window.showNotification('info', 'No items added', 'No items were added to inventory.');
+          showDropZoneOnly();
+          return;
+        }
+
+        if (!window.CoreAPI || !window.CoreAPI.inventoryCsvCommit) return;
+        if (wrap) {
+          wrap.innerHTML = '<p class="csv-review-saving" role="status">Saving inventory…</p>';
+        }
+        CoreAPI.inventoryCsvCommit({ rows: S.acceptedRows }).then(function(res) {
+          var hasErr = res.errors && res.errors.length;
+          if (hasErr) {
+            if (res.created && res.created.length) {
+              window.showNotification && window.showNotification('success', 'Inventory added', res.created.length + ' item(s) added from CSV.');
+            }
+            var failedRows = [];
+            S.acceptedRows.forEach(function(row) {
+              var failed = (res.errors || []).some(function(e) { return e.row_index === row.row_index; });
+              if (failed) {
+                row._duplicateCommit = true;
+                row._dupSnapshot = {
+                  name: (row.name || '').trim(),
+                  supplier: (row.supplier || '').trim(),
+                  batch: (row.batch_number || '').trim()
+                };
+                failedRows.push(row);
+              }
+            });
+            if (failedRows.length === 0) {
+              window.showNotification && window.showNotification(
+                'error',
+                'Upload failed',
+                res.error || 'Some rows could not be saved. Try again or contact support.'
+              );
+              if (wrap) wrap.innerHTML = '';
+              if (prog) { prog.textContent = ''; prog.style.display = 'none'; }
+              showDropZoneOnly();
+              return;
+            }
+            S.pendingRows = failedRows;
+            S.acceptedRows = [];
+            S.totalReviewCount = failedRows.length;
+            if (prog) {
+              prog.style.display = 'block';
+              prog.textContent = failedRows.length === 1
+                ? 'Reviewing item 1 of 1'
+                : ('Reviewing item 1 of ' + failedRows.length);
+            }
+            window.showNotification && window.showNotification(
+              'error',
+              'Could not add duplicate item',
+              res.error || 'Change item name, supplier, or batch number, or skip this row.'
+            );
+            renderCurrentReviewCard();
+            return;
+          }
+          if (res.created && res.created.length) {
+            window.location.href = '/core';
+          } else {
+            if (wrap) wrap.innerHTML = '';
+            if (prog) { prog.textContent = ''; prog.style.display = 'none'; }
+            showDropZoneOnly();
+          }
+        }).catch(function(err) {
+          window.showNotification && window.showNotification('error', 'Upload failed', err.message || 'Could not add inventory.');
+          showDropZoneOnly();
+        });
+      }
+
+      function runAfterCardExit(fn) {
+        var card = document.getElementById('csv-review-card');
+        if (!card) {
+          fn();
+          return;
+        }
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          requestAnimationFrame(fn);
+          return;
+        }
+        var finished = false;
+        function done() {
+          if (finished) return;
+          finished = true;
+          fn();
+        }
+        card.addEventListener('animationend', done, { once: true });
+        setTimeout(done, 400);
+        card.classList.add('csv-review-card--leave');
+      }
+
+      S.onReviewSkip = function() {
+        if (!S.pendingRows || !S.pendingRows.length) return;
+        runAfterCardExit(function() {
+          S.pendingRows.shift();
+          renderCurrentReviewCard();
+        });
+      };
+
+      S.onReviewAccept = function() {
+        if (!S.pendingRows || !S.pendingRows.length) return;
+        if (isDuplicateSubmitBlocked()) {
+          window.showNotification && window.showNotification(
+            'error',
+            'Could not add duplicate item',
+            'Change item name, supplier, or batch number before adding this row.'
+          );
+          return;
+        }
+        var merged = readCurrentRowFromForm();
+        if (!merged) return;
+        runAfterCardExit(function() {
+          S.acceptedRows.push(merged);
+          S.pendingRows.shift();
+          renderCurrentReviewCard();
+        });
+      };
+
+      function updateTruncationSummary() {
+        var summaryEl = document.getElementById('csv-preview-summary');
+        if (!summaryEl || !S.csvValidatedData) return;
+        var res = S.csvValidatedData;
+        var parts = [];
+        if (res.truncated && res.validated_count != null && res.max_rows_allowed != null) {
+          parts.push('Only first ' + res.validated_count + ' rows validated; maximum ' + res.max_rows_allowed + ' rows per file.');
+        } else if (res.truncated) {
+          var n = res._initial_row_count != null ? res._initial_row_count : 500;
+          parts.push('Only first ' + n + ' rows validated; maximum 500 rows per file.');
+        }
+        summaryEl.textContent = parts.join(' ');
+      }
+
+      function startReview() {
+        var wrap = document.getElementById('csv-review-card-wrap');
+        if (!S.csvValidatedData || !S.csvValidatedData.rows || !S.csvValidatedData.rows.length) {
+          if (wrap) wrap.innerHTML = '<p style="padding: 16px; color: var(--text-secondary); margin: 0;">No data rows found in this file.</p>';
+          var sum = document.getElementById('csv-preview-summary');
+          if (sum) sum.textContent = '';
+          return;
+        }
+        S.pendingRows = S.csvValidatedData.rows.slice();
+        S.acceptedRows = [];
+        S.totalReviewCount = S.pendingRows.length;
+        updateTruncationSummary();
+        renderCurrentReviewCard();
+      }
+
+      S.onDownloadTemplate = function() {
+        var blob = new Blob([CSV_TEMPLATE_HEADERS + '\nExample Item,10,kg,ACME Ltd,2024-01-15,BATCH-001,2025-12-31'], { type: 'text/csv' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'inventory_template.csv';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 100);
+      };
+
+      S.handleCsvFile = function(file) {
+        if (!file || !file.name) return;
+        if (!window.CoreAPI || !window.CoreAPI.inventoryCsvValidate) {
+          console.error('CoreAPI.inventoryCsvValidate is not available.');
+          return;
+        }
+        var wrap = document.getElementById('csv-review-card-wrap');
+        var summaryEl = document.getElementById('csv-preview-summary');
+        var prog = document.getElementById('csv-review-progress');
+        var formData = new FormData();
+        formData.append('file', file);
+        showPreview();
+        if (wrap) wrap.innerHTML = '<p style="padding: 16px; color: var(--text-secondary); margin: 0;">Validating…</p>';
+        if (prog) { prog.style.display = 'none'; prog.textContent = ''; }
+        if (summaryEl) summaryEl.textContent = '';
+        CoreAPI.inventoryCsvValidate(formData).then(function(res) {
+          S.csvValidatedData = res;
+          S.csvValidatedData._initial_row_count = (res.rows || []).length;
+          startReview();
+        }).catch(function(err) {
+          if (wrap) wrap.innerHTML = '<p style="padding: 16px; color: var(--error); margin: 0;">' + escapeHtml(err.message || 'Validation failed') + '</p>';
+          if (summaryEl) summaryEl.textContent = '';
+        });
+      };
+
+      if (!window.__csvInventoryPageDelegated) {
+        window.__csvInventoryPageDelegated = true;
+        document.body.addEventListener('click', function(e) {
+          if (!document.getElementById('csv-file-input')) return;
+          var St = window.__csvInventoryPage;
+          if (!St) return;
+          if (e.target.closest('#csv-download-template')) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof St.onDownloadTemplate === 'function') St.onDownloadTemplate();
+            return;
+          }
+          if (e.target.closest('#csv-browse-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('csv-file-input')?.click();
+            return;
+          }
+          if (e.target.closest('#csv-drop-zone') && !e.target.closest('#csv-browse-btn')) {
+            document.getElementById('csv-file-input')?.click();
+            return;
+          }
+          if (e.target.closest('#csv-review-compliance-toggle')) {
+            e.preventDefault();
+            var cbtn = e.target.closest('#csv-review-compliance-toggle');
+            var track = cbtn && cbtn.querySelector('.spa-advanced-toggle__track');
+            var fields = document.getElementById('csv-review-compliance-fields');
+            if (!track || !fields) return;
+            track.classList.toggle('spa-advanced-toggle__track--on');
+            var open = track.classList.contains('spa-advanced-toggle__track--on');
+            cbtn.setAttribute('aria-checked', open ? 'true' : 'false');
+            fields.style.display = open ? '' : 'none';
+            return;
+          }
+          if (e.target.closest('#csv-review-skip')) {
+            e.preventDefault();
+            if (typeof St.onReviewSkip === 'function') St.onReviewSkip();
+            return;
+          }
+          if (e.target.closest('#csv-review-accept')) {
+            e.preventDefault();
+            if (typeof St.onReviewAccept === 'function') St.onReviewAccept();
+          }
+        });
+        document.body.addEventListener('input', function(e) {
+          if (!e.target.closest || !e.target.closest('#csv-review-card')) return;
+          var id = e.target.id;
+          if (id !== 'csv-review-name' && id !== 'csv-review-supplier' && id !== 'csv-review-batch') return;
+          updateDuplicateSubmitState();
+        });
+        document.body.addEventListener('change', function(e) {
+          if (e.target.id !== 'csv-file-input') return;
+          if (!document.getElementById('csv-file-input')) return;
+          var St = window.__csvInventoryPage;
+          if (e.target.files && e.target.files[0] && St && typeof St.handleCsvFile === 'function') {
+            St.handleCsvFile(e.target.files[0]);
+          }
+        });
+        document.body.addEventListener('dragover', function(e) {
+          var dz = e.target.closest('#csv-drop-zone');
+          if (!dz) return;
+          e.preventDefault();
+          e.stopPropagation();
+          dz.classList.add('csv-drop-zone--drag');
+        });
+        document.body.addEventListener('dragleave', function(e) {
+          var dz = e.target.closest('#csv-drop-zone');
+          if (!dz) return;
+          e.preventDefault();
+          var rel = e.relatedTarget;
+          if (rel && dz.contains(rel)) return;
+          dz.classList.remove('csv-drop-zone--drag');
+        });
+        document.body.addEventListener('drop', function(e) {
+          var dz = e.target.closest('#csv-drop-zone');
+          if (!dz) return;
+          e.preventDefault();
+          e.stopPropagation();
+          dz.classList.remove('csv-drop-zone--drag');
+          var St = window.__csvInventoryPage;
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0] && St && typeof St.handleCsvFile === 'function') {
+            St.handleCsvFile(e.dataTransfer.files[0]);
+          }
+        });
+      }
+    })();
+  </script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
 {% endblock %}
