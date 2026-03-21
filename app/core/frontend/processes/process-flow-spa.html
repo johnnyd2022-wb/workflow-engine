@@ -1,17 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "shared/base_spa.html" %}
+
+{% block body_class %}spa-hide-main-header process-flow-spa{% endblock %}
+{% block body_extra_attrs %}data-page="process-flow-spa"{% endblock %}
+
+{% block title %}Create process steps | SupplyChain V2{% endblock %}
+
+{% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Create process steps">
-  <title>Create process steps | SupplyChain V2</title>
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* Breakpoints: mobile 0–767px, laptop 768–1279px, desktop 1280px+ */
-    /* Consistent card height: fill viewport so each step has same container height */
     .process-flow-spa .page-content {
       padding: 16px;
       display: flex;
@@ -50,13 +47,11 @@
       flex-direction: column;
       min-width: 0;
     }
-    /* Step summaries, existing list, indicators: don't grow */
     .process-flow-spa .card-content > #step-summaries-container,
     .process-flow-spa .card-content > #existing-steps-list-view,
     .process-flow-spa .card-content > #create-process-step-indicators {
       flex-shrink: 0;
     }
-    /* Visible step fills space, body scrolls, actions pinned to bottom */
     .process-flow-spa .card-content .create-process-step[style*="block"] {
       display: flex !important;
       flex-direction: column;
@@ -79,7 +74,6 @@
     .process-flow-spa .card-content > #post-creation-options {
       flex-shrink: 0;
     }
-    /* Inputs step (2): inventory selector uses full height above buttons before scrolling */
     .process-flow-spa #create-process-step-2 .create-process-step-body {
       display: flex;
       flex-direction: column;
@@ -132,7 +126,6 @@
         margin-bottom: 16px;
       }
     }
-    /* Guided step flow (same as create-process-modal) */
     .guided-inputs-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border-default, #e5e7eb); }
     .guided-inputs-tab { flex: 1; padding: 12px 16px; border: none; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: background 0.2s, color 0.2s; }
     .guided-inputs-tab:hover { background: var(--bg-hover, rgba(0,0,0,0.05)); color: var(--text-primary); }
@@ -160,22 +153,10 @@
     .guided-inventory-card .card-meta-block .meta-line:first-child { margin-top: 10px; }
     .guided-inventory-card .card-meta-block .meta-label { font-weight: 500; color: var(--text-primary); }
   </style>
-</head>
-<body data-page="process-flow-spa" class="process-flow-spa">
-  <div class="app-layout">
-    {% include 'shared/sidebar-v2.html' %}
+{% endblock %}
 
-    <div class="main-content">
-      <header class="main-header">
-        <div>
-          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">Supply Chain Management</h1>
-          <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Manage and monitor all your operational workflows</p>
-        </div>
-      </header>
-
-      <main class="page-content">
+{% block content %}
         <div class="max-content">
-          <!-- Back link: to process flow if we have id, else Process Hub -->
           <a href="#" id="process-flow-spa-back-link" class="back-link">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"/>
@@ -184,7 +165,6 @@
             <span id="process-flow-spa-back-text">Back to Process Hub</span>
           </a>
 
-          <!-- Step flow: full-width section card (same width as flows2 / core2 content) -->
           <section class="card process-flow-card" style="margin-top: 24px;">
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
               <div style="flex: 1; min-width: 0;">
@@ -195,80 +175,78 @@
               </div>
             </div>
             <div class="card-content">
-              {% include 'shared/create-process-step-content.html' %}
+              {% include 'processes/create-process-step-content.html' %}
             </div>
           </section>
         </div>
-      </main>
-    </div>
-  </div>
 
-  <!-- Finish / Resume / Save-draft modals (required by create-process-modal.js) -->
-  <div class="modal-overlay" id="finish-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center;">
-    <div class="card" style="max-width: 600px; width: 90%; padding: 24px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Finish Creating Process</h2>
-        <button class="modal-close" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div style="margin-bottom: 24px;">
-        <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
-          <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;"><strong>By finishing this process, you are locking in the process definition.</strong></p>
-          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">Once you execute this process, your inventory will automatically update in real-time.</p>
-          <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">You can edit this process at any time in the process view.</p>
+        <!-- Finish / Resume / Save-draft modals (required by create-process-modal.js) -->
+        <div class="modal-overlay" id="finish-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center;">
+          <div class="card" style="max-width: 600px; width: 90%; padding: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+              <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Finish Creating Process</h2>
+              <button class="modal-close" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div style="margin-bottom: 24px;">
+              <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+                <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;"><strong>By finishing this process, you are locking in the process definition.</strong></p>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">Once you execute this process, your inventory will automatically update in real-time.</p>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">You can edit this process at any time in the process view.</p>
+              </div>
+              <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">Press <strong>"Finish creating process"</strong> to save, or <strong>"Back"</strong> to add another step.</p>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'">Back</button>
+              <button type="button" class="btn btn-primary" onclick="window.confirmFinishProcess()">Finish creating process</button>
+            </div>
+          </div>
         </div>
-        <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">Press <strong>"Finish creating process"</strong> to save, or <strong>"Back"</strong> to add another step.</p>
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'">Back</button>
-        <button type="button" class="btn btn-primary" onclick="window.confirmFinishProcess()">Finish creating process</button>
-      </div>
-    </div>
-  </div>
 
-  <div class="modal-overlay" id="resume-draft-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1002; align-items: center; justify-content: center;">
-    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">Resume Draft Process</h2>
-        <button class="modal-close" onclick="window.cancelResumeDraft()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div style="margin-bottom: 24px;">
-        <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">To resume editing click <strong>Resume Draft</strong>, or <strong>Start New</strong> to start over.</p>
-        <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">Your previous progress will be restored.</p>
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="window.cancelResumeDraft()">Start New</button>
-        <button type="button" class="btn btn-primary" onclick="window.confirmResumeDraft()">Resume Draft</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="save-draft-or-discard-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1003; align-items: center; justify-content: center; padding: 16px;">
-    <div class="card" style="max-width: 480px; width: 90%; padding: 24px;">
-      <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
-        <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--warning-bg, #fef3c7); display: flex; align-items: center; justify-content: center;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--warning, #f59e0b);"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="modal-overlay" id="resume-draft-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1002; align-items: center; justify-content: center;">
+          <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+              <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">Resume Draft Process</h2>
+              <button class="modal-close" onclick="window.cancelResumeDraft()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div style="margin-bottom: 24px;">
+              <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">To resume editing click <strong>Resume Draft</strong>, or <strong>Start New</strong> to start over.</p>
+              <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">Your previous progress will be restored.</p>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" onclick="window.cancelResumeDraft()">Start New</button>
+              <button type="button" class="btn btn-primary" onclick="window.confirmResumeDraft()">Resume Draft</button>
+            </div>
+          </div>
         </div>
-        <div style="flex: 1; min-width: 0;">
-          <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Save your progress?</h2>
-          <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;"><strong>Continue creating steps</strong>, <strong>save as draft</strong>, or <strong>discard</strong> and lose progress.</p>
+
+        <div class="modal-overlay" id="save-draft-or-discard-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1003; align-items: center; justify-content: center; padding: 16px;">
+          <div class="card" style="max-width: 480px; width: 90%; padding: 24px;">
+            <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
+              <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--warning-bg, #fef3c7); display: flex; align-items: center; justify-content: center;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--warning, #f59e0b);"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div style="flex: 1; min-width: 0;">
+                <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Save your progress?</h2>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;"><strong>Continue creating steps</strong>, <strong>save as draft</strong>, or <strong>discard</strong> and lose progress.</p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary" id="save-draft-discard-btn">Discard</button>
+              <button type="button" class="btn btn-secondary" id="save-draft-save-btn">Save as draft</button>
+              <button type="button" class="btn btn-primary" id="save-draft-continue-btn">Continue creating steps</button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">
-        <button type="button" class="btn btn-secondary" id="save-draft-discard-btn">Discard</button>
-        <button type="button" class="btn btn-secondary" id="save-draft-save-btn">Save as draft</button>
-        <button type="button" class="btn btn-primary" id="save-draft-continue-btn">Continue creating steps</button>
-      </div>
-    </div>
-  </div>
 
-  {% include 'shared/delete-doc-confirm-modal.html' %}
+        {% include 'shared/delete-doc-confirm-modal.html' %}
+{% endblock %}
 
-  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
-  <script src="/ui/shared/sidebar-v2.js"></script>
+{% block scripts %}
+  {{ super() }}
   <script>
     window.showNotification = window.showNotification || function(type, title, message) {
       console.log(type + ': ' + title + ' - ' + message);
@@ -276,5 +254,4 @@
   </script>
   <script src="{{ url_for('core.serve_core_js', filename='process-flow-spa.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='create-process-modal.js') }}"></script>
-</body>
-</html>
+{% endblock %}

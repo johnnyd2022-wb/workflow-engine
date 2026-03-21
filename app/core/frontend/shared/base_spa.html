@@ -316,6 +316,7 @@
 </head>
 <body
   class="{% block body_class %}{% endblock %}"
+  {% block body_extra_attrs %}{% endblock %}
   hx-boost="true"
   hx-target="#page-content"
   hx-select="#page-content"

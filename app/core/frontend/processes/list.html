@@ -1,0 +1,179 @@
+{% extends "shared/base_spa.html" %}
+
+{% block body_class %}spa-hide-main-header{% endblock %}
+
+{% block title %}View processes{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Browse all processes and open each in the process workspace.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  <style>
+    .processes-list-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+    .processes-list-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: var(--radius-lg, 12px);
+      text-decoration: none;
+      color: inherit;
+      background: var(--bg-card, #fff);
+      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      text-align: left;
+      cursor: pointer;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    .processes-list-item:hover {
+      border-color: var(--primary, #3b82f6);
+      background: rgba(59, 130, 246, 0.04);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .processes-list-item:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 2px;
+    }
+    .processes-list-item__main {
+      flex: 1;
+      min-width: 0;
+    }
+    .processes-list-item__name {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary, #111827);
+      margin: 0 0 6px 0;
+      line-height: 1.3;
+    }
+    .processes-list-item__meta {
+      font-size: 0.875rem;
+      color: var(--text-secondary, #6b7280);
+      margin: 0;
+      line-height: 1.45;
+    }
+    .processes-list-item__arrow {
+      flex-shrink: 0;
+      color: var(--text-tertiary, #9ca3af);
+      margin-top: 2px;
+    }
+    .processes-list-item:hover .processes-list-item__arrow {
+      color: var(--primary, #3b82f6);
+    }
+    .processes-list-empty {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--text-secondary, #6b7280);
+      font-size: 0.9375rem;
+    }
+    .processes-list-loading {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-secondary, #6b7280);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="max-content">
+    {% import "shared/back_link.html" as nav %}
+    {% from "shared/primary_card.html" import primary_card %}
+
+    {{ nav.spa_back_link("/core") }}
+    {% include 'processes/processes_hub_banner.html' %}
+
+    {% call primary_card(
+      title="View processes",
+      subtitle="Open a process to see steps, runs, and inventory in the full workspace."
+    ) %}
+      <div class="spa-card-form" style="gap: 1rem;">
+        <div id="processes-list-loading" class="processes-list-loading">Loading processes…</div>
+        <div id="processes-list-empty" class="processes-list-empty" style="display: none;">No processes yet. Create one from the Process Hub.</div>
+        <div id="processes-list-stack" class="processes-list-stack" style="display: none;"></div>
+      </div>
+    {% endcall %}
+  </div>
+  <script>
+    (function () {
+      if (window.__processesListInit) return;
+      window.__processesListInit = true;
+
+      function esc(s) {
+        if (s == null || s === '') return '';
+        var d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+      }
+
+      function render(processes) {
+        var loading = document.getElementById('processes-list-loading');
+        var empty = document.getElementById('processes-list-empty');
+        var stack = document.getElementById('processes-list-stack');
+        if (loading) loading.style.display = 'none';
+        if (!processes || !processes.length) {
+          if (empty) empty.style.display = 'block';
+          if (stack) { stack.style.display = 'none'; stack.innerHTML = ''; }
+          return;
+        }
+        if (empty) empty.style.display = 'none';
+        if (stack) {
+          stack.style.display = 'flex';
+          stack.innerHTML = processes.map(function (p) {
+            var id = p.id || '';
+            var href = '/core/flows?id=' + encodeURIComponent(id);
+            var steps = typeof p.step_count === 'number' ? p.step_count : 0;
+            var active = typeof p.active_executions === 'number' ? p.active_executions : 0;
+            var done = typeof p.completed_executions === 'number' ? p.completed_executions : 0;
+            var draft = p.is_draft ? ' · Draft' : '';
+            var meta = steps + ' step' + (steps === 1 ? '' : 's') + ' · ' + active + ' active · ' + done + ' completed' + draft;
+            return (
+              '<a href="' + esc(href) + '" class="processes-list-item" hx-boost="false">' +
+                '<div class="processes-list-item__main">' +
+                  '<p class="processes-list-item__name">' + esc(p.name || 'Untitled') + '</p>' +
+                  '<p class="processes-list-item__meta">' + esc(meta) + '</p>' +
+                '</div>' +
+                '<span class="processes-list-item__arrow" aria-hidden="true">' +
+                  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<polyline points="9 18 15 12 9 6"/>' +
+                  '</svg>' +
+                '</span>' +
+              '</a>'
+            );
+          }).join('');
+        }
+      }
+
+      function load() {
+        if (!window.CoreAPI || !window.CoreAPI.getProcesses) {
+          var loading = document.getElementById('processes-list-loading');
+          if (loading) loading.textContent = 'Processes API is not available.';
+          return;
+        }
+        window.CoreAPI.getProcesses()
+          .then(function (res) {
+            render(res.processes || []);
+          })
+          .catch(function (e) {
+            console.error(e);
+            var loading = document.getElementById('processes-list-loading');
+            if (loading) loading.textContent = 'Failed to load processes.';
+          });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', load);
+      } else {
+        load();
+      }
+    })();
+  </script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+{% endblock %}
