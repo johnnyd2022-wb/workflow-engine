@@ -1,0 +1,32 @@
+{% extends "shared/base_spa.html" %}
+
+{% block body_class %}spa-hide-main-header{% endblock %}
+
+{% block title %}Add Inventory via Barcode{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Scan or enter a barcode to add inventory.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="max-content">
+    {% import "shared/back_link.html" as nav %}
+    {% from "shared/primary_card.html" import primary_card %}
+
+    {{ nav.spa_back_link("/core/inventory/add") }}
+    {% include 'inventory/inventory_hub_banner.html' %}
+
+    {% call primary_card(
+      title="Add Inventory via Barcode",
+      subtitle="Scan a barcode or enter it manually, then confirm the item details before adding to inventory."
+    ) %}
+      <div class="spa-card-form">
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
+          This screen will replace the previous barcode modal flow with a full, routeable page.
+        </p>
+        <!-- TODO: migrate existing barcode scan UI and behaviour from core2.html modal into this page -->
+      </div>
+    {% endcall %}
+  </div>
+{% endblock %}

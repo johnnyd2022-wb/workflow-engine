@@ -1,0 +1,76 @@
+/* Process Hub inventory illustration strip + legacy header parts */
+
+.inventory-spa-header-wrap {
+  margin-bottom: 20px;
+}
+
+.inventory-hub-banner-wrap {
+  margin-bottom: 12px;
+}
+
+.inventory-spa-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.inventory-spa-header__top {
+  padding: 0 0 12px;
+}
+
+.inventory-spa-header__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-tertiary, #9ca3af);
+  transition: color var(--transition-fast, 0.15s ease);
+}
+
+.inventory-spa-header__back:hover {
+  color: var(--primary, #3b82f6);
+}
+
+.inventory-spa-header__back svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform var(--transition-fast, 0.15s ease);
+}
+
+.inventory-spa-header__back:hover svg {
+  transform: translateX(-3px);
+}
+
+.inventory-spa-header__banner {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 14px 0 18px;
+  box-sizing: border-box;
+  border-radius: var(--radius-xl, 16px);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 247, 237, 0.98) 0%,
+    rgba(239, 246, 255, 0.88) 40%,
+    rgba(253, 244, 255, 0.55) 75%,
+    rgba(249, 250, 251, 0.2) 100%
+  );
+  border: none;
+  box-shadow: none;
+}
+
+.inventory-spa-header__banner svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 120px;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}

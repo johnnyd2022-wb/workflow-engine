@@ -139,6 +139,34 @@ def core():
     return render_template("core2.html", active_page="core", show_reset_db=show_reset_db)
 
 
+@core_bp.route("/core/inventory/add", methods=["GET"])
+@requires_auth
+def inventory_add_hub():
+    """Inventory entry hub: choose manual / CSV / barcode."""
+    return render_template("inventory/add.html", active_page="core")
+
+
+@core_bp.route("/core/inventory/add/manual", methods=["GET"])
+@requires_auth
+def inventory_add_manual():
+    """Add inventory via manual single-item form."""
+    return render_template("inventory/add_manual.html", active_page="core")
+
+
+@core_bp.route("/core/inventory/add/csv", methods=["GET"])
+@requires_auth
+def inventory_add_csv():
+    """Add or update inventory in bulk via CSV upload."""
+    return render_template("inventory/add_csv.html", active_page="core")
+
+
+@core_bp.route("/core/inventory/add/barcode", methods=["GET"])
+@requires_auth
+def inventory_add_barcode():
+    """Add inventory via barcode / camera scan."""
+    return render_template("inventory/add_barcode.html", active_page="core")
+
+
 @core_bp.route("/core/flows", methods=["GET"])
 @requires_auth
 def flows():
@@ -249,6 +277,49 @@ def serve_core_css(filename):
 
         logger = logging.getLogger(__name__)
         logger.exception(f"Unexpected error serving static CSS file: {filename}")
+        abort(500, "Internal server error")
+
+
+_INVENTORY_STATIC_ALLOWLIST = frozenset({"inventory-icon.svg", "inventory-spa-header.css"})
+
+
+@core_bp.route("/static/inventory/<filename>")
+@limiter.exempt
+def serve_core_inventory_static(filename):
+    """Serve SVG/CSS from core frontend inventory/ (used by inventory SPA header partial)."""
+    from flask import abort
+    from werkzeug.security import safe_join
+
+    if ".." in filename or "/" in filename or "\\" in filename:
+        abort(400, "Invalid filename")
+    if filename not in _INVENTORY_STATIC_ALLOWLIST:
+        abort(400, "Invalid file")
+
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in (".svg", ".css"):
+        abort(400, "Invalid file type")
+
+    inventory_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "inventory")
+    safe_path = safe_join(inventory_dir, filename)
+    if safe_path is None:
+        abort(400, "Invalid filename")
+
+    try:
+        response = send_from_directory(inventory_dir, filename)
+        if ext == ".svg":
+            response.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
+        else:
+            response.headers["Content-Type"] = "text/css; charset=utf-8"
+        return response
+    except FileNotFoundError:
+        import logging
+
+        logging.getLogger(__name__).info("Inventory static file not found: %s", filename)
+        abort(404, "File not found")
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Error serving inventory static: %s", filename)
         abort(500, "Internal server error")
 
 

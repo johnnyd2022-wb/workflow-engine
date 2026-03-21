@@ -1,0 +1,20 @@
+{% macro primary_card(title="", subtitle="") -%}
+  <section class="card" style="margin-top: 24px;">
+    {% if title or subtitle %}
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 0;">
+          {% if title %}
+            <h2 class="card-title">{{ title }}</h2>
+          {% endif %}
+          {% if subtitle %}
+            <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">{{ subtitle }}</p>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+    <div class="card-content">
+      {{ caller() }}
+    </div>
+  </section>
+{%- endmacro %}
+

@@ -1,0 +1,181 @@
+{% extends "shared/base_spa.html" %}
+
+{% block body_class %}spa-hide-main-header{% endblock %}
+
+{% block title %}Add Inventory Manually{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Manually add a single inventory item.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="max-content">
+    {% import "shared/back_link.html" as nav %}
+    {% from "shared/primary_card.html" import primary_card %}
+
+    {{ nav.spa_back_link("/core/inventory/add") }}
+    {% include 'inventory/inventory_hub_banner.html' %}
+
+    {% call primary_card(
+      title="Add Inventory Manually",
+      subtitle="Enter the details for a single inventory item."
+    ) %}
+      <form id="add-inventory-form" x-data="{ advancedOpen: false }" class="spa-card-form">
+        <input type="hidden" name="barcode" id="add-inventory-barcode-input" value="">
+
+        <section class="spa-form-section" aria-labelledby="add-inv-section-basic">
+          <h3 id="add-inv-section-basic" class="spa-form-section-title">Basic Information</h3>
+          <div>
+            <label class="spa-field-label" for="add-inventory-name">Item name</label>
+            <input type="text" name="name" id="add-inventory-name" required class="spa-inp" placeholder="e.g., Steel Rods">
+          </div>
+          <div>
+            <label class="spa-field-label" for="add-inventory-quantity">Quantity</label>
+            <input type="number" name="quantity" id="add-inventory-quantity" required step="0.01" class="spa-inp" placeholder="0">
+          </div>
+          <div>
+            <label class="spa-field-label" for="add-inventory-unit">Unit</label>
+            <select name="unit" id="add-inventory-unit" required class="spa-inp">
+              <option value="kg">Kilograms (kg)</option>
+              <option value="g">Grams (g)</option>
+              <option value="L">Liters (L)</option>
+              <option value="mL">Milliliters (mL)</option>
+              <option value="units">Units</option>
+              <option value="pcs">Pieces</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="spa-form-section" aria-labelledby="add-inv-section-source">
+          <h3 id="add-inv-section-source" class="spa-form-section-title">Source</h3>
+          <div>
+            <label class="spa-field-label" for="add-inventory-supplier">Supplier <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+            <input type="text" name="supplier" id="add-inventory-supplier" class="spa-inp" placeholder="Who supplied this stock?">
+          </div>
+          <div id="add-inventory-barcode-display-wrap" style="display: none;">
+            <span class="spa-field-label">Barcode</span>
+            <span id="add-inventory-barcode-display" style="display: block; font-size: 0.9375rem; font-weight: 500; color: var(--text-primary); line-height: 1.45; margin-top: 4px;"></span>
+          </div>
+        </section>
+
+        <section id="add-inventory-map-untracked-wrapper" class="spa-form-section spa-form-section--reconciliation" style="display: none;" aria-live="polite" aria-labelledby="add-inv-section-reconciliation">
+          <h3 id="add-inv-section-reconciliation" class="spa-form-section-title">Reconciliation</h3>
+          <p class="spa-reconciliation-intro">When untracked stock matches this item, map it here so system balances stay accurate.</p>
+          <div>
+            <label class="spa-field-label" for="add-inventory-map-untracked-select">Map to untracked item <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+            <select name="mapToUntrackedItemId" id="add-inventory-map-untracked-select" class="spa-inp">
+              <option value="">— No mapping —</option>
+            </select>
+            <p id="add-inventory-untracked-hint" style="font-size: 12px; color: var(--text-secondary); margin-top: 8px; margin-bottom: 0;"></p>
+          </div>
+        </section>
+
+        <button
+          type="button"
+          class="spa-advanced-toggle"
+          @click="advancedOpen = !advancedOpen"
+          role="switch"
+          :aria-checked="advancedOpen ? 'true' : 'false'"
+        >
+          <span class="spa-advanced-toggle__label spa-form-section-title">Compliance &amp; Traceability</span>
+          <span
+            class="spa-advanced-toggle__track"
+            :class="{ 'spa-advanced-toggle__track--on': advancedOpen }"
+            aria-hidden="true"
+          >
+            <span class="spa-advanced-toggle__thumb"></span>
+          </span>
+        </button>
+
+        <div x-show="advancedOpen" x-cloak x-transition class="spa-advanced-fields spa-form-section">
+          <div>
+            <label class="spa-field-label" for="add-inventory-batch">Batch number <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+            <input type="text" name="batchNumber" id="add-inventory-batch" class="spa-inp" placeholder="e.g., BN-2024-001">
+          </div>
+          <div>
+            <label class="spa-field-label" for="add-inventory-purchase">Purchase date <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+            <input type="date" name="purchaseDate" id="add-inventory-purchase" class="spa-inp">
+          </div>
+          <div>
+            <label class="spa-field-label" for="add-inventory-expiry">Expiry date <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
+            <input type="date" name="expiryDate" id="add-inventory-expiry" class="spa-inp">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
+          <a href="/core/inventory/add" class="btn btn-secondary" style="min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-primary" style="min-height: 44px;">Add Inventory Item</button>
+        </div>
+      </form>
+    {% endcall %}
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (function() {
+      const form = document.getElementById('add-inventory-form');
+      if (!form) return;
+
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const formData = new FormData(this);
+
+        const name = (formData.get('name') || '').trim();
+        const quantity = parseFloat(formData.get('quantity'));
+        const unit = (formData.get('unit') || '').trim();
+
+        if (!name) {
+          window.showNotification && window.showNotification('error', 'Validation Error', 'Please enter an item name');
+          return false;
+        }
+        if (!quantity || isNaN(quantity) || quantity <= 0) {
+          window.showNotification && window.showNotification('error', 'Validation Error', 'Please enter a quantity greater than 0');
+          return false;
+        }
+        if (!unit) {
+          window.showNotification && window.showNotification('error', 'Validation Error', 'Please select a unit');
+          return false;
+        }
+
+        const payload = {
+          name,
+          quantity,
+          unit,
+          inventory_type: 'raw_material',
+          supplier: (formData.get('supplier') || '').trim() || null,
+          purchase_date: formData.get('purchaseDate') || null,
+          supplier_batch_number: (formData.get('batchNumber') || '').trim() || null,
+          expiry_date: formData.get('expiryDate') || null,
+          barcode: (formData.get('barcode') || '').trim() || null,
+        };
+
+        try {
+          if (!window.CoreAPI || !window.CoreAPI.createInventoryItem) {
+            console.error('CoreAPI.createInventoryItem is not available in this context.', payload);
+            return false;
+          }
+
+          await window.CoreAPI.createInventoryItem(payload);
+
+          window.showNotification && window.showNotification('success', 'Inventory Item Added', 'The item has been added to inventory.');
+
+          this.reset();
+
+          window.location.href = '/core';
+        } catch (err) {
+          console.error('Failed to create inventory item', err);
+          window.showNotification && window.showNotification('error', 'Failed to Add Item', 'There was a problem saving this inventory item.');
+        }
+
+        return false;
+      });
+    })();
+  </script>
+{% endblock %}

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Flume Workflow Engine{% endblock %}</title>
+
+  {# Core styles & fonts #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  {# Page-level head customisation #}
+  {% block head_extras %}{% endblock %}
+
+  <style>
+    [x-cloak] { display: none !important; }
+
+    /* SPA shell: Roboto for layout + page content */
+    body {
+      font-family: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Page content: one type scale (mobile → desktop) */
+    #page-content.page-content {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+
+    #page-content h1,
+    #page-content .page-title {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: clamp(1.25rem, 2.1vw, 1.5rem);
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+
+    #page-content h2,
+    #page-content .card-title {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: clamp(1.125rem, 1.75vw, 1.25rem);
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+
+    #page-content h3 {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: clamp(1.125rem, 1.75vw, 1.25rem);
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    #page-content .page-subtitle,
+    #page-content .metric-label,
+    #page-content .metric-subtext {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: 0.875rem;
+      line-height: 1.45;
+    }
+
+    #page-content .metric-value {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: clamp(1.25rem, 2vw, 1.5rem);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    /* Text fields: full width of container, left-aligned with headings/labels (no centering) */
+    #page-content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]):not([type="image"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+    #page-content select,
+    #page-content textarea {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif !important;
+      font-size: 1rem !important;
+      line-height: 1.45;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      display: block !important;
+      box-sizing: border-box !important;
+      min-height: 44px;
+      padding: 0.625rem 0.875rem !important;
+      border-radius: var(--radius-lg, 12px);
+      border: 1px solid var(--border-default, #e5e7eb);
+      background: var(--bg-card, #fff);
+      color: var(--text-primary, #111827);
+    }
+
+    #page-content textarea {
+      min-height: 6rem;
+      resize: vertical;
+    }
+
+    #page-content input[type="file"] {
+      font-size: 0.875rem !important;
+      min-height: auto;
+      padding: 0.5rem 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+
+    /* SPA forms: fill card content width; stack matches card-title / subtitles */
+    .spa-card-form {
+      display: flex;
+      flex-direction: column;
+      gap: 2.25rem;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .spa-form-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1.125rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .spa-form-section-title {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-secondary, #6b7280);
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      line-height: 1.3;
+    }
+    .page-content h3.spa-form-section-title,
+    #page-content h3.spa-form-section-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      line-height: 1.3;
+      text-transform: uppercase;
+      color: var(--text-secondary, #6b7280);
+    }
+    .spa-form-section--reconciliation {
+      padding: 14px 16px;
+      border-radius: var(--radius-lg, 12px);
+      border: 1px solid var(--border-default, #e5e7eb);
+      background: var(--primary-bg, hsl(210, 100%, 95%));
+      gap: 0.75rem;
+    }
+    .spa-form-section--reconciliation .spa-form-section-title {
+      color: var(--primary-dark, hsl(210, 100%, 45%));
+    }
+    #page-content .spa-form-section--reconciliation h3.spa-form-section-title {
+      color: var(--primary-dark, hsl(210, 100%, 45%));
+    }
+    .spa-reconciliation-intro {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      color: var(--text-secondary, #6b7280);
+      margin: 0 0 0.25rem 0;
+    }
+    .spa-field-label {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: 0.875rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--text-primary, #111827);
+      margin-bottom: 8px;
+    }
+    .spa-inp {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif !important;
+      font-size: 1rem !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      display: block !important;
+      padding: 0.625rem 0.875rem !important;
+      min-height: 44px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-default);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      box-sizing: border-box !important;
+    }
+    .spa-advanced-toggle {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 44px;
+      padding: 4px 0;
+      margin: 0;
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-lg, 12px);
+      cursor: pointer;
+      text-align: left;
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      box-sizing: border-box;
+    }
+    .spa-advanced-toggle:focus-visible {
+      outline: 2px solid var(--primary, hsl(210, 100%, 50%));
+      outline-offset: 2px;
+    }
+    .spa-advanced-toggle__label {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      text-align: left;
+    }
+    .spa-advanced-toggle__track {
+      position: relative;
+      flex-shrink: 0;
+      width: 44px;
+      height: 26px;
+      border-radius: 999px;
+      background: var(--border-default, #e5e7eb);
+      transition: background 0.2s ease;
+    }
+    .spa-advanced-toggle__track--on {
+      background: var(--primary, hsl(210, 100%, 50%));
+    }
+    .spa-advanced-toggle__thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+      transition: transform 0.2s ease;
+    }
+    .spa-advanced-toggle__track--on .spa-advanced-toggle__thumb {
+      transform: translateX(18px);
+    }
+    .spa-advanced-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* Responsive padding for main column (styles2 sets 32px; tighten on phones) */
+    @media (max-width: 767px) {
+      #page-content.page-content {
+        padding: 16px !important;
+      }
+    }
+    @media (min-width: 768px) and (max-width: 1279px) {
+      #page-content.page-content {
+        padding: 24px !important;
+      }
+    }
+
+    /* SPA page-content fade transitions */
+    #page-content {
+      transition: opacity 0.15s ease;
+    }
+
+    body.htmx-request-loading #page-content {
+      opacity: 0.5;
+    }
+
+    .htmx-indicator {
+      position: fixed;
+      inset-inline-end: 16px;
+      inset-block-start: 16px;
+      z-index: 1200;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      color: #f9fafb;
+      font-size: 12px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .htmx-indicator.htmx-request {
+      display: inline-flex;
+    }
+
+    /* Show “Supply Chain Management” header only on Process Hub (/core), not on /core/inventory/* etc. */
+    body.spa-hide-main-header .main-header {
+      display: none !important;
+    }
+
+    /* Main column title (outside #page-content): match SPA heading scale */
+    .main-header .spa-topbar-title {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: clamp(1.25rem, 2.1vw, 1.5rem);
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      margin: 0 0 0.25rem 0;
+      color: var(--color-text-primary, #111827);
+    }
+    .main-header .spa-topbar-subtitle {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: 0.875rem;
+      line-height: 1.45;
+      margin: 0;
+      color: var(--color-text-secondary, #6b7280);
+    }
+  </style>
+</head>
+<body
+  class="{% block body_class %}{% endblock %}"
+  hx-boost="true"
+  hx-target="#page-content"
+  hx-select="#page-content"
+  hx-push-url="true"
+  x-data
+>
+  <div class="app-layout">
+    {% include 'shared/sidebar-v2.html' %}
+
+    <div class="main-content">
+      <header class="main-header">
+        {% block topbar %}
+        <div class="spa-topbar-title-wrap">
+          <h1 class="spa-topbar-title">Supply Chain Management</h1>
+          <p class="spa-topbar-subtitle">Manage and monitor all your operational workflows</p>
+        </div>
+        {% endblock %}
+      </header>
+
+      <main id="page-content" class="page-content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <div id="loading-indicator" class="htmx-indicator">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10" opacity="0.25"></circle>
+      <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round">
+        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite" />
+      </path>
+    </svg>
+    <span>Loading…</span>
+  </div>
+
+  {# Core JS and shared behaviour #}
+  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
+  <script src="/ui/shared/account-info.js"></script>
+  <script src="/ui/shared/sidebar-v2.js"></script>
+
+  {# HTMX & Alpine for SPA-style navigation and local UI state #}
+  <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous"></script>
+  <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+  <script>
+    function spaSyncMainHeader() {
+      var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
+      var hide = path !== '/core';
+      document.body.classList.toggle('spa-hide-main-header', hide);
+    }
+
+    document.addEventListener('DOMContentLoaded', spaSyncMainHeader);
+
+    // Global HTMX wiring
+    document.body.addEventListener('htmx:configRequest', function (evt) {
+      const indicator = document.getElementById('loading-indicator');
+      if (indicator) {
+        evt.detail.elt.setAttribute('hx-indicator', '#loading-indicator');
+      }
+    });
+
+    // afterOnLoad: sync header visibility + Process Hub data reload (see core2.html)
+    document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+      spaSyncMainHeader();
+      window.scrollTo(0, 0);
+      var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
+      if (path !== '/core') return;
+      if (typeof window.loadCoreHubDashboardData === 'function') {
+        window.loadCoreHubDashboardData();
+      } else {
+        window.location.reload();
+      }
+    });
+  </script>
+
+  {# Page-specific scripts go here #}
+  {% block scripts %}{% endblock %}
+</body>
+</html>
+
