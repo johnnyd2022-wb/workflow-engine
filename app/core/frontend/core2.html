@@ -104,6 +104,51 @@
       .csv-preview-wrap { max-height: 400px; }
       .csv-upload-modal-card { width: 90%; max-width: 880px; }
     }
+    .core2-hub-card {
+      display: block;
+      border: none;
+      border-radius: var(--radius-xl, 12px);
+      padding: 16px 18px;
+      margin: 0;
+      text-decoration: none;
+      color: inherit;
+      background: transparent;
+      box-shadow: none;
+      transition: background 0.2s ease;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .core2-hub-card:hover {
+      background: rgba(59, 130, 246, 0.06);
+    }
+    .core2-hub-card:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 2px;
+    }
+    button.core2-hub-card {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .core2-inventory-hub-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr;
+      width: 100%;
+      margin-top: 4px;
+    }
+    @media (min-width: 640px) {
+      .core2-inventory-hub-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (min-width: 1024px) {
+      .core2-inventory-hub-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
   </style>
 {% endblock %}
 
@@ -111,15 +156,12 @@
         {% include 'shared/system-findings-banner.html' %}
 
         <div class="max-content">
-          <!-- Page Header -->
-          <div class="page-header">
-            <div class="page-header-content">
-              <h1 class="page-title">Process Hub</h1>
-              <p class="page-subtitle">Manage and monitor all your operational workflows</p>
-            </div>
-          </div>
-          
-          <!-- Metrics Grid -->
+          <section class="spa-form-section" aria-labelledby="core2-hub-title">
+            <h1 id="core2-hub-title" class="page-title">Process Hub</h1>
+            <p class="page-subtitle">Manage and monitor all your operational workflows</p>
+          </section>
+
+          <section class="spa-form-section" aria-label="Key metrics">
           <div class="metrics-grid">
             <div class="card metric-card">
               <div class="metric-card-content">
@@ -183,65 +225,48 @@
             </div>
           </div>
           </div>
-          
+          </section>
+
           <!-- Source Map Section -->
-          <section class="card" style="margin-top: 24px; margin-bottom: 24px;">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 20px;">
-              <div style="flex: 1; min-width: 0;">
-                <h2 class="card-title">Source Map</h2>
-                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Leverage source map for end to end traceability of any inventory item, execution or custom field you define in your processes.</p>
-              </div>
-              <a href="/core/sourcemap" class="btn btn-primary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 3h8v8H3z"/>
-                  <path d="M14 3h7v7h-7z"/>
-                  <path d="M14 14h7v7h-7z"/>
-                  <path d="M3 14h8v8H3z"/>
-                </svg>
-                Open Source Map
-              </a>
-            </div>
+          <section class="spa-form-section" style="margin-top: 24px; margin-bottom: 32px;">
+            <a href="/core/sourcemap" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-section-sourcemap">
+              <h2 id="core2-section-sourcemap" class="spa-form-section-title">Source Map</h2>
+              <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Trace any inventory item, process completion or custom recorded data</p>
+            </a>
           </section>
-          
+
           <!-- Inventory Section -->
-          <section class="card">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-              <div>
-                <h2 class="card-title">Inventory</h2>
-                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Monitor your inventory with real-time visibility across your entire supply chain.</p>
-              </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <a href="/core/inventory/add" hx-boost="false" class="btn btn-secondary btn-sm" style="margin-top: 0; min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                  </svg>
-                  <span>Add to Inventory</span>
-                </a>
-                <button type="button" class="btn btn-secondary btn-sm" id="record-wastage-btn" style="margin-top: 0;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 6h18"/>
-                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-                    <line x1="10" y1="11" x2="10" y2="17"/>
-                    <line x1="14" y1="11" x2="14" y2="17"/>
-                  </svg>
-                  Dispose of inventory item
-                </button>
-              </div>
+          <section class="spa-form-section" aria-labelledby="core2-section-inventory">
+            <div>
+              <h2 id="core2-section-inventory" class="spa-form-section-title">Inventory</h2>
+              <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Monitor your inventory with real-time visibility across your entire supply chain.</p>
             </div>
-            <div class="card-content">
-              <div class="inventory-category-grid" id="inventory-grid">
-                <!-- Inventory will be loaded dynamically from backend -->
-              </div>
+            <div class="core2-inventory-hub-grid">
+              <a href="/core/inventory/view" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-inv-view-title">
+                <h3 id="core2-inv-view-title" class="spa-form-section-title">View inventory</h3>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">
+                  <span id="inv-hub-count-raw">0</span> raw, <span id="inv-hub-count-intermediate">0</span> intermediate, <span id="inv-hub-count-final">0</span> final items
+                </p>
+              </a>
+              <a href="/core/inventory/add" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-inv-add-title">
+                <h3 id="core2-inv-add-title" class="spa-form-section-title">Add to inventory</h3>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Add a single item manually, bulk upload via CSV, or scan a barcode to add stock.</p>
+              </a>
+              <button type="button" id="record-wastage-btn" class="core2-hub-card" aria-labelledby="core2-inv-dispose-title">
+                <h3 id="core2-inv-dispose-title" class="spa-form-section-title">Dispose of inventory</h3>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Record disposal of waste, overage, lost, or expired stock.</p>
+              </button>
+            </div>
+            <div class="inventory-category-grid card-content" id="inventory-grid">
+              <!-- Inventory will be loaded dynamically from backend -->
             </div>
           </section>
-          
+
           <!-- Processes Section -->
-          <section class="card" style="margin-top: 32px;">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <section class="spa-form-section" style="margin-top: 32px;" aria-labelledby="core2-section-processes">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
               <div>
-                <h2 class="card-title">Processes</h2>
+                <h2 id="core2-section-processes" class="spa-form-section-title">Processes</h2>
                 <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Create your custom processes to gain real-time operational insights into batch production.</p>
               </div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -257,10 +282,8 @@
                 </a>
               </div>
             </div>
-            <div class="card-content">
-              <div class="processes-grid" id="processes-grid">
-                <!-- Processes will be loaded dynamically from backend -->
-              </div>
+            <div class="processes-grid card-content" id="processes-grid">
+              <!-- Processes will be loaded dynamically from backend -->
             </div>
           </section>
         </div>
@@ -532,6 +555,34 @@
     }
     
     // Render inventory for V2 Modern design
+    function countInventoryByType(items) {
+      const grouped = { raw: 0, intermediate: 0, final: 0 };
+      let total = 0;
+      if (!items || !items.length) {
+        return { ...grouped, total: 0 };
+      }
+      items.forEach((item) => {
+        let quantity = parseFloat(String(item.quantity || '0').trim());
+        if (isNaN(quantity)) quantity = 0;
+        if (quantity <= 0 || Math.abs(quantity) < 0.0001) return;
+        total++;
+        const type = item.inventory_type || 'raw_material';
+        if (type === 'raw_material') grouped.raw++;
+        else if (type === 'work_in_progress') grouped.intermediate++;
+        else if (type === 'final_product') grouped.final++;
+      });
+      return { ...grouped, total };
+    }
+
+    function updateInventoryHubCountDisplay(counts) {
+      const rawEl = document.getElementById('inv-hub-count-raw');
+      const intEl = document.getElementById('inv-hub-count-intermediate');
+      const finEl = document.getElementById('inv-hub-count-final');
+      if (rawEl) rawEl.textContent = String(counts.raw);
+      if (intEl) intEl.textContent = String(counts.intermediate);
+      if (finEl) finEl.textContent = String(counts.final);
+    }
+
     async function loadInventoryV2() {
       try {
         const inventoryData = await CoreAPI.getInventory();
@@ -542,6 +593,7 @@
     }
     
     function renderInventoryV2(items) {
+      updateInventoryHubCountDisplay(countInventoryByType(items || []));
       const inventoryGrid = document.getElementById('inventory-grid');
       if (!inventoryGrid) return;
       

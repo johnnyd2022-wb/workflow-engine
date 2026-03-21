@@ -1,0 +1,541 @@
+{% extends "shared/base_spa.html" %}
+
+{% block body_class %}spa-hide-main-header{% endblock %}
+
+{% block title %}View inventory{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Filter and review all inventory on hand.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  <style>
+    .inv-view-filters {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr;
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 16px;
+    }
+    @media (min-width: 640px) {
+      .inv-view-filters { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (min-width: 1024px) {
+      .inv-view-filters { grid-template-columns: repeat(4, 1fr); }
+    }
+    .inv-view-filters__full {
+      grid-column: 1 / -1;
+    }
+    .inv-view-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .inv-view-count {
+      font-size: 0.875rem;
+      color: var(--text-secondary, #6b7280);
+    }
+    .inv-view-cards {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .inv-view-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: var(--radius-lg, 12px);
+      border: 1px solid var(--border-default, #e5e7eb);
+      background: var(--bg-card, #fff);
+    }
+    .inv-view-table {
+      width: 100%;
+      min-width: 880px;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    .inv-view-table th,
+    .inv-view-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-light, #f3f4f6);
+      vertical-align: top;
+    }
+    .inv-view-table th {
+      font-weight: 600;
+      color: var(--text-secondary, #6b7280);
+      background: var(--bg-hover, rgba(0, 0, 0, 0.02));
+      white-space: nowrap;
+    }
+    .inv-view-table tr:last-child td { border-bottom: none; }
+    .inv-view-table tbody tr:hover td {
+      background: rgba(59, 130, 246, 0.04);
+    }
+    .inv-view-type {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      text-transform: capitalize;
+    }
+    .inv-view-type--raw { background: hsl(217, 91%, 94%); color: hsl(217, 91%, 35%); }
+    .inv-view-type--wip { background: hsl(45, 93%, 92%); color: hsl(45, 93%, 28%); }
+    .inv-view-type--final { background: hsl(142, 71%, 92%); color: hsl(142, 50%, 28%); }
+    .inv-json {
+      margin: 0;
+      max-height: 160px;
+      overflow: auto;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .inv-view-card {
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: var(--radius-lg, 12px);
+      padding: 14px 16px;
+      background: var(--bg-card, #fff);
+    }
+    .inv-view-card__row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.875rem;
+      margin-top: 6px;
+    }
+    .inv-view-card__row:first-of-type { margin-top: 0; }
+    .inv-view-card__label { color: var(--text-secondary, #6b7280); flex-shrink: 0; }
+    .inv-view-card__val { text-align: right; word-break: break-word; }
+    @media (max-width: 899px) {
+      .inv-view-table-wrap { display: none !important; }
+      .inv-view-cards { display: flex !important; }
+    }
+    @media (min-width: 900px) {
+      .inv-view-table-wrap { display: block; }
+      .inv-view-cards { display: none !important; }
+    }
+    .inv-view-empty {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--text-secondary, #6b7280);
+      font-size: 0.9375rem;
+    }
+    .inv-view-loading {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-secondary, #6b7280);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="max-content">
+    {% import "shared/back_link.html" as nav %}
+    {% from "shared/primary_card.html" import primary_card %}
+
+    {{ nav.spa_back_link("/core") }}
+    {% include 'inventory/inventory_hub_banner.html' %}
+
+    {% call primary_card(
+      title="View inventory",
+      subtitle="Search, filter by type or dates, and inspect metadata stored with each line."
+    ) %}
+      <div class="spa-card-form" style="gap: 1rem;">
+        <div class="inv-view-filters" id="inv-view-filters">
+          <div class="inv-view-filters__full">
+            <label class="spa-field-label" for="inv-filter-search">Search</label>
+            <input type="search" id="inv-filter-search" class="spa-inp" placeholder="Name, supplier, unit, process, barcode, or any text in metadata" autocomplete="off">
+          </div>
+          <div>
+            <label class="spa-field-label" for="inv-filter-type">Type</label>
+            <select id="inv-filter-type" class="spa-inp">
+              <option value="">All types</option>
+              <option value="raw_material">Raw</option>
+              <option value="work_in_progress">Intermediate</option>
+              <option value="final_product">Final</option>
+            </select>
+          </div>
+          <div>
+            <label class="spa-field-label" for="inv-filter-supplier">Supplier</label>
+            <select id="inv-filter-supplier" class="spa-inp">
+              <option value="">Any supplier</option>
+            </select>
+          </div>
+          <div>
+            <label class="spa-field-label" for="inv-filter-process">Process</label>
+            <select id="inv-filter-process" class="spa-inp">
+              <option value="">Any process</option>
+            </select>
+          </div>
+          <div>
+            <label class="spa-field-label" for="inv-filter-expiry-from">Expiry from</label>
+            <input type="date" id="inv-filter-expiry-from" class="spa-inp">
+          </div>
+          <div>
+            <label class="spa-field-label" for="inv-filter-expiry-to">Expiry to</label>
+            <input type="date" id="inv-filter-expiry-to" class="spa-inp">
+          </div>
+          <div>
+            <label class="spa-field-label" for="inv-filter-purchase-from">Purchase from</label>
+            <input type="date" id="inv-filter-purchase-from" class="spa-inp">
+          </div>
+          <div>
+            <label class="spa-field-label" for="inv-filter-purchase-to">Purchase to</label>
+            <input type="date" id="inv-filter-purchase-to" class="spa-inp">
+          </div>
+          <div>
+            <label class="spa-field-label" for="inv-filter-meta-key">Metadata field (optional)</label>
+            <select id="inv-filter-meta-key" class="spa-inp">
+              <option value="">Any</option>
+            </select>
+          </div>
+          <div class="inv-view-filters__full">
+            <label class="spa-field-label" for="inv-filter-meta-text">Metadata contains (JSON text)</label>
+            <input type="text" id="inv-filter-meta-text" class="spa-inp" placeholder="Substring match inside stored metadata JSON" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="inv-view-toolbar">
+          <span class="inv-view-count" id="inv-view-count" aria-live="polite">Loading…</span>
+          <button type="button" class="btn btn-secondary btn-sm" id="inv-view-clear-filters" style="min-height: 44px;">Clear filters</button>
+        </div>
+
+        <div id="inv-view-loading" class="inv-view-loading">Loading inventory…</div>
+        <div id="inv-view-empty" class="inv-view-empty" style="display: none;"></div>
+
+        <div class="inv-view-table-wrap" id="inv-view-table-wrap" style="display: none;">
+          <table class="inv-view-table" id="inv-view-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>Supplier</th>
+                <th>Batch</th>
+                <th>Purchase</th>
+                <th>Expiry</th>
+                <th>Process</th>
+                <th>Barcode</th>
+                <th>Metadata</th>
+              </tr>
+            </thead>
+            <tbody id="inv-view-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="inv-view-cards" id="inv-view-cards"></div>
+      </div>
+    {% endcall %}
+  </div>
+  <script>
+    (function () {
+      if (window.__invViewInit) return;
+      window.__invViewInit = true;
+
+      const TYPE_LABEL = { raw_material: 'Raw', work_in_progress: 'Intermediate', final_product: 'Final' };
+      const TYPE_CLASS = { raw_material: 'inv-view-type--raw', work_in_progress: 'inv-view-type--wip', final_product: 'inv-view-type--final' };
+
+      let allItems = [];
+
+      function esc(s) {
+        if (s == null || s === '') return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+      }
+
+      function parseQty(item) {
+        const q = parseFloat(String(item.quantity || '0').trim());
+        return isNaN(q) ? 0 : q;
+      }
+
+      function itemVisible(item) {
+        return parseQty(item) > 0 && Math.abs(parseQty(item)) >= 0.0001;
+      }
+
+      function datePart(iso) {
+        if (!iso || typeof iso !== 'string') return '';
+        return iso.slice(0, 10);
+      }
+
+      function topLevelKeysFromExtra(extra) {
+        const keys = [];
+        if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+          Object.keys(extra).forEach(function (k) { keys.push(k); });
+        }
+        return keys.sort();
+      }
+
+      function extraDataString(item) {
+        try {
+          return JSON.stringify(item.extra_data != null ? item.extra_data : {});
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function populateSelect(sel, values, emptyLabel) {
+        const cur = sel.value;
+        sel.innerHTML = '';
+        const opt0 = document.createElement('option');
+        opt0.value = '';
+        opt0.textContent = emptyLabel;
+        sel.appendChild(opt0);
+        values.forEach(function (v) {
+          const o = document.createElement('option');
+          o.value = v;
+          o.textContent = v;
+          sel.appendChild(o);
+        });
+        if (values.indexOf(cur) >= 0) sel.value = cur;
+      }
+
+      function populateMetaKeys(items) {
+        const set = new Set();
+        items.forEach(function (it) {
+          topLevelKeysFromExtra(it.extra_data).forEach(function (k) { set.add(k); });
+        });
+        const metaSel = document.getElementById('inv-filter-meta-key');
+        if (!metaSel) return;
+        const opts = Array.from(set);
+        const cur = metaSel.value;
+        metaSel.innerHTML = '<option value="">Any</option>';
+        opts.forEach(function (k) {
+          const o = document.createElement('option');
+          o.value = k;
+          o.textContent = k;
+          metaSel.appendChild(o);
+        });
+        if (opts.indexOf(cur) >= 0) metaSel.value = cur;
+      }
+
+      function uniqueStrings(items, getter) {
+        const s = new Set();
+        items.forEach(function (it) {
+          const v = getter(it);
+          if (v && String(v).trim()) s.add(String(v).trim());
+        });
+        return Array.from(s).sort(function (a, b) { return a.localeCompare(b); });
+      }
+
+      function passesFilters(item) {
+        const q = (document.getElementById('inv-filter-search') || {}).value || '';
+        const type = (document.getElementById('inv-filter-type') || {}).value || '';
+        const supplier = (document.getElementById('inv-filter-supplier') || {}).value || '';
+        const process = (document.getElementById('inv-filter-process') || {}).value || '';
+        const expFrom = (document.getElementById('inv-filter-expiry-from') || {}).value || '';
+        const expTo = (document.getElementById('inv-filter-expiry-to') || {}).value || '';
+        const purFrom = (document.getElementById('inv-filter-purchase-from') || {}).value || '';
+        const purTo = (document.getElementById('inv-filter-purchase-to') || {}).value || '';
+        const metaKey = (document.getElementById('inv-filter-meta-key') || {}).value || '';
+        const metaText = ((document.getElementById('inv-filter-meta-text') || {}).value || '').trim().toLowerCase();
+
+        if (type && (item.inventory_type || '') !== type) return false;
+        if (supplier && String(item.supplier || '').trim() !== supplier) return false;
+        if (process && String(item.process_name || '').trim() !== process) return false;
+
+        const ed = item.expiry_date ? datePart(item.expiry_date) : '';
+        if (expFrom && (!ed || ed < expFrom)) return false;
+        if (expTo && (!ed || ed > expTo)) return false;
+
+        const pd = item.purchase_date ? datePart(item.purchase_date) : '';
+        if (purFrom && (!pd || pd < purFrom)) return false;
+        if (purTo && (!pd || pd > purTo)) return false;
+
+        if (metaKey) {
+          const ex = item.extra_data;
+          if (!ex || typeof ex !== 'object' || !Object.prototype.hasOwnProperty.call(ex, metaKey)) return false;
+        }
+
+        const jsonLow = extraDataString(item).toLowerCase();
+        if (metaText && jsonLow.indexOf(metaText) === -1) return false;
+
+        if (q.trim()) {
+          const needle = q.trim().toLowerCase();
+          const hay = [
+            item.name,
+            item.unit,
+            item.supplier,
+            item.process_name,
+            item.source_step_name,
+            item.supplier_batch_number,
+            item.barcode,
+            jsonLow
+          ].filter(Boolean).join(' ').toLowerCase();
+          if (hay.indexOf(needle) === -1) return false;
+        }
+
+        return true;
+      }
+
+      function render() {
+        const visibleAll = allItems.filter(itemVisible);
+        const filtered = visibleAll.filter(passesFilters);
+        const countEl = document.getElementById('inv-view-count');
+        const loadingEl = document.getElementById('inv-view-loading');
+        const emptyEl = document.getElementById('inv-view-empty');
+        const wrapEl = document.getElementById('inv-view-table-wrap');
+        const cardsEl = document.getElementById('inv-view-cards');
+        const tbody = document.getElementById('inv-view-tbody');
+
+        if (loadingEl) loadingEl.style.display = 'none';
+
+        if (countEl) {
+          countEl.textContent = filtered.length === visibleAll.length
+            ? filtered.length + ' item' + (filtered.length === 1 ? '' : 's') + ' on hand'
+            : filtered.length + ' of ' + visibleAll.length + ' items shown';
+        }
+
+        if (!filtered.length) {
+          if (emptyEl) {
+            emptyEl.style.display = 'block';
+            emptyEl.textContent = visibleAll.length === 0
+              ? 'No inventory on hand yet.'
+              : 'No items match your filters.';
+          }
+          if (wrapEl) wrapEl.style.display = 'none';
+          if (cardsEl) cardsEl.style.display = 'none';
+          if (tbody) tbody.innerHTML = '';
+          if (cardsEl) cardsEl.innerHTML = '';
+          return;
+        }
+
+        if (emptyEl) emptyEl.style.display = 'none';
+        if (wrapEl) wrapEl.style.removeProperty('display');
+        if (cardsEl) cardsEl.style.removeProperty('display');
+
+        const rows = filtered.map(function (item) {
+          const t = item.inventory_type || 'raw_material';
+          const typeLabel = TYPE_LABEL[t] || t;
+          const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
+          const metaStr = extraDataString(item);
+          const metaCell = metaStr.length > 2
+            ? '<details><summary style="cursor:pointer;color:var(--primary,#3b82f6);">View</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
+            : '—';
+
+          return (
+            '<tr>' +
+              '<td><strong>' + esc(item.name) + '</strong></td>' +
+              '<td><span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span></td>' +
+              '<td>' + esc(String(item.quantity != null ? item.quantity : '')) + '</td>' +
+              '<td>' + esc(item.unit || '') + '</td>' +
+              '<td>' + esc(item.supplier || '—') + '</td>' +
+              '<td>' + esc(item.supplier_batch_number || '—') + '</td>' +
+              '<td>' + esc(datePart(item.purchase_date) || '—') + '</td>' +
+              '<td>' + esc(datePart(item.expiry_date) || '—') + '</td>' +
+              '<td>' + esc(item.process_name || '—') + '</td>' +
+              '<td>' + esc(item.barcode || '—') + '</td>' +
+              '<td>' + metaCell + '</td>' +
+            '</tr>'
+          );
+        }).join('');
+
+        if (tbody) tbody.innerHTML = rows;
+
+        if (cardsEl) {
+          cardsEl.innerHTML = filtered.map(function (item) {
+            const t = item.inventory_type || 'raw_material';
+            const typeLabel = TYPE_LABEL[t] || t;
+            const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
+            const metaStr = extraDataString(item);
+            const metaBlock = metaStr.length > 2
+              ? '<details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--primary,#3b82f6);font-size:0.875rem;">Metadata</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
+              : '';
+            return (
+              '<article class="inv-view-card">' +
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
+                  '<strong style="font-size:1rem;">' + esc(item.name) + '</strong>' +
+                  '<span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span>' +
+                '</div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + '</span></div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Supplier</span><span class="inv-view-card__val">' + esc(item.supplier || '—') + '</span></div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Batch</span><span class="inv-view-card__val">' + esc(item.supplier_batch_number || '—') + '</span></div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Purchase</span><span class="inv-view-card__val">' + esc(datePart(item.purchase_date) || '—') + '</span></div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Expiry</span><span class="inv-view-card__val">' + esc(datePart(item.expiry_date) || '—') + '</span></div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Process</span><span class="inv-view-card__val">' + esc(item.process_name || '—') + '</span></div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Barcode</span><span class="inv-view-card__val">' + esc(item.barcode || '—') + '</span></div>' +
+                metaBlock +
+              '</article>'
+            );
+          }).join('');
+        }
+      }
+
+      function wireFilters() {
+        const ids = ['inv-filter-search', 'inv-filter-type', 'inv-filter-supplier', 'inv-filter-process',
+          'inv-filter-expiry-from', 'inv-filter-expiry-to', 'inv-filter-purchase-from', 'inv-filter-purchase-to',
+          'inv-filter-meta-key', 'inv-filter-meta-text'];
+        ids.forEach(function (id) {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', function () { render(); });
+          el.addEventListener('change', function () { render(); });
+        });
+        const clear = document.getElementById('inv-view-clear-filters');
+        if (clear) {
+          clear.addEventListener('click', function () {
+            document.getElementById('inv-filter-search').value = '';
+            document.getElementById('inv-filter-type').value = '';
+            document.getElementById('inv-filter-supplier').value = '';
+            document.getElementById('inv-filter-process').value = '';
+            document.getElementById('inv-filter-expiry-from').value = '';
+            document.getElementById('inv-filter-expiry-to').value = '';
+            document.getElementById('inv-filter-purchase-from').value = '';
+            document.getElementById('inv-filter-purchase-to').value = '';
+            document.getElementById('inv-filter-meta-key').value = '';
+            document.getElementById('inv-filter-meta-text').value = '';
+            render();
+          });
+        }
+      }
+
+      async function load() {
+        if (!window.CoreAPI || !window.CoreAPI.getInventory) {
+          const loadingEl = document.getElementById('inv-view-loading');
+          if (loadingEl) {
+            loadingEl.textContent = 'Inventory API is not available.';
+          }
+          return;
+        }
+        try {
+          const res = await window.CoreAPI.getInventory();
+          allItems = res.inventory_items || [];
+          populateSelect(
+            document.getElementById('inv-filter-supplier'),
+            uniqueStrings(allItems.filter(itemVisible), function (i) { return i.supplier; }),
+            'Any supplier'
+          );
+          populateSelect(
+            document.getElementById('inv-filter-process'),
+            uniqueStrings(allItems.filter(itemVisible), function (i) { return i.process_name; }),
+            'Any process'
+          );
+          populateMetaKeys(allItems.filter(itemVisible));
+          render();
+        } catch (e) {
+          console.error(e);
+          const loadingEl = document.getElementById('inv-view-loading');
+          if (loadingEl) loadingEl.textContent = 'Failed to load inventory.';
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+          wireFilters();
+          load();
+        });
+      } else {
+        wireFilters();
+        load();
+      }
+    })();
+  </script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+{% endblock %}

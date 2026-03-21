@@ -167,6 +167,13 @@ def inventory_add_barcode():
     return render_template("inventory/add_barcode.html", active_page="core")
 
 
+@core_bp.route("/core/inventory/view", methods=["GET"])
+@requires_auth
+def inventory_view():
+    """Full-page inventory list with filtering."""
+    return render_template("inventory/view.html", active_page="core")
+
+
 @core_bp.route("/core/flows", methods=["GET"])
 @requires_auth
 def flows():
@@ -1723,6 +1730,7 @@ def list_inventory():
                 "quantity": item.quantity,
                 "unit": item.unit,
                 "inventory_type": item.inventory_type,
+                "barcode": item.barcode,
                 "supplier": item.supplier,
                 "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
                 "supplier_batch_number": item.supplier_batch_number,
