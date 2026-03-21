@@ -1,23 +1,27 @@
 {% extends "shared/base_spa.html" %}
 
+{% block body_class %}spa-hide-main-header{% endblock %}
+
 {% block title %}Add to Inventory{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="Add inventory items to your supply chain.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
 {% endblock %}
 
 {% block content %}
   <div class="max-content">
-    {% import "shared/back_link.html" as back %}
+    {% import "shared/back_link.html" as nav %}
     {% from "shared/primary_card.html" import primary_card %}
 
-    {{ back.back_link("/core", "Back to Process Hub") }}
+    {{ nav.spa_back_link("/core") }}
+    {% include 'inventory/inventory_hub_banner.html' %}
 
     {% call primary_card(
       title="Add to Inventory",
       subtitle="Choose how you want to add inventory: manual entry, CSV upload, or barcode scan."
     ) %}
-      <div style="display: flex; flex-direction: column; gap: 12px; max-width: 520px;">
+      <div class="spa-card-form">
         <a href="/core/inventory/add/manual" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-decoration: none; min-height: 44px; transition: background 0.2s;">
           <span style="flex: 1;">Manual Entry</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -45,4 +49,3 @@
     {% endcall %}
   </div>
 {% endblock %}
-

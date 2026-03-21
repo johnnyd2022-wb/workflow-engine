@@ -1122,8 +1122,8 @@
       card.remove();
     }
     
-    // Load dashboard data on page load (system findings banner is handled by shared system-findings-banner.js)
-    document.addEventListener('DOMContentLoaded', async function() {
+    // Load dashboard data on full page load and after HTMX swaps #page-content back to Process Hub (see base_spa.html)
+    async function loadCoreHubDashboardData() {
       try {
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
@@ -1136,7 +1136,14 @@
       if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
       setupModalHandlers();
       setupInventoryEntryHub();
-    });
+    }
+    window.loadCoreHubDashboardData = loadCoreHubDashboardData;
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loadCoreHubDashboardData);
+    } else {
+      loadCoreHubDashboardData();
+    }
     
     // Modal handlers
     function setupModalHandlers() {

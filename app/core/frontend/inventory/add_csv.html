@@ -1,27 +1,32 @@
 {% extends "shared/base_spa.html" %}
 
+{% block body_class %}spa-hide-main-header{% endblock %}
+
 {% block title %}Add Inventory via CSV{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="Upload a CSV file to add or update inventory in bulk.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
 {% endblock %}
 
 {% block content %}
   <div class="max-content">
-    {% import "shared/back_link.html" as back %}
+    {% import "shared/back_link.html" as nav %}
     {% from "shared/primary_card.html" import primary_card %}
 
-    {{ back.back_link("/core/inventory/add", "Back to Add Inventory") }}
+    {{ nav.spa_back_link("/core/inventory/add") }}
+    {% include 'inventory/inventory_hub_banner.html' %}
 
     {% call primary_card(
       title="Add Inventory via CSV",
       subtitle="Upload a CSV file to add or update multiple inventory items at once."
     ) %}
-      <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px;">
-        This screen will host the CSV upload and mapping flow, migrated from the previous modal.
-      </p>
-      <!-- TODO: migrate existing CSV upload UI and behaviour from the inventory modal in core2.html -->
+      <div class="spa-card-form">
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
+          This screen will host the CSV upload and mapping flow, migrated from the previous modal.
+        </p>
+        <!-- TODO: migrate existing CSV upload UI and behaviour from the inventory modal in core2.html -->
+      </div>
     {% endcall %}
   </div>
 {% endblock %}
-
