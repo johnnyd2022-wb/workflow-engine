@@ -79,10 +79,10 @@
     .help-tooltip { position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 4px; max-width: 280px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
     .help-tooltip.visible { display: block; }
     .help-wrapper { position: relative; display: inline-block; }
-    .dopamine-line { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px; }
+    .dopamine-line { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-lg); padding: 14px 0; margin-bottom: 20px; }
     .dopamine-line p { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); line-height: 1.5; }
-    @media (min-width: 600px) { .dopamine-line { padding: 16px 20px; } .dopamine-line p { font-size: 0.95rem; } }
-    @media (min-width: 1024px) { .dopamine-line { padding: 18px 22px; } .dopamine-line p { font-size: 1rem; } }
+    @media (min-width: 600px) { .dopamine-line { padding: 16px 0; } .dopamine-line p { font-size: 0.95rem; } }
+    @media (min-width: 1024px) { .dopamine-line { padding: 18px 0; } .dopamine-line p { font-size: 1rem; } }
     .inventory-entry-hub-btn:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.05)); }
     .csv-preview-table thead th { position: sticky; top: 0; background: var(--bg-card); z-index: 10; box-shadow: 0 1px 0 var(--border-default); }
     .csv-preview-wrap { max-height: 280px; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -108,7 +108,7 @@
       display: block;
       border: none;
       border-radius: var(--radius-xl, 12px);
-      padding: 16px 18px;
+      padding: 16px 0;
       margin: 0;
       text-decoration: none;
       color: inherit;
@@ -131,12 +131,6 @@
     button.core2-hub-card {
       -webkit-appearance: none;
       appearance: none;
-    }
-    /* Match horizontal inset of .core2-hub-card titles (padding 18px) so section headings line up with sourcemap card */
-    .core2-section-heading {
-      padding-left: 18px;
-      padding-right: 18px;
-      box-sizing: border-box;
     }
     .core2-hub-card-stack {
       display: flex;
@@ -258,9 +252,7 @@
 
           <!-- Traceability (sourcemap) -->
           <section class="spa-form-section" style="margin-top: 24px; margin-bottom: 32px;" aria-labelledby="core2-section-traceability">
-            <div class="core2-section-heading">
-              <h2 id="core2-section-traceability" class="spa-form-section-title">Traceability</h2>
-            </div>
+            <h2 id="core2-section-traceability" class="spa-form-section-title">Traceability</h2>
             <div class="core2-hub-card-stack">
               <a href="/core/sourcemap" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-section-sourcemap">
                 <span class="core2-hub-card__icon" aria-hidden="true">
@@ -280,9 +272,7 @@
 
           <!-- Inventory Section -->
           <section class="spa-form-section" aria-labelledby="core2-section-inventory">
-            <div class="core2-section-heading">
-              <h2 id="core2-section-inventory" class="spa-form-section-title">Inventory</h2>
-            </div>
+            <h2 id="core2-section-inventory" class="spa-form-section-title">Inventory</h2>
             <div class="core2-hub-card-stack">
               <a href="/core/inventory/view" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-inv-view-title">
                 <span class="core2-hub-card__icon" aria-hidden="true">
@@ -339,9 +329,7 @@
 
           <!-- Processes Section -->
           <section class="spa-form-section" style="margin-top: 32px;" aria-labelledby="core2-section-processes">
-            <div class="core2-section-heading">
-              <h2 id="core2-section-processes" class="spa-form-section-title">Processes</h2>
-            </div>
+            <h2 id="core2-section-processes" class="spa-form-section-title">Processes</h2>
             <div class="core2-hub-card-stack">
               <a href="/core/flows/create" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-proc-create-title">
                 <span class="core2-hub-card__icon" aria-hidden="true">
@@ -356,8 +344,8 @@
                   </svg>
                 </span>
                 <span class="core2-hub-card__text">
-                  <h3 id="core2-proc-create-title" class="spa-form-section-title">Create new process</h3>
-                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Define steps, inputs, and outputs on the full-page guided flow.</p>
+                  <h3 id="core2-proc-create-title" class="spa-form-section-title">Create new product</h3>
+                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Define process steps, inputs, outputs and custom data to record.</p>
                 </span>
               </a>
               <a href="/core/processes" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-proc-view-title">
@@ -370,8 +358,8 @@
                   </svg>
                 </span>
                 <span class="core2-hub-card__text">
-                  <h3 id="core2-proc-view-title" class="spa-form-section-title">View processes</h3>
-                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">See every process in a list and open one to work in the full workspace.</p>
+                  <h3 id="core2-proc-view-title" class="spa-form-section-title">View products</h3>
+                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Open a product to run executions, edit steps, and manage inventory.</p>
                 </span>
               </a>
             </div>
@@ -382,9 +370,6 @@
               <a href="/core/flows/create" class="btn btn-ghost btn-sm">Define steps (full page)</a>
             </div>
             -->
-            <div class="processes-grid card-content" id="processes-grid">
-              <!-- Processes will be loaded dynamically from backend -->
-            </div>
           </section>
         </div>
 {% endblock %}
@@ -526,132 +511,10 @@
       if (inventoryEl) inventoryEl.textContent = metrics.inventory_items?.total || 0;
     }
     
-    // Render processes for V2 Modern design
-    function renderProcessesV2(processes) {
-      const processGrid = document.getElementById('processes-grid');
-      if (!processGrid) return;
-      
-      processGrid.innerHTML = '';
-      
-      if (!processes || processes.length === 0) {
-        processGrid.innerHTML = `
-          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
-            <p style="color: var(--text-secondary);">No processes yet. Create your first process to get started.</p>
-          </div>
-        `;
-        return;
-      }
-      
-      processes.forEach(process => {
-        const processCard = createProcessCardV2(process);
-        processGrid.appendChild(processCard);
-      });
-    }
-    
-    // Optimistic rendering helpers
-    function prependProcessCardV2(process) {
-      const grid = document.getElementById('processes-grid');
-      if (!grid) return;
-
-      // Clear empty state message if present
-      if (grid.innerHTML.includes('No processes yet')) {
-        grid.innerHTML = '';
-      }
-
-      const card = renderSingleProcessCardV2(process);
-      card.dataset.processId = process.id;
-
-      if (process.__optimistic) {
-        card.style.opacity = '0.6';
-      }
-
-      grid.prepend(card);
-    }
-
-    function replaceOptimisticProcessV2(tempId, realProcess) {
-      const card = document.querySelector(`[data-process-id="${tempId}"]`);
-      if (!card) return;
-
-      const newCard = renderSingleProcessCardV2(realProcess);
-      newCard.dataset.processId = realProcess.id;
-
-      card.replaceWith(newCard);
-    }
-
-    function removeOptimisticProcessV2(tempId) {
-      const card = document.querySelector(`[data-process-id="${tempId}"]`);
-      if (card) card.remove();
-    }
-    
-    function renderSingleProcessCardV2(process) {
-      const card = document.createElement('div');
-      card.className = 'card card-interactive process-card';
-      
-      const categoryBadgeClass = {
-        'manufacturing': 'default',
-        'chemical': 'default',
-        'packaging': 'default',
-        'assembly': 'default',
-        'other': 'default',
-      }[process.category] || 'default';
-      
-      card.innerHTML = `
-        <div class="process-card-header">
-          <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="navigateToProcess('${process.id}')">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-              <h3 class="process-title">${escapeHtml(process.name)}</h3>
-              ${process.is_draft ? '<span class="badge" style="background: var(--warning, #f59e0b); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">DRAFT</span>' : ''}
-            </div>
-            <p class="process-description">${escapeHtml(process.description || '')}</p>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditProcessModal('${process.id}')" title="Edit process">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteConfirmation('${process.id}', '${escapeHtml(process.name)}')" title="Delete process">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-              </svg>
-            </button>
-            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer;" onclick="navigateToProcess('${process.id}')">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-              <polyline points="12 5 19 12 12 19"/>
-            </svg>
-          </div>
-        </div>
-        <div class="process-card-footer">
-          <span class="process-badge ${categoryBadgeClass}">${process.step_count || 0} steps</span>
-          ${process.active_executions > 0 ? `
-            <span class="process-badge active">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-              ${process.active_executions} active
-            </span>
-          ` : ''}
-          <span class="process-completed">${process.completed_executions || 0} completed</span>
-        </div>
-      `;
-      
-      return card;
-    }
-    
-    function createProcessCardV2(process) {
-      return renderSingleProcessCardV2(process);
-    }
-    
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
-    }
-    
-    function navigateToProcess(processId) {
-      window.location.href = `/core/flows?id=${processId}`;
     }
     
     // Render inventory for V2 Modern design
@@ -1279,8 +1142,7 @@
       try {
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
-        const processesData = await CoreAPI.getProcesses();
-        renderProcessesV2(processesData.processes);
+        await CoreAPI.getProcesses();
         await loadInventoryV2();
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
@@ -2381,7 +2243,7 @@
       if (recordWastageSubmit) recordWastageSubmit.addEventListener('click', submitRecordWastage);
     });
     
-    // Create process handler with optimistic UI
+    // Create process handler
     window.createNewProcess = function (form) {
       const formData = new FormData(form);
       const name = formData.get('name')?.trim();
@@ -2393,30 +2255,13 @@
         return false;
       }
 
-      const tempId = `temp-${Date.now()}`;
-
-      const optimisticProcess = {
-        id: tempId,
-        name,
-        description,
-        category,
-        created_at: new Date().toISOString(),
-        __optimistic: true,
-        step_count: 0,
-        active_executions: 0,
-        completed_executions: 0,
-      };
-
-      // Close modal immediately (like delete does)
+      // Close modal immediately
       const modal = document.getElementById('create-process-modal');
       if (modal) {
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
       }
       form.reset();
-
-      // Render immediately
-      prependProcessCardV2(optimisticProcess);
 
       // Persist asynchronously, then redirect to flows2 with welcome=1
       (async () => {
@@ -2427,8 +2272,6 @@
             category,
           });
 
-          replaceOptimisticProcessV2(tempId, saved);
-
           // Update metrics
           const metrics = await CoreAPI.getMetrics();
           updateMetricsV2(metrics);
@@ -2436,8 +2279,6 @@
           // Redirect to process flow page and show "define steps" welcome modal
           window.location.href = `/core/flows?id=${saved.id}&welcome=1`;
         } catch (error) {
-          removeOptimisticProcessV2(tempId);
-
           showNotification(
             'error',
             'Failed to Create Process',
@@ -2492,10 +2333,6 @@
         }
         
         // Reload processes
-        const processesData = await CoreAPI.getProcesses();
-        renderProcessesV2(processesData.processes);
-        
-        // Reload metrics
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
         
@@ -2507,55 +2344,6 @@
         showNotification('error', 'Failed to Update Process', error.message || 'Failed to update process. Please try again.');
         return false;
       }
-    }
-    
-    // Delete process handler
-    let currentDeleteProcessId = null;
-    let currentDeleteProcessName = null;
-    
-    function showDeleteConfirmation(processId, processName) {
-      currentDeleteProcessId = processId;
-      currentDeleteProcessName = processName;
-      const modal = document.getElementById('delete-process-confirmation-modal');
-      const messageEl = modal.querySelector('#delete-confirmation-message');
-      messageEl.textContent = `Are you sure you want to delete "${processName}"? This action cannot be undone.`;
-      modal.style.display = 'flex';
-      document.body.style.overflow = 'hidden';
-    }
-    
-    async function confirmDeleteProcess() {
-      if (!currentDeleteProcessId) return;
-      
-      try {
-        await CoreAPI.deleteProcess(currentDeleteProcessId);
-        
-        // Close modal
-        const modal = document.getElementById('delete-process-confirmation-modal');
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-        
-        // Reload processes
-        const processesData = await CoreAPI.getProcesses();
-        renderProcessesV2(processesData.processes);
-        
-        // Reload metrics
-        const metrics = await CoreAPI.getMetrics();
-        updateMetricsV2(metrics);
-        
-        currentDeleteProcessId = null;
-        currentDeleteProcessName = null;
-      } catch (error) {
-        console.error('Failed to delete process:', error);
-        showNotification('error', 'Failed to Delete Process', error.message || 'Failed to delete process. Please try again.');
-      }
-    }
-    
-    function cancelDeleteProcess() {
-      const modal = document.getElementById('delete-process-confirmation-modal');
-      modal.style.display = 'none';
-      document.body.style.overflow = 'auto';
-      currentDeleteProcessId = null;
-      currentDeleteProcessName = null;
     }
     
     // showNotification is now defined at the top of the script
@@ -3029,28 +2817,6 @@
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button type="button" class="btn btn-secondary" onclick="closeResetDbModal()">Cancel</button>
         <button type="button" class="btn btn-primary" id="reset-db-confirm-btn" onclick="confirmResetDb()">Reset Database</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Delete Process Confirmation Modal -->
-  <div class="modal-overlay" id="delete-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Process</h2>
-        <button onclick="cancelDeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <div style="margin-bottom: 24px;">
-        <p id="delete-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="cancelDeleteProcess()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="confirmDeleteProcess()" style="background: var(--danger, #ef4444);">Delete</button>
       </div>
     </div>
   </div>

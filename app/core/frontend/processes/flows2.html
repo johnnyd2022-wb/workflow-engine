@@ -98,17 +98,22 @@
           
           <!-- Process Header Card -->
           <div class="card" style="padding: 24px; margin-bottom: 24px;">
-            <div class="flex justify-between items-center">
-              <div>
+            <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: 12px;">
+              <div style="flex: 1; min-width: 0;">
                 <h1 class="page-title" style="font-size: 24px;" id="process-name">Loading...</h1>
                 <p class="page-subtitle" id="process-description">Loading process details...</p>
               </div>
-              <button class="btn btn-primary" id="start-execution-btn" onclick="startExecution()">
-                <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-                Start New Execution
-              </button>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;">
+                <button type="button" class="btn btn-sm" id="delete-process-btn" onclick="showFlows2DeleteProcessModal()" style="background: var(--error, #ef4444); color: #fff; border: 1px solid var(--error, #ef4444); font-weight: 600;">
+                  Delete
+                </button>
+                <button class="btn btn-primary" id="start-execution-btn" onclick="startExecution()">
+                  <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  Start New Execution
+                </button>
+              </div>
             </div>
             
             <!-- Stats Row -->
@@ -565,6 +570,46 @@
       }
     }
     window.loadProcessData = loadProcessData;
+
+    if (!processId) {
+      const delBtn = document.getElementById('delete-process-btn');
+      if (delBtn) delBtn.style.display = 'none';
+    }
+
+    function showFlows2DeleteProcessModal() {
+      if (!processId) return;
+      const nameEl = document.getElementById('process-name');
+      const name = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'this product';
+      const modal = document.getElementById('flows2-delete-process-modal');
+      const msg = document.getElementById('flows2-delete-confirmation-message');
+      if (msg) {
+        msg.textContent = 'Are you sure you want to delete "' + name + '"? This action cannot be undone.';
+      }
+      if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    async function confirmFlows2DeleteProcess() {
+      if (!processId) return;
+      try {
+        await CoreAPI.deleteProcess(processId);
+        window.location.href = '/core/processes';
+      } catch (e) {
+        console.error(e);
+        if (typeof showNotification === 'function') {
+          showNotification('error', 'Failed to delete', e.message || 'Could not delete this product.');
+        }
+        cancelFlows2DeleteProcess();
+      }
+    }
+
+    function cancelFlows2DeleteProcess() {
+      const modal = document.getElementById('flows2-delete-process-modal');
+      if (modal) modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+    }
     
     function closeWelcomeDefineStepsModal() {
       const welcomeModal = document.getElementById('welcome-define-steps-modal');
@@ -3458,6 +3503,28 @@
   
   <!-- Create Process Guided Flow Modal -->
   {% include 'processes/create-process-modal.html' %}
+
+  <!-- Delete product (process) — same API as Process Hub cards -->
+  <div class="modal-overlay" id="flows2-delete-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete product</h2>
+        <button type="button" onclick="cancelFlows2DeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div style="margin-bottom: 24px;">
+        <p id="flows2-delete-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="cancelFlows2DeleteProcess()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmFlows2DeleteProcess()" style="background: var(--danger, #ef4444); border-color: var(--danger, #ef4444);">Delete</button>
+      </div>
+    </div>
+  </div>
   
   <!-- Welcome: Define steps / inputs / outputs (shown after creating process from core2) -->
   <style>

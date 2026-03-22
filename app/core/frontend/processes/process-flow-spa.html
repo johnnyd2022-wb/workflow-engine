@@ -8,20 +8,18 @@
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Create process steps">
   <style>
-    /* Breakpoints: mobile 0–767px, laptop 768–1279px, desktop 1280px+ */
-    .process-flow-spa .page-content {
-      padding: 16px;
+    /* Fill viewport column; horizontal width/padding come from shared/base_spa.html */
+    .process-flow-spa #page-content.page-content {
       display: flex;
       flex-direction: column;
       min-height: 0;
     }
-    .process-flow-spa .max-content {
+    .process-flow-spa #page-content .max-content {
       flex: 1;
       display: flex;
       flex-direction: column;
       min-height: 0;
       min-width: 0;
-      width: 100%;
     }
     .process-flow-spa .back-link {
       flex-shrink: 0;
@@ -91,16 +89,6 @@
       min-height: 0;
       max-height: none;
       overflow-y: auto;
-    }
-    @media (min-width: 768px) {
-      .process-flow-spa .page-content {
-        padding: 24px;
-      }
-    }
-    @media (min-width: 1280px) {
-      .process-flow-spa .page-content {
-        padding: 32px;
-      }
     }
     @media (max-width: 767px) {
       .process-flow-spa .process-flow-card .card-header {
