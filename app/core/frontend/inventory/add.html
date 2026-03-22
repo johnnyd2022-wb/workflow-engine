@@ -1,7 +1,5 @@
 {% extends "shared/base_spa.html" %}
 
-{% block body_class %}spa-hide-main-header{% endblock %}
-
 {% block title %}Add to Inventory{% endblock %}
 
 {% block head_extras %}
@@ -11,10 +9,8 @@
 
 {% block content %}
   <div class="max-content">
-    {% import "shared/back_link.html" as nav %}
     {% from "shared/primary_card.html" import primary_card %}
 
-    {{ nav.spa_back_link("/core") }}
     {% include 'inventory/inventory_hub_banner.html' %}
 
     {% call primary_card(

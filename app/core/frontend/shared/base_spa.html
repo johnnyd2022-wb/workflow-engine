@@ -347,27 +347,41 @@
       display: inline-flex;
     }
 
-    /* Show “Supply Chain Management” header only on Process Hub (/core), not on /core/inventory/* etc. */
-    body.spa-hide-main-header .main-header {
-      display: none !important;
-    }
-
-    /* Main column title (outside #page-content): match SPA heading scale */
-    .main-header .spa-topbar-title {
-      font-family: "Roboto", system-ui, -apple-system, sans-serif;
-      font-size: clamp(1.25rem, 2.1vw, 1.5rem);
-      font-weight: 600;
-      line-height: 1.25;
-      letter-spacing: -0.01em;
-      margin: 0 0 0.25rem 0;
-      color: var(--color-text-primary, #111827);
-    }
-    .main-header .spa-topbar-subtitle {
-      font-family: "Roboto", system-ui, -apple-system, sans-serif;
-      font-size: 0.875rem;
-      line-height: 1.45;
+    /*
+     * Slim app banner (shared): ~1/20 viewport height, back control only (see styles2.css .main-header).
+     */
+    .spa-banner-back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
       margin: 0;
-      color: var(--color-text-secondary, #6b7280);
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-md, 8px);
+      background: transparent;
+      color: rgba(255, 255, 255, 0.92);
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .spa-banner-back:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    .spa-banner-back:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.85);
+      outline-offset: 2px;
+    }
+    .spa-banner-back svg {
+      display: block;
+      width: 18px;
+      height: 18px;
+    }
+    .spa-banner-back.spa-banner-back--hidden {
+      display: none !important;
     }
   </style>
 </head>
@@ -384,12 +398,18 @@
     {% include 'shared/sidebar-v2.html' %}
 
     <div class="main-content">
-      <header class="main-header">
+      <header class="main-header" role="banner">
         {% block topbar %}
-        <div class="spa-topbar-title-wrap">
-          <h1 class="spa-topbar-title">Supply Chain Management</h1>
-          <p class="spa-topbar-subtitle">Manage and monitor all your operational workflows</p>
-        </div>
+        <a
+          href="/core"
+          class="spa-banner-back"
+          id="spa-banner-back"
+          aria-label="Go back"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6"/>
+          </svg>
+        </a>
         {% endblock %}
       </header>
 
@@ -420,13 +440,50 @@
   <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
   <script>
-    function spaSyncMainHeader() {
+    function spaSyncBannerBack() {
+      var el = document.getElementById('spa-banner-back');
+      if (!el) return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
-      var hide = path !== '/core';
-      document.body.classList.toggle('spa-hide-main-header', hide);
+      if (path === '/core') {
+        el.classList.add('spa-banner-back--hidden');
+        el.setAttribute('aria-hidden', 'true');
+        el.setAttribute('tabindex', '-1');
+        return;
+      }
+      el.classList.remove('spa-banner-back--hidden');
+      el.removeAttribute('aria-hidden');
+      el.removeAttribute('tabindex');
+      if (path === '/core/flows/create') {
+        var processId = new URLSearchParams(window.location.search).get('id');
+        var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
+        el.setAttribute('href', dest);
+        el.setAttribute('data-spa-back-explicit', 'true');
+        return;
+      }
+      el.setAttribute('href', '/core');
+      el.removeAttribute('data-spa-back-explicit');
     }
 
-    document.addEventListener('DOMContentLoaded', spaSyncMainHeader);
+    function spaBannerBackInit() {
+      var el = document.getElementById('spa-banner-back');
+      if (!el) return;
+      el.addEventListener('click', function (e) {
+        if (el.classList.contains('spa-banner-back--hidden')) {
+          e.preventDefault();
+          return;
+        }
+        if (el.getAttribute('data-spa-back-explicit') === 'true') {
+          return;
+        }
+        if (window.history.length > 1) {
+          e.preventDefault();
+          window.history.back();
+        }
+      });
+      spaSyncBannerBack();
+    }
+
+    document.addEventListener('DOMContentLoaded', spaBannerBackInit);
 
     // Global HTMX wiring
     document.body.addEventListener('htmx:configRequest', function (evt) {
@@ -436,9 +493,9 @@
       }
     });
 
-    // afterOnLoad: sync header visibility + Process Hub data reload (see core2.html)
+    // afterOnLoad: banner back state (HTMX keeps shell; sync from URL) + Process Hub data reload (see core2.html)
     document.body.addEventListener('htmx:afterOnLoad', function (evt) {
-      spaSyncMainHeader();
+      spaSyncBannerBack();
       window.scrollTo(0, 0);
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
       if (path !== '/core') return;

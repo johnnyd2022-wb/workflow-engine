@@ -1,7 +1,5 @@
 {% extends "shared/base_spa.html" %}
 
-{% block body_class %}spa-hide-main-header{% endblock %}
-
 {% block title %}Products{% endblock %}
 
 {% block head_extras %}
@@ -148,8 +146,6 @@
 
 {% block content %}
   <div class="max-content">
-    {% import "shared/back_link.html" as nav %}
-    {{ nav.spa_back_link("/core") }}
     {% include 'processes/processes_hub_banner.html' %}
 
     <section class="card spa-primary-flat processes-list-hero" style="margin-top: 24px;">
