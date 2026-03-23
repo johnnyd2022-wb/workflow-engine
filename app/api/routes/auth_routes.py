@@ -570,6 +570,8 @@ def get_current_user():
     user = {
         "id": g.user_id,
         "email": g.user_email,
+        "first_name": (getattr(g.current_user, "first_name", None) if g.current_user else None) or "",
+        "last_name": (getattr(g.current_user, "last_name", None) if g.current_user else None) or "",
         "role": g.user_role,
         "org_id": g.org_id,
         "is_active": g.current_user.is_active if g.current_user else True,
@@ -1265,10 +1267,10 @@ def change_password():
 @auth_bp.route("/settings", methods=["GET", "PUT"])
 @requires_auth
 def manage_user_settings():
-    """Get or update user settings (email, phone_number)
+    """Get or update user settings (first/last name, email, phone_number)
 
-    GET: Returns current user settings including org_name, email, and phone_number
-    PUT: Updates email and phone_number (org_name is not editable)
+    GET: Returns current user settings including org_name, first_name/last_name, email, and phone_number
+    PUT: Updates first_name/last_name, email, and phone_number (org_name is not editable)
     """
     user = g.current_user
     if not user:
@@ -1284,6 +1286,8 @@ def manage_user_settings():
             return jsonify(
                 {
                     "org_name": getattr(g, "org_name", None),
+                    "first_name": user.first_name or "",
+                    "last_name": user.last_name or "",
                     "email": user.email,
                     "phone_number": user.phone_number or "",
                 }
@@ -1296,6 +1300,8 @@ def manage_user_settings():
                 return jsonify({"error": "JSON body required"}), 400
 
             email = data.get("email")
+            first_name = data.get("first_name")
+            last_name = data.get("last_name")
             phone_number = data.get("phone_number")
 
             # Validate email if provided
@@ -1303,6 +1309,21 @@ def manage_user_settings():
                 is_valid, error_msg = validate_email(email)
                 if not is_valid:
                     return jsonify({"error": error_msg}), 400
+
+            # Validate profile names if provided
+            if first_name is not None:
+                if not isinstance(first_name, str):
+                    return jsonify({"error": "first_name must be a string"}), 400
+                first_name = first_name.strip()
+                if len(first_name) > 255:
+                    return jsonify({"error": "first_name must be 255 characters or fewer"}), 400
+
+            if last_name is not None:
+                if not isinstance(last_name, str):
+                    return jsonify({"error": "last_name must be a string"}), 400
+                last_name = last_name.strip()
+                if len(last_name) > 255:
+                    return jsonify({"error": "last_name must be 255 characters or fewer"}), 400
 
             # Normalize phone number if provided (reusable function for consistency)
             from app.core.utils.phone_normalization import normalize_phone_number
@@ -1321,6 +1342,8 @@ def manage_user_settings():
                     org_id=user.org_id,
                     email=email,
                     phone_number=phone_number,
+                    first_name=first_name,
+                    last_name=last_name,
                 )
             except EmailConflictError as e:
                 # Email conflict - return 409 Conflict
@@ -1333,6 +1356,8 @@ def manage_user_settings():
             # Use updated values if provided, otherwise use original values
             final_email = email if email is not None else user.email
             final_phone = phone_number if phone_number is not None else (user.phone_number or "")
+            final_first_name = first_name if first_name is not None else (user.first_name or "")
+            final_last_name = last_name if last_name is not None else (user.last_name or "")
 
             # Update session email if it changed
             if email and email != user.email:
@@ -1343,7 +1368,12 @@ def manage_user_settings():
                 "update",
                 "user_settings",
                 user.id,
-                {"email_updated": email is not None, "phone_updated": phone_number is not None},
+                {
+                    "email_updated": email is not None,
+                    "phone_updated": phone_number is not None,
+                    "first_name_updated": first_name is not None,
+                    "last_name_updated": last_name is not None,
+                },
                 user.org_id,
                 user.id,
             )
@@ -1352,6 +1382,8 @@ def manage_user_settings():
                 {
                     "message": "Settings updated successfully",
                     "org_name": getattr(g, "org_name", None),
+                    "first_name": final_first_name,
+                    "last_name": final_last_name,
                     "email": final_email,
                     "phone_number": final_phone,
                 }

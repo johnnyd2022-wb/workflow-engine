@@ -28,6 +28,8 @@ class UserRepository:
         role: UserRole = UserRole.MEMBER,
         is_active: bool = True,
         phone_number: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
     ) -> User:
         """Create a new user (must belong to an organisation)
 
@@ -44,6 +46,8 @@ class UserRepository:
             role=role,
             is_active=is_active,
             phone_number=phone_number,
+            first_name=first_name,
+            last_name=last_name,
         )
         self.db.add(user)
         try:
@@ -98,6 +102,8 @@ class UserRepository:
         role: UserRole | None = None,
         is_active: bool | None = None,
         phone_number: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
     ) -> User | None:
         """Update user (tenancy enforced - must match org_id)
 
@@ -125,6 +131,10 @@ class UserRepository:
             user.is_active = is_active
         if phone_number is not None:
             user.phone_number = phone_number
+        if first_name is not None:
+            user.first_name = first_name
+        if last_name is not None:
+            user.last_name = last_name
 
         try:
             self.db.commit()

@@ -28,6 +28,9 @@ class User(Base):
     email = Column(String(255), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
     phone_number = Column(String(15), nullable=True)  # 6-15 digits
+    # Optional profile names (used for UI personalization like avatar initials).
+    first_name = Column(String(255), nullable=True)
+    last_name = Column(String(255), nullable=True)
     role = Column(Enum(UserRole, name="user_role"), default=UserRole.MEMBER, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)

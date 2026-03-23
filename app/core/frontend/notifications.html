@@ -1,0 +1,133 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Notifications{% endblock %}
+
+{% block head_extras %}
+  <style>
+    /* Transparent "card list" presentation for system findings */
+    #system-findings-banner {
+      background: transparent !important;
+      border-bottom: none !important;
+    }
+
+    .system-findings-banner__header {
+      display: none !important;
+    }
+
+    .system-findings-banner__actions {
+      display: none !important;
+    }
+
+    #system-findings-banner-body {
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .system-findings-banner__hint {
+      display: none !important;
+    }
+
+    /* Make each finding look like a transparent card with separators only */
+    #system-findings-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    #system-findings-list .system-findings-item {
+      border: none !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+
+    #system-findings-list .system-findings-item:not(:first-child) {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+      padding-top: 14px;
+      margin-top: 14px;
+    }
+
+    #system-findings-list .system-findings-item__row {
+      padding: 0 !important;
+      align-items: flex-start !important;
+      gap: 14px !important;
+    }
+
+    #system-findings-list .system-findings-item__summary {
+      cursor: default !important;
+      background: transparent !important;
+      padding: 0 !important;
+      pointer-events: none !important; /* details are always shown */
+    }
+
+    #system-findings-list .system-findings-item__details {
+      margin-top: 10px;
+      border-top: none !important;
+    }
+
+    #system-findings-list .system-findings-item__details-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary, #6b7280);
+      margin-bottom: 6px;
+    }
+
+    #system-findings-list .system-findings-item__detail-section {
+      margin-top: 8px;
+    }
+
+    #system-findings-list .system-findings-item__action-dropdown {
+      margin-top: 2px;
+    }
+
+    .system-findings-item__card-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .system-findings-item__card-action {
+      border-radius: var(--radius-md, 10px);
+      border: none;
+      cursor: pointer;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.95);
+      background: rgba(255, 255, 255, 0.06);
+      transition: background 120ms ease, transform 120ms ease;
+    }
+
+    .system-findings-item__card-action:hover {
+      background: rgba(255, 255, 255, 0.09);
+      transform: translateY(-1px);
+    }
+
+    .system-findings-item__card-action--ignore {
+      background: rgba(59, 130, 246, 0.12);
+    }
+
+    .system-findings-item__card-action--ignore:hover {
+      background: rgba(59, 130, 246, 0.18);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="max-content">
+    <section class="spa-form-section" aria-labelledby="notifications-title">
+      <h1 id="notifications-title" class="page-title">Notifications</h1>
+    </section>
+
+    {% include 'shared/system-findings-banner.html' %}
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('core.serve_core_js', filename='system-findings-notifications.js') }}"></script>
+{% endblock %}
+
