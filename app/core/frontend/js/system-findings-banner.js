@@ -20,6 +20,10 @@
    * Fetch system findings (one API call) and render banner. Call on DOMContentLoaded and optionally after navigation.
    */
   async function loadSystemFindingsBanner() {
+    /* Notifications page renders its own list from the API; do not overwrite #system-findings-list. */
+    if (document.getElementById('notifications-page-marker')) {
+      return;
+    }
     var banner = document.getElementById('system-findings-banner');
     var listEl = document.getElementById('system-findings-list');
     if (!banner || !listEl) return;

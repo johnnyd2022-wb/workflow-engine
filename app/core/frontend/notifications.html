@@ -3,8 +3,41 @@
 {% block title %}Notifications{% endblock %}
 
 {% block head_extras %}
+  <meta name="description" content="Review system findings and notifications. Resolve issues or hide items you have already handled.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <style>
-    /* Transparent "card list" presentation for system findings */
+    /* Hero title + subtitle — same pattern as processes/list.html (.processes-list-hero__header) */
+    .notifications-hero__header {
+      text-align: center;
+      padding: 0 0 12px 0;
+    }
+
+    .notifications-hero__header .card-title {
+      margin: 0;
+    }
+
+    .notifications-hero__tagline {
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      color: var(--text-secondary, #6b7280);
+      margin: 10px 0 0 0;
+      max-width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .notifications-card {
+      margin-top: 24px;
+    }
+
+    .notifications-card__content {
+      padding-top: 0 !important;
+    }
+
+    /* Transparent shell: list lives inside primary card (matches processes/list.html stack). */
     #system-findings-banner {
       background: transparent !important;
       border-bottom: none !important;
@@ -21,109 +54,174 @@
     #system-findings-banner-body {
       padding: 0 !important;
       margin: 0 !important;
+      max-width: none !important;
+      width: 100% !important;
     }
 
     .system-findings-banner__hint {
       display: none !important;
     }
 
-    /* Make each finding look like a transparent card with separators only */
+    #system-findings-banner-body {
+      display: block !important;
+    }
+
+    #system-findings-banner-toggle {
+      display: none !important;
+    }
+
     #system-findings-list {
       margin: 0;
       padding: 0;
       list-style: none;
-    }
-
-    #system-findings-list .system-findings-item {
-      border: none !important;
-      border-radius: 0 !important;
-      background: transparent !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: visible !important;
-    }
-
-    #system-findings-list .system-findings-item:not(:first-child) {
-      border-top: 1px solid var(--border-default, #e5e7eb);
-      padding-top: 14px;
-      margin-top: 14px;
-    }
-
-    #system-findings-list .system-findings-item__row {
-      padding: 0 !important;
-      align-items: flex-start !important;
-      gap: 14px !important;
-    }
-
-    #system-findings-list .system-findings-item__summary {
-      cursor: default !important;
-      background: transparent !important;
-      padding: 0 !important;
-      pointer-events: none !important; /* details are always shown */
-    }
-
-    #system-findings-list .system-findings-item__details {
-      margin-top: 10px;
-      border-top: none !important;
-    }
-
-    #system-findings-list .system-findings-item__details-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-secondary, #6b7280);
-      margin-bottom: 6px;
-    }
-
-    #system-findings-list .system-findings-item__detail-section {
-      margin-top: 8px;
-    }
-
-    #system-findings-list .system-findings-item__action-dropdown {
-      margin-top: 2px;
-    }
-
-    .system-findings-item__card-actions {
       display: flex;
-      gap: 10px;
-      justify-content: flex-end;
-      margin-top: 12px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
     }
 
-    .system-findings-item__card-action {
-      border-radius: var(--radius-md, 10px);
+    /* Match processes/list.html .processes-list-item — clean row, hairline between items */
+    #system-findings-list .notifications-list-item {
+      display: block;
+      margin: 0;
+      padding: 14px 0;
       border: none;
-      cursor: pointer;
-      padding: 8px 12px;
-      font-size: 12px;
+      border-radius: 0;
+      background: transparent;
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    #system-findings-list .notifications-list-item:not(:first-child) {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+
+    #system-findings-list .notifications-list-item:last-child {
+      padding-bottom: 4px;
+    }
+
+    .notifications-list-item__inner {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 100%;
+    }
+
+    .notifications-list-item__field {
+      display: flex;
+      flex-direction: row;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .notifications-list-item__label {
+      font-size: 0.75rem;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.3;
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .notifications-list-item__value {
+      font-size: 0.9375rem;
+      font-weight: 400;
+      color: var(--text-primary, #111827);
+      line-height: 1.45;
+      word-break: break-word;
+      min-width: 0;
+    }
+
+    .notifications-list-item__value--emphasis {
+      font-size: 0.9375rem;
+      font-weight: 400;
+    }
+
+    .notifications-list-item__actions {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .notifications-list-item__field--stacked {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+    }
+
+    .notifications-list-item__field--actions {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .notifications-list-item__field--finding .notifications-list-item__label,
+    .notifications-list-item__field--finding .notifications-list-item__value {
       font-weight: 700;
-      color: rgba(255, 255, 255, 0.95);
-      background: rgba(255, 255, 255, 0.06);
-      transition: background 120ms ease, transform 120ms ease;
     }
 
-    .system-findings-item__card-action:hover {
-      background: rgba(255, 255, 255, 0.09);
-      transform: translateY(-1px);
+    .notifications-list-item__field--actions .notifications-list-item__label {
+      font-weight: 400;
     }
 
-    .system-findings-item__card-action--ignore {
-      background: rgba(59, 130, 246, 0.12);
+    .notifications-list-item__field--actions .btn {
+      border-radius: var(--radius-sm, 6px);
+      min-height: 32px;
+      padding: 6px 10px;
+      background: transparent;
+      border: 1px solid var(--border-default, #e5e7eb);
+      color: var(--text-primary, #111827);
+      font-weight: 400;
     }
 
-    .system-findings-item__card-action--ignore:hover {
-      background: rgba(59, 130, 246, 0.18);
+    .notifications-list-item__field--actions .btn:hover {
+      background: var(--bg-secondary, #f9fafb);
+      border-color: var(--border-default, #d1d5db);
+    }
+
+    .notifications-list-item__actions .btn {
+      font-size: 0.8125rem;
+    }
+
+    .notifications-list-item__detail-pre {
+      margin: 0;
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.45;
+    }
+
+    .notification-page__empty {
+      padding: 24px 0;
+      text-align: center;
+      color: var(--text-secondary, #6b7280);
+      font-size: 0.9375rem;
     }
   </style>
 {% endblock %}
 
 {% block content %}
+  <div id="notifications-page-marker" hidden aria-hidden="true"></div>
   <div class="max-content">
-    <section class="spa-form-section" aria-labelledby="notifications-title">
-      <h1 id="notifications-title" class="page-title">Notifications</h1>
-    </section>
+    {% include 'shared/notifications_hub_banner.html' %}
 
-    {% include 'shared/system-findings-banner.html' %}
+    <section class="card spa-primary-flat notifications-card" aria-labelledby="notifications-title">
+      <div class="card-header notifications-hero__header">
+        <h1 id="notifications-title" class="card-title">Notifications</h1>
+        <p class="notifications-hero__tagline">See every active system finding in one place—expired materials, output dates, untracked inventory, and more</p>
+      </div>
+      <div class="card-content notifications-card__content">
+        <div class="spa-card-form" style="gap: 0;">
+          {% include 'shared/system-findings-banner.html' %}
+        </div>
+      </div>
+    </section>
   </div>
 {% endblock %}
 

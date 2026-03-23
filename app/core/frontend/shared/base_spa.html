@@ -432,7 +432,7 @@
       display: flex;
       align-items: center;
       justify-content: flex-end;
-      gap: clamp(6px, 1.6vw, 10px);
+      gap: clamp(10px, 2.1vw, 18px);
       min-width: 0;
     }
 
@@ -1153,12 +1153,12 @@
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
       }
 
-      function ignoreKey(checkId) {
-        return 'corechecks_finding_ignore_date_' + String(checkId);
+      function ignoreKey(checkId, itemKey) {
+        return 'corechecks_finding_ignore_date_' + String(checkId) + '_' + String(itemKey);
       }
 
-      function dismissedKey(checkId) {
-        return 'corechecks_finding_dismissed_' + String(checkId);
+      function dismissedKey(checkId, itemKey) {
+        return 'corechecks_finding_dismissed_' + String(checkId) + '_' + String(itemKey);
       }
 
       function updateBadge(count) {
@@ -1187,12 +1187,85 @@
           var data = await api.getSystemFindings();
           var findings = (data && Array.isArray(data.findings)) ? data.findings : [];
 
+          function itemKeyOutputExpiry(x) {
+            var iid = x && x.inventory_item_id != null ? String(x.inventory_item_id) : '';
+            var exp = x && (x.expiry_at || x.expiry_date) ? String(x.expiry_at || x.expiry_date) : '';
+            var sid = x && x.step_id != null ? String(x.step_id) : '';
+            return 'oe_' + iid + '_' + sid + '_' + exp;
+          }
+
+          function itemKeyOutputReady(x) {
+            var iid = x && x.inventory_item_id != null ? String(x.inventory_item_id) : '';
+            var rd = x && x.ready_date ? String(x.ready_date) : '';
+            var sid = x && x.step_id != null ? String(x.step_id) : '';
+            return 'ord_' + iid + '_' + sid + '_' + rd;
+          }
+
+          function itemKeyUntracked(u) {
+            return u && u.id != null ? 'ut_' + String(u.id) : '';
+          }
+
           var visibleCount = 0;
           findings.forEach(function (f) {
             var checkId = f && f.check_id != null ? String(f.check_id) : '';
             if (!checkId) return;
-            if (sessionStorage.getItem(ignoreKey(checkId)) === todayKey) return;
-            if (sessionStorage.getItem(dismissedKey(checkId)) === '1') return;
+            var data = f.data && typeof f.data === 'object' ? f.data : {};
+
+            if (checkId === 'expired_materials') {
+              var expired = Array.isArray(data.expired_raw_materials) ? data.expired_raw_materials : [];
+              expired.forEach(function (raw) {
+                var rawId = raw && raw.id != null ? String(raw.id) : null;
+                if (!rawId) return;
+                if (sessionStorage.getItem(ignoreKey(checkId, rawId)) === todayKey) return;
+                if (sessionStorage.getItem(dismissedKey(checkId, rawId)) === '1') return;
+                visibleCount += 1;
+              });
+              return;
+            }
+
+            if (checkId === 'output_expiry') {
+              var oeItems = Array.isArray(data.output_expiry_items) ? data.output_expiry_items : [];
+              var seenOe = {};
+              oeItems.forEach(function (x) {
+                var ik = itemKeyOutputExpiry(x);
+                if (!ik || seenOe[ik]) return;
+                seenOe[ik] = true;
+                if (sessionStorage.getItem(ignoreKey(checkId, ik)) === todayKey) return;
+                if (sessionStorage.getItem(dismissedKey(checkId, ik)) === '1') return;
+                visibleCount += 1;
+              });
+              return;
+            }
+
+            if (checkId === 'output_ready_date') {
+              var orItems = Array.isArray(data.output_ready_date_items) ? data.output_ready_date_items : [];
+              var seenOr = {};
+              orItems.forEach(function (x) {
+                var ik = itemKeyOutputReady(x);
+                if (!ik || seenOr[ik]) return;
+                seenOr[ik] = true;
+                if (sessionStorage.getItem(ignoreKey(checkId, ik)) === todayKey) return;
+                if (sessionStorage.getItem(dismissedKey(checkId, ik)) === '1') return;
+                visibleCount += 1;
+              });
+              return;
+            }
+
+            if (checkId === 'untracked_items') {
+              var untracked = Array.isArray(data.untracked_items) ? data.untracked_items : [];
+              untracked.forEach(function (u) {
+                var ik = itemKeyUntracked(u);
+                if (!ik) return;
+                if (sessionStorage.getItem(ignoreKey(checkId, ik)) === todayKey) return;
+                if (sessionStorage.getItem(dismissedKey(checkId, ik)) === '1') return;
+                visibleCount += 1;
+              });
+              return;
+            }
+
+            var genKey = 'gen_' + checkId;
+            if (sessionStorage.getItem(ignoreKey(checkId, genKey)) === todayKey) return;
+            if (sessionStorage.getItem(dismissedKey(checkId, genKey)) === '1') return;
             visibleCount += 1;
           });
 
