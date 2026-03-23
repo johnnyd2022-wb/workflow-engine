@@ -1,0 +1,231 @@
+{% extends "shared/base_spa.html" %}
+
+{% block body_class %}process-flow-spa{% endblock %}
+{% block body_extra_attrs %}data-page="process-flow-spa"{% endblock %}
+
+{% block title %}Create process steps | SupplyChain V2{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="SupplyChain V2 - Create process steps">
+  <style>
+    /* Fill viewport column; horizontal width/padding come from shared/base_spa.html */
+    .process-flow-spa #page-content.page-content {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .process-flow-spa #page-content .max-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+    .process-flow-spa .process-flow-card {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      margin-top: 24px;
+    }
+    .process-flow-spa .process-flow-card .card-header {
+      padding: 20px 20px 0 20px;
+      flex-shrink: 0;
+    }
+    .process-flow-spa .process-flow-card .card-content {
+      padding: 20px;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .process-flow-spa .card-content > #step-summaries-container,
+    .process-flow-spa .card-content > #existing-steps-list-view,
+    .process-flow-spa .card-content > #create-process-step-indicators {
+      flex-shrink: 0;
+    }
+    .process-flow-spa .card-content .create-process-step[style*="block"] {
+      display: flex !important;
+      flex-direction: column;
+      flex: 1 1 0;
+      min-height: 0;
+      min-width: 0;
+    }
+    .process-flow-spa .create-process-step-body {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      min-width: 0;
+    }
+    .process-flow-spa .create-process-step-actions {
+      flex-shrink: 0;
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-light, #e5e7eb);
+    }
+    .process-flow-spa .card-content > #post-creation-options {
+      flex-shrink: 0;
+    }
+    .process-flow-spa #create-process-step-2 .create-process-step-body {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .process-flow-spa #create-process-step-2 .guided-inputs-panel-inventory {
+      display: flex !important;
+      flex-direction: column;
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .process-flow-spa #create-process-step-2 #guided-inventory-cards-container.guided-inventory-cards-stack {
+      flex: 1 1 0;
+      min-height: 0;
+      max-height: none;
+      overflow-y: auto;
+    }
+    @media (max-width: 767px) {
+      .process-flow-spa .process-flow-card .card-header {
+        padding: 16px 16px 0 16px;
+      }
+      .process-flow-spa .process-flow-card .card-content {
+        padding: 16px;
+      }
+      .process-flow-spa #create-process-step-indicators {
+        gap: 4px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .process-flow-spa #create-process-step-indicators .step-indicator {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+      }
+      .process-flow-spa #create-process-step-indicators > div[style*="40px"] {
+        width: 24px;
+      }
+    }
+    .guided-inputs-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border-default, #e5e7eb); }
+    .guided-inputs-tab { flex: 1; padding: 12px 16px; border: none; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: background 0.2s, color 0.2s; }
+    .guided-inputs-tab:hover { background: var(--bg-hover, rgba(0,0,0,0.05)); color: var(--text-primary); }
+    .guided-inputs-tab.active { background: var(--bg-card, #fff); color: var(--primary, #3b82f6); border-bottom-color: var(--primary, #3b82f6); }
+    @media (min-width: 768px) { .guided-inputs-tab { padding: 14px 20px; font-size: 15px; } }
+    @media (max-width: 767px) { .guided-inputs-tab { padding: 10px 12px; font-size: 13px; min-width: 0; } }
+    .guided-inventory-cards-stack { display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
+    .guided-inventory-section { display: flex; flex-direction: column; gap: 8px; }
+    .guided-inventory-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; padding: 4px 0; border-bottom: 1px solid var(--border-default, #e5e7eb); }
+    .guided-inventory-card { display: flex; flex-direction: column; align-items: stretch; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); background: var(--bg-card, #fff); color: var(--text-primary); font-size: 13px; text-align: left; width: 100%; min-height: 56px; box-sizing: border-box; overflow: hidden; }
+    .guided-inventory-card:hover { border-color: var(--primary, #3b82f6); }
+    .guided-inventory-card .card-header-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; }
+    .guided-inventory-card .card-header-row:hover { background: var(--bg-secondary, #f9fafb); }
+    .guided-inventory-card .card-header-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+    .guided-inventory-card .card-name { font-weight: 600; }
+    .guided-inventory-card .card-summary { font-size: 11px; color: var(--text-tertiary); }
+    .guided-inventory-card .card-expand-btn { flex-shrink: 0; padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-sm); }
+    .guided-inventory-card .card-expand-btn:hover { color: var(--primary, #3b82f6); background: var(--bg-secondary, #f3f4f6); }
+    .guided-inventory-card .card-expand-btn svg { transition: transform 0.2s; }
+    .guided-inventory-card.expanded .card-expand-btn svg { transform: rotate(180deg); }
+    .guided-inventory-card .card-add-btn { padding: 6px 12px; font-size: 12px; }
+    .guided-inventory-card .card-meta-block { padding: 0 14px 12px 14px; border-top: 1px solid var(--border-light, #eee); }
+    .guided-inventory-card .card-add-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-light, #eee); }
+    .guided-inventory-card .card-meta-block .meta-line { font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0; line-height: 1.5; }
+    .guided-inventory-card .card-meta-block .meta-line:first-child { margin-top: 10px; }
+    .guided-inventory-card .card-meta-block .meta-label { font-weight: 500; color: var(--text-primary); }
+  </style>
+{% endblock %}
+
+{% block content %}
+        <div class="max-content">
+          <section class="card process-flow-card" style="margin-top: 24px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+              <div style="flex: 1; min-width: 0;">
+                <h2 class="card-title">Create process step</h2>
+                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">
+                  Define a new step: name, inputs, outputs, and execution prompts.
+                </p>
+              </div>
+            </div>
+            <div class="card-content">
+              {% include 'processes/create-process-step-content.html' %}
+            </div>
+          </section>
+        </div>
+
+        <!-- Finish / Resume / Save-draft modals (required by create-process-modal.js) -->
+        <div class="modal-overlay" id="finish-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center;">
+          <div class="card" style="max-width: 600px; width: 90%; padding: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+              <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Finish Creating Process</h2>
+              <button class="modal-close" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div style="margin-bottom: 24px;">
+              <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
+                <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;"><strong>By finishing this process, you are locking in the process definition.</strong></p>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">Once you execute this process, your inventory will automatically update in real-time.</p>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">You can edit this process at any time in the process view.</p>
+              </div>
+              <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">Press <strong>"Finish creating process"</strong> to save, or <strong>"Back"</strong> to add another step.</p>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'">Back</button>
+              <button type="button" class="btn btn-primary" onclick="window.confirmFinishProcess()">Finish creating process</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay" id="resume-draft-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1002; align-items: center; justify-content: center;">
+          <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+              <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">Resume Draft Process</h2>
+              <button class="modal-close" onclick="window.cancelResumeDraft()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div style="margin-bottom: 24px;">
+              <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">To resume editing click <strong>Resume Draft</strong>, or <strong>Start New</strong> to start over.</p>
+              <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">Your previous progress will be restored.</p>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" onclick="window.cancelResumeDraft()">Start New</button>
+              <button type="button" class="btn btn-primary" onclick="window.confirmResumeDraft()">Resume Draft</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay" id="save-draft-or-discard-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1003; align-items: center; justify-content: center; padding: 16px;">
+          <div class="card" style="max-width: 480px; width: 90%; padding: 24px;">
+            <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px;">
+              <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--warning-bg, #fef3c7); display: flex; align-items: center; justify-content: center;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--warning, #f59e0b);"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div style="flex: 1; min-width: 0;">
+                <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Save your progress?</h2>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;"><strong>Continue creating steps</strong>, <strong>save as draft</strong>, or <strong>discard</strong> and lose progress.</p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary" id="save-draft-discard-btn">Discard</button>
+              <button type="button" class="btn btn-secondary" id="save-draft-save-btn">Save as draft</button>
+              <button type="button" class="btn btn-primary" id="save-draft-continue-btn">Continue creating steps</button>
+            </div>
+          </div>
+        </div>
+
+        {% include 'shared/delete-doc-confirm-modal.html' %}
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    window.showNotification = window.showNotification || function(type, title, message) {
+      console.log(type + ': ' + title + ' - ' + message);
+    };
+  </script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-flow-spa.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='create-process-modal.js') }}"></script>
+{% endblock %}

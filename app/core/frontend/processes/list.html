@@ -1,0 +1,260 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Products{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="View products, steps, and live inventory for each manufacturing process.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  <style>
+    .processes-list-hero__header {
+      text-align: center;
+      padding: 0 0 12px 0;
+    }
+    .processes-list-hero__header .card-title {
+      margin: 0;
+    }
+    .processes-list-hero__tagline {
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      color: var(--text-secondary, #6b7280);
+      margin: 10px 0 0 0;
+      max-width: 36rem;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .processes-list-create-card {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 14px;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 16px 0;
+      margin: 0 0 8px 0;
+      border: none;
+      border-radius: var(--radius-xl, 12px);
+      text-decoration: none;
+      color: inherit;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      transition: background 0.2s ease;
+    }
+    .processes-list-create-card:hover {
+      background: rgba(59, 130, 246, 0.06);
+    }
+    .processes-list-create-card:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 2px;
+    }
+    .processes-list-create-card__icon {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary, #3b82f6);
+      opacity: 0.92;
+    }
+    .processes-list-create-card__icon svg {
+      width: 22px;
+      height: 22px;
+      display: block;
+    }
+    .processes-list-create-card__text .spa-form-section-title {
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0.02em;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary, #111827);
+    }
+    .processes-list-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+    }
+    .processes-list-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 0;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      text-decoration: none;
+      color: inherit;
+      background: transparent;
+      transition: background 0.2s ease;
+      text-align: left;
+      cursor: pointer;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    .processes-list-item:not(:first-child) {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .processes-list-item:hover {
+      background: rgba(59, 130, 246, 0.06);
+    }
+    .processes-list-item:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 2px;
+    }
+    .processes-list-item__main {
+      flex: 1;
+      min-width: 0;
+    }
+    .processes-list-item__name {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary, #111827);
+      margin: 0 0 6px 0;
+      line-height: 1.3;
+    }
+    .processes-list-item__meta {
+      font-size: 0.875rem;
+      color: var(--text-secondary, #6b7280);
+      margin: 0;
+      line-height: 1.45;
+    }
+    .processes-list-item__arrow {
+      flex-shrink: 0;
+      color: var(--text-tertiary, #9ca3af);
+      margin-top: 2px;
+    }
+    .processes-list-item:hover .processes-list-item__arrow {
+      color: var(--primary, #3b82f6);
+    }
+    .processes-list-empty {
+      padding: 24px 0;
+      text-align: center;
+      color: var(--text-secondary, #6b7280);
+      font-size: 0.9375rem;
+    }
+    .processes-list-loading {
+      padding: 16px 0;
+      text-align: center;
+      color: var(--text-secondary, #6b7280);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="max-content">
+    {% include 'processes/processes_hub_banner.html' %}
+
+    <section class="card spa-primary-flat processes-list-hero" style="margin-top: 24px;">
+      <div class="card-header processes-list-hero__header">
+        <h2 class="card-title">Products</h2>
+        <p class="processes-list-hero__tagline">View and record product steps with live product inventory</p>
+      </div>
+      <div class="card-content">
+        <a href="/core/flows/create" hx-boost="false" class="processes-list-create-card" aria-labelledby="processes-list-create-title">
+          <span class="processes-list-create-card__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="8" width="6" height="6" rx="1"/>
+              <rect x="9" y="8" width="6" height="6" rx="1"/>
+              <path d="M8 11h1"/>
+              <path d="M15 11h1"/>
+              <circle cx="19" cy="11" r="3"/>
+              <path d="M19 9.5v3"/>
+              <path d="M17.5 11h3"/>
+            </svg>
+          </span>
+          <span class="processes-list-create-card__text">
+            <h3 id="processes-list-create-title" class="spa-form-section-title">Create new product</h3>
+            <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Define process steps, inputs, outputs and custom data to record</p>
+          </span>
+        </a>
+        <div class="spa-card-form" style="gap: 0;">
+          <div id="processes-list-loading" class="processes-list-loading">Loading products…</div>
+          <div id="processes-list-empty" class="processes-list-empty" style="display: none;">No products yet. Create one from the Process Hub.</div>
+          <div id="processes-list-stack" class="processes-list-stack" style="display: none;"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+    (function () {
+      if (window.__processesListInit) return;
+      window.__processesListInit = true;
+
+      function esc(s) {
+        if (s == null || s === '') return '';
+        var d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+      }
+
+      function render(processes) {
+        var loading = document.getElementById('processes-list-loading');
+        var empty = document.getElementById('processes-list-empty');
+        var stack = document.getElementById('processes-list-stack');
+        if (loading) loading.style.display = 'none';
+        if (!processes || !processes.length) {
+          if (empty) empty.style.display = 'block';
+          if (stack) { stack.style.display = 'none'; stack.innerHTML = ''; }
+          return;
+        }
+        if (empty) empty.style.display = 'none';
+        if (stack) {
+          stack.style.display = 'flex';
+          stack.innerHTML = processes.map(function (p) {
+            var id = p.id || '';
+            var href = '/core/flows?id=' + encodeURIComponent(id);
+            var steps = typeof p.step_count === 'number' ? p.step_count : 0;
+            var active = typeof p.active_executions === 'number' ? p.active_executions : 0;
+            var done = typeof p.completed_executions === 'number' ? p.completed_executions : 0;
+            var draft = p.is_draft ? ' · Draft' : '';
+            var meta = steps + ' step' + (steps === 1 ? '' : 's') + ' · ' + active + ' active · ' + done + ' completed' + draft;
+            return (
+              '<a href="' + esc(href) + '" class="processes-list-item" hx-boost="false">' +
+                '<div class="processes-list-item__main">' +
+                  '<p class="processes-list-item__name">' + esc(p.name || 'Untitled') + '</p>' +
+                  '<p class="processes-list-item__meta">' + esc(meta) + '</p>' +
+                '</div>' +
+                '<span class="processes-list-item__arrow" aria-hidden="true">' +
+                  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<polyline points="9 18 15 12 9 6"/>' +
+                  '</svg>' +
+                '</span>' +
+              '</a>'
+            );
+          }).join('');
+        }
+      }
+
+      function load() {
+        if (!window.CoreAPI || !window.CoreAPI.getProcesses) {
+          var loading = document.getElementById('processes-list-loading');
+          if (loading) loading.textContent = 'Products API is not available.';
+          return;
+        }
+        window.CoreAPI.getProcesses()
+          .then(function (res) {
+            render(res.processes || []);
+          })
+          .catch(function (e) {
+            console.error(e);
+            var loading = document.getElementById('processes-list-loading');
+            if (loading) loading.textContent = 'Failed to load products.';
+          });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', load);
+      } else {
+        load();
+      }
+    })();
+  </script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+{% endblock %}

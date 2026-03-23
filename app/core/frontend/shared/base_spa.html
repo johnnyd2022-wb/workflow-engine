@@ -250,16 +250,73 @@
       box-sizing: border-box;
     }
 
-    /* Responsive padding for main column (styles2 sets 32px; tighten on phones) */
+    /*
+     * SPA shell layout (mobile → laptop → desktop):
+     * - Primary column is ~95% of available main width (2.5% breathing room each side), max 1280px.
+     * - Vertical padding only on #page-content; horizontal gutter comes from the % width (not double padding).
+     * - --spa-column-inset: small inner padding so headings/cards align inside the column.
+     * - Safe-area + overflow clipping for notched phones and HTMX swaps.
+     */
+    .app-layout .main-content {
+      min-width: 0;
+      overflow-x: clip;
+    }
+
+    #page-content.page-content {
+      --spa-column-inset: clamp(10px, 2.2vw, 18px);
+      box-sizing: border-box;
+      min-width: 0;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: clip;
+      -webkit-overflow-scrolling: touch;
+      padding-top: clamp(12px, 2.5vw, 32px) !important;
+      padding-bottom: clamp(16px, 3vw, 40px) !important;
+      padding-left: max(0px, env(safe-area-inset-left)) !important;
+      padding-right: max(0px, env(safe-area-inset-right)) !important;
+    }
     @media (max-width: 767px) {
       #page-content.page-content {
-        padding: 16px !important;
+        --spa-column-inset: clamp(8px, 2vw, 14px);
+        padding-top: max(12px, env(safe-area-inset-top)) !important;
+        padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
       }
     }
     @media (min-width: 768px) and (max-width: 1279px) {
       #page-content.page-content {
-        padding: 24px !important;
+        padding-top: clamp(16px, 2.5vw, 24px) !important;
+        padding-bottom: clamp(20px, 3vw, 32px) !important;
       }
+    }
+
+    #page-content .max-content {
+      width: 95%;
+      max-width: 1280px;
+      margin-left: auto;
+      margin-right: auto;
+      padding-inline: var(--spa-column-inset);
+      box-sizing: border-box;
+    }
+
+    /*
+     * Primary content block (primary_card macro): same surface as page — no lifted card chrome.
+     * Matches Process Hub (core2) sections that sit on --bg-app without a bordered panel.
+     */
+    #page-content .card.spa-primary-flat {
+      background: var(--bg-app, hsl(220, 20%, 97%));
+      border: none;
+      box-shadow: none;
+      border-radius: 0;
+    }
+    #page-content .card.spa-primary-flat:hover {
+      border: none;
+      box-shadow: none;
+    }
+    #page-content .card.spa-primary-flat .card-header {
+      padding: 0 0 12px 0;
+    }
+    #page-content .card.spa-primary-flat .card-content {
+      padding: 0;
     }
 
     /* SPA page-content fade transitions */
@@ -290,32 +347,47 @@
       display: inline-flex;
     }
 
-    /* Show “Supply Chain Management” header only on Process Hub (/core), not on /core/inventory/* etc. */
-    body.spa-hide-main-header .main-header {
-      display: none !important;
-    }
-
-    /* Main column title (outside #page-content): match SPA heading scale */
-    .main-header .spa-topbar-title {
-      font-family: "Roboto", system-ui, -apple-system, sans-serif;
-      font-size: clamp(1.25rem, 2.1vw, 1.5rem);
-      font-weight: 600;
-      line-height: 1.25;
-      letter-spacing: -0.01em;
-      margin: 0 0 0.25rem 0;
-      color: var(--color-text-primary, #111827);
-    }
-    .main-header .spa-topbar-subtitle {
-      font-family: "Roboto", system-ui, -apple-system, sans-serif;
-      font-size: 0.875rem;
-      line-height: 1.45;
+    /*
+     * Slim app banner (shared): ~1/20 viewport height, back control only (see styles2.css .main-header).
+     */
+    .spa-banner-back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
       margin: 0;
-      color: var(--color-text-secondary, #6b7280);
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-md, 8px);
+      background: transparent;
+      color: rgba(255, 255, 255, 0.92);
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .spa-banner-back:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    .spa-banner-back:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.85);
+      outline-offset: 2px;
+    }
+    .spa-banner-back svg {
+      display: block;
+      width: 18px;
+      height: 18px;
+    }
+    .spa-banner-back.spa-banner-back--hidden {
+      display: none !important;
     }
   </style>
 </head>
 <body
   class="{% block body_class %}{% endblock %}"
+  {% block body_extra_attrs %}{% endblock %}
   hx-boost="true"
   hx-target="#page-content"
   hx-select="#page-content"
@@ -326,12 +398,18 @@
     {% include 'shared/sidebar-v2.html' %}
 
     <div class="main-content">
-      <header class="main-header">
+      <header class="main-header" role="banner">
         {% block topbar %}
-        <div class="spa-topbar-title-wrap">
-          <h1 class="spa-topbar-title">Supply Chain Management</h1>
-          <p class="spa-topbar-subtitle">Manage and monitor all your operational workflows</p>
-        </div>
+        <a
+          href="/core"
+          class="spa-banner-back"
+          id="spa-banner-back"
+          aria-label="Go back"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6"/>
+          </svg>
+        </a>
         {% endblock %}
       </header>
 
@@ -362,13 +440,50 @@
   <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
   <script>
-    function spaSyncMainHeader() {
+    function spaSyncBannerBack() {
+      var el = document.getElementById('spa-banner-back');
+      if (!el) return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
-      var hide = path !== '/core';
-      document.body.classList.toggle('spa-hide-main-header', hide);
+      if (path === '/core') {
+        el.classList.add('spa-banner-back--hidden');
+        el.setAttribute('aria-hidden', 'true');
+        el.setAttribute('tabindex', '-1');
+        return;
+      }
+      el.classList.remove('spa-banner-back--hidden');
+      el.removeAttribute('aria-hidden');
+      el.removeAttribute('tabindex');
+      if (path === '/core/flows/create') {
+        var processId = new URLSearchParams(window.location.search).get('id');
+        var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
+        el.setAttribute('href', dest);
+        el.setAttribute('data-spa-back-explicit', 'true');
+        return;
+      }
+      el.setAttribute('href', '/core');
+      el.removeAttribute('data-spa-back-explicit');
     }
 
-    document.addEventListener('DOMContentLoaded', spaSyncMainHeader);
+    function spaBannerBackInit() {
+      var el = document.getElementById('spa-banner-back');
+      if (!el) return;
+      el.addEventListener('click', function (e) {
+        if (el.classList.contains('spa-banner-back--hidden')) {
+          e.preventDefault();
+          return;
+        }
+        if (el.getAttribute('data-spa-back-explicit') === 'true') {
+          return;
+        }
+        if (window.history.length > 1) {
+          e.preventDefault();
+          window.history.back();
+        }
+      });
+      spaSyncBannerBack();
+    }
+
+    document.addEventListener('DOMContentLoaded', spaBannerBackInit);
 
     // Global HTMX wiring
     document.body.addEventListener('htmx:configRequest', function (evt) {
@@ -378,9 +493,9 @@
       }
     });
 
-    // afterOnLoad: sync header visibility + Process Hub data reload (see core2.html)
+    // afterOnLoad: banner back state (HTMX keeps shell; sync from URL) + Process Hub data reload (see core2.html)
     document.body.addEventListener('htmx:afterOnLoad', function (evt) {
-      spaSyncMainHeader();
+      spaSyncBannerBack();
       window.scrollTo(0, 0);
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
       if (path !== '/core') return;

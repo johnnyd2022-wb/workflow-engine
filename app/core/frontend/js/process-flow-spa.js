@@ -10,17 +10,7 @@
     return;
   }
 
-  var processId = new URLSearchParams(window.location.search).get('id');
-
-  // Back link
-  var backLink = document.getElementById('process-flow-spa-back-link');
-  var backText = document.getElementById('process-flow-spa-back-text');
-  if (backLink) {
-    backLink.href = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
-    if (backText) {
-      backText.textContent = processId ? 'Back to process' : 'Back to Process Hub';
-    }
-  }
+  // Banner back link for /core/flows/create is synced in shared/base_spa.html (spaSyncBannerBack).
 
   // When modal logic calls loadProcessData (after close, save draft, or finish), redirect instead of refreshing in place.
   window.loadProcessData = function() {

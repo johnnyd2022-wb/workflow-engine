@@ -79,10 +79,10 @@
     .help-tooltip { position: absolute; z-index: 10; left: 0; top: 100%; margin-top: 4px; max-width: 280px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
     .help-tooltip.visible { display: block; }
     .help-wrapper { position: relative; display: inline-block; }
-    .dopamine-line { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px; }
+    .dopamine-line { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--radius-lg); padding: 14px 0; margin-bottom: 20px; }
     .dopamine-line p { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); line-height: 1.5; }
-    @media (min-width: 600px) { .dopamine-line { padding: 16px 20px; } .dopamine-line p { font-size: 0.95rem; } }
-    @media (min-width: 1024px) { .dopamine-line { padding: 18px 22px; } .dopamine-line p { font-size: 1rem; } }
+    @media (min-width: 600px) { .dopamine-line { padding: 16px 0; } .dopamine-line p { font-size: 0.95rem; } }
+    @media (min-width: 1024px) { .dopamine-line { padding: 18px 0; } .dopamine-line p { font-size: 1rem; } }
     .inventory-entry-hub-btn:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.05)); }
     .csv-preview-table thead th { position: sticky; top: 0; background: var(--bg-card); z-index: 10; box-shadow: 0 1px 0 var(--border-default); }
     .csv-preview-wrap { max-height: 280px; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -104,6 +104,74 @@
       .csv-preview-wrap { max-height: 400px; }
       .csv-upload-modal-card { width: 90%; max-width: 880px; }
     }
+    .core2-hub-card {
+      display: block;
+      border: none;
+      border-radius: var(--radius-xl, 12px);
+      padding: 16px 0;
+      margin: 0;
+      text-decoration: none;
+      color: inherit;
+      background: transparent;
+      box-shadow: none;
+      transition: background 0.2s ease;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .core2-hub-card:hover {
+      background: rgba(59, 130, 246, 0.06);
+    }
+    .core2-hub-card:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 2px;
+    }
+    button.core2-hub-card {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .core2-hub-card-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+      margin-top: 4px;
+    }
+    .core2-hub-card-stack .core2-hub-card {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .core2-hub-card__icon {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary, #3b82f6);
+      opacity: 0.92;
+    }
+    .core2-hub-card__icon svg {
+      width: 22px;
+      height: 22px;
+      display: block;
+    }
+    .core2-hub-card__text {
+      flex: 1;
+      min-width: 0;
+    }
+    .core2-hub-card__text .spa-form-section-title {
+      margin: 0;
+    }
+    /* Product-style label: not uppercase like other spa section titles */
+    .core2-hub-card__text .core2-hub-card__title-lowercase {
+      text-transform: none;
+      letter-spacing: 0.02em;
+    }
   </style>
 {% endblock %}
 
@@ -111,15 +179,11 @@
         {% include 'shared/system-findings-banner.html' %}
 
         <div class="max-content">
-          <!-- Page Header -->
-          <div class="page-header">
-            <div class="page-header-content">
-              <h1 class="page-title">Process Hub</h1>
-              <p class="page-subtitle">Manage and monitor all your operational workflows</p>
-            </div>
-          </div>
-          
-          <!-- Metrics Grid -->
+          <section class="spa-form-section" aria-labelledby="core2-hub-title">
+            <h1 id="core2-hub-title" class="page-title">Process Hub</h1>
+          </section>
+
+          <section class="spa-form-section" aria-label="Key metrics">
           <div class="metrics-grid">
             <div class="card metric-card">
               <div class="metric-card-content">
@@ -183,85 +247,128 @@
             </div>
           </div>
           </div>
-          
-          <!-- Source Map Section -->
-          <section class="card" style="margin-top: 24px; margin-bottom: 24px;">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 20px;">
-              <div style="flex: 1; min-width: 0;">
-                <h2 class="card-title">Source Map</h2>
-                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Leverage source map for end to end traceability of any inventory item, execution or custom field you define in your processes.</p>
-              </div>
-              <a href="/core/sourcemap" class="btn btn-primary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 3h8v8H3z"/>
-                  <path d="M14 3h7v7h-7z"/>
-                  <path d="M14 14h7v7h-7z"/>
-                  <path d="M3 14h8v8H3z"/>
-                </svg>
-                Open Source Map
+          </section>
+
+          <!-- Traceability (sourcemap) -->
+          <section class="spa-form-section" style="margin-top: 24px; margin-bottom: 32px;" aria-labelledby="core2-section-traceability">
+            <h2 id="core2-section-traceability" class="spa-form-section-title">Traceability</h2>
+            <div class="core2-hub-card-stack">
+              <a href="/core/sourcemap" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-section-sourcemap">
+                <span class="core2-hub-card__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-8 4z"/>
+                    <path d="M8 2v16"/>
+                    <path d="M16 6v16"/>
+                  </svg>
+                </span>
+                <span class="core2-hub-card__text">
+                  <h3 id="core2-section-sourcemap" class="spa-form-section-title core2-hub-card__title-lowercase">sourcemap</h3>
+                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Trace any inventory item, process completion or custom recorded data</p>
+                </span>
               </a>
             </div>
           </section>
-          
+
           <!-- Inventory Section -->
-          <section class="card">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-              <div>
-                <h2 class="card-title">Inventory</h2>
-                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Monitor your inventory with real-time visibility across your entire supply chain.</p>
-              </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <a href="/core/inventory/add" hx-boost="false" class="btn btn-secondary btn-sm" style="margin-top: 0; min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
+          <section class="spa-form-section" aria-labelledby="core2-section-inventory">
+            <h2 id="core2-section-inventory" class="spa-form-section-title">Inventory</h2>
+            <div class="core2-hub-card-stack">
+              <a href="/core/inventory/view" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-inv-view-title">
+                <span class="core2-hub-card__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
                   </svg>
-                  <span>Add to Inventory</span>
-                </a>
-                <button type="button" class="btn btn-secondary btn-sm" id="record-wastage-btn" style="margin-top: 0;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 6h18"/>
-                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </span>
+                <span class="core2-hub-card__text">
+                  <h3 id="core2-inv-view-title" class="spa-form-section-title">View inventory</h3>
+                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">
+                    <span id="inv-hub-count-raw">0</span> raw, <span id="inv-hub-count-intermediate">0</span> intermediate, <span id="inv-hub-count-final">0</span> final items
+                  </p>
+                </span>
+              </a>
+              <a href="/core/inventory/add" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-inv-add-title">
+                <span class="core2-hub-card__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="16"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                  </svg>
+                </span>
+                <span class="core2-hub-card__text">
+                  <h3 id="core2-inv-add-title" class="spa-form-section-title">Add to inventory</h3>
+                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Add a single item manually, bulk upload via CSV, or scan a barcode to add stock.</p>
+                </span>
+              </a>
+              <button type="button" id="record-wastage-btn" class="core2-hub-card" aria-labelledby="core2-inv-dispose-title">
+                <span class="core2-hub-card__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                     <line x1="10" y1="11" x2="10" y2="17"/>
                     <line x1="14" y1="11" x2="14" y2="17"/>
                   </svg>
-                  Dispose of inventory item
-                </button>
-              </div>
+                </span>
+                <span class="core2-hub-card__text">
+                  <h3 id="core2-inv-dispose-title" class="spa-form-section-title">Dispose of inventory</h3>
+                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Record disposal of waste, overage, lost, or expired stock.</p>
+                </span>
+              </button>
             </div>
-            <div class="card-content">
-              <div class="inventory-category-grid" id="inventory-grid">
-                <!-- Inventory will be loaded dynamically from backend -->
-              </div>
+            <!--
+            Raw / intermediate / final category column cards (hidden for now; restore by uncommenting)
+            <div class="inventory-category-grid card-content" id="inventory-grid">
             </div>
+            -->
           </section>
-          
+
           <!-- Processes Section -->
-          <section class="card" style="margin-top: 32px;">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-              <div>
-                <h2 class="card-title">Processes</h2>
-                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Create your custom processes to gain real-time operational insights into batch production.</p>
-              </div>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" data-modal-open="create-process-modal" style="margin-top: 0;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
+          <section class="spa-form-section" style="margin-top: 32px;" aria-labelledby="core2-section-processes">
+            <h2 id="core2-section-processes" class="spa-form-section-title">Processes</h2>
+            <div class="core2-hub-card-stack">
+              <a href="/core/flows/create" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-proc-create-title">
+                <span class="core2-hub-card__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="8" width="6" height="6" rx="1"/>
+                    <rect x="9" y="8" width="6" height="6" rx="1"/>
+                    <path d="M8 11h1"/>
+                    <path d="M15 11h1"/>
+                    <circle cx="19" cy="11" r="3"/>
+                    <path d="M19 9.5v3"/>
+                    <path d="M17.5 11h3"/>
                   </svg>
-                  Create New Process
-                </button>
-                <a href="/core/flows/create" class="btn btn-ghost btn-sm" style="margin-top: 0;" title="Create process and define steps on a full page">
-                  Define steps (full page)
-                </a>
-              </div>
+                </span>
+                <span class="core2-hub-card__text">
+                  <h3 id="core2-proc-create-title" class="spa-form-section-title">Create new product</h3>
+                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Define process steps, inputs, outputs and custom data to record.</p>
+                </span>
+              </a>
+              <a href="/core/processes" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-proc-view-title">
+                <span class="core2-hub-card__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="9" rx="1"/>
+                    <rect x="14" y="3" width="7" height="5" rx="1"/>
+                    <rect x="14" y="12" width="7" height="9" rx="1"/>
+                    <rect x="3" y="16" width="7" height="5" rx="1"/>
+                  </svg>
+                </span>
+                <span class="core2-hub-card__text">
+                  <h3 id="core2-proc-view-title" class="spa-form-section-title">View products</h3>
+                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Open a product to run executions, edit steps, and manage inventory.</p>
+                </span>
+              </a>
             </div>
-            <div class="card-content">
-              <div class="processes-grid" id="processes-grid">
-                <!-- Processes will be loaded dynamically from backend -->
-              </div>
+            <!--
+            Legacy hub actions (kept for reference; modal + flows/create still available via cards)
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" data-modal-open="create-process-modal" type="button">Create New Process</button>
+              <a href="/core/flows/create" class="btn btn-ghost btn-sm">Define steps (full page)</a>
             </div>
+            -->
           </section>
         </div>
 {% endblock %}
@@ -403,135 +510,41 @@
       if (inventoryEl) inventoryEl.textContent = metrics.inventory_items?.total || 0;
     }
     
-    // Render processes for V2 Modern design
-    function renderProcessesV2(processes) {
-      const processGrid = document.getElementById('processes-grid');
-      if (!processGrid) return;
-      
-      processGrid.innerHTML = '';
-      
-      if (!processes || processes.length === 0) {
-        processGrid.innerHTML = `
-          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
-            <p style="color: var(--text-secondary);">No processes yet. Create your first process to get started.</p>
-          </div>
-        `;
-        return;
-      }
-      
-      processes.forEach(process => {
-        const processCard = createProcessCardV2(process);
-        processGrid.appendChild(processCard);
-      });
-    }
-    
-    // Optimistic rendering helpers
-    function prependProcessCardV2(process) {
-      const grid = document.getElementById('processes-grid');
-      if (!grid) return;
-
-      // Clear empty state message if present
-      if (grid.innerHTML.includes('No processes yet')) {
-        grid.innerHTML = '';
-      }
-
-      const card = renderSingleProcessCardV2(process);
-      card.dataset.processId = process.id;
-
-      if (process.__optimistic) {
-        card.style.opacity = '0.6';
-      }
-
-      grid.prepend(card);
-    }
-
-    function replaceOptimisticProcessV2(tempId, realProcess) {
-      const card = document.querySelector(`[data-process-id="${tempId}"]`);
-      if (!card) return;
-
-      const newCard = renderSingleProcessCardV2(realProcess);
-      newCard.dataset.processId = realProcess.id;
-
-      card.replaceWith(newCard);
-    }
-
-    function removeOptimisticProcessV2(tempId) {
-      const card = document.querySelector(`[data-process-id="${tempId}"]`);
-      if (card) card.remove();
-    }
-    
-    function renderSingleProcessCardV2(process) {
-      const card = document.createElement('div');
-      card.className = 'card card-interactive process-card';
-      
-      const categoryBadgeClass = {
-        'manufacturing': 'default',
-        'chemical': 'default',
-        'packaging': 'default',
-        'assembly': 'default',
-        'other': 'default',
-      }[process.category] || 'default';
-      
-      card.innerHTML = `
-        <div class="process-card-header">
-          <div class="process-card-header-content" style="flex: 1; cursor: pointer;" onclick="navigateToProcess('${process.id}')">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-              <h3 class="process-title">${escapeHtml(process.name)}</h3>
-              ${process.is_draft ? '<span class="badge" style="background: var(--warning, #f59e0b); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;">DRAFT</span>' : ''}
-            </div>
-            <p class="process-description">${escapeHtml(process.description || '')}</p>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button class="btn-icon-small" onclick="event.stopPropagation(); openEditProcessModal('${process.id}')" title="Edit process">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-            <button class="btn-icon-small" onclick="event.stopPropagation(); showDeleteConfirmation('${process.id}', '${escapeHtml(process.name)}')" title="Delete process">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-              </svg>
-            </button>
-            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer;" onclick="navigateToProcess('${process.id}')">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-              <polyline points="12 5 19 12 12 19"/>
-            </svg>
-          </div>
-        </div>
-        <div class="process-card-footer">
-          <span class="process-badge ${categoryBadgeClass}">${process.step_count || 0} steps</span>
-          ${process.active_executions > 0 ? `
-            <span class="process-badge active">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-              ${process.active_executions} active
-            </span>
-          ` : ''}
-          <span class="process-completed">${process.completed_executions || 0} completed</span>
-        </div>
-      `;
-      
-      return card;
-    }
-    
-    function createProcessCardV2(process) {
-      return renderSingleProcessCardV2(process);
-    }
-    
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
     }
     
-    function navigateToProcess(processId) {
-      window.location.href = `/core/flows?id=${processId}`;
-    }
-    
     // Render inventory for V2 Modern design
+    function countInventoryByType(items) {
+      const grouped = { raw: 0, intermediate: 0, final: 0 };
+      let total = 0;
+      if (!items || !items.length) {
+        return { ...grouped, total: 0 };
+      }
+      items.forEach((item) => {
+        let quantity = parseFloat(String(item.quantity || '0').trim());
+        if (isNaN(quantity)) quantity = 0;
+        if (quantity <= 0 || Math.abs(quantity) < 0.0001) return;
+        total++;
+        const type = item.inventory_type || 'raw_material';
+        if (type === 'raw_material') grouped.raw++;
+        else if (type === 'work_in_progress') grouped.intermediate++;
+        else if (type === 'final_product') grouped.final++;
+      });
+      return { ...grouped, total };
+    }
+
+    function updateInventoryHubCountDisplay(counts) {
+      const rawEl = document.getElementById('inv-hub-count-raw');
+      const intEl = document.getElementById('inv-hub-count-intermediate');
+      const finEl = document.getElementById('inv-hub-count-final');
+      if (rawEl) rawEl.textContent = String(counts.raw);
+      if (intEl) intEl.textContent = String(counts.intermediate);
+      if (finEl) finEl.textContent = String(counts.final);
+    }
+
     async function loadInventoryV2() {
       try {
         const inventoryData = await CoreAPI.getInventory();
@@ -542,6 +555,7 @@
     }
     
     function renderInventoryV2(items) {
+      updateInventoryHubCountDisplay(countInventoryByType(items || []));
       const inventoryGrid = document.getElementById('inventory-grid');
       if (!inventoryGrid) return;
       
@@ -1127,8 +1141,7 @@
       try {
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
-        const processesData = await CoreAPI.getProcesses();
-        renderProcessesV2(processesData.processes);
+        await CoreAPI.getProcesses();
         await loadInventoryV2();
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
@@ -2229,7 +2242,7 @@
       if (recordWastageSubmit) recordWastageSubmit.addEventListener('click', submitRecordWastage);
     });
     
-    // Create process handler with optimistic UI
+    // Create process handler
     window.createNewProcess = function (form) {
       const formData = new FormData(form);
       const name = formData.get('name')?.trim();
@@ -2241,30 +2254,13 @@
         return false;
       }
 
-      const tempId = `temp-${Date.now()}`;
-
-      const optimisticProcess = {
-        id: tempId,
-        name,
-        description,
-        category,
-        created_at: new Date().toISOString(),
-        __optimistic: true,
-        step_count: 0,
-        active_executions: 0,
-        completed_executions: 0,
-      };
-
-      // Close modal immediately (like delete does)
+      // Close modal immediately
       const modal = document.getElementById('create-process-modal');
       if (modal) {
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
       }
       form.reset();
-
-      // Render immediately
-      prependProcessCardV2(optimisticProcess);
 
       // Persist asynchronously, then redirect to flows2 with welcome=1
       (async () => {
@@ -2275,8 +2271,6 @@
             category,
           });
 
-          replaceOptimisticProcessV2(tempId, saved);
-
           // Update metrics
           const metrics = await CoreAPI.getMetrics();
           updateMetricsV2(metrics);
@@ -2284,8 +2278,6 @@
           // Redirect to process flow page and show "define steps" welcome modal
           window.location.href = `/core/flows?id=${saved.id}&welcome=1`;
         } catch (error) {
-          removeOptimisticProcessV2(tempId);
-
           showNotification(
             'error',
             'Failed to Create Process',
@@ -2340,10 +2332,6 @@
         }
         
         // Reload processes
-        const processesData = await CoreAPI.getProcesses();
-        renderProcessesV2(processesData.processes);
-        
-        // Reload metrics
         const metrics = await CoreAPI.getMetrics();
         updateMetricsV2(metrics);
         
@@ -2355,55 +2343,6 @@
         showNotification('error', 'Failed to Update Process', error.message || 'Failed to update process. Please try again.');
         return false;
       }
-    }
-    
-    // Delete process handler
-    let currentDeleteProcessId = null;
-    let currentDeleteProcessName = null;
-    
-    function showDeleteConfirmation(processId, processName) {
-      currentDeleteProcessId = processId;
-      currentDeleteProcessName = processName;
-      const modal = document.getElementById('delete-process-confirmation-modal');
-      const messageEl = modal.querySelector('#delete-confirmation-message');
-      messageEl.textContent = `Are you sure you want to delete "${processName}"? This action cannot be undone.`;
-      modal.style.display = 'flex';
-      document.body.style.overflow = 'hidden';
-    }
-    
-    async function confirmDeleteProcess() {
-      if (!currentDeleteProcessId) return;
-      
-      try {
-        await CoreAPI.deleteProcess(currentDeleteProcessId);
-        
-        // Close modal
-        const modal = document.getElementById('delete-process-confirmation-modal');
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-        
-        // Reload processes
-        const processesData = await CoreAPI.getProcesses();
-        renderProcessesV2(processesData.processes);
-        
-        // Reload metrics
-        const metrics = await CoreAPI.getMetrics();
-        updateMetricsV2(metrics);
-        
-        currentDeleteProcessId = null;
-        currentDeleteProcessName = null;
-      } catch (error) {
-        console.error('Failed to delete process:', error);
-        showNotification('error', 'Failed to Delete Process', error.message || 'Failed to delete process. Please try again.');
-      }
-    }
-    
-    function cancelDeleteProcess() {
-      const modal = document.getElementById('delete-process-confirmation-modal');
-      modal.style.display = 'none';
-      document.body.style.overflow = 'auto';
-      currentDeleteProcessId = null;
-      currentDeleteProcessName = null;
     }
     
     // showNotification is now defined at the top of the script
@@ -2877,28 +2816,6 @@
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button type="button" class="btn btn-secondary" onclick="closeResetDbModal()">Cancel</button>
         <button type="button" class="btn btn-primary" id="reset-db-confirm-btn" onclick="confirmResetDb()">Reset Database</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Delete Process Confirmation Modal -->
-  <div class="modal-overlay" id="delete-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete Process</h2>
-        <button onclick="cancelDeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <div style="margin-bottom: 24px;">
-        <p id="delete-confirmation-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></p>
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" onclick="cancelDeleteProcess()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="confirmDeleteProcess()" style="background: var(--danger, #ef4444);">Delete</button>
       </div>
     </div>
   </div>
