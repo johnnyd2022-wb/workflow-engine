@@ -190,6 +190,13 @@ def flows_create():
     return render_template("processes/process-flow-spa.html", active_page="core", process_id=process_id)
 
 
+@core_bp.route("/core/notifications", methods=["GET"])
+@requires_auth
+def notifications_page():
+    """Serve system notifications (system findings) as a card list."""
+    return render_template("notifications.html", active_page="core")
+
+
 @core_bp.route("/core/processes", methods=["GET"])
 @requires_auth
 def processes_list_page():

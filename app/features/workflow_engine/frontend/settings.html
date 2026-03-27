@@ -111,6 +111,28 @@
           </div>
           
           <div class="form-group">
+            <label class="form-label">First Name</label>
+            <input 
+              type="text" 
+              id="settings-first-name" 
+              class="form-input" 
+              placeholder="Enter first name"
+              autocomplete="given-name"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Last Name</label>
+            <input 
+              type="text" 
+              id="settings-last-name" 
+              class="form-input" 
+              placeholder="Enter last name"
+              autocomplete="family-name"
+            >
+          </div>
+          
+          <div class="form-group">
             <label class="form-label">Email</label>
             <input 
               type="email" 
@@ -634,10 +656,14 @@
         if (response.ok) {
           const data = await response.json();
           const orgNameInput = document.getElementById('settings-org-name');
+          const firstNameInput = document.getElementById('settings-first-name');
+          const lastNameInput = document.getElementById('settings-last-name');
           const emailInput = document.getElementById('settings-email');
           const phoneInput = document.getElementById('settings-phone');
           
           if (orgNameInput) orgNameInput.value = data.org_name || '';
+          if (firstNameInput) firstNameInput.value = data.first_name || '';
+          if (lastNameInput) lastNameInput.value = data.last_name || '';
           if (emailInput) emailInput.value = data.email || '';
           if (phoneInput) phoneInput.value = data.phone_number || '';
         }
@@ -649,15 +675,19 @@
     // Save settings
     async function saveSettings() {
       const emailInput = document.getElementById('settings-email');
+      const firstNameInput = document.getElementById('settings-first-name');
+      const lastNameInput = document.getElementById('settings-last-name');
       const phoneInput = document.getElementById('settings-phone');
       const saveBtn = document.getElementById('settings-save-btn');
       const messageDiv = document.getElementById('settings-message');
       const phoneErrorDiv = document.getElementById('settings-phone-error');
       
-      if (!emailInput || !phoneInput || !saveBtn) return;
+      if (!emailInput || !phoneInput || !firstNameInput || !lastNameInput || !saveBtn) return;
       
       const email = emailInput.value.trim();
       let phoneNumber = phoneInput.value.trim();
+      const firstName = firstNameInput.value.trim();
+      const lastName = lastNameInput.value.trim();
       
       // Hide previous messages
       if (messageDiv) messageDiv.style.display = 'none';
@@ -667,6 +697,28 @@
       if (!email || !email.includes('@')) {
         if (messageDiv) {
           messageDiv.textContent = 'Please enter a valid email address';
+          messageDiv.style.display = 'block';
+          messageDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+          messageDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          messageDiv.style.color = '#ef4444';
+        }
+        return;
+      }
+
+      // Validate name lengths (server-side also enforces this)
+      if (firstName.length > 255) {
+        if (messageDiv) {
+          messageDiv.textContent = 'First name must be 255 characters or fewer';
+          messageDiv.style.display = 'block';
+          messageDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+          messageDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          messageDiv.style.color = '#ef4444';
+        }
+        return;
+      }
+      if (lastName.length > 255) {
+        if (messageDiv) {
+          messageDiv.textContent = 'Last name must be 255 characters or fewer';
           messageDiv.style.display = 'block';
           messageDiv.style.background = 'rgba(239, 68, 68, 0.1)';
           messageDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
@@ -701,6 +753,8 @@
           credentials: 'include',
           body: JSON.stringify({
             email: email,
+            first_name: firstName,
+            last_name: lastName,
             phone_number: phoneNumber || ''
           })
         });
@@ -718,6 +772,8 @@
         
         if (response.ok) {
           // Success - update UI and show message
+          if (firstNameInput) firstNameInput.value = data.first_name || '';
+          if (lastNameInput) lastNameInput.value = data.last_name || '';
           if (phoneInput) phoneInput.value = data.phone_number || '';
           if (messageDiv) {
             messageDiv.textContent = data.message || 'Settings saved successfully';

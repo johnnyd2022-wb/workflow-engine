@@ -199,7 +199,7 @@ def create_app():
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
-            "img-src 'self' data: https:; "
+            "img-src 'self' data:; "
             "connect-src 'self'"
         )
 

@@ -260,10 +260,53 @@
     .app-layout .main-content {
       min-width: 0;
       overflow-x: clip;
+      --spa-column-inset: clamp(7px, 1.35vw, 13px);
+    }
+
+    @media (max-width: 767px) {
+      .app-layout .main-content {
+        --spa-column-inset: clamp(6px, 1.5vw, 11px);
+      }
+    }
+
+    .app-layout .main-header {
+      /* Full width banner; keep topbar controls near the edges */
+      width: 100%;
+      padding-left: 0;
+      padding-right: 0;
+      box-sizing: border-box;
+      background: rgba(10, 20, 34, 0.92);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .main-header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding-left: calc(var(--spa-column-inset) + max(0px, env(safe-area-inset-left)));
+      padding-right: calc(var(--spa-column-inset) + max(0px, env(safe-area-inset-right)));
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    /* When the bee overlay is open, keep header stable. */
+    .main-header.bee-menu-open {
+      height: max(36px, calc(100vh / 20)) !important;
+      min-height: unset !important;
+      overflow: hidden !important;
+      align-items: center !important;
+      flex-direction: row !important;
+      justify-content: flex-start !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
     }
 
     #page-content.page-content {
-      --spa-column-inset: clamp(10px, 2.2vw, 18px);
+      --spa-column-inset: clamp(7px, 1.35vw, 13px);
       box-sizing: border-box;
       min-width: 0;
       width: 100%;
@@ -277,7 +320,7 @@
     }
     @media (max-width: 767px) {
       #page-content.page-content {
-        --spa-column-inset: clamp(8px, 2vw, 14px);
+        --spa-column-inset: clamp(6px, 1.5vw, 11px);
         padding-top: max(12px, env(safe-area-inset-top)) !important;
         padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
       }
@@ -290,8 +333,8 @@
     }
 
     #page-content .max-content {
-      width: 95%;
-      max-width: 1280px;
+      width: 100%;
+      max-width: 1400px;
       margin-left: auto;
       margin-right: auto;
       padding-inline: var(--spa-column-inset);
@@ -355,21 +398,21 @@
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      width: 36px;
-      height: 36px;
+      width: var(--bee-size, clamp(26px, 6vw, 40px));
+      height: var(--bee-size, clamp(26px, 6vw, 40px));
       margin: 0;
       padding: 0;
       border: none;
-      border-radius: var(--radius-md, 8px);
-      background: transparent;
-      color: rgba(255, 255, 255, 0.92);
+      border-radius: calc((var(--bee-size, clamp(26px, 6vw, 40px))) * 0.25);
+      background: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%);
+      color: rgba(17, 24, 39, 0.96);
       cursor: pointer;
       text-decoration: none;
-      transition: background 0.15s ease, color 0.15s ease;
+      transition: transform 0.12s ease, background 0.15s ease;
     }
     .spa-banner-back:hover {
-      background: rgba(255, 255, 255, 0.1);
-      color: #fff;
+      transform: translateY(-1px);
+      background: linear-gradient(145deg, #FFE680 0%, #F1C40F 45%, #C47F00 100%);
     }
     .spa-banner-back:focus-visible {
       outline: 2px solid rgba(255, 255, 255, 0.85);
@@ -377,11 +420,299 @@
     }
     .spa-banner-back svg {
       display: block;
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
     }
     .spa-banner-back.spa-banner-back--hidden {
       display: none !important;
+    }
+
+    /* Top-right bee account dropdown (base SPA shared banner) */
+    .topbar-account {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: clamp(10px, 2.1vw, 18px);
+      min-width: 0;
+    }
+
+    .topbar-notifications {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--bee-size, clamp(26px, 6vw, 40px));
+      height: var(--bee-size, clamp(26px, 6vw, 40px));
+      border-radius: calc((var(--bee-size, clamp(26px, 6vw, 40px))) * 0.25);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.95);
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .topbar-notifications:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .topbar-notifications svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+
+    .topbar-notifications__badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: linear-gradient(145deg, hsl(38, 92%, 50%) 0%, hsl(25, 95%, 53%) 100%);
+      color: rgba(17, 24, 39, 0.96);
+      font-size: 11px;
+      font-weight: 900;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+      line-height: 1;
+    }
+
+    .topbar-notifications__badge[data-visible="true"] {
+      display: inline-flex;
+    }
+
+    .bee-profile {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: clamp(6px, 1.6vw, 10px);
+      /* Responsive sizing so the badge fits the header on mobile */
+      --bee-size: clamp(26px, 6vw, 40px);
+    }
+
+    .bee-profile__button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      padding: 0;
+      border-radius: calc(var(--bee-size) * 0.25);
+      border: none;
+      /* Bold mustard badge behind the bee to stand out on dark headers */
+      background: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%);
+      color: rgba(17, 24, 39, 0.96);
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+      user-select: none;
+      box-shadow:
+        0 18px 44px rgba(0, 0, 0, 0.36),
+        0 0 0 1px rgba(255, 225, 120, 0.18);
+      line-height: 1;
+      white-space: nowrap;
+      position: relative;
+      width: var(--bee-size);
+      height: var(--bee-size);
+    }
+
+    .bee-profile__button:hover {
+      transform: translateY(-1px);
+      background: linear-gradient(145deg, #FFE680 0%, #F1C40F 45%, #C47F00 100%);
+      box-shadow:
+        0 24px 56px rgba(0, 0, 0, 0.42),
+        0 0 0 1px rgba(255, 225, 120, 0.25);
+    }
+
+    .bee-profile__button:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 3px rgba(246, 208, 76, 0.35),
+        0 12px 26px rgba(0, 0, 0, 0.28);
+    }
+
+    .bee-avatar {
+      position: relative;
+      width: var(--bee-size);
+      height: var(--bee-size);
+      flex-shrink: 0;
+    }
+
+    .bee-avatar canvas {
+      width: var(--bee-size);
+      height: var(--bee-size);
+      display: block;
+      border-radius: calc(var(--bee-size) * 0.25);
+    }
+
+    .bee-svg {
+      width: var(--bee-size);
+      height: var(--bee-size);
+      display: block;
+      border-radius: calc(var(--bee-size) * 0.25);
+    }
+
+    .bee-body {
+      transform-origin: 50% 60%;
+    }
+
+    .bee-topbar-wrap {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .bee-wing {
+      transform-box: fill-box;
+      transform-origin: 50% 40%;
+    }
+
+    .bee-wing--left {
+      transform-origin: 75% 45%;
+    }
+
+    .bee-wing--right {
+      transform-origin: 25% 45%;
+    }
+
+    @keyframes beeWingFlapLeft {
+      0% { transform: rotate(0deg) scale(1); opacity: 0.92; }
+      50% { transform: rotate(-16deg) scale(0.96); opacity: 1; }
+      100% { transform: rotate(0deg) scale(1); opacity: 0.92; }
+    }
+
+    @keyframes beeWingFlapRight {
+      0% { transform: rotate(0deg) scale(1); opacity: 0.92; }
+      50% { transform: rotate(16deg) scale(0.96); opacity: 1; }
+      100% { transform: rotate(0deg) scale(1); opacity: 0.92; }
+    }
+
+    @keyframes beeBodyBop {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-1px); }
+      100% { transform: translateY(0); }
+    }
+
+    .bee-quirk .bee-wing--left {
+      animation: beeWingFlapLeft 180ms ease-in-out;
+    }
+
+    .bee-quirk .bee-wing--right {
+      animation: beeWingFlapRight 180ms ease-in-out;
+    }
+
+    .bee-quirk .bee-body {
+      animation: beeBodyBop 180ms ease-in-out;
+    }
+
+    .bee-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0;
+      border-radius: 0 0 var(--radius-xl, 14px) var(--radius-xl, 14px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(10, 20, 34, 0.92);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      overflow-x: hidden;
+      overflow-y: auto;
+      z-index: 2000;
+    }
+
+    .bee-menu__inner {
+      padding: 18px var(--spa-column-inset) 18px var(--spa-column-inset);
+      display: flex;
+      flex-direction: column;
+      min-height: 220px;
+    }
+
+    .bee-menu__title {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 1.05rem;
+      letter-spacing: 0.01em;
+      text-transform: none;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .bee-menu__content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 8px;
+      padding: 0 4px;
+    }
+
+    .bee-menu__close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.95);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+
+    .bee-menu__close:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .bee-menu__name {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.96);
+      font-size: 1.0rem;
+      line-height: 1.2;
+    }
+
+    .bee-menu__email {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.82rem;
+      color: rgba(255, 255, 255, 0.78);
+      word-break: break-word;
+      line-height: 1.35;
+      font-weight: 400;
+    }
+
+    .bee-menu__org {
+      font-family: "Roboto", system-ui, -apple-system, sans-serif;
+      font-size: 0.82rem;
+      color: rgba(255, 255, 255, 0.72);
+      line-height: 1.35;
+      font-weight: 400;
+    }
+
+    .bee-menu__hint {
+      margin-top: 6px;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.6);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 8px;
+      line-height: 1.3;
+    }
+
+    @media (max-width: 767px) {
+      .bee-menu {
+        border-radius: 0 0 var(--radius-xl, 14px) var(--radius-xl, 14px);
+      }
     }
   </style>
 </head>
@@ -398,20 +729,205 @@
     {% include 'shared/sidebar-v2.html' %}
 
     <div class="main-content">
-      <header class="main-header" role="banner">
-        {% block topbar %}
-        <a
-          href="/core"
-          class="spa-banner-back"
-          id="spa-banner-back"
-          aria-label="Go back"
+      <div class="bee-topbar-wrap" x-data="bizeMascot()">
+        <header
+          class="main-header"
+          role="banner"
+          :class="open ? 'bee-menu-open' : ''"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M15 18l-6-6 6-6"/>
-          </svg>
-        </a>
-        {% endblock %}
+        <div class="main-header-inner">
+          <div style="display:flex; align-items:center; gap: 10px; min-width: 0;">
+            {% block topbar %}
+            <a
+              href="/core"
+              class="spa-banner-back"
+              id="spa-banner-back"
+              aria-label="Go back"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M11 19l-7-7 7-7"/>
+                <path d="M4 12h16"/>
+              </svg>
+            </a>
+            {% endblock %}
+          </div>
+
+          <div class="topbar-account">
+            <a
+              href="/core/notifications"
+              class="topbar-notifications"
+              id="topbar-notifications-link"
+              aria-label="Notifications"
+              hx-boost="false"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <span
+                class="topbar-notifications__badge"
+                id="topbar-notifications-count"
+                data-visible="false"
+              >0</span>
+            </a>
+            <div class="bee-profile" x-cloak :class="quirk ? 'bee-quirk' : ''">
+              <button
+                type="button"
+                class="bee-profile__button"
+                aria-label="Account menu"
+                aria-haspopup="menu"
+                :aria-expanded="open"
+                @click.stop="openMenu()"
+              >
+                <span class="bee-avatar" aria-hidden="true">
+                  <svg
+                    class="bee-svg"
+                    viewBox="0 0 100 100"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <defs>
+                      <!-- Steampunk bronze palette -->
+                      <linearGradient id="beeG" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#C6863A"/>
+                        <stop offset="45%" stop-color="#B87333"/>
+                        <stop offset="100%" stop-color="#6B3F10"/>
+                      </linearGradient>
+                    </defs>
+
+                    <g class="bee-wing bee-wing--left" opacity="0.95">
+                      <path
+                        d="M26 38 C16 30 18 16 31 19 C44 22 45 38 34 42 C31 43 29 41 26 38 Z"
+                        fill="none"
+                        stroke="#E5E7EB"
+                        stroke-width="4"
+                        stroke-linecap="round"
+                      />
+                      <path
+                        d="M27 36 C19 29 21 19 31 20"
+                        fill="none"
+                        stroke="#9CA3AF"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        opacity="0.9"
+                      />
+                    </g>
+
+                    <g class="bee-wing bee-wing--right" opacity="0.95">
+                      <path
+                        d="M74 38 C84 30 82 16 69 19 C56 22 55 38 66 42 C69 43 71 41 74 38 Z"
+                        fill="none"
+                        stroke="#E5E7EB"
+                        stroke-width="4"
+                        stroke-linecap="round"
+                      />
+                      <path
+                        d="M73 36 C81 29 79 19 69 20"
+                        fill="none"
+                        stroke="#9CA3AF"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        opacity="0.9"
+                      />
+                    </g>
+
+                    <g class="bee-body">
+                      <!-- Body -->
+                      <ellipse
+                        cx="50"
+                        cy="58"
+                        rx="18"
+                        ry="24"
+                        fill="url(#beeG)"
+                        stroke="#E5E7EB"
+                        stroke-opacity="0.45"
+                        stroke-width="1"
+                      />
+
+                      <!-- Mechanical stripes -->
+                      <rect x="40" y="44" width="20" height="6" rx="3" fill="#2B1B08" opacity="0.85" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
+                      <rect x="40" y="54" width="20" height="6" rx="3" fill="#3A240B" opacity="0.9" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
+                      <rect x="40" y="64" width="20" height="6" rx="3" fill="#2B1B08" opacity="0.85" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
+
+                      <!-- Head -->
+                      <circle
+                        cx="50"
+                        cy="35"
+                        r="11"
+                        fill="#1F2937"
+                        opacity="0.92"
+                        stroke="#E5E7EB"
+                        stroke-opacity="0.35"
+                        stroke-width="1"
+                      />
+
+                      <!-- Green cyber eyes -->
+                      <circle cx="46.3" cy="33.4" r="2.6" fill="#22C55E" opacity="0.98"/>
+                      <circle cx="53.7" cy="33.4" r="2.6" fill="#22C55E" opacity="0.98"/>
+                      <circle cx="46.3" cy="33.4" r="1.3" fill="#052E16" opacity="0.95"/>
+                      <circle cx="53.7" cy="33.4" r="1.3" fill="#052E16" opacity="0.95"/>
+                      <circle cx="45.7" cy="32.8" r="0.6" fill="#A7F3D0" opacity="0.95"/>
+                      <circle cx="53.1" cy="32.8" r="0.6" fill="#A7F3D0" opacity="0.95"/>
+
+                      <!-- Tail/connector -->
+                      <path d="M68 58 L82 54 L68 62 Z" fill="#1F2937" opacity="0.95"/>
+
+                      <!-- Rivets -->
+                      <circle cx="35" cy="52" r="2" fill="#E5E7EB" opacity="0.22"/>
+                      <circle cx="65" cy="52" r="2" fill="#E5E7EB" opacity="0.22"/>
+                      <circle cx="50" cy="78" r="2" fill="#E5E7EB" opacity="0.22"/>
+
+                      <!-- Mechanical antenna -->
+                      <path d="M44 26 L38 14" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round" />
+                      <path d="M56 26 L62 14" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round" />
+                      <circle cx="38" cy="14" r="4" fill="#1F2937" opacity="0.95"/>
+                      <circle cx="62" cy="14" r="4" fill="#1F2937" opacity="0.95"/>
+
+                      <!-- Small gear ring -->
+                      <circle cx="50" cy="35" r="13" fill="none" stroke="#E5E7EB" stroke-width="3" opacity="0.35"/>
+                    </g>
+                  </svg>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
       </header>
+
+        <div
+          class="bee-menu"
+          x-show="open"
+          x-transition:enter="transition ease-out duration-160"
+          x-transition:enter-start="opacity-0"
+          x-transition:enter-end="opacity-100"
+          x-transition:leave="transition ease-in duration-120"
+          x-transition:leave-start="opacity-100"
+          x-transition:leave-end="opacity-0"
+          role="menu"
+          aria-label="Account menu dropdown"
+        >
+          <button
+            type="button"
+            class="bee-menu__close"
+            aria-label="Close account menu"
+            @click.stop="closeMenu()"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+
+          <div class="bee-menu__inner">
+            <div class="bee-menu__title">Account information</div>
+            <div class="bee-menu__content">
+              <div class="bee-menu__name" x-text="fullName || 'Loading...'"></div>
+              <div class="bee-menu__email" x-text="email || ''"></div>
+              <div class="bee-menu__org" x-text="orgName || ''"></div>
+            </div>
+          </div>
+        </div>
 
       <main id="page-content" class="page-content">
         {% block content %}{% endblock %}
@@ -505,6 +1021,278 @@
         window.location.reload();
       }
     });
+  </script>
+
+  <script>
+    // Alpine.js component for the top-right bee + profile dropdown.
+    // Animation is fully local (inline SVG + CSS) so it will not break in production.
+    document.addEventListener('alpine:init', function () {
+      if (!window.Alpine) return;
+
+      window.Alpine.data('bizeMascot', function () {
+        return {
+          open: false,
+          quirk: false,
+          fullName: '',
+          email: '',
+          orgName: '',
+
+          prevBodyOverflow: '',
+          prevHtmlOverflow: '',
+
+          init() {
+            this.loadProfile();
+          },
+
+          async loadProfile() {
+            try {
+              const res = await fetch('/auth/me', { method: 'GET', credentials: 'include' });
+              if (!res.ok) return;
+              const data = await res.json();
+              const u = data?.user || {};
+              const org = data?.organisation || {};
+
+              const first = (u.first_name || '').toString().trim();
+              const last = (u.last_name || '').toString().trim();
+
+              this.fullName = ((first + ' ' + last).trim() || first || u.email || 'User');
+              this.email = (u.email || '').toString();
+              this.orgName = (org.name || '').toString();
+            } catch (e) {
+              // Non-fatal; keep placeholders.
+            }
+          },
+
+          playQuirk() {
+            try {
+              this.quirk = false;
+              requestAnimationFrame(() => {
+                this.quirk = true;
+                setTimeout(() => {
+                  this.quirk = false;
+                }, 220);
+              });
+            } catch (e) {
+              // Ignore animation errors.
+            }
+          },
+
+          blockScroll() {
+            try {
+              this.prevBodyOverflow = document.body.style.overflow;
+              this.prevHtmlOverflow = document.documentElement.style.overflow;
+              document.body.style.overflow = 'hidden';
+              document.documentElement.style.overflow = 'hidden';
+            } catch (e) {
+              // Non-fatal.
+            }
+          },
+
+          unblockScroll() {
+            try {
+              document.body.style.overflow = this.prevBodyOverflow || '';
+              document.documentElement.style.overflow = this.prevHtmlOverflow || '';
+            } catch (e) {
+              // Non-fatal.
+            }
+          },
+
+          positionMenu() {
+            try {
+              const beeMenuEl = document.querySelector('.bee-menu');
+              const headerEl = document.querySelector('.main-header');
+              const mainContentEl = document.querySelector('.main-content');
+              if (!beeMenuEl || !headerEl || !mainContentEl) return;
+
+              const headerRect = headerEl.getBoundingClientRect();
+              const mainRect = mainContentEl.getBoundingClientRect();
+
+              const maxW = 1400;
+              const beeW = Math.min(mainRect.width, maxW);
+              const beeLeft = mainRect.left + (mainRect.width - beeW) / 2;
+
+              // Anchor to the sticky top pane (visible header) below its bottom edge.
+              const topPx = Math.max(0, headerRect.bottom);
+
+              beeMenuEl.style.top = `${topPx}px`;
+              beeMenuEl.style.left = `${beeLeft}px`;
+              beeMenuEl.style.width = `${beeW}px`;
+            } catch (e) {
+              // Non-fatal.
+            }
+          },
+
+          openMenu() {
+            if (this.open) return; // only close via the X (clean UI)
+            this.playQuirk();
+            this.blockScroll();
+
+          // Position before revealing to avoid a "jump" on scroll.
+          this.positionMenu();
+          this.open = true;
+          },
+
+          closeMenu() {
+            if (!this.open) return;
+            this.open = false;
+            this.unblockScroll();
+          }
+        };
+      });
+    });
+  </script>
+
+  <script>
+    // System findings notification badge count (top-right bell icon).
+    // Uses sessionStorage keys set by notifications.html per-card actions.
+    (function () {
+      'use strict';
+
+      function todayDateKey() {
+        var d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+
+      function ignoreKey(checkId, itemKey) {
+        return 'corechecks_finding_ignore_date_' + String(checkId) + '_' + String(itemKey);
+      }
+
+      function dismissedKey(checkId, itemKey) {
+        return 'corechecks_finding_dismissed_' + String(checkId) + '_' + String(itemKey);
+      }
+
+      function updateBadge(count) {
+        var badge = document.getElementById('topbar-notifications-count');
+        if (!badge) return;
+        badge.textContent = String(count);
+        badge.setAttribute('data-visible', count > 0 ? 'true' : 'false');
+      }
+
+      async function refreshBadge() {
+        try {
+          var todayKey = todayDateKey();
+          var globalIgnored = sessionStorage.getItem('corechecks_ignore_date') === todayKey;
+          var globalDismissed = sessionStorage.getItem('corechecks_banner_dismissed') === '1';
+          if (globalIgnored || globalDismissed) {
+            updateBadge(0);
+            return;
+          }
+
+          var api = window.CoreAPI;
+          if (!api || typeof api.getSystemFindings !== 'function') {
+            updateBadge(0);
+            return;
+          }
+
+          var data = await api.getSystemFindings();
+          var findings = (data && Array.isArray(data.findings)) ? data.findings : [];
+
+          function itemKeyOutputExpiry(x) {
+            var iid = x && x.inventory_item_id != null ? String(x.inventory_item_id) : '';
+            var exp = x && (x.expiry_at || x.expiry_date) ? String(x.expiry_at || x.expiry_date) : '';
+            var sid = x && x.step_id != null ? String(x.step_id) : '';
+            return 'oe_' + iid + '_' + sid + '_' + exp;
+          }
+
+          function itemKeyOutputReady(x) {
+            var iid = x && x.inventory_item_id != null ? String(x.inventory_item_id) : '';
+            var rd = x && x.ready_date ? String(x.ready_date) : '';
+            var sid = x && x.step_id != null ? String(x.step_id) : '';
+            return 'ord_' + iid + '_' + sid + '_' + rd;
+          }
+
+          function itemKeyUntracked(u) {
+            return u && u.id != null ? 'ut_' + String(u.id) : '';
+          }
+
+          var visibleCount = 0;
+          findings.forEach(function (f) {
+            var checkId = f && f.check_id != null ? String(f.check_id) : '';
+            if (!checkId) return;
+            var data = f.data && typeof f.data === 'object' ? f.data : {};
+
+            if (checkId === 'expired_materials') {
+              var expired = Array.isArray(data.expired_raw_materials) ? data.expired_raw_materials : [];
+              expired.forEach(function (raw) {
+                var rawId = raw && raw.id != null ? String(raw.id) : null;
+                if (!rawId) return;
+                if (sessionStorage.getItem(ignoreKey(checkId, rawId)) === todayKey) return;
+                if (sessionStorage.getItem(dismissedKey(checkId, rawId)) === '1') return;
+                visibleCount += 1;
+              });
+              return;
+            }
+
+            if (checkId === 'output_expiry') {
+              var oeItems = Array.isArray(data.output_expiry_items) ? data.output_expiry_items : [];
+              var seenOe = {};
+              oeItems.forEach(function (x) {
+                var ik = itemKeyOutputExpiry(x);
+                if (!ik || seenOe[ik]) return;
+                seenOe[ik] = true;
+                if (sessionStorage.getItem(ignoreKey(checkId, ik)) === todayKey) return;
+                if (sessionStorage.getItem(dismissedKey(checkId, ik)) === '1') return;
+                visibleCount += 1;
+              });
+              return;
+            }
+
+            if (checkId === 'output_ready_date') {
+              var orItems = Array.isArray(data.output_ready_date_items) ? data.output_ready_date_items : [];
+              var seenOr = {};
+              orItems.forEach(function (x) {
+                var ik = itemKeyOutputReady(x);
+                if (!ik || seenOr[ik]) return;
+                seenOr[ik] = true;
+                if (sessionStorage.getItem(ignoreKey(checkId, ik)) === todayKey) return;
+                if (sessionStorage.getItem(dismissedKey(checkId, ik)) === '1') return;
+                visibleCount += 1;
+              });
+              return;
+            }
+
+            if (checkId === 'untracked_items') {
+              var untracked = Array.isArray(data.untracked_items) ? data.untracked_items : [];
+              untracked.forEach(function (u) {
+                var ik = itemKeyUntracked(u);
+                if (!ik) return;
+                if (sessionStorage.getItem(ignoreKey(checkId, ik)) === todayKey) return;
+                if (sessionStorage.getItem(dismissedKey(checkId, ik)) === '1') return;
+                visibleCount += 1;
+              });
+              return;
+            }
+
+            var genKey = 'gen_' + checkId;
+            if (sessionStorage.getItem(ignoreKey(checkId, genKey)) === todayKey) return;
+            if (sessionStorage.getItem(dismissedKey(checkId, genKey)) === '1') return;
+            visibleCount += 1;
+          });
+
+          updateBadge(visibleCount);
+        } catch (e) {
+          // Non-fatal.
+          updateBadge(0);
+        }
+      }
+
+      window.SystemFindingsNotifications = {
+        updateBadge: updateBadge,
+        refreshBadge: refreshBadge
+      };
+
+      document.addEventListener('DOMContentLoaded', function () {
+        if (typeof window.SystemFindingsNotifications.refreshBadge === 'function') {
+          window.SystemFindingsNotifications.refreshBadge();
+        }
+      });
+
+      document.body.addEventListener('htmx:afterOnLoad', function () {
+        if (typeof window.SystemFindingsNotifications.refreshBadge === 'function') {
+          window.SystemFindingsNotifications.refreshBadge();
+        }
+      });
+    })();
   </script>
 
   {# Page-specific scripts go here #}

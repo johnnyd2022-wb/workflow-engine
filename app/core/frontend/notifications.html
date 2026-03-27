@@ -1,0 +1,407 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Notifications{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Review system findings and notifications. Resolve issues or hide items you have already handled.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  <style>
+    /* Hero title + subtitle — same pattern as processes/list.html (.processes-list-hero__header) */
+    .notifications-hero__header {
+      text-align: center;
+      padding: 0 0 12px 0;
+    }
+
+    .notifications-hero__header .card-title {
+      margin: 0;
+    }
+
+    .notifications-hero__tagline {
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      color: var(--text-secondary, #6b7280);
+      margin: 10px 0 0 0;
+      max-width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .notifications-card {
+      margin-top: 24px;
+    }
+
+    .notifications-card__content {
+      padding-top: 0 !important;
+    }
+
+    /* Transparent shell: list lives inside primary card (matches processes/list.html stack). */
+    #system-findings-banner {
+      background: transparent !important;
+      border-bottom: none !important;
+    }
+
+    .system-findings-banner__header {
+      display: none !important;
+    }
+
+    .system-findings-banner__actions {
+      display: none !important;
+    }
+
+    #system-findings-banner-body {
+      padding: 0 !important;
+      margin: 0 !important;
+      max-width: none !important;
+      width: 100% !important;
+    }
+
+    .system-findings-banner__hint {
+      display: none !important;
+    }
+
+    #system-findings-banner-body {
+      display: block !important;
+    }
+
+    #system-findings-banner-toggle {
+      display: none !important;
+    }
+
+    #system-findings-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+    }
+
+    /* Match processes/list.html .processes-list-item — clean row, hairline between items */
+    #system-findings-list .notifications-list-item {
+      display: block;
+      position: relative;
+      margin: 0;
+      padding: 14px 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    #system-findings-list .notifications-list-item:not(:first-child) {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+
+    #system-findings-list .notifications-list-item:last-child {
+      padding-bottom: 4px;
+    }
+
+    .notifications-list-item__inner {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 100%;
+      padding-right: 54px;
+    }
+
+    .notifications-list-item__overflow {
+      position: absolute;
+      top: 8px;
+      right: 0;
+      z-index: 3;
+    }
+
+    .notifications-list-item__overflow-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text-secondary, #6b7280);
+      cursor: pointer;
+      font-size: 1.22rem;
+      font-weight: 700;
+      line-height: 0.9;
+      transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+    }
+
+    .notifications-list-item__overflow-toggle:hover,
+    .notifications-list-item__overflow-toggle[aria-expanded="true"] {
+      background: var(--bg-secondary, #f9fafb);
+      border-color: var(--border-default, #e5e7eb);
+      color: var(--text-primary, #111827);
+    }
+
+    .notifications-list-item__overflow-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 0;
+      min-width: 172px;
+      width: max-content;
+      max-width: min(88vw, 260px);
+      padding: 6px;
+      background: var(--bg-card, #ffffff);
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: 12px;
+      box-shadow: 0 14px 30px rgba(17, 24, 39, 0.14);
+    }
+
+    .notifications-list-item__overflow-menu[hidden] {
+      display: none;
+    }
+
+    .notifications-list-item__overflow-item {
+      width: 100%;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      padding: 9px 10px;
+      text-align: left;
+      font-size: 0.85rem;
+      color: var(--text-primary, #111827);
+      cursor: pointer;
+      transition: background 0.16s ease, color 0.16s ease;
+    }
+
+    .notifications-list-item__overflow-item:hover {
+      background: var(--bg-secondary, #f9fafb);
+    }
+
+    @media (max-width: 767px) {
+      .notifications-list-item__inner {
+        padding-right: 48px;
+      }
+
+      .notifications-list-item__overflow {
+        top: 6px;
+      }
+
+      .notifications-list-item__overflow-toggle {
+        width: 32px;
+        height: 32px;
+      }
+
+      .notifications-list-item__overflow-menu {
+        right: -2px;
+        min-width: 152px;
+      }
+    }
+
+    .notifications-list-item__field {
+      display: flex;
+      flex-direction: row;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .notifications-list-item__label {
+      font-size: 0.75rem;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.3;
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .notifications-list-item__value {
+      font-size: 0.9375rem;
+      font-weight: 400;
+      color: var(--text-primary, #111827);
+      line-height: 1.45;
+      word-break: break-word;
+      min-width: 0;
+    }
+
+    .notifications-list-item__value--emphasis {
+      font-size: 0.9375rem;
+      font-weight: 400;
+    }
+
+    .notifications-list-item__actions {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .notifications-list-item__field--stacked {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+    }
+
+    .notifications-list-item__field--actions {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .notifications-list-item__field--date .notifications-list-item__label {
+      display: none;
+    }
+
+    .notifications-list-item__field--date .notifications-list-item__value {
+      font-size: 0.82rem;
+    }
+
+    .notifications-list-item__field--date,
+    .notifications-list-item__field--finding,
+    .notifications-list-item__field--actions-menu,
+    .notifications-list-item__field--narrative {
+      gap: 0;
+    }
+
+    .notifications-list-item__field--finding .notifications-list-item__label,
+    .notifications-list-item__field--actions-menu .notifications-list-item__label,
+    .notifications-list-item__field--narrative .notifications-list-item__label {
+      display: none;
+    }
+
+    .notifications-list-item__field--actions-menu {
+      position: relative;
+      align-items: center;
+    }
+
+    .notifications-list-item__field--narrative .notifications-list-item__value {
+      color: var(--text-primary, #111827);
+      font-size: 0.9375rem;
+      font-weight: 400;
+      line-height: 1.45;
+    }
+
+    .notifications-list-item__field--supporting .notifications-list-item__label {
+      letter-spacing: 0.02em;
+    }
+
+    .notifications-list-item__field--supporting .notifications-list-item__value {
+      font-size: 0.9375rem;
+      font-weight: 400;
+      line-height: 1.45;
+    }
+
+    .notifications-list-item__actions-dropdown {
+      position: relative;
+    }
+
+    .notifications-list-item__actions-toggle {
+      border: none;
+      background: transparent;
+      padding: 0;
+      font-size: 0.9375rem;
+      line-height: 1.45;
+      font-weight: 500;
+      color: var(--primary, #2563eb);
+      cursor: pointer;
+      text-decoration: none;
+      transition: color 0.16s ease;
+    }
+
+    .notifications-list-item__actions-toggle:hover,
+    .notifications-list-item__actions-toggle[aria-expanded="true"] {
+      color: var(--primary-dark, #1d4ed8);
+    }
+
+    .notifications-list-item__actions-menu {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      min-width: 200px;
+      max-width: min(88vw, 300px);
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid var(--border-default, #e5e7eb);
+      background: var(--bg-card, #fff);
+      box-shadow: 0 14px 30px rgba(17, 24, 39, 0.14);
+      z-index: 4;
+    }
+
+    .notifications-list-item__actions-menu[hidden] {
+      display: none;
+    }
+
+    .notifications-list-item__actions-item {
+      display: block;
+      width: 100%;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      padding: 9px 10px;
+      text-align: left;
+      color: var(--text-primary, #111827);
+      font-size: 0.85rem;
+      text-decoration: none;
+      cursor: pointer;
+      font-family: inherit;
+      line-height: 1.4;
+      transition: background 0.16s ease;
+    }
+
+    .notifications-list-item__actions-item:hover {
+      background: var(--bg-secondary, #f9fafb);
+    }
+
+    .notifications-list-item__actions .btn {
+      font-size: 0.8125rem;
+    }
+
+    @media (max-width: 767px) {
+      .notifications-list-item__actions-menu {
+        min-width: 168px;
+      }
+    }
+
+    .notifications-list-item__detail-pre {
+      margin: 0;
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.45;
+    }
+
+    .notification-page__empty {
+      padding: 24px 0;
+      text-align: center;
+      color: var(--text-secondary, #6b7280);
+      font-size: 0.9375rem;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div id="notifications-page-marker" hidden aria-hidden="true"></div>
+  <div class="max-content">
+    {% include 'shared/notifications_hub_banner.html' %}
+
+    <section class="card spa-primary-flat notifications-card" aria-labelledby="notifications-title">
+      <div class="card-header notifications-hero__header">
+        <h1 id="notifications-title" class="card-title">Notifications</h1>
+        <p class="notifications-hero__tagline">See every active system finding in one place—expired materials, output dates, untracked inventory, and more</p>
+      </div>
+      <div class="card-content notifications-card__content">
+        <div class="spa-card-form" style="gap: 0;">
+          {% include 'shared/system-findings-banner.html' %}
+        </div>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('core.serve_core_js', filename='system-findings-notifications.js') }}"></script>
+{% endblock %}
+

@@ -20,6 +20,10 @@
    * Fetch system findings (one API call) and render banner. Call on DOMContentLoaded and optionally after navigation.
    */
   async function loadSystemFindingsBanner() {
+    /* Notifications page renders its own list from the API; do not overwrite #system-findings-list. */
+    if (document.getElementById('notifications-page-marker')) {
+      return;
+    }
     var banner = document.getElementById('system-findings-banner');
     var listEl = document.getElementById('system-findings-list');
     if (!banner || !listEl) return;
@@ -44,6 +48,23 @@
       console.warn('System findings banner: failed to load findings', e);
       return;
     }
+
+    // Frontend-only per-check filtering for notifications UI.
+    // These sessionStorage keys are set by notifications.html card actions.
+    var filteredFindings = [];
+    var todayKey = todayDateKey();
+    findings.forEach(function (f, idx) {
+      var checkId = f && f.check_id != null ? String(f.check_id) : '';
+      if (!checkId) {
+        // If we cannot identify the check, keep it (best-effort visibility).
+        filteredFindings.push(f);
+        return;
+      }
+      if (sessionStorage.getItem('corechecks_finding_ignore_date_' + checkId) === todayKey) return;
+      if (sessionStorage.getItem('corechecks_finding_dismissed_' + checkId) === '1') return;
+      filteredFindings.push(f);
+    });
+    findings = filteredFindings;
 
     if (findings.length === 0) {
       hideSystemFindingsBanner();
@@ -90,7 +111,7 @@
           '</div>';
       }
       return (
-        '<li class="system-findings-item" data-index="' + index + '">' +
+        '<li class="system-findings-item" data-index="' + index + '" data-check-id="' + escapeHtml(checkId) + '">' +
           '<div class="system-findings-item__row">' +
             '<button type="button" class="' + summaryClass + '"' + ariaExpanded + '>' +
               chevron +
