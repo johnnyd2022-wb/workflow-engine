@@ -196,7 +196,8 @@ def inventory_dispose_confirm():
     error = None
     try:
         if quantity_wasted_raw:
-            from decimal import Decimal, InvalidOperation
+            from decimal import Decimal
+
             quantity_wasted_dec = Decimal(quantity_wasted_raw)
             if quantity_wasted_dec <= 0:
                 error = "Quantity must be greater than 0."
@@ -231,7 +232,8 @@ def inventory_dispose_confirm():
             if item and getattr(item, "unit", None):
                 inventory_item_unit = str(item.unit)
             if not error and item and quantity_wasted_dec is not None:
-                from decimal import Decimal, InvalidOperation
+                from decimal import Decimal
+
                 current_qty_dec = Decimal(str(item.quantity))
                 remaining_dec = current_qty_dec - quantity_wasted_dec
                 if remaining_dec < 0:
