@@ -174,6 +174,90 @@ def inventory_view():
     return render_template("inventory/view.html", active_page="core")
 
 
+@core_bp.route("/core/inventory/dispose", methods=["GET"])
+@requires_auth
+def inventory_dispose():
+    """Full-page disposal flow for recording inventory wastage."""
+    item_ids_param = (request.args.get("item_ids") or "").strip()
+    item_ids = [v.strip() for v in item_ids_param.split(",") if v and v.strip()] if item_ids_param else []
+    return render_template("inventory/dispose.html", active_page="core", initial_item_ids=item_ids)
+
+
+@core_bp.route("/core/inventory/dispose/confirm", methods=["GET"])
+@requires_auth
+def inventory_dispose_confirm():
+    """Confirmation page for disposing a single selected quantity (no modals)."""
+    inventory_item_id = (request.args.get("inventory_item_id") or "").strip()
+    quantity_wasted_raw = (request.args.get("quantity_wasted") or "").strip()
+
+    quantity_wasted = None
+    quantity_wasted_dec = None
+    quantity_wasted_display = None
+    error = None
+    try:
+        if quantity_wasted_raw:
+            from decimal import Decimal, InvalidOperation
+            quantity_wasted_dec = Decimal(quantity_wasted_raw)
+            if quantity_wasted_dec <= 0:
+                error = "Quantity must be greater than 0."
+            else:
+                # Use float for JSON/JS submission; keep Decimal for remaining calculations.
+                quantity_wasted = float(quantity_wasted_dec)
+                # Fixed-point + trimmed trailing zeros
+                s = format(quantity_wasted_dec, "f")
+                if "." in s:
+                    s = s.rstrip("0").rstrip(".")
+                quantity_wasted_display = s
+    except (TypeError, ValueError):
+        error = "Invalid quantity."
+
+    if not inventory_item_id:
+        error = error or "Missing inventory item id."
+
+    inventory_item_name = "item"
+    inventory_item_unit = ""
+    remaining_quantity_display = ""
+    org_id = getattr(g, "org_id", None)
+    if org_id and inventory_item_id:
+        try:
+            item_uuid = UUID(inventory_item_id)
+            item = (
+                db_session.query(InventoryItem)
+                .filter(InventoryItem.id == item_uuid, InventoryItem.org_id == org_id)
+                .first()
+            )
+            if item and getattr(item, "name", None):
+                inventory_item_name = str(item.name)
+            if item and getattr(item, "unit", None):
+                inventory_item_unit = str(item.unit)
+            if not error and item and quantity_wasted_dec is not None:
+                from decimal import Decimal, InvalidOperation
+                current_qty_dec = Decimal(str(item.quantity))
+                remaining_dec = current_qty_dec - quantity_wasted_dec
+                if remaining_dec < 0:
+                    remaining_dec = Decimal("0")
+                rs = format(remaining_dec, "f")
+                if "." in rs:
+                    rs = rs.rstrip("0").rstrip(".")
+                remaining_quantity_display = rs
+            elif not error:
+                error = "Inventory item was not found."
+        except (ValueError, TypeError):
+            if not error:
+                error = "Invalid inventory item id."
+
+    return render_template(
+        "inventory/dispose_confirm.html",
+        active_page="core",
+        inventory_item_id=inventory_item_id,
+        inventory_item_name=inventory_item_name,
+        inventory_item_unit=inventory_item_unit,
+        remaining_quantity_display=remaining_quantity_display,
+        quantity_wasted=quantity_wasted,
+        error=error,
+    )
+
+
 @core_bp.route("/core/flows", methods=["GET"])
 @requires_auth
 def flows():
