@@ -56,6 +56,31 @@
     }
   }
 
+  function pickTriggeredDate(item, finding, data) {
+    var itemMeta = item && item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+    var dataMeta = data && data.metadata && typeof data.metadata === 'object' ? data.metadata : {};
+    var candidates = [
+      item && item.notification_triggered_at,
+      item && item.triggered_at,
+      item && item.detected_at,
+      item && item.evaluated_at,
+      itemMeta.evaluated_at,
+      finding && finding.triggered_at,
+      finding && finding.detected_at,
+      finding && finding.created_at,
+      finding && finding.updated_at,
+      data && data.triggered_at,
+      data && data.detected_at,
+      data && data.evaluated_at,
+      data && data.generated_at,
+      dataMeta.evaluated_at
+    ];
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (parseDateMs(candidates[i])) return String(candidates[i]);
+    }
+    return '';
+  }
+
   function categoryLabel(checkId) {
     return CATEGORY_LABELS[checkId] || String(checkId || '').replace(/_/g, ' ') || 'System finding';
   }
@@ -121,44 +146,180 @@
     }
   }
 
-  function appendDismissRow(inner, checkId, itemKey, todayKey, onChange) {
+  function closeAllOverflowMenus() {
+    var menus = document.querySelectorAll('.notifications-list-item__overflow-menu');
+    menus.forEach(function (menu) {
+      menu.hidden = true;
+    });
+    var toggles = document.querySelectorAll('.notifications-list-item__overflow-toggle');
+    toggles.forEach(function (toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+    });
+
+    var actionMenus = document.querySelectorAll('.notifications-list-item__actions-menu');
+    actionMenus.forEach(function (menu) {
+      menu.hidden = true;
+    });
+    var actionToggles = document.querySelectorAll('.notifications-list-item__actions-toggle');
+    actionToggles.forEach(function (toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function bindOverflowMenuHandlers() {
+    if (window.__coreNotificationsOverflowHandlersBound) return;
+    window.__coreNotificationsOverflowHandlersBound = true;
+
+    document.addEventListener('click', function (ev) {
+      if (!ev.target || !ev.target.closest('.notifications-list-item__overflow')) {
+        closeAllOverflowMenus();
+      }
+    });
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') closeAllOverflowMenus();
+    });
+  }
+
+  function createOverflowMenuItem(label, onClick) {
+    var item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'notifications-list-item__overflow-item';
+    item.textContent = label;
+    item.addEventListener('click', onClick);
+    return item;
+  }
+
+  function createActionsRow(inner, record) {
+    if (!record.actions || !record.actions.length) return;
+
     var field = document.createElement('div');
-    field.className = 'notifications-list-item__field notifications-list-item__field--actions';
+    field.className = 'notifications-list-item__field notifications-list-item__field--actions-menu';
 
-    var lab = document.createElement('span');
+    var lab = document.createElement('div');
     lab.className = 'notifications-list-item__label';
-    lab.textContent = 'Hide or snooze:';
+    lab.textContent = 'Actions:';
 
-    var actions = document.createElement('div');
-    actions.className = 'notifications-list-item__actions';
+    var menuWrap = document.createElement('div');
+    menuWrap.className = 'notifications-list-item__actions-dropdown';
 
-    var ignoreBtn = document.createElement('button');
-    ignoreBtn.type = 'button';
-    ignoreBtn.className = 'btn btn-secondary btn-sm';
-    ignoreBtn.textContent = 'Ignore for today';
-    ignoreBtn.addEventListener('click', function (ev) {
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'notifications-list-item__actions-toggle';
+    toggle.setAttribute('aria-haspopup', 'menu');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.textContent = 'Actions';
+
+    var menu = document.createElement('div');
+    menu.className = 'notifications-list-item__actions-menu';
+    menu.setAttribute('role', 'menu');
+    menu.hidden = true;
+
+    record.actions.forEach(function (a) {
+      if (a.type === 'link') {
+        var link = document.createElement('a');
+        link.className = 'notifications-list-item__actions-item';
+        link.href = a.href;
+        if (a.boost === false) link.setAttribute('hx-boost', 'false');
+        link.textContent = a.label;
+        link.setAttribute('role', 'menuitem');
+        menu.appendChild(link);
+      } else if (a.type === 'button' && a.action === 'dispose-expired') {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'notifications-list-item__actions-item';
+        btn.textContent = a.label;
+        btn.setAttribute('role', 'menuitem');
+        (function (rid) {
+          btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof window.openRecordWastageModalForExpired === 'function') {
+              window.openRecordWastageModalForExpired([rid]);
+            }
+            closeAllOverflowMenus();
+          });
+        })(a.rawId);
+        menu.appendChild(btn);
+      } else if (a.type === 'reconcile') {
+        var rlink = document.createElement('a');
+        rlink.className = 'notifications-list-item__actions-item system-findings-untracked-item__reconcile-link';
+        rlink.href = a.href;
+        rlink.setAttribute('hx-boost', 'false');
+        rlink.textContent = a.label;
+        rlink.setAttribute('role', 'menuitem');
+        if (a.processId) {
+          rlink.setAttribute('data-reconcile-process-id', a.processId);
+          rlink.setAttribute('data-reconcile-process-name', a.processName || '');
+          rlink.setAttribute('data-reconcile-step-name', a.stepName || '');
+        }
+        menu.appendChild(rlink);
+      }
+    });
+
+    toggle.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var willOpen = menu.hidden;
+      closeAllOverflowMenus();
+      menu.hidden = !willOpen;
+      toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+
+    menuWrap.appendChild(toggle);
+    menuWrap.appendChild(menu);
+    field.appendChild(lab);
+    field.appendChild(menuWrap);
+    inner.appendChild(field);
+  }
+
+  function appendOverflowMenu(inner, checkId, itemKey, todayKey, onChange) {
+    var wrap = document.createElement('div');
+    wrap.className = 'notifications-list-item__overflow';
+
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'notifications-list-item__overflow-toggle';
+    toggle.setAttribute('aria-label', 'Open notification options');
+    toggle.setAttribute('aria-haspopup', 'menu');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.innerHTML = '<span aria-hidden="true">&#8942;</span>';
+
+    var menu = document.createElement('div');
+    menu.className = 'notifications-list-item__overflow-menu';
+    menu.setAttribute('role', 'menu');
+    menu.hidden = true;
+
+    var snoozeItem = createOverflowMenuItem('Snooze for today', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
       sessionStorage.setItem(ignoreKey(checkId, itemKey), todayKey);
       onChange();
     });
+    snoozeItem.setAttribute('role', 'menuitem');
 
-    var dismissBtn = document.createElement('button');
-    dismissBtn.type = 'button';
-    dismissBtn.className = 'btn btn-ghost btn-sm';
-    dismissBtn.textContent = 'Dismiss';
-    dismissBtn.addEventListener('click', function (ev) {
+    var hideItem = createOverflowMenuItem('Hide', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
       sessionStorage.setItem(dismissedKey(checkId, itemKey), '1');
       onChange();
     });
+    hideItem.setAttribute('role', 'menuitem');
 
-    actions.appendChild(ignoreBtn);
-    actions.appendChild(dismissBtn);
-    field.appendChild(lab);
-    field.appendChild(actions);
-    inner.appendChild(field);
+    toggle.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var willOpen = menu.hidden;
+      closeAllOverflowMenus();
+      menu.hidden = !willOpen;
+      toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+
+    menu.appendChild(snoozeItem);
+    menu.appendChild(hideItem);
+    wrap.appendChild(toggle);
+    wrap.appendChild(menu);
+    inner.appendChild(wrap);
   }
 
   function appendLabeledField(inner, labelText, valueText, emphasis, fieldClassName) {
@@ -231,9 +392,10 @@
             checkId: checkId,
             itemKey: rawId,
             sortMs: sortMs,
+            triggeredDateText: formatDate(pickTriggeredDate(raw, f, data) || todayKey),
             systemFinding: categoryLabel(checkId),
-            dateCaption: 'Expiry:',
-            dateText: formatDate(dateStr),
+            detailDateCaption: 'Expiry:',
+            detailDateText: formatDate(dateStr),
             itemName: raw.name || rawId,
             extraFields: impactedLine
               ? [{ label: 'Impacted downstream items:', value: impactedLine }]
@@ -276,9 +438,10 @@
             checkId: checkId,
             itemKey: ik,
             sortMs: sortMs,
+            triggeredDateText: formatDate(pickTriggeredDate(x, f, data) || todayKey),
             systemFinding: categoryLabel(checkId),
-            dateCaption: 'Expiry date:',
-            dateText: formatDate(expStr),
+            detailDateCaption: 'Expiry:',
+            detailDateText: formatDate(expStr),
             itemName: name,
             extraFields: oeExtra,
             actions: actions
@@ -320,9 +483,10 @@
             checkId: checkId,
             itemKey: ik,
             sortMs: sortMs,
+            triggeredDateText: formatDate(pickTriggeredDate(x, f, data) || todayKey),
             systemFinding: categoryLabel(checkId),
-            dateCaption: 'Ready from date:',
-            dateText: formatDate(rd),
+            detailDateCaption: 'Ready from date:',
+            detailDateText: formatDate(rd),
             itemName: name,
             extraFields: ordExtra,
             actions: actions
@@ -367,9 +531,10 @@
             checkId: checkId,
             itemKey: ik,
             sortMs: sortMs,
+            triggeredDateText: formatDate(pickTriggeredDate(u, f, data) || todayKey),
             systemFinding: categoryLabel(checkId),
-            dateCaption: 'Created:',
-            dateText: formatDate(created),
+            detailDateCaption: 'Created:',
+            detailDateText: formatDate(created),
             itemName: name,
             extraFields: utExtra,
             actions: [
@@ -401,9 +566,10 @@
         checkId: checkId,
         itemKey: genKey,
         sortMs: 0,
+        triggeredDateText: formatDate(pickTriggeredDate(null, f, data) || todayKey),
         systemFinding: categoryLabel(checkId),
-        dateCaption: 'Date:',
-        dateText: formatDate(todayKey),
+        detailDateCaption: null,
+        detailDateText: null,
         itemName: null,
         extraFields: unkExtra,
         actions: []
@@ -422,12 +588,17 @@
 
     var inner = document.createElement('div');
     inner.className = 'notifications-list-item__inner';
+    appendOverflowMenu(inner, record.checkId, record.itemKey, todayKey, onChange);
 
+    appendLabeledField(inner, 'Date triggered:', record.triggeredDateText || formatDate(todayKey), false, 'notifications-list-item__field--date');
     appendLabeledField(inner, 'System finding:', record.systemFinding || categoryLabel(record.checkId), false, 'notifications-list-item__field--finding');
-    appendLabeledField(inner, record.dateCaption || 'Date:', record.dateText || '—', false);
 
     if (record.itemName != null && String(record.itemName).length) {
       appendLabeledField(inner, 'Item name:', String(record.itemName), true);
+    }
+
+    if (record.detailDateCaption && record.detailDateText) {
+      appendLabeledField(inner, record.detailDateCaption, record.detailDateText, false);
     }
 
     (record.extraFields || []).forEach(function (row) {
@@ -439,58 +610,7 @@
       }
     });
 
-    if (record.actions && record.actions.length) {
-      var actField = document.createElement('div');
-      actField.className = 'notifications-list-item__field notifications-list-item__field--actions';
-      var actLab = document.createElement('div');
-      actLab.className = 'notifications-list-item__label';
-      actLab.textContent = 'Actions:';
-      var actRow = document.createElement('div');
-      actRow.className = 'notifications-list-item__actions';
-      record.actions.forEach(function (a) {
-        if (a.type === 'link') {
-          var link = document.createElement('a');
-          link.className = 'btn btn-secondary btn-sm';
-          link.href = a.href;
-          if (a.boost === false) link.setAttribute('hx-boost', 'false');
-          link.textContent = a.label;
-          actRow.appendChild(link);
-        } else if (a.type === 'button' && a.action === 'dispose-expired') {
-          var btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'btn btn-secondary btn-sm';
-          btn.textContent = a.label;
-          btn.setAttribute('aria-label', 'Dispose of this expired inventory item');
-          (function (rid) {
-            btn.addEventListener('click', function (ev) {
-              ev.preventDefault();
-              ev.stopPropagation();
-              if (typeof window.openRecordWastageModalForExpired === 'function') {
-                window.openRecordWastageModalForExpired([rid]);
-              }
-            });
-          })(a.rawId);
-          actRow.appendChild(btn);
-        } else if (a.type === 'reconcile') {
-          var rlink = document.createElement('a');
-          rlink.className = 'btn btn-secondary btn-sm system-findings-untracked-item__reconcile-link';
-          rlink.href = a.href;
-          rlink.setAttribute('hx-boost', 'false');
-          rlink.textContent = a.label;
-          if (a.processId) {
-            rlink.setAttribute('data-reconcile-process-id', a.processId);
-            rlink.setAttribute('data-reconcile-process-name', a.processName || '');
-            rlink.setAttribute('data-reconcile-step-name', a.stepName || '');
-          }
-          actRow.appendChild(rlink);
-        }
-      });
-      actField.appendChild(actLab);
-      actField.appendChild(actRow);
-      inner.appendChild(actField);
-    }
-
-    appendDismissRow(inner, record.checkId, record.itemKey, todayKey, onChange);
+    createActionsRow(inner, record);
 
     li.appendChild(inner);
     return li;
@@ -529,6 +649,7 @@
   }
 
   function init() {
+    bindOverflowMenuHandlers();
     renderCards();
   }
 
