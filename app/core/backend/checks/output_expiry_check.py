@@ -299,6 +299,8 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
                         "inventory_item_id": str(item.id),
                         "item_name": item.name,
                         "unit": item.unit,
+                        # Stable trigger timestamp for notifications: when this output was produced.
+                        "detected_at": completed_dt.isoformat(),
                         "expiry_at": expiry_at.isoformat(),
                         "warning_value": int(warning_value),
                         "warning_unit": warning_unit,

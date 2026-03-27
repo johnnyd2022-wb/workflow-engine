@@ -50,7 +50,7 @@
     try {
       var d = new Date(dateStr);
       if (Number.isNaN(d.getTime())) return '—';
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }).toUpperCase();
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: '2-digit' });
     } catch (e) {
       return '—';
     }
@@ -63,6 +63,8 @@
       item && item.notification_triggered_at,
       item && item.triggered_at,
       item && item.detected_at,
+      item && item.created_at,
+      item && item.purchase_date,
       item && item.evaluated_at,
       itemMeta.evaluated_at,
       finding && finding.triggered_at,
@@ -81,6 +83,13 @@
     return '';
   }
 
+  function resolveTriggeredDateText(item, finding, data) {
+    var triggered = pickTriggeredDate(item, finding, data);
+    if (!triggered) return 'Unknown';
+    var formatted = formatDate(triggered);
+    return formatted === '—' ? 'Unknown' : formatted;
+  }
+
   function categoryLabel(checkId) {
     return CATEGORY_LABELS[checkId] || String(checkId || '').replace(/_/g, ' ') || 'System finding';
   }
@@ -96,6 +105,12 @@
       out.push(s);
     });
     return out;
+  }
+
+  function fallbackText(value, fallbackValue) {
+    if (value == null) return fallbackValue;
+    var text = String(value).trim();
+    return text ? text : fallbackValue;
   }
 
   function itemKeyOutputExpiry(x) {
@@ -392,10 +407,14 @@
             checkId: checkId,
             itemKey: rawId,
             sortMs: sortMs,
-            triggeredDateText: formatDate(pickTriggeredDate(raw, f, data) || todayKey),
+            triggeredDateText: resolveTriggeredDateText(raw, f, data),
             systemFinding: categoryLabel(checkId),
-            detailDateCaption: 'Expiry:',
-            detailDateText: formatDate(dateStr),
+            summaryText: 'Inventory item ' + fallbackText(raw.name || rawId, 'Unknown item') + ' expired on ' + formatDate(dateStr) + '.',
+            detailText: impactedLine
+              ? 'Select from the actions below to remove this expired item or open Sourcemap to trace usage in: ' + impactedLine + '.'
+              : 'Select from the actions below to remove this expired item from inventory or open Sourcemap to trace usage.',
+            detailDateCaption: null,
+            detailDateText: null,
             itemName: raw.name || rawId,
             extraFields: impactedLine
               ? [{ label: 'Impacted downstream items:', value: impactedLine }]
@@ -430,20 +449,20 @@
             actions.push({ type: 'link', href: '/core/flows?id=' + encodeURIComponent(pid), label: 'Open process', boost: false });
           }
 
-          var oeExtra = [];
-          if (processStep) {
-            oeExtra.push({ label: 'Process / step:', value: processStep });
-          }
           records.push({
             checkId: checkId,
             itemKey: ik,
             sortMs: sortMs,
-            triggeredDateText: formatDate(pickTriggeredDate(x, f, data) || todayKey),
+            triggeredDateText: resolveTriggeredDateText(x, f, data),
             systemFinding: categoryLabel(checkId),
-            detailDateCaption: 'Expiry:',
-            detailDateText: formatDate(expStr),
+            summaryText: 'Inventory item ' + fallbackText(name, 'Unknown item') + ' has an output expiry date of ' + formatDate(expStr) + '.',
+            detailText: processStep
+              ? 'This warning was detected for process step: ' + processStep + '. Select an action below to review and update the process.'
+              : 'Select an action below to review this item and update the related process settings.',
+            detailDateCaption: null,
+            detailDateText: null,
             itemName: name,
-            extraFields: oeExtra,
+            extraFields: [],
             actions: actions
           });
         });
@@ -483,8 +502,14 @@
             checkId: checkId,
             itemKey: ik,
             sortMs: sortMs,
-            triggeredDateText: formatDate(pickTriggeredDate(x, f, data) || todayKey),
+            triggeredDateText: resolveTriggeredDateText(x, f, data),
             systemFinding: categoryLabel(checkId),
+            summaryText: fallbackText(name, 'This item') + ' is set to be ready from ' + formatDate(rd) + '.',
+            detailText: detail
+              ? detail + (processStep ? ' (' + processStep + ')' : '')
+              : (processStep
+                ? 'Detected on process step: ' + processStep + '. Select an action below to review the process.'
+                : 'Select an action below to review this ready-date warning.'),
             detailDateCaption: 'Ready from date:',
             detailDateText: formatDate(rd),
             itemName: name,
@@ -507,46 +532,51 @@
           var sortMs = parseDateMs(created) || 0;
           var name = (u && u.name) ? String(u.name) : (u.id || '—');
           var unreconciled = u.remaining_balance_to_reconcile != null ? String(u.remaining_balance_to_reconcile) : null;
-          var impactedParts = [];
-          if (unreconciled !== null) {
-            impactedParts.push(unreconciled + ' ' + (u.unit || '') + ' unreconciled');
-          }
-          if (u.process_name || u.step_name) {
-            impactedParts.push([u.process_name, u.step_name].filter(Boolean).join(' · '));
-          }
-          var impactedLine = impactedParts.filter(Boolean).join(' · ');
 
           var processId = (u.process_id != null && String(u.process_id).trim() !== '') ? String(u.process_id) : '';
           var processName = (u.process_name != null) ? String(u.process_name) : '';
           var stepName = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : (u.step_name || '');
 
-          var reconcileHref = processId ? '#' : '/core/sourcemap?show=check-needed';
-          var reconcileLabel = processId ? 'Reconcile this item' : 'Open Source Map to reconcile';
-
-          var utExtra = [];
-          if (impactedLine) {
-            utExtra.push({ label: 'Context:', value: impactedLine });
+          var createdText = formatDate(created);
+          var untrackedActions = [];
+          if (processId) {
+            untrackedActions.push({
+              type: 'reconcile',
+              href: '#',
+              label: 'Go to process step to execute and reconcile',
+              processId: processId,
+              processName: processName,
+              stepName: stepName
+            });
           }
+          untrackedActions.push({
+            type: 'link',
+            href: '/core/sourcemap?show=check-needed',
+            label: processId
+              ? 'Review in Sourcemap'
+              : 'Find process step in Sourcemap to execute and reconcile',
+            boost: false
+          });
           records.push({
             checkId: checkId,
             itemKey: ik,
             sortMs: sortMs,
-            triggeredDateText: formatDate(pickTriggeredDate(u, f, data) || todayKey),
+            triggeredDateText: resolveTriggeredDateText(u, f, data),
             systemFinding: categoryLabel(checkId),
-            detailDateCaption: 'Created:',
-            detailDateText: formatDate(created),
+            summaryText: 'Inventory item ' + fallbackText(name, 'Unknown item') + ' is currently untracked in inventory.',
+            detailText: stepName
+              ? 'Context: ' + (unreconciled !== null ? unreconciled : '0') + ' ' + (u.unit || '') + ' of '
+                + fallbackText(name, 'this item') + ' was recorded as unreconciled on ' + createdText
+                + '. Execute step "' + stepName + '" in process "' + fallbackText(processName, 'the linked process')
+                + '" to create output and reconcile against this inventory item.'
+              : 'Context: ' + (unreconciled !== null ? unreconciled : '0') + ' ' + (u.unit || '') + ' of '
+                + fallbackText(name, 'this item') + ' was recorded as unreconciled on ' + createdText
+                + '. Use the actions below to find the process step, execute it, and reconcile this item.',
+            detailDateCaption: null,
+            detailDateText: null,
             itemName: name,
-            extraFields: utExtra,
-            actions: [
-              {
-                type: 'reconcile',
-                href: reconcileHref,
-                label: reconcileLabel,
-                processId: processId,
-                processName: processName,
-                stepName: stepName
-              }
-            ]
+            extraFields: [],
+            actions: untrackedActions
           });
         });
         return;
@@ -566,8 +596,10 @@
         checkId: checkId,
         itemKey: genKey,
         sortMs: 0,
-        triggeredDateText: formatDate(pickTriggeredDate(null, f, data) || todayKey),
+        triggeredDateText: resolveTriggeredDateText(null, f, data),
         systemFinding: categoryLabel(checkId),
+        summaryText: msg,
+        detailText: rawJson ? 'Technical details are included below.' : '',
         detailDateCaption: null,
         detailDateText: null,
         itemName: null,
@@ -590,23 +622,29 @@
     inner.className = 'notifications-list-item__inner';
     appendOverflowMenu(inner, record.checkId, record.itemKey, todayKey, onChange);
 
-    appendLabeledField(inner, 'Date triggered:', record.triggeredDateText || formatDate(todayKey), false, 'notifications-list-item__field--date');
-    appendLabeledField(inner, 'System finding:', record.systemFinding || categoryLabel(record.checkId), false, 'notifications-list-item__field--finding');
+    appendLabeledField(inner, 'Date triggered:', record.triggeredDateText || 'Unknown', false, 'notifications-list-item__field--date');
+    appendLabeledField(
+      inner,
+      'System finding:',
+      record.summaryText || record.systemFinding || categoryLabel(record.checkId),
+      true,
+      'notifications-list-item__field--finding'
+    );
 
-    if (record.itemName != null && String(record.itemName).length) {
-      appendLabeledField(inner, 'Item name:', String(record.itemName), true);
+    if (record.detailText && String(record.detailText).trim()) {
+      appendLabeledField(inner, 'Details:', String(record.detailText), false, 'notifications-list-item__field--narrative');
     }
 
-    if (record.detailDateCaption && record.detailDateText) {
-      appendLabeledField(inner, record.detailDateCaption, record.detailDateText, false);
+    if (record.detailDateCaption && record.detailDateText && record.detailDateText !== '—') {
+      appendLabeledField(inner, record.detailDateCaption, record.detailDateText, false, 'notifications-list-item__field--supporting');
     }
 
     (record.extraFields || []).forEach(function (row) {
       if (!row || row.value == null || String(row.value).trim() === '') return;
       if (row.pre) {
-        appendLabeledPre(inner, row.label || 'Details:', String(row.value));
+        appendLabeledPre(inner, row.label || 'Technical details:', String(row.value));
       } else {
-        appendLabeledField(inner, row.label || 'Details:', String(row.value), !!row.emphasis);
+        appendLabeledField(inner, row.label || 'Details:', String(row.value), !!row.emphasis, 'notifications-list-item__field--supporting');
       }
     });
 

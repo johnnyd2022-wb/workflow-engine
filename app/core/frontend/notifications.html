@@ -249,11 +249,6 @@
       gap: 8px;
     }
 
-    .notifications-list-item__field--finding .notifications-list-item__label,
-    .notifications-list-item__field--finding .notifications-list-item__value {
-      font-weight: 700;
-    }
-
     .notifications-list-item__field--date .notifications-list-item__label {
       display: none;
     }
@@ -264,18 +259,37 @@
 
     .notifications-list-item__field--date,
     .notifications-list-item__field--finding,
-    .notifications-list-item__field--actions-menu {
+    .notifications-list-item__field--actions-menu,
+    .notifications-list-item__field--narrative {
       gap: 0;
     }
 
     .notifications-list-item__field--finding .notifications-list-item__label,
-    .notifications-list-item__field--actions-menu .notifications-list-item__label {
+    .notifications-list-item__field--actions-menu .notifications-list-item__label,
+    .notifications-list-item__field--narrative .notifications-list-item__label {
       display: none;
     }
 
     .notifications-list-item__field--actions-menu {
       position: relative;
       align-items: center;
+    }
+
+    .notifications-list-item__field--narrative .notifications-list-item__value {
+      color: var(--text-primary, #111827);
+      font-size: 0.9375rem;
+      font-weight: 400;
+      line-height: 1.45;
+    }
+
+    .notifications-list-item__field--supporting .notifications-list-item__label {
+      letter-spacing: 0.02em;
+    }
+
+    .notifications-list-item__field--supporting .notifications-list-item__value {
+      font-size: 0.9375rem;
+      font-weight: 400;
+      line-height: 1.45;
     }
 
     .notifications-list-item__actions-dropdown {

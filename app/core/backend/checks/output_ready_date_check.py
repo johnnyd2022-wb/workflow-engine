@@ -380,6 +380,8 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
                         "inventory_item_id": str(item.id),
                         "item_name": item.name,
                         "unit": item.unit,
+                        # Stable trigger timestamp for notifications: when this output was produced.
+                        "detected_at": completed_dt.isoformat(),
                         "ready_date": ready_dt.isoformat(),
                         "metadata": {
                             "rule_type": config.get("rule_type", RULE_TYPE_READY_DATE),
