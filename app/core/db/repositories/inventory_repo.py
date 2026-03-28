@@ -84,9 +84,9 @@ class InventoryRepository:
             )
             self.db.add(item)
             self.db.flush()
-        _ = item.id
-        if commit:
-            self.db.commit()
+            _ = item.id
+            if commit:
+                self.db.commit()
         return item
 
     def add_quantity_to_inventory_item(
@@ -111,18 +111,18 @@ class InventoryRepository:
             return item
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_ADD_QUANTITY):
             item.quantity = coerce_stored_quantity(current + add_val)
-        if extra_data_merge:
-            # Merge audit etc. into extra_data; for high volume consider a relational InventoryAuditEntry table
-            merged = dict(item.extra_data or {})
-            for key, value in extra_data_merge.items():
-                if key == "inventory_audit_history" and isinstance(value, list):
-                    existing = list(merged.get(key) or [])
-                    merged[key] = existing + value
-                else:
-                    merged[key] = value
-            item.extra_data = merged
-        if commit:
-            self.db.commit()
+            if extra_data_merge:
+                # Merge audit etc. into extra_data; for high volume consider a relational InventoryAuditEntry table
+                merged = dict(item.extra_data or {})
+                for key, value in extra_data_merge.items():
+                    if key == "inventory_audit_history" and isinstance(value, list):
+                        existing = list(merged.get(key) or [])
+                        merged[key] = existing + value
+                    else:
+                        merged[key] = value
+                item.extra_data = merged
+            if commit:
+                self.db.commit()
         self.db.expire(item, ["updated_at"])
         _ = item.updated_at
         return item
@@ -209,15 +209,17 @@ class InventoryRepository:
 
         if name is not None:
             item.name = name
-        if quantity is not None:
-            with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_UPDATE):
-                item.quantity = coerce_stored_quantity(quantity)
         if unit is not None:
             item.unit = unit
         if extra_data is not None:
             item.extra_data = extra_data
 
-        if commit:
+        if quantity is not None:
+            with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_UPDATE):
+                item.quantity = coerce_stored_quantity(quantity)
+                if commit:
+                    self.db.commit()
+        elif commit:
             self.db.commit()
         self.db.expire(item, ["updated_at"])
         _ = item.updated_at

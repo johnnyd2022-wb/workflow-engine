@@ -349,22 +349,23 @@ def reset_demo_db(db: Session) -> dict:
             )
             output_items_by_name[oname] = new_item
 
-        # Consume input quantities (decrement)
-        for ai in actual_inputs:
-            inv_id = ai.get("inventory_item_id")
-            if not inv_id:
-                continue
-            inv = inv_repo.get_inventory_item_by_id(UUID(inv_id), org_id)
-            if inv and inv.quantity is not None:
-                try:
-                    current = parse_stored_quantity_to_decimal(inv.quantity)
-                    consumed = Decimal(str(ai.get("quantity", 0)))
-                    new_qty = max(Decimal("0"), current - consumed)
-                    with allow_inventory_quantity_write(InventoryQuantityWriteReason.RESETDB_DEV):
+        # Consume input quantities (decrement). Commit must run inside allow_inventory_quantity_write
+        # so the flush on commit still sees the guard (ContextVar) as allowed.
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.RESETDB_DEV):
+            for ai in actual_inputs:
+                inv_id = ai.get("inventory_item_id")
+                if not inv_id:
+                    continue
+                inv = inv_repo.get_inventory_item_by_id(UUID(inv_id), org_id)
+                if inv and inv.quantity is not None:
+                    try:
+                        current = parse_stored_quantity_to_decimal(inv.quantity)
+                        consumed = Decimal(str(ai.get("quantity", 0)))
+                        new_qty = max(Decimal("0"), current - consumed)
                         inv.quantity = coerce_stored_quantity(new_qty)
-                    db.commit()
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
+            db.commit()
 
     return {
         "success": True,
