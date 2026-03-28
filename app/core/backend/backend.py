@@ -1880,7 +1880,7 @@ def record_wastage():
         except (ValueError, TypeError):
             errors.append(f"Entry {idx + 1}: invalid inventory_item_id")
             continue
-        item = inventory_repo.get_inventory_item_by_id(item_id, org_id)
+        item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
         if not item:
             errors.append(f"Entry {idx + 1}: inventory item not found or access denied")
             continue
@@ -1898,13 +1898,13 @@ def record_wastage():
         if waste_decimal <= 0:
             errors.append(f"Entry {idx + 1}: quantity_wasted must be positive")
             continue
-        actual_waste = min(waste_decimal, current_qty)
-        if actual_waste <= 0:
-            errors.append(f"Entry {idx + 1}: item has no quantity to waste")
+        if waste_decimal > current_qty:
+            errors.append(
+                f"Entry {idx + 1}: quantity_wasted exceeds available quantity ({current_qty} on hand)"
+            )
             continue
+        actual_waste = waste_decimal
         new_qty = current_qty - actual_waste
-        if new_qty < 0:
-            new_qty = Decimal("0")
         new_qty_str = str(new_qty.quantize(Decimal("0.0001"))).rstrip("0").rstrip(".")
         if new_qty_str == "" or new_qty_str == "-":
             new_qty_str = "0"
