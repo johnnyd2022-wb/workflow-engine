@@ -208,7 +208,6 @@ def inventory_dispose_confirm():
 
     quantity_wasted = None
     quantity_wasted_dec = None
-    quantity_wasted_display = None
     error = None
     try:
         if quantity_wasted_raw:
@@ -224,7 +223,6 @@ def inventory_dispose_confirm():
                 s = format(quantity_wasted_dec, "f")
                 if "." in s:
                     s = s.rstrip("0").rstrip(".")
-                quantity_wasted_display = s
     except (TypeError, ValueError):
         error = "Invalid quantity."
 
