@@ -17,6 +17,7 @@ from app.core.db.models.step import Step
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.inventory_movement import InventoryMovement
 from app.utils.config_loader import config
 
 # this is the Alembic Config object, which provides

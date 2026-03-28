@@ -23,9 +23,9 @@ class InventoryItem(Base):
     """InventoryItem model for tracking raw materials, WIP, and final products.
 
     DB enforces UNIQUE (org_id, barcode) where barcode IS NOT NULL (see migration uq_inventory_org_barcode_001).
-    On-hand quantity is NUMERIC(18,4) at rest; API layers serialize to strings. Full audit/reconstruction
-    still needs a unified inventory_movements ledger (append-only); until then, wastage rows + quantity updates
-    are the partial audit trail.
+    On-hand quantity is NUMERIC(18,4) at rest; API layers serialize to strings. Append-only
+    inventory_movements rows (signed quantities) provide the ledger for reconstruction; InventoryWastage
+    remains the wastage-specific audit slice.
     """
 
     __tablename__ = "inventory_items"

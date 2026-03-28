@@ -23,6 +23,7 @@ from app.core.db import db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.process import ProcessCategory
 from app.core.db.repositories.execution_repo import ExecutionRepository
@@ -49,6 +50,9 @@ from app.core.utils.unit_conversion import are_units_compatible, convert_to_inve
 from app.utils.config_loader import config
 
 logger = logging.getLogger(__name__)
+
+# Guardrail: single wastage request should not hold row locks too long.
+MAX_WASTAGE_BATCH_ENTRIES = 500
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -1896,9 +1900,8 @@ def record_wastage():
     quantity_wasted is in InventoryItem.unit unless optional quantity_unit (or unit) is sent; then it is
     converted with are_units_compatible / convert_to_inventory_unit_decimal.
 
-    On-hand quantity is stored as NUMERIC(18,4). A unified movement ledger (append-only, derived on-hand)
-    would still improve full reconstruction; InventoryWastage is a partial audit trail while on-hand is
-    updated in place.
+    On-hand quantity is stored as NUMERIC(18,4). Each line also appends an inventory_movements row
+    (WASTAGE, signed quantity) for replay and reconciliation; InventoryWastage remains the wastage slice.
     """
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
@@ -1910,6 +1913,20 @@ def record_wastage():
                     "success": False,
                     "error": "entries (array of {inventory_item_id, quantity_wasted}) required",
                     "error_code": "ENTRIES_REQUIRED",
+                    "errors": [],
+                    "wastage_records": [],
+                }
+            ),
+            400,
+        )
+
+    if len(entries) > MAX_WASTAGE_BATCH_ENTRIES:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": f"At most {MAX_WASTAGE_BATCH_ENTRIES} entries per request",
+                    "error_code": "BATCH_TOO_LARGE",
                     "errors": [],
                     "wastage_records": [],
                 }
@@ -2083,6 +2100,19 @@ def record_wastage():
             )
             db_session.add(record)
             db_session.flush()
+            movement_meta: dict = {"wastage_record_id": str(record.id)}
+            if idem_key:
+                movement_meta["idempotency_key"] = idem_key
+            db_session.add(
+                InventoryMovement(
+                    org_id=org_id,
+                    inventory_item_id=item.id,
+                    movement_type=InventoryMovementType.WASTAGE.value,
+                    quantity=coerce_stored_quantity(-actual_waste),
+                    unit=unit,
+                    movement_metadata=movement_meta,
+                )
+            )
             result_records.append(
                 {
                     "id": str(record.id),

@@ -1,11 +1,17 @@
-"""Merge heads: inventory NUMERIC migration + api_idempotency_keys (both branched from add_first_last_name_to_user_001).
+"""Merge inventory_quantity_numeric_001 and api_idempotency_keys_001 (parallel branches from add_first_last_name).
 
-Revision ID: merge_qty_idem_001
+Revision ID: merge_inventory_qty_and_api_idem_001
 Revises: inventory_quantity_numeric_001, api_idempotency_keys_001
+
+Ensures CI and fresh databases apply both branches before inventory_movements_001.
+No schema changes.
 """
+
 from typing import Sequence, Union
 
-revision: str = "merge_qty_idem_001"
+from alembic import op
+
+revision: str = "merge_inventory_qty_and_api_idem_001"
 down_revision: Union[str, tuple[str, ...], None] = (
     "inventory_quantity_numeric_001",
     "api_idempotency_keys_001",

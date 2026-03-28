@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 # Matches PostgreSQL inventory_items.quantity NUMERIC(18,4).
+# Rounding policy: half-up at four decimal places (same as convert_quantity_decimal after unit conversion).
 STORAGE_QUANTIZE_EXP = Decimal("0.0001")
 
 
@@ -25,7 +26,12 @@ def coerce_stored_quantity(value: object) -> Decimal:
 
 
 def quantity_to_api_str(value: object | None) -> str:
-    """Serialize quantity for JSON APIs (avoid Decimal jsonify issues; stable trimming)."""
+    """Serialize quantity for JSON APIs (avoid Decimal jsonify issues).
+
+    Contract: values are full-precision Decimals/NUMERIC in memory and in the DB; JSON strings trim
+    trailing zeros after fixed-point formatting (e.g. 1.2300 → "1.23", 1.0000 → "1"). Callers must
+    not infer storage precision from the number of decimal digits in the string alone.
+    """
     if value is None:
         return "0"
     try:

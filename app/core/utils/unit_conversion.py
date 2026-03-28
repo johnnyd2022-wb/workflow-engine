@@ -1,6 +1,14 @@
 """Unit conversion utilities for inventory and execution quantities"""
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
+
+from app.core.utils.inventory_quantity import STORAGE_QUANTIZE_EXP
+
+
+def _quantize_inventory_decimal(value: Decimal) -> Decimal:
+    """Align converted quantities with NUMERIC(18,4) storage (ROUND_HALF_UP) to avoid drift."""
+    return value.quantize(STORAGE_QUANTIZE_EXP, rounding=ROUND_HALF_UP)
+
 
 # Unit conversion factors to base units
 # Base units: kg (mass), L (volume), m (length), units (count)
@@ -178,13 +186,16 @@ def convert_quantity_decimal(quantity: Decimal, from_unit: str, to_unit: str) ->
     Use this for reconciliation, compliance, and audited inventory to avoid
     floating-point boundary issues.
 
+    Results are quantized to STORAGE_QUANTIZE_EXP (four decimals, ROUND_HALF_UP) so they align with
+    inventory_items.quantity and do not accumulate extra fractional digits from conversion ratios.
+
     Args:
         quantity: The quantity to convert (Decimal)
         from_unit: Source unit
         to_unit: Target unit
 
     Returns:
-        Converted quantity (Decimal)
+        Converted quantity (Decimal), storage-aligned
 
     Raises:
         ValueError: If units are not compatible or conversion is not possible
@@ -193,7 +204,7 @@ def convert_quantity_decimal(quantity: Decimal, from_unit: str, to_unit: str) ->
     to_unit_norm = normalize_unit(to_unit)
 
     if from_unit_norm == to_unit_norm:
-        return quantity
+        return _quantize_inventory_decimal(quantity)
 
     if not are_units_compatible(from_unit, to_unit):
         raise ValueError(f"Cannot convert between incompatible units: {from_unit} and {to_unit}")
@@ -201,7 +212,7 @@ def convert_quantity_decimal(quantity: Decimal, from_unit: str, to_unit: str) ->
     if from_unit_norm in COUNT_UNITS:
         if from_unit_norm != to_unit_norm:
             raise ValueError(f"Count units must match exactly: {from_unit} != {to_unit}")
-        return quantity
+        return _quantize_inventory_decimal(quantity)
 
     from_factor = CONVERSION_FACTORS.get(from_unit_norm)
     to_factor = CONVERSION_FACTORS.get(to_unit_norm)
@@ -213,7 +224,7 @@ def convert_quantity_decimal(quantity: Decimal, from_unit: str, to_unit: str) ->
     to_f = Decimal(str(to_factor))
     base_quantity = quantity * from_f
     converted_quantity = base_quantity / to_f
-    return converted_quantity
+    return _quantize_inventory_decimal(converted_quantity)
 
 
 def convert_to_inventory_unit_decimal(quantity: Decimal, quantity_unit: str, inventory_unit: str) -> Decimal:
