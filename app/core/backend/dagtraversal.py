@@ -33,6 +33,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.utils.inventory_quantity import quantity_to_api_str
+
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
@@ -670,7 +672,7 @@ class DAGTracer:
         return {
             "id": str(item.id),
             "name": item.name,
-            "quantity": item.quantity,
+            "quantity": quantity_to_api_str(item.quantity),
             "unit": item.unit,
             "inventory_type": item.inventory_type,
             "supplier": item.supplier,

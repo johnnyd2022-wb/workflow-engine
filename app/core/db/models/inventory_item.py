@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, String
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -23,6 +23,9 @@ class InventoryItem(Base):
     """InventoryItem model for tracking raw materials, WIP, and final products.
 
     DB enforces UNIQUE (org_id, barcode) where barcode IS NOT NULL (see migration uq_inventory_org_barcode_001).
+    On-hand quantity is NUMERIC(18,4) at rest; API layers serialize to strings. Full audit/reconstruction
+    still needs a unified inventory_movements ledger (append-only); until then, wastage rows + quantity updates
+    are the partial audit trail.
     """
 
     __tablename__ = "inventory_items"
@@ -30,7 +33,7 @@ class InventoryItem(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
-    quantity = Column(String(50), nullable=False)  # Store as string to preserve precision and unit info
+    quantity = Column(Numeric(18, 4), nullable=False, server_default="0")
     unit = Column(String(50), nullable=False)  # kg, g, L, mL, units, pcs, etc.
     inventory_type = Column(String(50), nullable=False)  # raw_material, work_in_progress, final_product
     # Supplier information (for raw materials)

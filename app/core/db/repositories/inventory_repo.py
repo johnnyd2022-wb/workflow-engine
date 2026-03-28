@@ -7,13 +7,16 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.utils.inventory_quantity import coerce_stored_quantity, parse_stored_quantity_to_decimal
 
 _UNTRACKED_EXTRA_FILTER = {"untracked": True}
 
 
-def _parse_quantity(value: str | None) -> Decimal | None:
+def _parse_quantity(value: object | None) -> Decimal | None:
     if value is None:
         return None
+    if isinstance(value, Decimal):
+        return value
     try:
         return Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError):
@@ -41,7 +44,7 @@ class InventoryRepository:
         self,
         org_id: UUID,
         name: str,
-        quantity: str,
+        quantity: str | Decimal,
         unit: str,
         inventory_type: str,
         supplier: str | None = None,
@@ -60,7 +63,7 @@ class InventoryRepository:
         item = InventoryItem(
             org_id=org_id,
             name=name,
-            quantity=quantity,
+            quantity=coerce_stored_quantity(quantity),
             unit=unit,
             inventory_type=inventory_type,
             supplier=supplier,
@@ -95,13 +98,13 @@ class InventoryRepository:
         item = self.get_inventory_item_by_id_for_update(item_id, org_id)
         if not item:
             return None
-        current = _parse_quantity(item.quantity) or Decimal("0")
+        current = parse_stored_quantity_to_decimal(item.quantity)
         add_val = _parse_quantity(quantity_to_add) or Decimal("0")
         if add_val <= 0:
             if commit:
                 self.db.commit()
             return item
-        item.quantity = str(current + add_val)
+        item.quantity = coerce_stored_quantity(current + add_val)
         if extra_data_merge:
             # Merge audit etc. into extra_data; for high volume consider a relational InventoryAuditEntry table
             merged = dict(item.extra_data or {})
@@ -164,7 +167,7 @@ class InventoryRepository:
             )
         items = query.all()
         if quantity_gt_zero:
-            items = [i for i in items if (_parse_quantity(i.quantity) or Decimal("0")) > 0]
+            items = [i for i in items if parse_stored_quantity_to_decimal(i.quantity) > 0]
         return items
 
     def list_inventory_items(
@@ -188,7 +191,7 @@ class InventoryRepository:
         item_id: UUID,
         org_id: UUID,
         name: str | None = None,
-        quantity: str | None = None,
+        quantity: str | Decimal | None = None,
         unit: str | None = None,
         extra_data: dict | None = None,
         commit: bool = True,
@@ -201,7 +204,7 @@ class InventoryRepository:
         if name is not None:
             item.name = name
         if quantity is not None:
-            item.quantity = quantity
+            item.quantity = coerce_stored_quantity(quantity)
         if unit is not None:
             item.unit = unit
         if extra_data is not None:

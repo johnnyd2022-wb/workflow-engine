@@ -33,18 +33,19 @@ from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_da
 from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
 from app.core.security.permissions import requires_auth
+from app.core.utils.inventory_quantity import (
+    coerce_stored_quantity,
+    parse_stored_quantity_to_decimal,
+    quantity_to_api_str,
+)
 from app.core.utils.inventory_wastage_quantity import (
-    INVENTORY_WASTAGE_QUANTIZE,
     parse_wastage_quantity,
+    parse_wastage_unit_field,
     wastage_entries_payload_hash,
 )
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
-from app.core.utils.unit_conversion import (
-    are_units_compatible,
-    convert_to_inventory_unit_decimal,
-    normalize_unit,
-)
+from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.utils.config_loader import config
 
 logger = logging.getLogger(__name__)
@@ -1565,8 +1566,7 @@ def list_inventory():
         # Filter out items with zero or negative quantity
         # QUANTITY PRECISION: Use Decimal for safe comparison
         try:
-            qty_str = str(item.quantity).strip() if item.quantity else "0"
-            quantity_decimal = Decimal(qty_str)
+            quantity_decimal = parse_stored_quantity_to_decimal(item.quantity)
             # Skip items with zero or negative quantity (including very small numbers)
             if quantity_decimal <= 0 or abs(quantity_decimal) < Decimal("0.0001"):
                 continue  # Skip this item
@@ -1841,7 +1841,7 @@ def list_inventory():
             {
                 "id": str(item.id),
                 "name": item.name,
-                "quantity": item.quantity,
+                "quantity": quantity_to_api_str(item.quantity),
                 "unit": item.unit,
                 "inventory_type": item.inventory_type,
                 "barcode": item.barcode,
@@ -1896,9 +1896,9 @@ def record_wastage():
     quantity_wasted is in InventoryItem.unit unless optional quantity_unit (or unit) is sent; then it is
     converted with are_units_compatible / convert_to_inventory_unit_decimal.
 
-    Inventory quantity is still stored as a string on the row; a future DB migration to NUMERIC would
-    reduce format drift. A unified movement ledger (append-only, derived on-hand) would improve audit;
-    InventoryWastage is a step toward that but on-hand is still updated in place here.
+    On-hand quantity is stored as NUMERIC(18,4). A unified movement ledger (append-only, derived on-hand)
+    would still improve full reconstruction; InventoryWastage is a partial audit trail while on-hand is
+    updated in place.
     """
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
@@ -1909,6 +1909,7 @@ def record_wastage():
                 {
                     "success": False,
                     "error": "entries (array of {inventory_item_id, quantity_wasted}) required",
+                    "error_code": "ENTRIES_REQUIRED",
                     "errors": [],
                     "wastage_records": [],
                 }
@@ -1925,6 +1926,7 @@ def record_wastage():
                     {
                         "success": False,
                         "error": "idempotency_key must be a non-empty string at most 128 characters",
+                        "error_code": "IDEMPOTENCY_KEY_INVALID",
                         "errors": [],
                         "wastage_records": [],
                     }
@@ -1962,12 +1964,10 @@ def record_wastage():
         raw_unit = entry.get("quantity_unit")
         if raw_unit is None:
             raw_unit = entry.get("unit")
-        if raw_unit is not None and not isinstance(raw_unit, str):
-            parse_errors.append(f"Entry {idx + 1}: quantity_unit must be a string when provided")
+        parsed_unit, u_err = parse_wastage_unit_field(raw_unit)
+        if u_err:
+            parse_errors.append(f"Entry {idx + 1}: {u_err}")
             continue
-        parsed_unit: str | None = normalize_unit(raw_unit) if raw_unit else None
-        if parsed_unit == "":
-            parsed_unit = None
         lines.append((idx + 1, item_id, waste_decimal, parsed_unit))
 
     if parse_errors:
@@ -1976,6 +1976,7 @@ def record_wastage():
                 {
                     "success": False,
                     "error": "Validation failed",
+                    "error_code": "VALIDATION_FAILED",
                     "errors": parse_errors,
                     "wastage_records": [],
                 }
@@ -2006,6 +2007,7 @@ def record_wastage():
                             {
                                 "success": False,
                                 "error": "Idempotency key already used with a different payload",
+                                "error_code": "IDEMPOTENCY_PAYLOAD_MISMATCH",
                                 "errors": [],
                                 "wastage_records": [],
                             }
@@ -2025,15 +2027,7 @@ def record_wastage():
             if not item:
                 validation_errors.append(f"Entry {entry_idx}: inventory item not found or access denied")
                 continue
-            try:
-                current_str = str(item.quantity).strip() if item.quantity else "0"
-                current_qty = Decimal(current_str)
-            except (InvalidOperation, ValueError, TypeError):
-                validation_errors.append(f"Entry {entry_idx}: invalid current quantity for item")
-                continue
-            if not current_qty.is_finite():
-                validation_errors.append(f"Entry {entry_idx}: invalid current quantity for item")
-                continue
+            current_qty = parse_stored_quantity_to_decimal(item.quantity)
             if current_qty <= 0:
                 validation_errors.append(f"Entry {entry_idx}: item has no quantity to waste")
                 continue
@@ -2065,6 +2059,7 @@ def record_wastage():
                     {
                         "success": False,
                         "error": "Validation failed",
+                        "error_code": "VALIDATION_FAILED",
                         "errors": validation_errors,
                         "wastage_records": [],
                     }
@@ -2075,13 +2070,10 @@ def record_wastage():
         result_records = []
         for item, waste_decimal, _entry_idx in staged:
             actual_waste = waste_decimal
-            current_qty = Decimal(str(item.quantity).strip() if item.quantity else "0")
+            current_qty = parse_stored_quantity_to_decimal(item.quantity)
             new_qty = current_qty - actual_waste
-            new_qty_str = str(new_qty.quantize(INVENTORY_WASTAGE_QUANTIZE)).rstrip("0").rstrip(".")
-            if new_qty_str == "" or new_qty_str == "-":
-                new_qty_str = "0"
             unit = (item.unit or "units").strip() or "units"
-            item.quantity = new_qty_str
+            item.quantity = coerce_stored_quantity(new_qty)
             record = InventoryWastage(
                 org_id=org_id,
                 inventory_item_id=item.id,
@@ -2141,6 +2133,7 @@ def record_wastage():
                     {
                         "success": False,
                         "error": "Conflict recording wastage",
+                        "error_code": "CONFLICT_RECORDING_WASTAGE",
                         "errors": [],
                         "wastage_records": [],
                     }
@@ -2168,6 +2161,7 @@ def record_wastage():
         payload = {
             "success": False,
             "error": "Failed to record wastage",
+            "error_code": "INTERNAL_ERROR",
             "errors": [],
             "wastage_records": [],
         }
@@ -2241,21 +2235,15 @@ def list_out_of_stock_raw_materials():
 
     result = []
     for item in items:
-        # Only include items with exactly zero quantity
-        try:
-            qty_str = str(item.quantity).strip() if item.quantity else "0"
-            quantity_decimal = Decimal(qty_str)
-            # Only include items with exactly zero quantity
-            if quantity_decimal != Decimal("0"):
-                continue  # Skip items with any stock remaining
-        except (InvalidOperation, ValueError, TypeError):
+        quantity_decimal = parse_stored_quantity_to_decimal(item.quantity)
+        if quantity_decimal != Decimal("0"):
             continue
 
         result.append(
             {
                 "id": str(item.id),
                 "name": item.name,
-                "quantity": item.quantity,
+                "quantity": quantity_to_api_str(item.quantity),
                 "unit": item.unit,
                 "inventory_type": item.inventory_type,
                 "supplier": item.supplier,
@@ -2372,7 +2360,7 @@ def create_inventory_item():
                         {
                             "id": str(updated.id),
                             "name": updated.name,
-                            "quantity": updated.quantity,
+                            "quantity": quantity_to_api_str(updated.quantity),
                             "unit": updated.unit,
                             "inventory_type": updated.inventory_type,
                             "supplier": updated.supplier,
@@ -2466,7 +2454,7 @@ def create_inventory_item():
                 {
                     "id": str(item.id),
                     "name": item.name,
-                    "quantity": item.quantity,
+                    "quantity": quantity_to_api_str(item.quantity),
                     "unit": item.unit,
                     "inventory_type": item.inventory_type,
                     "supplier": item.supplier,
@@ -2522,7 +2510,7 @@ def update_inventory_item(item_id):
 
         # Update item
         item.name = name
-        item.quantity = str(quantity)
+        item.quantity = coerce_stored_quantity(quantity)
         item.unit = unit
         item.inventory_type = inventory_type
         item.supplier = data.get("supplier")
@@ -2540,7 +2528,7 @@ def update_inventory_item(item_id):
                 {
                     "id": str(item.id),
                     "name": item.name,
-                    "quantity": item.quantity,
+                    "quantity": quantity_to_api_str(item.quantity),
                     "unit": item.unit,
                     "inventory_type": item.inventory_type,
                     "supplier": item.supplier,
@@ -2636,7 +2624,7 @@ def trace_raw_material(raw_material_id: str):
     raw_material_data = {
         "id": str(raw_material.id),
         "name": raw_material.name,
-        "quantity": raw_material.quantity,
+        "quantity": quantity_to_api_str(raw_material.quantity),
         "unit": raw_material.unit,
         "inventory_type": raw_material.inventory_type,
         "supplier": raw_material.supplier,
@@ -2723,7 +2711,7 @@ def trace_inventory_backward(inventory_item_id: str):
         traced_item_data = {
             "id": str(traced_item.id),
             "name": traced_item.name,
-            "quantity": traced_item.quantity,
+            "quantity": quantity_to_api_str(traced_item.quantity),
             "unit": traced_item.unit,
             "inventory_type": traced_item.inventory_type,
             "supplier": traced_item.supplier,

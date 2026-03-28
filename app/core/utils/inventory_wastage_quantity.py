@@ -7,10 +7,11 @@ import json
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
+from app.core.utils.inventory_quantity import STORAGE_QUANTIZE_EXP
 from app.core.utils.unit_conversion import normalize_unit
 
-# Universal quantize step for wastage lines (align with inventory quantity strings).
-INVENTORY_WASTAGE_QUANTIZE = Decimal("0.0001")
+# Same quantize as NUMERIC(18,4) on-hand storage.
+INVENTORY_WASTAGE_QUANTIZE = STORAGE_QUANTIZE_EXP
 
 # Reject pathological magnitudes (DoS / storage); normal inventory stays well below this.
 MAX_WASTAGE_MAGNITUDE = Decimal("1e18")
@@ -18,6 +19,22 @@ MAX_WASTAGE_MAGNITUDE = Decimal("1e18")
 
 def quantize_wastage_quantity(d: Decimal) -> Decimal:
     return d.quantize(INVENTORY_WASTAGE_QUANTIZE)
+
+
+def parse_wastage_unit_field(raw: object | None) -> tuple[str | None, str | None]:
+    """Normalize optional quantity_unit / unit; single source of truth with hash (None = same as inventory line)."""
+    if raw is None:
+        return None, None
+    if not isinstance(raw, str):
+        return None, "quantity_unit must be a string when provided"
+    u = normalize_unit(raw)
+    return (None if u == "" else u), None
+
+
+def _wastage_unit_for_hash(raw: object | None) -> str:
+    """Canonical unit string for idempotency (must stay aligned with parse_wastage_unit_field)."""
+    u, _ = parse_wastage_unit_field(raw)
+    return u or ""
 
 
 def parse_wastage_quantity(raw) -> tuple[Decimal | None, str | None]:
@@ -58,10 +75,7 @@ def wastage_entries_payload_hash(entries: list[dict]) -> str:
             q = Decimal(str(q))
         q = q.quantize(INVENTORY_WASTAGE_QUANTIZE)
         raw_u = e.get("quantity_unit")
-        if raw_u is not None and raw_u != "":
-            qu = normalize_unit(str(raw_u))
-        else:
-            qu = ""
+        qu = _wastage_unit_for_hash(raw_u)
         norm.append({"inventory_item_id": iid, "quantity_wasted": str(q), "quantity_unit": qu})
     norm.sort(key=lambda x: x["inventory_item_id"])
     canonical = json.dumps(norm, separators=(",", ":"), ensure_ascii=True, sort_keys=True)

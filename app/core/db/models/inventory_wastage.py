@@ -11,7 +11,11 @@ from app.core.db.models.models import Base
 
 
 class InventoryWastage(Base):
-    """Record of inventory quantity written off as wastage. Deducts from inventory_items.quantity."""
+    """Record of inventory quantity written off as wastage. Deducts from inventory_items.quantity.
+
+    Long-term: fold into a unified inventory_movements ledger (WASTAGE | PRODUCTION | ADJUSTMENT) with
+    signed quantities and derived on-hand; this table remains the wastage slice of that story.
+    """
 
     __tablename__ = "inventory_wastage"
 
