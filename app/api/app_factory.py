@@ -231,7 +231,8 @@ def create_app():
         logger = logging.getLogger(__name__)
         if config.environment not in ("local", "test"):
             raise RuntimeError(
-                "Flask-WTF is required in this environment for CSRF protection. " "Install with: pip install Flask-WTF"
+                "Flask-WTF is required in this environment for CSRF protection. "
+                "Install with: pip install Flask-WTF"
             ) from None
         logger.error(
             "Flask-WTF not installed — CSRF protection disabled (allowed only for local/test). "
