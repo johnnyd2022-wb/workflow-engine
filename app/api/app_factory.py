@@ -212,7 +212,8 @@ def create_app():
         return response
 
     # CRITICAL: CSRF Protection - Protect against Cross-Site Request Forgery attacks
-    # Flask-WTF provides automatic CSRF token validation for all POST/PUT/DELETE requests
+    # Flask-WTF validates mutating requests; SPA sends token via X-CSRFToken (see base_spa.html + core-api.js).
+    app.config.setdefault("WTF_CSRF_HEADERS", ["X-CSRFToken", "X-CSRF-Token"])
     try:
         from flask_wtf.csrf import CSRFProtect
 
@@ -225,5 +226,12 @@ def create_app():
 
         logger = logging.getLogger(__name__)
         logger.warning("Flask-WTF not installed. CSRF protection disabled. Install with: pip install Flask-WTF")
+
+        @app.context_processor
+        def _csrf_token_placeholder():
+            def csrf_token():
+                return ""
+
+            return dict(csrf_token=csrf_token)
 
     return app

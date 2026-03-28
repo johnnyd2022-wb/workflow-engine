@@ -1,11 +1,15 @@
 """Core backend API routes for process execution platform"""
 
+import hashlib
+import json
+import logging
 import os
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
@@ -17,6 +21,7 @@ from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
+from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.process import ProcessCategory
@@ -30,8 +35,15 @@ from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duratio
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
+from app.core.utils.inventory_wastage_quantity import (
+    INVENTORY_WASTAGE_QUANTIZE,
+    parse_wastage_quantity,
+    wastage_entries_payload_hash,
+)
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.utils.config_loader import config
+
+logger = logging.getLogger(__name__)
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -1853,61 +1865,186 @@ def list_inventory():
     return jsonify({"inventory_items": result}), 200
 
 
+def _pg_advisory_lock_wastage_idempotency(session, org_id: UUID, idem_key: str) -> None:
+    """Serialize idempotent wastage retries for the same org+key (PostgreSQL transaction-scoped lock)."""
+    bind = session.get_bind()
+    if not bind or getattr(bind.dialect, "name", None) != "postgresql":
+        return
+    digest = hashlib.sha256(f"{org_id}:{idem_key}".encode()).digest()
+    k1 = int.from_bytes(digest[0:4], "big") & 0x7FFFFFFF
+    k2 = int.from_bytes(digest[4:8], "big") & 0x7FFFFFFF
+    session.execute(text("SELECT pg_advisory_xact_lock(:k1, :k2)"), {"k1": k1, "k2": k2})
+
+
 @core_bp.route("/api/core/inventory/wastage", methods=["POST"])
 @requires_auth
 def record_wastage():
-    """Record wastage for one or more inventory items. Deducts quantity; items at zero disappear from list."""
+    """
+    Record wastage for one or more inventory items.
+
+    Atomic batch: either every line applies in one transaction or none do (no partial inventory updates).
+    Optional idempotency_key with canonical payload hash prevents duplicate disposal on client retries.
+    Confirm/dispose UI pages are not a security boundary; validation and tenancy are enforced only here.
+    quantity_wasted is interpreted in the same unit as the inventory line (InventoryItem.unit).
+    """
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
     entries = data.get("entries")
     if not entries or not isinstance(entries, list):
-        return jsonify({"error": "entries (array of {inventory_item_id, quantity_wasted}) required"}), 400
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "entries (array of {inventory_item_id, quantity_wasted}) required",
+                    "errors": [],
+                    "wastage_records": [],
+                }
+            ),
+            400,
+        )
 
-    inventory_repo = InventoryRepository(db_session)
-    recorded_by = getattr(g, "user_email", None) or getattr(g, "username", None)
+    idem_key_raw = data.get("idempotency_key")
+    idem_key: str | None = None
+    if idem_key_raw is not None:
+        if not isinstance(idem_key_raw, str) or not idem_key_raw.strip() or len(idem_key_raw) > 128:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "idempotency_key must be a non-empty string at most 128 characters",
+                        "errors": [],
+                        "wastage_records": [],
+                    }
+                ),
+                400,
+            )
+        idem_key = idem_key_raw.strip()
 
-    result_records = []
-    errors = []
+    parse_errors: list[str] = []
+    lines: list[tuple[int, UUID, Decimal]] = []
+    seen_ids: set[UUID] = set()
 
     for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            parse_errors.append(f"Entry {idx + 1}: must be an object")
+            continue
         item_id_str = entry.get("inventory_item_id")
         qty_wasted = entry.get("quantity_wasted")
         if not item_id_str:
-            errors.append(f"Entry {idx + 1}: inventory_item_id required")
+            parse_errors.append(f"Entry {idx + 1}: inventory_item_id required")
             continue
         try:
             item_id = UUID(item_id_str)
         except (ValueError, TypeError):
-            errors.append(f"Entry {idx + 1}: invalid inventory_item_id")
+            parse_errors.append(f"Entry {idx + 1}: invalid inventory_item_id")
             continue
-        item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
-        if not item:
-            errors.append(f"Entry {idx + 1}: inventory item not found or access denied")
+        if item_id in seen_ids:
+            parse_errors.append(f"Entry {idx + 1}: duplicate inventory_item_id in the same request")
             continue
-        try:
-            current_str = str(item.quantity).strip() if item.quantity else "0"
-            current_qty = Decimal(current_str)
-        except (InvalidOperation, ValueError, TypeError):
-            errors.append(f"Entry {idx + 1}: invalid current quantity for item")
+        seen_ids.add(item_id)
+        waste_decimal, qty_err = parse_wastage_quantity(qty_wasted)
+        if qty_err:
+            parse_errors.append(f"Entry {idx + 1}: {qty_err}")
             continue
-        try:
-            waste_decimal = Decimal(str(qty_wasted)).quantize(Decimal("0.0001"))
-        except (InvalidOperation, ValueError, TypeError):
-            errors.append(f"Entry {idx + 1}: quantity_wasted must be a number")
-            continue
-        if waste_decimal <= 0:
-            errors.append(f"Entry {idx + 1}: quantity_wasted must be positive")
-            continue
-        if waste_decimal > current_qty:
-            errors.append(f"Entry {idx + 1}: quantity_wasted exceeds available quantity ({current_qty} on hand)")
-            continue
-        actual_waste = waste_decimal
-        new_qty = current_qty - actual_waste
-        new_qty_str = str(new_qty.quantize(Decimal("0.0001"))).rstrip("0").rstrip(".")
-        if new_qty_str == "" or new_qty_str == "-":
-            new_qty_str = "0"
-        unit = (item.unit or "units").strip() or "units"
-        try:
+        lines.append((idx + 1, item_id, waste_decimal))
+
+    if parse_errors:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Validation failed",
+                    "errors": parse_errors,
+                    "wastage_records": [],
+                }
+            ),
+            400,
+        )
+
+    lines.sort(key=lambda t: t[1])
+    hash_for_idem = wastage_entries_payload_hash(
+        [{"inventory_item_id": item_id, "quantity_wasted": w} for _i, item_id, w in lines]
+    )
+
+    inventory_repo = InventoryRepository(db_session)
+    recorded_by = getattr(g, "user_email", None) or getattr(g, "username", None)
+
+    try:
+        if idem_key:
+            _pg_advisory_lock_wastage_idempotency(db_session, org_id, idem_key)
+            existing = (
+                db_session.query(ApiIdempotencyKey)
+                .filter(ApiIdempotencyKey.org_id == org_id, ApiIdempotencyKey.key == idem_key)
+                .one_or_none()
+            )
+            if existing:
+                if existing.payload_hash != hash_for_idem:
+                    return (
+                        jsonify(
+                            {
+                                "success": False,
+                                "error": "Idempotency key already used with a different payload",
+                                "errors": [],
+                                "wastage_records": [],
+                            }
+                        ),
+                        409,
+                    )
+                stored = json.loads(existing.response_json)
+                if isinstance(stored, dict):
+                    stored = {**stored, "idempotent_replay": True}
+                return jsonify(stored), existing.http_status
+
+        validation_errors: list[str] = []
+        staged: list[tuple[InventoryItem, Decimal, int]] = []
+
+        for entry_idx, item_id, waste_decimal in lines:
+            item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
+            if not item:
+                validation_errors.append(f"Entry {entry_idx}: inventory item not found or access denied")
+                continue
+            try:
+                current_str = str(item.quantity).strip() if item.quantity else "0"
+                current_qty = Decimal(current_str)
+            except (InvalidOperation, ValueError, TypeError):
+                validation_errors.append(f"Entry {entry_idx}: invalid current quantity for item")
+                continue
+            if not current_qty.is_finite():
+                validation_errors.append(f"Entry {entry_idx}: invalid current quantity for item")
+                continue
+            if current_qty <= 0:
+                validation_errors.append(f"Entry {entry_idx}: item has no quantity to waste")
+                continue
+            if waste_decimal > current_qty:
+                validation_errors.append(
+                    f"Entry {entry_idx}: quantity_wasted exceeds available quantity ({current_qty} on hand)"
+                )
+                continue
+            staged.append((item, waste_decimal, entry_idx))
+
+        if validation_errors:
+            db_session.rollback()
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Validation failed",
+                        "errors": validation_errors,
+                        "wastage_records": [],
+                    }
+                ),
+                400,
+            )
+
+        result_records = []
+        for item, waste_decimal, _entry_idx in staged:
+            actual_waste = waste_decimal
+            current_qty = Decimal(str(item.quantity).strip() if item.quantity else "0")
+            new_qty = current_qty - actual_waste
+            new_qty_str = str(new_qty.quantize(INVENTORY_WASTAGE_QUANTIZE)).rstrip("0").rstrip(".")
+            if new_qty_str == "" or new_qty_str == "-":
+                new_qty_str = "0"
+            unit = (item.unit or "units").strip() or "units"
             item.quantity = new_qty_str
             record = InventoryWastage(
                 org_id=org_id,
@@ -1928,18 +2065,77 @@ def record_wastage():
                     "recorded_at": record.recorded_at.isoformat() if record.recorded_at else None,
                 }
             )
-        except Exception as e:
-            db_session.rollback()
-            return jsonify({"error": "Failed to record wastage", "details": str(e)}), 500
 
-    if errors and not result_records:
-        return jsonify({"error": "Validation failed", "details": errors}), 400
-    try:
-        db_session.commit()
+        response_body = {
+            "success": True,
+            "wastage_records": result_records,
+            "errors": [],
+            "idempotent_replay": False,
+        }
+        http_status = 201
+        if idem_key:
+            db_session.add(
+                ApiIdempotencyKey(
+                    org_id=org_id,
+                    key=idem_key,
+                    payload_hash=hash_for_idem,
+                    response_json=json.dumps(response_body),
+                    http_status=http_status,
+                )
+            )
+
+        try:
+            db_session.commit()
+        except IntegrityError:
+            db_session.rollback()
+            if idem_key:
+                existing = (
+                    db_session.query(ApiIdempotencyKey)
+                    .filter(ApiIdempotencyKey.org_id == org_id, ApiIdempotencyKey.key == idem_key)
+                    .one_or_none()
+                )
+                if existing and existing.payload_hash == hash_for_idem:
+                    stored = json.loads(existing.response_json)
+                    if isinstance(stored, dict):
+                        stored = {**stored, "idempotent_replay": True}
+                    return jsonify(stored), existing.http_status
+            logger.warning("inventory_wastage commit conflict org_id=%s", org_id)
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Conflict recording wastage",
+                        "errors": [],
+                        "wastage_records": [],
+                    }
+                ),
+                409,
+            )
+
+        logger.info(
+            "inventory_wastage_recorded org_id=%s entries=%s idempotency_key=%s",
+            org_id,
+            len(result_records),
+            idem_key,
+        )
+
+        return jsonify(response_body), http_status
+
     except Exception as e:
         db_session.rollback()
-        return jsonify({"error": "Failed to save wastage", "details": str(e)}), 500
-    return jsonify({"wastage_records": result_records, "errors": errors}), 201
+        logger.exception("inventory_wastage failed: %s", e)
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Failed to record wastage",
+                    "details": str(e),
+                    "errors": [],
+                    "wastage_records": [],
+                }
+            ),
+            500,
+        )
 
 
 @core_bp.route("/api/core/inventory/wastage", methods=["GET"])

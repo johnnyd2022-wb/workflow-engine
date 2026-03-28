@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <meta name="description" content="SupplyChain V2 - Process Flow Details">
   <title>Process Flow | SupplyChain V2</title>
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
@@ -3477,7 +3478,8 @@
             return;
           }
           try {
-            var res = await window.CoreAPI.recordWastage(entries);
+            var idemKey = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random();
+            var res = await window.CoreAPI.recordWastage(entries, { idempotencyKey: idemKey });
             closeRecordWastageModal();
             if (res && res.wastage_records && res.wastage_records.length && typeof window.showNotification === 'function') {
               window.showNotification('success', 'Inventory disposed', res.wastage_records.length + ' item(s) disposed. Quantity deducted from inventory.');
