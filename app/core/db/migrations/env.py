@@ -2,8 +2,7 @@
 
 from logging.config import fileConfig
 from urllib.parse import quote_plus
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool, text
 from alembic import context
 
 # Import Base and models
@@ -93,6 +92,8 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            if connection.dialect.name == "postgresql":
+                connection.execute(text("SELECT set_config('app.migration_mode', '1', true)"))
             context.run_migrations()
 
 
