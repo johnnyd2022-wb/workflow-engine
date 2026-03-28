@@ -14,7 +14,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from enum import Enum
 
-from sqlalchemy import event, inspect as sa_inspect
+from sqlalchemy import event
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 _inventory_writes_allowed: ContextVar[bool] = ContextVar("_inventory_writes_allowed", default=False)
