@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Heuristic CI scan: flag obvious patterns touching inventory_items quantity.
 
-NOT EXHAUSTIVE — dynamic SQL, string building, ORM compile paths, and other bypasses are not reliably
-detectable with regex. Treat this as governance signal + code review, not a proof of safety.
+NOT EXHAUSTIVE — not safety-grade enforcement. Still missed by design: SQLAlchemy Core
+``update(InventoryItem).values(quantity=...)`` without obvious string literals, expression-built SQL,
+indirect helpers, and many dynamic patterns. Dynamic SQL, string building, and other bypasses are not
+reliably detectable with regex. Treat this as governance signal + code review + DB trigger, not proof
+that no bypass exists.
 
 Excludes Alembic migrations (DDL/DML under app.migration_mode) and this script.
 Run from repo root: python scripts/ci_inventory_quantity_sql_scan.py [--strict]
