@@ -64,8 +64,15 @@ def validate_email(email: str) -> tuple[bool, str | None]:
     return True, None
 
 
-# Check if running in CI (GitLab CI sets CI=true and GITLAB_CI=true)
-IS_CI = os.getenv("CI", "").lower() == "true" or os.getenv("GITLAB_CI", "").lower() == "true"
+# Relaxed limits: CI jobs (GitLab sets CI / GITLAB_CI) and any process running with
+# ENVIRONMENT=test (integration tests start Flask with ENVIRONMENT=test; CI vars may not
+# always be visible to the server subprocess). Without this, signup/login fall back to
+# 5/minute keyed by IP when email is not parsed — the full pytest suite exceeds that.
+USE_RELAXED_AUTH_RATE_LIMITS = (
+    os.getenv("CI", "").lower() == "true"
+    or os.getenv("GITLAB_CI", "").lower() == "true"
+    or os.getenv("ENVIRONMENT", "").lower() == "test"
+)
 
 
 # CRITICAL: Custom rate limiting key function that combines IP + email/account
@@ -79,11 +86,17 @@ def get_rate_limit_key():
     ip = get_remote_address()
     # Try to get email from request body (for login/signup endpoints)
     try:
+        data = None
         if request.is_json:
             data = request.get_json(silent=True) or {}
-            email = data.get("email", "").lower().strip()
+        else:
+            # Some clients send JSON with a Content-Type Flask does not treat as is_json
+            ct = (request.content_type or "").lower()
+            if "application/json" in ct or ct.endswith("+json"):
+                data = request.get_json(silent=True) or {}
+        if data:
+            email = (data.get("email") or "").lower().strip()
             if email:
-                # Combine IP and email for more robust rate limiting
                 return f"{ip}:{email}"
     except Exception:
         pass
@@ -120,7 +133,7 @@ def rotate_session():
 
 
 @auth_bp.route("/signup", methods=["POST"])
-@limiter.limit("1000 per minute" if IS_CI else "5 per 1 minute")
+@limiter.limit("1000 per minute" if USE_RELAXED_AUTH_RATE_LIMITS else "5 per 1 minute")
 def signup():
     """Create a new organisation with an admin user. Rate limited to prevent abuse."""
     data = request.get_json()
@@ -204,7 +217,7 @@ def signup():
 
 @auth_bp.route("/login", methods=["POST"])
 @limiter.limit(
-    "1000 per minute" if IS_CI else "5 per 1 minute"
+    "1000 per minute" if USE_RELAXED_AUTH_RATE_LIMITS else "5 per 1 minute"
 )  # Allow 5 attempts to trigger account lockout, then 6th attempt gets rate limited (higher limit for CI)
 def login():
     """Login with email and password
