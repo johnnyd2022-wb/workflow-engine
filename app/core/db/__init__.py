@@ -5,6 +5,7 @@ from urllib.parse import quote_plus
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 
+from app.core.domain.inventory_quantity_guard import register_inventory_quantity_guard
 from app.utils.config_loader import config
 
 # Create database URL (URL-encode credentials to handle special characters)
@@ -40,8 +41,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Scoped session for thread safety
 db_session = scoped_session(SessionLocal)
-
-from app.core.domain.inventory_quantity_guard import register_inventory_quantity_guard
 
 register_inventory_quantity_guard(engine)
 
