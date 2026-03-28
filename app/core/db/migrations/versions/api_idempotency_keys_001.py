@@ -3,7 +3,7 @@
 Revision ID: api_idempotency_keys_001
 Revises: add_first_last_name_to_user_001
 
-Parallel branch with inventory_quantity_numeric_001; merge_inventory_qty_and_api_idem_001 joins them.
+Parallel branch with inventory_quantity_numeric_001; merge_inv_qty_api_idem_001 joins them.
 Safe to run in CI: upgrade is idempotent if the table already exists.
 """
 

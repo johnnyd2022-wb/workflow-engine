@@ -1,7 +1,7 @@
 """Add inventory_movements ledger (append-only signed quantities).
 
 Revision ID: inventory_movements_001
-Revises: merge_inventory_qty_and_api_idem_001
+Revises: merge_inv_qty_api_idem_001
 """
 
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "inventory_movements_001"
-down_revision: Union[str, None] = "merge_inventory_qty_and_api_idem_001"
+down_revision: Union[str, None] = "merge_inv_qty_api_idem_001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
