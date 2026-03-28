@@ -43,7 +43,7 @@ db_session = scoped_session(SessionLocal)
 
 from app.core.domain.inventory_quantity_guard import register_inventory_quantity_guard
 
-register_inventory_quantity_guard()
+register_inventory_quantity_guard(engine)
 
 
 def get_db():

@@ -24,20 +24,19 @@ def upgrade() -> None:
         """
         CREATE OR REPLACE FUNCTION inventory_items_enforce_qty_write_guard()
         RETURNS TRIGGER AS $$
+        DECLARE
+          migration_ok boolean;
+          guard_ok boolean;
         BEGIN
-          IF coalesce(current_setting('app.migration_mode', true), '0') = '1' THEN
+          migration_ok := coalesce(current_setting('app.migration_mode', true), '0') = '1';
+          guard_ok := coalesce(current_setting('app.inventory_qty_guard', true), '0') = '1';
+          IF migration_ok OR guard_ok THEN
             RETURN NEW;
           END IF;
-          IF coalesce(current_setting('app.inventory_qty_guard', true), '0') = '1' THEN
+          IF TG_OP = 'UPDATE' AND OLD.quantity IS NOT DISTINCT FROM NEW.quantity THEN
             RETURN NEW;
           END IF;
-          IF TG_OP = 'INSERT' THEN
-            RAISE EXCEPTION 'inventory_items: quantity INSERT blocked (set app.inventory_qty_guard via app, or app.migration_mode for migrations)';
-          END IF;
-          IF TG_OP = 'UPDATE' AND OLD.quantity IS DISTINCT FROM NEW.quantity THEN
-            RAISE EXCEPTION 'inventory_items: quantity UPDATE blocked (set app.inventory_qty_guard via app, or app.migration_mode for migrations)';
-          END IF;
-          RETURN NEW;
+          RAISE EXCEPTION 'inventory_items: quantity INSERT or quantity-changing UPDATE blocked (set app.inventory_qty_guard via app, or app.migration_mode for migrations)';
         END;
         $$ LANGUAGE plpgsql;
         """
