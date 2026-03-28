@@ -221,11 +221,19 @@ def create_app():
         # CSRF tokens are automatically validated for all POST/PUT/DELETE/PATCH requests
         # Exempt API endpoints that use token-based auth (if any) using @csrf.exempt decorator
     except ImportError:
-        # If Flask-WTF is not installed, log warning but don't fail
+        # Unsafe to run session-backed mutating APIs without CSRF outside local dev / CI test.
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.warning("Flask-WTF not installed. CSRF protection disabled. Install with: pip install Flask-WTF")
+        if config.environment not in ("local", "test"):
+            raise RuntimeError(
+                "Flask-WTF is required in this environment for CSRF protection. "
+                "Install with: pip install Flask-WTF"
+            ) from None
+        logger.error(
+            "Flask-WTF not installed — CSRF protection disabled (allowed only for local/test). "
+            "Install with: pip install Flask-WTF"
+        )
 
         @app.context_processor
         def _csrf_token_placeholder():

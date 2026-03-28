@@ -40,7 +40,11 @@ from app.core.utils.inventory_wastage_quantity import (
 )
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
-from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.core.utils.unit_conversion import (
+    are_units_compatible,
+    convert_to_inventory_unit_decimal,
+    normalize_unit,
+)
 from app.utils.config_loader import config
 
 logger = logging.getLogger(__name__)
@@ -1866,7 +1870,12 @@ def list_inventory():
 
 
 def _pg_advisory_lock_wastage_idempotency(session, org_id: UUID, idem_key: str) -> None:
-    """Serialize idempotent wastage retries for the same org+key (PostgreSQL transaction-scoped lock)."""
+    """
+    Serialize idempotent wastage retries for the same org+key (PostgreSQL transaction-scoped lock).
+
+    On non-PostgreSQL dialects this is a no-op: idempotency still relies on the unique (org_id, key)
+    row and payload hash, but concurrent duplicate requests may race until commit (acceptable tradeoff).
+    """
     bind = session.get_bind()
     if not bind or getattr(bind.dialect, "name", None) != "postgresql":
         return
@@ -1885,7 +1894,13 @@ def record_wastage():
     Atomic batch: either every line applies in one transaction or none do (no partial inventory updates).
     Optional idempotency_key with canonical payload hash prevents duplicate disposal on client retries.
     Confirm/dispose UI pages are not a security boundary; validation and tenancy are enforced only here.
-    quantity_wasted is interpreted in the same unit as the inventory line (InventoryItem.unit).
+
+    quantity_wasted is in InventoryItem.unit unless optional quantity_unit (or unit) is sent; then it is
+    converted with are_units_compatible / convert_to_inventory_unit_decimal.
+
+    Inventory quantity is still stored as a string on the row; a future DB migration to NUMERIC would
+    reduce format drift. A unified movement ledger (append-only, derived on-hand) would improve audit;
+    InventoryWastage is a step toward that but on-hand is still updated in place here.
     """
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
@@ -1921,7 +1936,7 @@ def record_wastage():
         idem_key = idem_key_raw.strip()
 
     parse_errors: list[str] = []
-    lines: list[tuple[int, UUID, Decimal]] = []
+    lines: list[tuple[int, UUID, Decimal, str | None]] = []
     seen_ids: set[UUID] = set()
 
     for idx, entry in enumerate(entries):
@@ -1946,7 +1961,16 @@ def record_wastage():
         if qty_err:
             parse_errors.append(f"Entry {idx + 1}: {qty_err}")
             continue
-        lines.append((idx + 1, item_id, waste_decimal))
+        raw_unit = entry.get("quantity_unit")
+        if raw_unit is None:
+            raw_unit = entry.get("unit")
+        if raw_unit is not None and not isinstance(raw_unit, str):
+            parse_errors.append(f"Entry {idx + 1}: quantity_unit must be a string when provided")
+            continue
+        parsed_unit: str | None = normalize_unit(raw_unit) if raw_unit else None
+        if parsed_unit == "":
+            parsed_unit = None
+        lines.append((idx + 1, item_id, waste_decimal, parsed_unit))
 
     if parse_errors:
         return (
@@ -1963,7 +1987,10 @@ def record_wastage():
 
     lines.sort(key=lambda t: t[1])
     hash_for_idem = wastage_entries_payload_hash(
-        [{"inventory_item_id": item_id, "quantity_wasted": w} for _i, item_id, w in lines]
+        [
+            {"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or ""}
+            for _i, item_id, w, u in lines
+        ]
     )
 
     inventory_repo = InventoryRepository(db_session)
@@ -1998,7 +2025,7 @@ def record_wastage():
         validation_errors: list[str] = []
         staged: list[tuple[InventoryItem, Decimal, int]] = []
 
-        for entry_idx, item_id, waste_decimal in lines:
+        for entry_idx, item_id, waste_decimal, req_unit in lines:
             item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
             if not item:
                 validation_errors.append(f"Entry {entry_idx}: inventory item not found or access denied")
@@ -2015,12 +2042,26 @@ def record_wastage():
             if current_qty <= 0:
                 validation_errors.append(f"Entry {entry_idx}: item has no quantity to waste")
                 continue
-            if waste_decimal > current_qty:
+            inv_unit = (item.unit or "units").strip() or "units"
+            if req_unit:
+                if not are_units_compatible(req_unit, inv_unit):
+                    validation_errors.append(
+                        f"Entry {entry_idx}: quantity_unit is not compatible with inventory unit ({inv_unit})"
+                    )
+                    continue
+                try:
+                    waste_in_inv = convert_to_inventory_unit_decimal(waste_decimal, req_unit, inv_unit)
+                except ValueError as exc:
+                    validation_errors.append(f"Entry {entry_idx}: {exc}")
+                    continue
+            else:
+                waste_in_inv = waste_decimal
+            if waste_in_inv > current_qty:
                 validation_errors.append(
-                    f"Entry {entry_idx}: quantity_wasted exceeds available quantity ({current_qty} on hand)"
+                    f"Entry {entry_idx}: quantity_wasted exceeds available quantity ({current_qty} {inv_unit} on hand)"
                 )
                 continue
-            staged.append((item, waste_decimal, entry_idx))
+            staged.append((item, waste_in_inv, entry_idx))
 
         if validation_errors:
             db_session.rollback()
@@ -2112,30 +2153,32 @@ def record_wastage():
                 409,
             )
 
-        logger.info(
-            "inventory_wastage_recorded org_id=%s entries=%s idempotency_key=%s",
-            org_id,
-            len(result_records),
-            idem_key,
-        )
+        audit_payload = {
+            "event": "inventory_wastage_recorded",
+            "org_id": str(org_id),
+            "inventory_item_ids": [r["inventory_item_id"] for r in result_records],
+            "quantities_wasted": [r["quantity_wasted"] for r in result_records],
+            "units": [r["unit"] for r in result_records],
+            "recorded_by": recorded_by,
+            "idempotency_key": idem_key,
+            "entry_count": len(result_records),
+        }
+        logger.info("inventory_wastage_recorded %s", json.dumps(audit_payload, separators=(",", ":")))
 
         return jsonify(response_body), http_status
 
     except Exception as e:
         db_session.rollback()
         logger.exception("inventory_wastage failed: %s", e)
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Failed to record wastage",
-                    "details": str(e),
-                    "errors": [],
-                    "wastage_records": [],
-                }
-            ),
-            500,
-        )
+        payload = {
+            "success": False,
+            "error": "Failed to record wastage",
+            "errors": [],
+            "wastage_records": [],
+        }
+        if not config.is_production:
+            payload["details"] = str(e)
+        return jsonify(payload), 500
 
 
 @core_bp.route("/api/core/inventory/wastage", methods=["GET"])
