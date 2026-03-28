@@ -1,4 +1,4 @@
-"""Append-only inventory movement ledger (event-sourced direction; on-hand = SUM(quantity))."""
+"""Append-only inventory movement rows (audit/replay), not a standalone event-sourced projection."""
 
 import enum
 import uuid
@@ -21,11 +21,12 @@ class InventoryMovementType(str, enum.Enum):
 
 
 class InventoryMovement(Base):
-    """Signed quantity change in the item's canonical storage unit (same as inventory_items.unit).
+    """Signed quantity in the item's canonical storage unit (inventory_items.unit).
 
-    Hybrid model: inventory_items.quantity is the hot path (cached on-hand); this table is append-only
-    audit/replay. Quantities MUST be in that canonical unit only (convert before insert). WASTAGE rows
-    from record_wastage are deduped by source_wastage_id -> inventory_wastage.id (unique when set).
+    This is an event log alongside mutable inventory_items.quantity—not sole source of truth until/unless
+    you migrate to derived on-hand. Inserts must use canonical unit; record_wastage stores conversion
+    provenance in movement_metadata when the client sent quantity_unit. WASTAGE rows from record_wastage
+    use source_wastage_id -> inventory_wastage.id (unique when set) for deduplication.
     """
 
     __tablename__ = "inventory_movements"

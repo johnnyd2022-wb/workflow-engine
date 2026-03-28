@@ -1893,13 +1893,24 @@ def record_wastage():
     """
     Record wastage for one or more inventory items.
 
+    Dual-write (same transaction): updates inventory_items.quantity, inserts inventory_wastage and
+    inventory_movements. Consistency relies on PostgreSQL transaction atomicity—do not add external I/O,
+    message publishing, or async work inside this handler's transaction; future refactors must keep all
+    three writes here or introduce explicit reconciliation.
+
     Transaction: SessionLocal uses autocommit=False; this handler commits once at the end (success path)
     or rollbacks on validation/exception paths. inventory_items.quantity, inventory_wastage, and
     inventory_movements rows for the batch are persisted in that single commit (no partial apply).
 
-    Hybrid model (Option B): inventory_items.quantity is the hot path (cached on-hand); movements are
-    append-only audit. Ledger rows use canonical item.unit; quantities are converted upstream before apply.
-    WASTAGE movements link source_wastage_id -> inventory_wastage.id (unique) to prevent double ledger rows.
+    Not event-sourced: inventory_items.quantity remains authoritative (mutable cache). Movements are an
+    append-only audit log alongside that state, not a derived projection that replaces quantity.
+
+    Hybrid model (Option B): ledger rows use canonical item.unit; optional converted_from_unit in metadata
+    when the client sent quantity_unit. WASTAGE movements link source_wastage_id -> inventory_wastage.id
+    (unique) to prevent double ledger rows.
+
+    Drift between quantity and SUM(movements) is not enforced by the DB; see scripts/inventory_quantity_drift_check.sql
+    and future jobs/triggers/repository-only writes if you need hard invariants.
 
     Optional idempotency_key with canonical payload hash prevents duplicate disposal on client retries.
     Confirm/dispose UI pages are not a security boundary; validation and tenancy are enforced only here.
@@ -2044,7 +2055,7 @@ def record_wastage():
                 return jsonify(stored), existing.http_status
 
         validation_errors: list[str] = []
-        staged: list[tuple[InventoryItem, Decimal, int]] = []
+        staged: list[tuple[InventoryItem, Decimal, int, str | None]] = []
 
         for entry_idx, item_id, waste_decimal, req_unit in lines:
             item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
@@ -2074,7 +2085,7 @@ def record_wastage():
                     f"Entry {entry_idx}: quantity_wasted exceeds available quantity ({current_qty} {inv_unit} on hand)"
                 )
                 continue
-            staged.append((item, waste_in_inv, entry_idx))
+            staged.append((item, waste_in_inv, entry_idx, req_unit))
 
         if validation_errors:
             db_session.rollback()
@@ -2092,7 +2103,7 @@ def record_wastage():
             )
 
         result_records = []
-        for item, waste_decimal, _entry_idx in staged:
+        for item, waste_decimal, _entry_idx, request_unit in staged:
             actual_waste = waste_decimal
             current_qty = parse_stored_quantity_to_decimal(item.quantity)
             new_qty = current_qty - actual_waste
@@ -2110,6 +2121,9 @@ def record_wastage():
             movement_meta: dict = {"wastage_record_id": str(record.id)}
             if idem_key:
                 movement_meta["idempotency_key"] = idem_key
+            if request_unit:
+                movement_meta["converted_from_unit"] = request_unit
+                movement_meta["canonical_unit"] = unit
             db_session.add(
                 InventoryMovement(
                     org_id=org_id,

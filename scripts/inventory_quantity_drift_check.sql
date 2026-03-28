@@ -1,4 +1,8 @@
 -- Read-only: rows where cached on-hand does not match signed movement sum (per item).
+-- This is observability, not enforcement—manual SQL on inventory_items or code paths that skip
+-- movements will show up here. For hard invariants use future triggers, batch reconciliation, or
+-- a single repository write path.
+--
 -- Run in reporting; does not fix data. Filter org: AND i.org_id = $1::uuid
 --
 -- Only meaningful once every quantity change is mirrored as a movement from a known baseline.
