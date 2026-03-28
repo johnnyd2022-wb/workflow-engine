@@ -51,8 +51,8 @@ from app.utils.config_loader import config
 
 logger = logging.getLogger(__name__)
 
-# Guardrail: single wastage request should not hold row locks too long.
-MAX_WASTAGE_BATCH_ENTRIES = 500
+# Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
+MAX_WASTAGE_BATCH_ENTRIES = 100
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -1893,7 +1893,14 @@ def record_wastage():
     """
     Record wastage for one or more inventory items.
 
-    Atomic batch: either every line applies in one transaction or none do (no partial inventory updates).
+    Transaction: SessionLocal uses autocommit=False; this handler commits once at the end (success path)
+    or rollbacks on validation/exception paths. inventory_items.quantity, inventory_wastage, and
+    inventory_movements rows for the batch are persisted in that single commit (no partial apply).
+
+    Hybrid model (Option B): inventory_items.quantity is the hot path (cached on-hand); movements are
+    append-only audit. Ledger rows use canonical item.unit; quantities are converted upstream before apply.
+    WASTAGE movements link source_wastage_id -> inventory_wastage.id (unique) to prevent double ledger rows.
+
     Optional idempotency_key with canonical payload hash prevents duplicate disposal on client retries.
     Confirm/dispose UI pages are not a security boundary; validation and tenancy are enforced only here.
 
@@ -2107,6 +2114,7 @@ def record_wastage():
                 InventoryMovement(
                     org_id=org_id,
                     inventory_item_id=item.id,
+                    source_wastage_id=record.id,
                     movement_type=InventoryMovementType.WASTAGE.value,
                     quantity=coerce_stored_quantity(-actual_waste),
                     unit=unit,
