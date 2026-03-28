@@ -1987,10 +1987,7 @@ def record_wastage():
 
     lines.sort(key=lambda t: t[1])
     hash_for_idem = wastage_entries_payload_hash(
-        [
-            {"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or ""}
-            for _i, item_id, w, u in lines
-        ]
+        [{"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or ""} for _i, item_id, w, u in lines]
     )
 
     inventory_repo = InventoryRepository(db_session)
