@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 # Matches PostgreSQL inventory_items.quantity NUMERIC(18,4).
 STORAGE_QUANTIZE_EXP = Decimal("0.0001")

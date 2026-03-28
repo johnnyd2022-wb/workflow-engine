@@ -33,12 +33,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.utils.inventory_quantity import quantity_to_api_str
-
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.process import Process
+from app.core.utils.inventory_quantity import quantity_to_api_str
 
 try:
     from dateutil import parser as dateutil_parser
