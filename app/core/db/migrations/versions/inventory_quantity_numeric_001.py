@@ -17,6 +17,22 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _pg_guard_function_exists(conn) -> bool:
+    if conn.dialect.name != "postgresql":
+        return False
+    row = conn.execute(
+        sa.text(
+            """
+            SELECT 1 FROM pg_proc p
+            JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'public' AND p.proname = 'inventory_items_enforce_qty_write_guard'
+            LIMIT 1
+            """
+        )
+    ).fetchone()
+    return row is not None
+
+
 def upgrade() -> None:
     conn = op.get_bind()
     insp = sa.inspect(conn)
@@ -29,6 +45,9 @@ def upgrade() -> None:
     tname = str(qty["type"]).upper()
     if "NUMERIC" in tname or "DECIMAL" in tname:
         return
+    had_pg_guard = _pg_guard_function_exists(conn)
+    if conn.dialect.name == "postgresql":
+        op.execute(sa.text("DROP TRIGGER IF EXISTS trg_inventory_items_qty_write_guard ON inventory_items;"))
     op.execute(
         sa.text(
             """
@@ -43,6 +62,16 @@ def upgrade() -> None:
             """
         )
     )
+    if conn.dialect.name == "postgresql" and had_pg_guard:
+        op.execute(
+            sa.text(
+                """
+                CREATE TRIGGER trg_inventory_items_qty_write_guard
+                BEFORE INSERT OR UPDATE OF quantity ON inventory_items
+                FOR EACH ROW EXECUTE PROCEDURE inventory_items_enforce_qty_write_guard();
+                """
+            )
+        )
 
 
 def downgrade() -> None:
@@ -50,6 +79,9 @@ def downgrade() -> None:
     insp = sa.inspect(conn)
     if "inventory_items" not in insp.get_table_names():
         return
+    had_pg_guard = _pg_guard_function_exists(conn)
+    if conn.dialect.name == "postgresql":
+        op.execute(sa.text("DROP TRIGGER IF EXISTS trg_inventory_items_qty_write_guard ON inventory_items;"))
     op.execute(
         sa.text(
             """
@@ -59,3 +91,13 @@ def downgrade() -> None:
             """
         )
     )
+    if conn.dialect.name == "postgresql" and had_pg_guard:
+        op.execute(
+            sa.text(
+                """
+                CREATE TRIGGER trg_inventory_items_qty_write_guard
+                BEFORE INSERT OR UPDATE OF quantity ON inventory_items
+                FOR EACH ROW EXECUTE PROCEDURE inventory_items_enforce_qty_write_guard();
+                """
+            )
+        )
