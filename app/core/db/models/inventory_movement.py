@@ -39,6 +39,4 @@ class InventoryMovement(Base):
     inventory_item = relationship("InventoryItem", backref="inventory_movements")
 
     def __repr__(self) -> str:
-        return (
-            f"<InventoryMovement(id={self.id}, type={self.movement_type}, qty={self.quantity} {self.unit}, item={self.inventory_item_id})>"
-        )
+        return f"<InventoryMovement(id={self.id}, type={self.movement_type}, qty={self.quantity} {self.unit}, item={self.inventory_item_id})>"
