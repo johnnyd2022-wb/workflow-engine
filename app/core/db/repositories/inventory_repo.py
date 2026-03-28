@@ -7,6 +7,10 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.domain.inventory_quantity_guard import (
+    InventoryQuantityWriteReason,
+    allow_inventory_quantity_write,
+)
 from app.core.utils.inventory_quantity import coerce_stored_quantity, parse_stored_quantity_to_decimal
 
 _UNTRACKED_EXTRA_FILTER = {"untracked": True}
@@ -60,25 +64,26 @@ class InventoryRepository:
         commit: bool = True,
     ) -> InventoryItem:
         """Create a new inventory item. If commit=False, caller is responsible for commit (e.g. atomic reconciliation)."""
-        item = InventoryItem(
-            org_id=org_id,
-            name=name,
-            quantity=coerce_stored_quantity(quantity),
-            unit=unit,
-            inventory_type=inventory_type,
-            supplier=supplier,
-            barcode=barcode,
-            purchase_date=purchase_date,
-            supplier_batch_number=supplier_batch_number,
-            expiry_date=expiry_date,
-            source_execution_id=source_execution_id,
-            source_execution_step_id=source_execution_step_id,
-            source_output_id=source_output_id,
-            source_step_name=source_step_name,
-            extra_data=extra_data or {},
-        )
-        self.db.add(item)
-        self.db.flush()
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_CREATE):
+            item = InventoryItem(
+                org_id=org_id,
+                name=name,
+                quantity=coerce_stored_quantity(quantity),
+                unit=unit,
+                inventory_type=inventory_type,
+                supplier=supplier,
+                barcode=barcode,
+                purchase_date=purchase_date,
+                supplier_batch_number=supplier_batch_number,
+                expiry_date=expiry_date,
+                source_execution_id=source_execution_id,
+                source_execution_step_id=source_execution_step_id,
+                source_output_id=source_output_id,
+                source_step_name=source_step_name,
+                extra_data=extra_data or {},
+            )
+            self.db.add(item)
+            self.db.flush()
         _ = item.id
         if commit:
             self.db.commit()
@@ -104,7 +109,8 @@ class InventoryRepository:
             if commit:
                 self.db.commit()
             return item
-        item.quantity = coerce_stored_quantity(current + add_val)
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_ADD_QUANTITY):
+            item.quantity = coerce_stored_quantity(current + add_val)
         if extra_data_merge:
             # Merge audit etc. into extra_data; for high volume consider a relational InventoryAuditEntry table
             merged = dict(item.extra_data or {})
@@ -204,7 +210,8 @@ class InventoryRepository:
         if name is not None:
             item.name = name
         if quantity is not None:
-            item.quantity = coerce_stored_quantity(quantity)
+            with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_UPDATE):
+                item.quantity = coerce_stored_quantity(quantity)
         if unit is not None:
             item.unit = unit
         if extra_data is not None:

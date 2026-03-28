@@ -41,6 +41,10 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Scoped session for thread safety
 db_session = scoped_session(SessionLocal)
 
+from app.core.domain.inventory_quantity_guard import register_inventory_quantity_guard
+
+register_inventory_quantity_guard()
+
 
 def get_db():
     """Get database session (for dependency injection)"""

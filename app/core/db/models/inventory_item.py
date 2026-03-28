@@ -24,10 +24,10 @@ class InventoryItem(Base):
 
     DB enforces UNIQUE (org_id, barcode) where barcode IS NOT NULL (see migration uq_inventory_org_barcode_001).
     On-hand quantity is NUMERIC(18,4) at rest; API layers serialize to strings. This column is the
-    authoritative on-hand cache (not derived-only from movements). Append-only inventory_movements
-    supplement audit/replay; drift vs SUM(movements) is possible if quantity is edited outside the
-    movement path—see scripts/inventory_quantity_drift_check.sql and architectural controls (jobs, triggers,
-    repository-only writes) for future enforcement.
+    authoritative on-hand cache (not derived-only from movements). Quantity mutations are gated by
+    app.core.domain.inventory_quantity_guard (ORM before_flush); bulk SQL bypasses that—avoid it.
+    Append-only inventory_movements supplement audit/replay; drift vs SUM(movements) is possible if
+    quantity is edited outside authorized paths—see scripts/inventory_quantity_drift_check.sql.
     """
 
     __tablename__ = "inventory_items"

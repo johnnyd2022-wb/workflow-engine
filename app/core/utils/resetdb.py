@@ -20,6 +20,10 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.user_repo import UserRepository
+from app.core.domain.inventory_quantity_guard import (
+    InventoryQuantityWriteReason,
+    allow_inventory_quantity_write,
+)
 from app.core.utils.inventory_quantity import coerce_stored_quantity, parse_stored_quantity_to_decimal
 
 DEMO_USER_EMAIL = "demo@whistlebird.co.nz"
@@ -356,7 +360,8 @@ def reset_demo_db(db: Session) -> dict:
                     current = parse_stored_quantity_to_decimal(inv.quantity)
                     consumed = Decimal(str(ai.get("quantity", 0)))
                     new_qty = max(Decimal("0"), current - consumed)
-                    inv.quantity = coerce_stored_quantity(new_qty)
+                    with allow_inventory_quantity_write(InventoryQuantityWriteReason.RESETDB_DEV):
+                        inv.quantity = coerce_stored_quantity(new_qty)
                     db.commit()
                 except Exception:
                     pass

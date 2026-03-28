@@ -47,6 +47,18 @@ def quantity_to_api_str(value: object | None) -> str:
     return s if s else "0"
 
 
+def assert_movement_unit_matches_item_canonical(movement_unit: str, inventory_item_unit: str) -> None:
+    """InventoryMovement.quantity must use the same canonical unit string as inventory_items.unit (normalized)."""
+    from app.core.utils.unit_conversion import normalize_unit
+
+    m = normalize_unit(movement_unit or "")
+    i = normalize_unit(inventory_item_unit or "")
+    if m != i:
+        raise ValueError(
+            f"Ledger unit must match canonical inventory unit ({inventory_item_unit!r} → {i!r}), got {movement_unit!r}"
+        )
+
+
 def parse_stored_quantity_to_decimal(value: object | None) -> Decimal:
     """Read DB/API value as Decimal (handles Decimal or string legacy)."""
     if value is None:

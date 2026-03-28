@@ -30,11 +30,16 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
+from app.core.domain.inventory_quantity_guard import (
+    InventoryQuantityWriteReason,
+    allow_inventory_quantity_write,
+)
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates, assert_expiry_after_ready_duration
 from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
 from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import (
+    assert_movement_unit_matches_item_canonical,
     coerce_stored_quantity,
     parse_stored_quantity_to_decimal,
     quantity_to_api_str,
@@ -1427,8 +1432,9 @@ def complete_step(execution_id: str, execution_step_id: str):
         # This ensures inventory consumption and output creation are atomic per execution step
         try:
             # Apply inventory updates
-            for inventory_item, new_quantity in inventory_updates:
-                inventory_item.quantity = new_quantity
+            with allow_inventory_quantity_write(InventoryQuantityWriteReason.EXECUTION_STEP_INVENTORY):
+                for inventory_item, new_quantity in inventory_updates:
+                    inventory_item.quantity = new_quantity
 
             # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
             from app.core.backend.reconciliation_service import reconcile_output_to_untracked_reduce_only
@@ -2103,48 +2109,50 @@ def record_wastage():
             )
 
         result_records = []
-        for item, waste_decimal, _entry_idx, request_unit in staged:
-            actual_waste = waste_decimal
-            current_qty = parse_stored_quantity_to_decimal(item.quantity)
-            new_qty = current_qty - actual_waste
-            unit = (item.unit or "units").strip() or "units"
-            item.quantity = coerce_stored_quantity(new_qty)
-            record = InventoryWastage(
-                org_id=org_id,
-                inventory_item_id=item.id,
-                quantity_wasted=str(actual_waste),
-                unit=unit,
-                recorded_by=recorded_by,
-            )
-            db_session.add(record)
-            db_session.flush()
-            movement_meta: dict = {"wastage_record_id": str(record.id)}
-            if idem_key:
-                movement_meta["idempotency_key"] = idem_key
-            if request_unit:
-                movement_meta["converted_from_unit"] = request_unit
-                movement_meta["canonical_unit"] = unit
-            db_session.add(
-                InventoryMovement(
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.WASTAGE_RECORD):
+            for item, waste_decimal, _entry_idx, request_unit in staged:
+                actual_waste = waste_decimal
+                current_qty = parse_stored_quantity_to_decimal(item.quantity)
+                new_qty = current_qty - actual_waste
+                unit = (item.unit or "units").strip() or "units"
+                item.quantity = coerce_stored_quantity(new_qty)
+                record = InventoryWastage(
                     org_id=org_id,
                     inventory_item_id=item.id,
-                    source_wastage_id=record.id,
-                    movement_type=InventoryMovementType.WASTAGE.value,
-                    quantity=coerce_stored_quantity(-actual_waste),
+                    quantity_wasted=str(actual_waste),
                     unit=unit,
-                    movement_metadata=movement_meta,
+                    recorded_by=recorded_by,
                 )
-            )
-            result_records.append(
-                {
-                    "id": str(record.id),
-                    "inventory_item_id": str(item.id),
-                    "item_name": item.name,
-                    "quantity_wasted": str(actual_waste),
-                    "unit": unit,
-                    "recorded_at": record.recorded_at.isoformat() if record.recorded_at else None,
-                }
-            )
+                db_session.add(record)
+                db_session.flush()
+                movement_meta: dict = {"wastage_record_id": str(record.id)}
+                if idem_key:
+                    movement_meta["idempotency_key"] = idem_key
+                if request_unit:
+                    movement_meta["converted_from_unit"] = request_unit
+                    movement_meta["canonical_unit"] = unit
+                assert_movement_unit_matches_item_canonical(unit, item.unit or "units")
+                db_session.add(
+                    InventoryMovement(
+                        org_id=org_id,
+                        inventory_item_id=item.id,
+                        source_wastage_id=record.id,
+                        movement_type=InventoryMovementType.WASTAGE.value,
+                        quantity=coerce_stored_quantity(-actual_waste),
+                        unit=unit,
+                        movement_metadata=movement_meta,
+                    )
+                )
+                result_records.append(
+                    {
+                        "id": str(record.id),
+                        "inventory_item_id": str(item.id),
+                        "item_name": item.name,
+                        "quantity_wasted": str(actual_waste),
+                        "unit": unit,
+                        "recorded_at": record.recorded_at.isoformat() if record.recorded_at else None,
+                    }
+                )
 
         response_body = {
             "success": True,
@@ -2562,7 +2570,8 @@ def update_inventory_item(item_id):
 
         # Update item
         item.name = name
-        item.quantity = coerce_stored_quantity(quantity)
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
+            item.quantity = coerce_stored_quantity(quantity)
         item.unit = unit
         item.inventory_type = inventory_type
         item.supplier = data.get("supplier")
