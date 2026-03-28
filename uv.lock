@@ -452,6 +452,20 @@ wheels = [
 ]
 
 [[package]]
+name = "flask-wtf"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flask" },
+    { name = "itsdangerous" },
+    { name = "wtforms" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9b/ef/b6ec35e02f479f6e76e02ede14594c9cfa5e6dcbab6ea0e82fa413993a2a/flask_wtf-1.2.1.tar.gz", hash = "sha256:8bb269eb9bb46b87e7c8233d7e7debdf1f8b74bf90cc1789988c29b37a97b695", size = 42498, upload-time = "2023-10-02T07:50:34.319266Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/02/2b/0f0cf68a2f052ea3dbb8b6c8c2a7e8aea5e6df7410f5e289437fefbeb461/flask_wtf-1.2.1-py3-none-any.whl", hash = "sha256:fa6793f2fb7e812e0fe9743b282118e581fb1b6c45d414b8af05e659bd653287", size = 12725, upload-time = "2023-10-02T07:50:32.552182Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1348,6 +1362,18 @@ wheels = [
 ]
 
 [[package]]
+name = "wtforms"
+version = "3.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markupsafe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/16/9f/7d8e2c7dcf2e2bc60e65e7ac833857e6e5f3d4e7505dcd3e7da2fd539e4d/wtforms-3.1.1.tar.gz", hash = "sha256:5e51df8af9a60f6beead75efa10975e97768825a82146a65c7cbf5b915990620", size = 134343, upload-time = "2023-11-01T10:21:12.986573Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/5d/dfe0b6c9173f3faa7cd8059497a4ec09e5a3c4ea685e9eb2dc29d2092f44/wtforms-3.1.1-py3-none-any.whl", hash = "sha256:ae7c54b29806c70f7bce8eb9f24afceb10ca5c32af3d9f04f74d2f66ccc5c7e0", size = 145431, upload-time = "2023-11-01T10:21:10.875111Z" },
+]
+
+[[package]]
 name = "workflow-engine"
 version = "0.1.0"
 source = { editable = "." }
@@ -1360,6 +1386,7 @@ dependencies = [
     { name = "docker" },
     { name = "flask" },
     { name = "flask-limiter" },
+    { name = "flask-wtf" },
     { name = "pandas" },
     { name = "psycopg2-binary" },
     { name = "pyotp" },
@@ -1385,6 +1412,7 @@ requires-dist = [
     { name = "docker", specifier = "==6.1.3" },
     { name = "flask", specifier = "==2.3.3" },
     { name = "flask-limiter", specifier = "==3.5.0" },
+    { name = "flask-wtf", specifier = "==1.2.1" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "psycopg2-binary", specifier = "==2.9.7" },
     { name = "pyotp", specifier = ">=2.9.0" },

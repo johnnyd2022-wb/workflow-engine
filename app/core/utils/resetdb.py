@@ -20,6 +20,11 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.user_repo import UserRepository
+from app.core.domain.inventory_quantity_guard import (
+    InventoryQuantityWriteReason,
+    allow_inventory_quantity_write,
+)
+from app.core.utils.inventory_quantity import coerce_stored_quantity, parse_stored_quantity_to_decimal
 
 DEMO_USER_EMAIL = "demo@whistlebird.co.nz"
 
@@ -344,21 +349,23 @@ def reset_demo_db(db: Session) -> dict:
             )
             output_items_by_name[oname] = new_item
 
-        # Consume input quantities (decrement)
-        for ai in actual_inputs:
-            inv_id = ai.get("inventory_item_id")
-            if not inv_id:
-                continue
-            inv = inv_repo.get_inventory_item_by_id(UUID(inv_id), org_id)
-            if inv and inv.quantity:
-                try:
-                    current = Decimal(str(inv.quantity))
-                    consumed = Decimal(str(ai.get("quantity", 0)))
-                    new_qty = max(Decimal("0"), current - consumed)
-                    inv.quantity = str(new_qty.normalize())
-                    db.commit()
-                except Exception:
-                    pass
+        # Consume input quantities (decrement). Commit must run inside allow_inventory_quantity_write
+        # so the flush on commit still sees the guard (ContextVar) as allowed.
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.RESETDB_DEV):
+            for ai in actual_inputs:
+                inv_id = ai.get("inventory_item_id")
+                if not inv_id:
+                    continue
+                inv = inv_repo.get_inventory_item_by_id(UUID(inv_id), org_id)
+                if inv and inv.quantity is not None:
+                    try:
+                        current = parse_stored_quantity_to_decimal(inv.quantity)
+                        consumed = Decimal(str(ai.get("quantity", 0)))
+                        new_qty = max(Decimal("0"), current - consumed)
+                        inv.quantity = coerce_stored_quantity(new_qty)
+                    except Exception:
+                        pass
+            db.commit()
 
     return {
         "success": True,

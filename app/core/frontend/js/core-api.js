@@ -5,11 +5,23 @@ window.CoreAPI = window.CoreAPI || {
     
     async request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
+        const method = (options.method || 'GET').toUpperCase();
+        const mutating = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+        const csrfMeta = typeof document !== 'undefined' && document.querySelector
+            ? document.querySelector('meta[name="csrf-token"]')
+            : null;
+        const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
+        const mergedHeaders = {
+            'Content-Type': 'application/json',
+            ...(options.headers || {}),
+        };
+        if (mutating && csrfTok) {
+            mergedHeaders['X-CSRFToken'] = csrfTok;
+            mergedHeaders['X-CSRF-Token'] = csrfTok;
+        }
         const config = {
-            headers: {
-                'Content-Type': 'application/json',
-            },
             ...options,
+            headers: mergedHeaders,
         };
         if (options.body instanceof FormData) {
             delete config.headers['Content-Type'];
@@ -30,7 +42,8 @@ window.CoreAPI = window.CoreAPI || {
             if (!response.ok) {
                 const msg = data.message || data.error || `HTTP error! status: ${response.status}`;
                 const details = data.details ? ` ${data.details}` : '';
-                throw new Error(msg + details);
+                const errList = Array.isArray(data.errors) && data.errors.length ? ` ${data.errors.join('; ')}` : '';
+                throw new Error(msg + details + errList);
             }
             return data;
         } catch (error) {
@@ -237,10 +250,14 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
 
-    async recordWastage(entries) {
+    async recordWastage(entries, opts = {}) {
+        const body = { entries };
+        if (opts.idempotencyKey) {
+            body.idempotency_key = opts.idempotencyKey;
+        }
         return this.request('/inventory/wastage', {
             method: 'POST',
-            body: { entries },
+            body,
         });
     },
 

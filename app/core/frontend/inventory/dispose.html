@@ -1,0 +1,415 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Dispose inventory{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Record disposed or wasted inventory quantities.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  <style>
+    #dispose-inventory-page .card-header {
+      justify-content: center !important;
+    }
+    #dispose-inventory-page .card-header > div {
+      text-align: center;
+    }
+
+    .dispose-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+    }
+    .dispose-list__item {
+      margin: 0;
+      padding: 14px 0;
+      border: none;
+      background: transparent;
+    }
+    .dispose-list__item:not(:first-child) {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .dispose-list__head {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .dispose-list__name {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text-primary, #111827);
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .dispose-list__meta {
+      font-size: 0.8125rem;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.4;
+    }
+    .dispose-list__controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .dispose-intro {
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    .dispose-list__label {
+      font-size: 0.75rem;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-secondary, #6b7280);
+    }
+    .dispose-list__unit {
+      font-size: 0.875rem;
+      color: var(--text-secondary, #6b7280);
+    }
+    .dispose-list__qty {
+      width: 124px;
+    }
+    .dispose-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin: 4px 0 14px 0;
+      border-bottom: 1px solid var(--border-default, #e5e7eb);
+    }
+    .dispose-tab {
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--text-secondary, #6b7280);
+      border-radius: 0;
+      padding: 8px 0;
+      margin-bottom: -1px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      min-height: 40px;
+    }
+    .dispose-tab:hover {
+      color: var(--text-primary, #111827);
+    }
+    .dispose-tab[aria-selected="true"] {
+      color: var(--primary, #2563eb);
+      border-bottom-color: var(--primary, #2563eb);
+    }
+    .dispose-item-action {
+      border: none;
+      background: transparent;
+      padding: 0;
+      font-size: 0.9375rem;
+      line-height: 1.45;
+      font-weight: 500;
+      color: var(--primary, #2563eb);
+      cursor: pointer;
+      text-decoration: none;
+      transition: color 0.16s ease;
+      min-height: 0;
+    }
+    .dispose-item-action:hover,
+    .dispose-item-action:focus-visible {
+      color: var(--primary-dark, #1d4ed8);
+      outline: none;
+    }
+    .dispose-tab__count {
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 639px) {
+      .dispose-list__qty {
+        width: 100%;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="max-content" id="dispose-inventory-page">
+    {% from "shared/primary_card.html" import primary_card %}
+
+    {% include 'inventory/inventory_hub_banner.html' %}
+
+    {% call primary_card(
+      title="Dispose of inventory",
+      subtitle="Record disposal of waste, overage, lost, or expired stock."
+    ) %}
+      <form id="dispose-inventory-form" class="spa-card-form" style="gap: 0;">
+        <section class="spa-form-section" aria-label="Inventory disposal">
+          <div class="dispose-intro">
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0;">
+              Enter a quantity for any item to dispose it from inventory. Quantities are disposed in the same unit as they are stored. Items with zero quantity no longer appear in stock.
+            </p>
+          </div>
+          <div class="dispose-tabs" id="dispose-type-tabs" role="tablist" aria-label="Filter inventory by type">
+            <button type="button" class="dispose-tab" data-type="raw_material" role="tab" aria-selected="true">
+              Raw materials <span class="dispose-tab__count" id="dispose-tab-count-raw">0</span>
+            </button>
+            <button type="button" class="dispose-tab" data-type="work_in_progress" role="tab" aria-selected="false">
+              Intermediate <span class="dispose-tab__count" id="dispose-tab-count-wip">0</span>
+            </button>
+            <button type="button" class="dispose-tab" data-type="final_product" role="tab" aria-selected="false">
+              Final products <span class="dispose-tab__count" id="dispose-tab-count-final">0</span>
+            </button>
+          </div>
+          <div id="dispose-inventory-cards-container" style="padding: 2px 0 0 0;">
+            <p style="padding: 16px; color: var(--text-secondary);">Loading inventory...</p>
+          </div>
+        </section>
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center;">
+          <button type="submit" id="dispose-inventory-submit" class="btn btn-primary" style="min-height: 44px;">Dispose of selected quantity of inventory items</button>
+        </div>
+      </form>
+    {% endcall %}
+  </div>
+  <script>
+    (function () {
+      if (window.__disposeInventoryPageInit) return;
+      window.__disposeInventoryPageInit = true;
+
+      var initialItemIds = {{ initial_item_ids|tojson }};
+      var cardsContainer = document.getElementById('dispose-inventory-cards-container');
+      var form = document.getElementById('dispose-inventory-form');
+      var submitBtn = document.getElementById('dispose-inventory-submit');
+      var tabsWrap = document.getElementById('dispose-type-tabs');
+      var activeType = 'raw_material';
+      var allItems = [];
+
+      function esc(s) {
+        if (s == null || s === '') return '';
+        var d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+      }
+
+      function setLoading(message) {
+        if (!cardsContainer) return;
+        cardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">' + esc(message) + '</p>';
+      }
+
+      function parseQty(v) {
+        var q = parseFloat(String(v || '').trim());
+        return isNaN(q) ? null : q;
+      }
+
+      function renderCards(items, filteredByIds) {
+        if (!cardsContainer) return;
+        if (!items.length) {
+          cardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">' + (filteredByIds ? 'No expired materials with quantity to dispose.' : 'No inventory with quantity to dispose.') + '</p>';
+          return;
+        }
+        cardsContainer.innerHTML = '';
+        var list = document.createElement('div');
+        list.className = 'dispose-list';
+        items.forEach(function (item) {
+          var qtyNum = parseFloat(item.quantity);
+          if (isNaN(qtyNum) || qtyNum <= 0) return;
+          var unit = item.unit || 'units';
+          var row = document.createElement('div');
+          row.className = 'wastage-card dispose-list__item';
+          row.dataset.inventoryId = item.id;
+          row.dataset.maxQuantity = String(item.quantity);
+          var nameLine = (item.process_name ? item.process_name + ' - ' : '') + item.name;
+          row.innerHTML =
+            '<div class="dispose-list__head">' +
+              '<span class="dispose-list__name">' + esc(nameLine) + '</span>' +
+              '<span class="dispose-list__meta">Available: ' + esc(String(item.quantity)) + ' ' + esc(unit) + '</span>' +
+            '</div>' +
+            '<div class="dispose-list__controls">' +
+              '<label class="dispose-list__label">Quantity to dispose</label>' +
+              '<input type="number" class="wastage-qty-input dispose-list__qty spa-inp" min="0" max="' + qtyNum + '" step="0.0001" placeholder="0" value="">' +
+              '<button type="button" class="dispose-item-action dispose-selected-btn">Dispose of selected quantity</button>' +
+            '</div>';
+          var qtyInput = row.querySelector('.wastage-qty-input');
+          var disposeSelectedBtn = row.querySelector('.dispose-selected-btn');
+          if (disposeSelectedBtn && qtyInput) {
+            disposeSelectedBtn.addEventListener('click', function () {
+              var val = parseQty(qtyInput.value);
+              if (val == null || val <= 0) {
+                if (typeof window.showNotification === 'function') {
+                  window.showNotification('error', 'No quantity entered', 'Enter quantity to dispose for this item first.');
+                }
+                return;
+              }
+              var max = parseQty(row.dataset.maxQuantity);
+              if (max != null && val > max) {
+                val = max;
+                qtyInput.value = String(max);
+              }
+              var params = new URLSearchParams();
+              params.set('inventory_item_id', row.dataset.inventoryId);
+              params.set('quantity_wasted', String(val));
+              window.location.href = '/core/inventory/dispose/confirm?' + params.toString();
+            });
+          }
+          if (qtyInput) {
+            qtyInput.addEventListener('input', function () {
+              var v = parseFloat(this.value);
+              var max = parseFloat(row.dataset.maxQuantity);
+              if (!isNaN(v) && !isNaN(max) && v > max) this.value = String(max);
+            });
+          }
+          list.appendChild(row);
+        });
+        cardsContainer.appendChild(list);
+      }
+
+      function itemInActiveType(item) {
+        return String(item.inventory_type || 'raw_material') === activeType;
+      }
+
+      function updateTabCounts(items) {
+        var counts = { raw_material: 0, work_in_progress: 0, final_product: 0 };
+        items.forEach(function (item) {
+          var t = String(item.inventory_type || 'raw_material');
+          if (Object.prototype.hasOwnProperty.call(counts, t)) counts[t] += 1;
+        });
+        var rawEl = document.getElementById('dispose-tab-count-raw');
+        var wipEl = document.getElementById('dispose-tab-count-wip');
+        var finalEl = document.getElementById('dispose-tab-count-final');
+        if (rawEl) rawEl.textContent = String(counts.raw_material);
+        if (wipEl) wipEl.textContent = String(counts.work_in_progress);
+        if (finalEl) finalEl.textContent = String(counts.final_product);
+      }
+
+      function syncTabActiveUi() {
+        if (!tabsWrap) return;
+        var buttons = tabsWrap.querySelectorAll('.dispose-tab');
+        buttons.forEach(function (btn) {
+          var selected = btn.getAttribute('data-type') === activeType;
+          btn.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+      }
+
+      function renderFromState() {
+        var visible = allItems.filter(itemInActiveType);
+        var hasFilter = Array.isArray(initialItemIds) && initialItemIds.length > 0;
+        renderCards(visible, hasFilter);
+      }
+
+      async function loadInventory() {
+        if (!window.CoreAPI || !window.CoreAPI.getInventory) {
+          setLoading('Inventory API is not available.');
+          return;
+        }
+        setLoading('Loading inventory...');
+        try {
+          var data = await window.CoreAPI.getInventory();
+          var items = (data.inventory_items || []).filter(function (item) {
+            var q = parseFloat(item.quantity);
+            return !isNaN(q) && q > 0;
+          });
+          var hasFilter = Array.isArray(initialItemIds) && initialItemIds.length > 0;
+          if (hasFilter) {
+            var idSet = new Set(initialItemIds.map(String));
+            items = items.filter(function (item) { return item && idSet.has(String(item.id)); });
+          }
+          allItems = items;
+          updateTabCounts(allItems);
+          syncTabActiveUi();
+          renderFromState();
+        } catch (e) {
+          console.error('Failed to load inventory for wastage', e);
+          setLoading('Failed to load inventory.');
+        }
+      }
+
+      async function submitEntries(entries, triggerBtn) {
+        if (!window.CoreAPI || !window.CoreAPI.recordWastage) return;
+        if (!entries || !entries.length) return;
+        var originalText = triggerBtn ? triggerBtn.textContent : '';
+        if (triggerBtn) {
+          triggerBtn.disabled = true;
+          triggerBtn.textContent = 'Submitting...';
+        }
+        if (submitBtn && triggerBtn !== submitBtn) submitBtn.disabled = true;
+        try {
+          var res = await window.CoreAPI.recordWastage(entries);
+          if (typeof window.showNotification === 'function') {
+            if (res && res.wastage_records && res.wastage_records.length) {
+              window.showNotification('success', 'Inventory disposed', res.wastage_records.length + ' item(s) disposed. Quantity deducted from inventory.');
+            } else {
+              window.showNotification('success', 'Inventory disposed', 'Disposal was recorded.');
+            }
+          }
+          await loadInventory();
+        } catch (e) {
+          if (typeof window.showNotification === 'function') {
+            window.showNotification('error', 'Failed to dispose of inventory', (e && e.message) || 'Could not dispose of inventory.');
+          }
+        } finally {
+          if (triggerBtn) {
+            triggerBtn.disabled = false;
+            triggerBtn.textContent = originalText;
+          }
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Dispose of selected quantity of inventory items';
+          }
+        }
+      }
+
+      async function submitWastage() {
+        if (!cardsContainer || !window.CoreAPI || !window.CoreAPI.recordWastage) return;
+        var cards = cardsContainer.querySelectorAll('.wastage-card');
+        var entries = [];
+        cards.forEach(function (card) {
+          var id = card.dataset.inventoryId;
+          var input = card.querySelector('.wastage-qty-input');
+          var val = input ? parseQty(input.value) : null;
+          if (!id || val == null || val <= 0) return;
+          var max = parseQty(card.dataset.maxQuantity);
+          if (max != null && val > max) {
+            val = max;
+            if (input) input.value = String(max);
+          }
+          entries.push({ inventory_item_id: id, quantity_wasted: val });
+        });
+        if (!entries.length) {
+          if (typeof window.showNotification === 'function') {
+            window.showNotification('error', 'No quantity entered', 'Enter quantity to dispose for at least one item.');
+          }
+          return;
+        }
+        submitEntries(entries, submitBtn);
+      }
+
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          submitWastage();
+          return false;
+        });
+      }
+
+      if (tabsWrap) {
+        tabsWrap.addEventListener('click', function (e) {
+          var btn = e.target && e.target.closest ? e.target.closest('.dispose-tab') : null;
+          if (!btn) return;
+          var t = btn.getAttribute('data-type');
+          if (!t || t === activeType) return;
+          activeType = t;
+          syncTabActiveUi();
+          renderFromState();
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadInventory);
+      } else {
+        loadInventory();
+      }
+    })();
+  </script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+{% endblock %}

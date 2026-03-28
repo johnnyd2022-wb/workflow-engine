@@ -22,7 +22,6 @@
     
     const container = document.getElementById(containerId);
     if (!container) {
-      console.error('Account info container not found:', containerId);
       return;
     }
     
@@ -32,9 +31,6 @@
     // Find or create the component in the container
     let component = container.querySelector('#account-info-component');
     if (!component) {
-      // Component HTML should already be inlined in the page
-      // If not found, this is an error state
-      console.error('Account info component not found in container:', containerId);
       initializedContainers.delete(containerId);
       return;
     }

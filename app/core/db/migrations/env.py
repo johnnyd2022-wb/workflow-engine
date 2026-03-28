@@ -2,8 +2,7 @@
 
 from logging.config import fileConfig
 from urllib.parse import quote_plus
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool, text
 from alembic import context
 
 # Import Base and models
@@ -17,6 +16,7 @@ from app.core.db.models.step import Step
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.inventory_movement import InventoryMovement
 from app.utils.config_loader import config
 
 # this is the Alembic Config object, which provides
@@ -92,6 +92,8 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            if connection.dialect.name == "postgresql":
+                connection.execute(text("SELECT set_config('app.migration_mode', '1', true)"))
             context.run_migrations()
 
 

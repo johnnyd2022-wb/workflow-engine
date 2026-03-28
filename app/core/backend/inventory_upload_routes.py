@@ -1,7 +1,7 @@
 """Routes for inventory upload: config/units, CSV validate/commit, barcode decode.
 
-Design (no float, single unit path, preserve quantity string):
-- Quantity: validated with Decimal only; sanitized original string is stored (no str(float(...))).
+Design (no float, single unit path; DB stores NUMERIC(18,4)):
+- Quantity: validated with Decimal; coerced to storage quantize on write (no str(float(...))).
 - Unit: single gate _unit_to_canonical(); no separate allowed-unit predicate.
 - Validation: _validate_row() used for both preview and commit; returns (status, message, canonical_unit, quantity_str_for_storage).
 """
@@ -21,6 +21,7 @@ from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.permissions import requires_auth
+from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.core.utils.unit_conversion import CONVERSION_FACTORS, UNIT_DISPLAY_LABELS
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ def register_routes(bp):
                     "name": existing.name,
                     "unit": existing.unit,
                     "supplier": existing.supplier or "",
-                    "quantity": existing.quantity,
+                    "quantity": quantity_to_api_str(existing.quantity),
                 },
             }
         ), 200
@@ -328,7 +329,7 @@ def register_routes(bp):
                         {
                             "id": str(item.id),
                             "name": item.name,
-                            "quantity": item.quantity,
+                            "quantity": quantity_to_api_str(item.quantity),
                             "unit": item.unit,
                             "row_index": r.get("row_index"),
                         }

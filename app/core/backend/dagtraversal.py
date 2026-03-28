@@ -37,6 +37,7 @@ from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.process import Process
+from app.core.utils.inventory_quantity import quantity_to_api_str
 
 try:
     from dateutil import parser as dateutil_parser
@@ -670,7 +671,7 @@ class DAGTracer:
         return {
             "id": str(item.id),
             "name": item.name,
-            "quantity": item.quantity,
+            "quantity": quantity_to_api_str(item.quantity),
             "unit": item.unit,
             "inventory_type": item.inventory_type,
             "supplier": item.supplier,

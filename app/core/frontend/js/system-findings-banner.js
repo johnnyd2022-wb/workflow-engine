@@ -39,13 +39,11 @@
     try {
       var api = window.CoreAPI;
       if (!api || typeof api.getSystemFindings !== 'function') {
-        console.warn('System findings banner: CoreAPI.getSystemFindings not available.');
         return;
       }
       var data = await api.getSystemFindings();
       findings = (data && Array.isArray(data.findings)) ? data.findings : [];
     } catch (e) {
-      console.warn('System findings banner: failed to load findings', e);
       return;
     }
 
@@ -447,7 +445,6 @@
   function init() {
     var banner = document.getElementById('system-findings-banner');
     if (!banner) {
-      console.warn('System findings banner element not found (ensure shared/system-findings-banner.html is included).');
       return;
     }
     bindBanner();

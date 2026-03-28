@@ -21,6 +21,7 @@ from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 
 _log = logging.getLogger(__name__)
@@ -182,7 +183,7 @@ def _untracked_item_to_dict(item: Any) -> dict[str, Any]:
     return {
         "id": str(item.id),
         "name": item.name,
-        "quantity": item.quantity,
+        "quantity": quantity_to_api_str(item.quantity),
         "unit": item.unit,
         "inventory_type": getattr(item, "inventory_type", None),
         "supplier": getattr(item, "supplier", None),
@@ -475,7 +476,7 @@ def reconcile_via_addition(
         return {
             "id": str(new_item.id),
             "name": new_item.name,
-            "quantity": new_item.quantity,
+            "quantity": quantity_to_api_str(new_item.quantity),
             "unit": new_item.unit,
             "inventory_type": new_item.inventory_type,
             "reconciled_amount": str(reconciled_amount),

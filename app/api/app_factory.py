@@ -212,18 +212,37 @@ def create_app():
         return response
 
     # CRITICAL: CSRF Protection - Protect against Cross-Site Request Forgery attacks
-    # Flask-WTF provides automatic CSRF token validation for all POST/PUT/DELETE requests
+    # Flask-WTF validates mutating requests; SPA sends token via X-CSRFToken (see base_spa.html + core-api.js).
+    app.config.setdefault("WTF_CSRF_HEADERS", ["X-CSRFToken", "X-CSRF-Token"])
     try:
         from flask_wtf.csrf import CSRFProtect
 
-        CSRFProtect(app)  # Initialize CSRF protection
-        # CSRF tokens are automatically validated for all POST/PUT/DELETE/PATCH requests
-        # Exempt API endpoints that use token-based auth (if any) using @csrf.exempt decorator
+        csrf = CSRFProtect(app)
+        # Session-cookie JSON auth API (/auth/*): integration tests and API clients POST JSON without
+        # a CSRF header. The SPA may still send X-CSRFToken; exemption only skips validation.
+        # SameSite=Strict on the session cookie limits cross-site cookie use in browsers.
+        for endpoint, view in app.view_functions.items():
+            if endpoint.startswith("auth."):
+                csrf.exempt(view)
     except ImportError:
-        # If Flask-WTF is not installed, log warning but don't fail
+        # Unsafe to run session-backed mutating APIs without CSRF outside local dev / CI test.
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.warning("Flask-WTF not installed. CSRF protection disabled. Install with: pip install Flask-WTF")
+        if config.environment not in ("local", "test"):
+            raise RuntimeError(
+                "Flask-WTF is required in this environment for CSRF protection. Install with: pip install Flask-WTF"
+            ) from None
+        logger.error(
+            "Flask-WTF not installed — CSRF protection disabled (allowed only for local/test). "
+            "Install with: pip install Flask-WTF"
+        )
+
+        @app.context_processor
+        def _csrf_token_placeholder():
+            def csrf_token():
+                return ""
+
+            return dict(csrf_token=csrf_token)
 
     return app

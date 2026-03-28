@@ -111,7 +111,9 @@ finally:
                 "password_confirm": self.test_password,
             },
         )
-        assert signup_response.status_code == 201
+        assert (
+            signup_response.status_code == 201
+        ), f"signup expected 201, got {signup_response.status_code}: {signup_response.text}"
         return signup_response.json()
 
     def _generate_two_different_tokens(self, secret: str):

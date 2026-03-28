@@ -1,0 +1,133 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Confirm inventory disposal{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Confirm inventory disposal of a selected quantity.">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  <style>
+    #dispose-inventory-page .card-header {
+      justify-content: center !important;
+    }
+    #dispose-inventory-page .card-header > div {
+      text-align: center;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="max-content" id="dispose-inventory-page">
+    {% from "shared/primary_card.html" import primary_card %}
+    {% include 'inventory/inventory_hub_banner.html' %}
+
+    {% call primary_card(
+      title="Dispose of inventory",
+      subtitle="Record disposal of waste, overage, lost, or expired stock."
+    ) %}
+      <div class="spa-card-form" style="gap: 0;">
+        <section class="spa-form-section" aria-label="Inventory disposal confirmation">
+          <div style="text-align: center; margin-bottom: 4px;">
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0;">
+              Enter a quantity for any item to dispose it from inventory. Quantities are disposed in the same unit as they are stored. Items with zero quantity no longer appear in stock.
+            </p>
+          </div>
+        </section>
+
+        <section class="spa-form-section" style="margin-top: 6px;" aria-labelledby="dispose-confirm-title">
+          <h3 id="dispose-confirm-title" class="spa-form-section-title">Confirm disposal</h3>
+          <p style="color: var(--text-secondary); margin: 0; font-size: 0.9375rem; line-height: 1.45;">
+            Review and confirm the quantity to dispose.
+          </p>
+
+        {% if error %}
+          <p style="color: var(--error, #ef4444); margin: 0; font-size: 0.9375rem; line-height: 1.45;">
+            {{ error }}
+          </p>
+        {% else %}
+          <p style="color: var(--text-secondary); margin: 0; font-size: 0.9375rem; line-height: 1.55;">
+            You are about to dispose
+            <strong style="color: var(--text-primary);">{{ quantity_wasted }}</strong>
+            {% if inventory_item_unit %}
+              <strong style="color: var(--text-primary);">{{ inventory_item_unit }}</strong>
+            {% endif %}
+            from inventory item
+            <strong style="color: var(--text-primary);">{{ inventory_item_name }}</strong>.
+          </p>
+          {% if remaining_quantity_display is not none and remaining_quantity_display != '' %}
+            <p style="color: var(--text-secondary); margin: 0; font-size: 0.875rem; line-height: 1.45;">
+              After this disposal, the remaining quantity will be
+              <strong style="color: var(--text-primary);">{{ remaining_quantity_display }}</strong>
+              {% if inventory_item_unit %}
+                <strong style="color: var(--text-primary);">{{ inventory_item_unit }}</strong>
+              {% endif %}
+              .
+            </p>
+          {% endif %}
+          <p style="color: var(--text-secondary); margin: 0; font-size: 0.875rem; line-height: 1.45;">
+            This will deduct the disposed quantity from inventory. Items with zero quantity will no longer appear in stock.
+          </p>
+        {% endif %}
+        </section>
+
+        <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-top: 14px; flex-wrap: wrap;">
+          <a href="/core/inventory/dispose" class="btn btn-secondary" style="min-height: 44px; text-decoration: none;">Cancel</a>
+          <button
+            type="button"
+            id="dispose-confirm-submit"
+            class="btn btn-primary"
+            style="min-height: 44px;"
+            {% if error %}disabled{% endif %}
+          >
+            Confirm dispose
+          </button>
+        </div>
+      </div>
+    {% endcall %}
+  </div>
+
+  <script>
+    (function () {
+      var submitBtn = document.getElementById('dispose-confirm-submit');
+      if (!submitBtn) return;
+
+      var inventoryItemId = {{ inventory_item_id|tojson }};
+      var quantityWasted = {{ quantity_wasted|tojson }};
+
+      submitBtn.addEventListener('click', async function () {
+        try {
+          var q = typeof quantityWasted === 'number' ? quantityWasted : parseFloat(String(quantityWasted));
+          if (!inventoryItemId || isNaN(q) || q <= 0) {
+            if (typeof window.showNotification === 'function') {
+              window.showNotification('error', 'Invalid disposal', 'Missing inventory item or quantity.');
+            }
+            return;
+          }
+
+          submitBtn.disabled = true;
+          var prevText = submitBtn.textContent;
+          submitBtn.textContent = 'Disposing...';
+
+          if (!window.CoreAPI || !window.CoreAPI.recordWastage) {
+            throw new Error('CoreAPI.recordWastage is not available.');
+          }
+
+          await window.CoreAPI.recordWastage([{ inventory_item_id: inventoryItemId, quantity_wasted: q }]);
+
+          window.location.href = '/core/inventory/dispose';
+          // Note: we intentionally do not attempt to keep this page state; redirect guarantees fresh reload.
+        } catch (e) {
+          if (typeof window.showNotification === 'function') {
+            window.showNotification('error', 'Failed to dispose', (e && e.message) ? e.message : 'Could not dispose of inventory.');
+          }
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Confirm dispose';
+        }
+      });
+    })();
+  </script>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+{% endblock %}
+

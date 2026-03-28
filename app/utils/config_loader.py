@@ -92,6 +92,11 @@ class Config:
         return self.getboolean("app", "debug", False)
 
     @property
+    def is_production(self) -> bool:
+        """True when running with production config (used to omit sensitive API error details)."""
+        return (self.environment or "").strip().lower() == "production"
+
+    @property
     def host(self) -> str:
         return self.get("app", "host", "localhost")
 
