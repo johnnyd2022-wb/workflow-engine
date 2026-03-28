@@ -1899,9 +1899,7 @@ def record_wastage():
             errors.append(f"Entry {idx + 1}: quantity_wasted must be positive")
             continue
         if waste_decimal > current_qty:
-            errors.append(
-                f"Entry {idx + 1}: quantity_wasted exceeds available quantity ({current_qty} on hand)"
-            )
+            errors.append(f"Entry {idx + 1}: quantity_wasted exceeds available quantity ({current_qty} on hand)")
             continue
         actual_waste = waste_decimal
         new_qty = current_qty - actual_waste
