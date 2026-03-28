@@ -217,9 +217,13 @@ def create_app():
     try:
         from flask_wtf.csrf import CSRFProtect
 
-        CSRFProtect(app)  # Initialize CSRF protection
-        # CSRF tokens are automatically validated for all POST/PUT/DELETE/PATCH requests
-        # Exempt API endpoints that use token-based auth (if any) using @csrf.exempt decorator
+        csrf = CSRFProtect(app)
+        # Session-cookie JSON auth API (/auth/*): integration tests and API clients POST JSON without
+        # a CSRF header. The SPA may still send X-CSRFToken; exemption only skips validation.
+        # SameSite=Strict on the session cookie limits cross-site cookie use in browsers.
+        for endpoint, view in app.view_functions.items():
+            if endpoint.startswith("auth."):
+                csrf.exempt(view)
     except ImportError:
         # Unsafe to run session-backed mutating APIs without CSRF outside local dev / CI test.
         import logging
