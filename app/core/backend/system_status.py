@@ -31,9 +31,7 @@ def _safe_qty_positive(raw: Any) -> bool:
 
 def compute_onboarding_complete(org_id: UUID, session: Session) -> dict[str, Any]:
     """Match core2.html journey: inventory row exists, process exists, execution exists."""
-    has_inventory = (
-        session.query(InventoryItem.id).filter(InventoryItem.org_id == org_id).limit(1).first() is not None
-    )
+    has_inventory = session.query(InventoryItem.id).filter(InventoryItem.org_id == org_id).limit(1).first() is not None
     has_process = session.query(Process.id).filter(Process.org_id == org_id).limit(1).first() is not None
     has_execution = session.query(Execution.id).filter(Execution.org_id == org_id).limit(1).first() is not None
 
