@@ -165,6 +165,17 @@
       margin-top: 18px;
       margin-bottom: 24px;
     }
+    @media (min-width: 641px) {
+      /* Keep the stats strip aligned with the main content gutter on larger screens. */
+      .core2-stats-panel {
+        max-width: min(100%, 40rem);
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: clamp(6px, 2.5vw, 18px);
+        padding-right: clamp(6px, 2.5vw, 18px);
+        box-sizing: border-box;
+      }
+    }
     #core2-hub-title {
       text-align: center;
       width: 100%;
@@ -180,46 +191,66 @@
     .core2-stats-hybrid {
       display: flex;
       align-items: stretch;
+      flex-wrap: nowrap;
       border: 1px solid var(--border-light, rgba(229, 231, 235, 1));
-      border-radius: var(--radius-xl, 16px);
+      border-radius: var(--radius-lg, 12px);
       overflow: hidden;
       background: var(--bg-card);
     }
     .core2-stats-hybrid__cell {
       flex: 1 1 0;
-      padding: 18px 16px;
+      padding: 12px min(10px, 2vw);
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      justify-content: center;
+      gap: 4px;
       min-width: 0;
+      text-align: center;
     }
     .core2-stats-hybrid__cell + .core2-stats-hybrid__cell {
       border-left: 1px solid var(--border-light, rgba(229, 231, 235, 1));
     }
     .core2-stats-hybrid__label {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-secondary, #6b7280);
       font-weight: 500;
       line-height: 1.2;
+      hyphens: auto;
+      overflow-wrap: break-word;
     }
     .core2-stats-hybrid__value {
-      font-size: 28px;
+      font-size: clamp(1.125rem, 2.1vw + 0.65rem, 1.5rem);
       font-weight: 700;
       color: var(--text-primary, #111827);
-      letter-spacing: -0.03em;
-      line-height: 1.05;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
       word-break: break-word;
+    }
+    @media (min-width: 900px) {
+      .core2-stats-hybrid__cell {
+        padding: 14px min(14px, 1.25vw);
+      }
+      .core2-stats-hybrid__label {
+        font-size: 12px;
+      }
     }
     @media (max-width: 640px) {
       .core2-stats-hybrid {
-        flex-wrap: wrap;
+        border-radius: var(--radius-md, 10px);
       }
       .core2-stats-hybrid__cell {
-        flex: 1 1 50%;
+        flex: 1 1 0;
+        padding: 9px 5px;
+        gap: 3px;
       }
-      .core2-stats-hybrid__cell + .core2-stats-hybrid__cell {
-        border-left: none;
-        border-top: 1px solid var(--border-light, rgba(229, 231, 235, 1));
+      .core2-stats-hybrid__label {
+        font-size: 9px;
+        letter-spacing: 0.01em;
+        line-height: 1.15;
+      }
+      .core2-stats-hybrid__value {
+        font-size: clamp(1rem, 4.2vw, 1.2rem);
       }
     }
 
@@ -629,11 +660,11 @@
                 <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
               </div>
               <div class="core2-stats-hybrid__cell">
-                <div class="core2-stats-hybrid__label">Active Executions</div>
+                <div class="core2-stats-hybrid__label">Active Batches</div>
                 <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
               </div>
               <div class="core2-stats-hybrid__cell">
-                <div class="core2-stats-hybrid__label">Completed</div>
+                <div class="core2-stats-hybrid__label">Completed Batches</div>
                 <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
               </div>
               <div class="core2-stats-hybrid__cell">
@@ -973,13 +1004,13 @@
       } else if (stage === 2) {
         primary = { label: 'Create product workflow', href: '/core/flows/create', icon: 'workflow' };
       } else if (stage === 3) {
-        primary = { label: 'Record execution', href: '/core/processes', icon: 'execution' };
+        primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
       } else {
         primary = { label: 'Trace product flow', href: '/core/sourcemap', icon: 'trace' };
       }
 
       var addInv = { kind: 'addInventory' };
-      var recordExec = { label: 'Record execution', href: '/core/processes' };
+      var recordExec = { label: 'Record production step', href: '/core/processes' };
       var secondaries = [];
       if (stage === 2) {
         secondaries.push(addInv, recordExec);
