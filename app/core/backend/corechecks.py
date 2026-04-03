@@ -241,8 +241,11 @@ def register_routes(bp):
 
         Single endpoint for the system-findings banner so the UI always reflects current checks.
         """
+        from app.core.backend.system_status import build_system_status_payload
+
         org_id = UUID(g.org_id)
-        runner = CoreChecksRunner(org_id=org_id, session=db_session())
+        session = db_session()
+        runner = CoreChecksRunner(org_id=org_id, session=session)
         results = runner.run_all_checks()
         findings = []
         for r in results:
@@ -252,4 +255,5 @@ def register_routes(bp):
             if r.data is not None:
                 finding["data"] = r.data
             findings.append(finding)
-        return jsonify({"findings": findings}), 200
+        system_status = build_system_status_payload(org_id, session, results)
+        return jsonify({"findings": findings, "system_status": system_status}), 200
