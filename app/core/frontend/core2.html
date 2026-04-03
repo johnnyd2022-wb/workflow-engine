@@ -1,9 +1,10 @@
 {% extends "shared/base_spa.html" %}
 
-{% block title %}Core - Process Hub{% endblock %}
+{% block title %}Core{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Modern Process Hub for managing manufacturing workflows and executions">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <style>
     .btn-icon-small {
       padding: 6px;
@@ -83,27 +84,6 @@
     .dopamine-line p { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); line-height: 1.5; }
     @media (min-width: 600px) { .dopamine-line { padding: 16px 0; } .dopamine-line p { font-size: 0.95rem; } }
     @media (min-width: 1024px) { .dopamine-line { padding: 18px 0; } .dopamine-line p { font-size: 1rem; } }
-    .inventory-entry-hub-btn:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.05)); }
-    .csv-preview-table thead th { position: sticky; top: 0; background: var(--bg-card); z-index: 10; box-shadow: 0 1px 0 var(--border-default); }
-    .csv-preview-wrap { max-height: 280px; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    .csv-preview-table { table-layout: fixed; width: 100%; }
-    .csv-preview-table th:nth-child(1), .csv-preview-table td:nth-child(1) { width: 12%; }
-    .csv-preview-table th:nth-child(2), .csv-preview-table td:nth-child(2) { width: 28%; }
-    .csv-preview-table th:nth-child(3), .csv-preview-table td:nth-child(3) { width: 14%; }
-    .csv-preview-table th:nth-child(4), .csv-preview-table td:nth-child(4) { width: 18%; }
-    .csv-preview-table th:nth-child(5), .csv-preview-table td:nth-child(5) { width: 28%; }
-    .csv-preview-table td { overflow: hidden; }
-    .csv-preview-table .csv-preview-input,
-    .csv-preview-table .csv-preview-select { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); }
-    .csv-upload-modal-card { width: calc(100vw - 24px); max-width: 96vw; }
-    @media (min-width: 600px) {
-      .csv-preview-wrap { max-height: 320px; }
-      .csv-upload-modal-card { width: 92%; max-width: 720px; }
-    }
-    @media (min-width: 1024px) {
-      .csv-preview-wrap { max-height: 400px; }
-      .csv-upload-modal-card { width: 90%; max-width: 880px; }
-    }
     .core2-hub-card {
       display: block;
       border: none;
@@ -172,6 +152,451 @@
       text-transform: none;
       letter-spacing: 0.02em;
     }
+    /* Segmented “loading” bar + labels; compact circle primary + text links */
+    .core2-journey-section {
+      margin-top: -0.35rem;
+      margin-bottom: 0.75rem;
+      padding-left: max(0px, env(safe-area-inset-left));
+      padding-right: max(0px, env(safe-area-inset-right));
+    }
+
+    /* Core Overview segmented stats panel (Stripe/Linear/Datadog-style). */
+    .core2-stats-panel {
+      margin-top: 18px;
+      margin-bottom: 24px;
+    }
+    @media (min-width: 641px) {
+      /* Keep the stats strip aligned with the main content gutter on larger screens. */
+      .core2-stats-panel {
+        max-width: min(100%, 40rem);
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: clamp(6px, 2.5vw, 18px);
+        padding-right: clamp(6px, 2.5vw, 18px);
+        box-sizing: border-box;
+      }
+    }
+    #core2-hub-title {
+      text-align: center;
+      width: 100%;
+      margin: 0.5rem 0 0.75rem 0;
+    }
+    .core2-stats-panel__title {
+      font-size: 13px;
+      color: var(--text-secondary, #6b7280);
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      margin: 0 0 12px 0;
+    }
+    .core2-stats-hybrid {
+      display: flex;
+      align-items: stretch;
+      flex-wrap: nowrap;
+      border: 1px solid var(--border-light, rgba(229, 231, 235, 1));
+      border-radius: var(--radius-lg, 12px);
+      overflow: hidden;
+      background: var(--bg-card);
+    }
+    .core2-stats-hybrid__cell {
+      flex: 1 1 0;
+      padding: 12px min(10px, 2vw);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      min-width: 0;
+      text-align: center;
+    }
+    .core2-stats-hybrid__cell + .core2-stats-hybrid__cell {
+      border-left: 1px solid var(--border-light, rgba(229, 231, 235, 1));
+    }
+    .core2-stats-hybrid__label {
+      font-size: 11px;
+      color: var(--text-secondary, #6b7280);
+      font-weight: 500;
+      line-height: 1.2;
+      hyphens: auto;
+      overflow-wrap: break-word;
+    }
+    .core2-stats-hybrid__value {
+      font-size: clamp(1.125rem, 2.1vw + 0.65rem, 1.5rem);
+      font-weight: 700;
+      color: var(--text-primary, #111827);
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+      word-break: break-word;
+    }
+    @media (min-width: 900px) {
+      .core2-stats-hybrid__cell {
+        padding: 14px min(14px, 1.25vw);
+      }
+      .core2-stats-hybrid__label {
+        font-size: 12px;
+      }
+    }
+    @media (max-width: 640px) {
+      .core2-stats-hybrid {
+        border-radius: var(--radius-md, 10px);
+      }
+      .core2-stats-hybrid__cell {
+        flex: 1 1 0;
+        padding: 9px 5px;
+        gap: 3px;
+      }
+      .core2-stats-hybrid__label {
+        font-size: 9px;
+        letter-spacing: 0.01em;
+        line-height: 1.15;
+      }
+      .core2-stats-hybrid__value {
+        font-size: clamp(1rem, 4.2vw, 1.2rem);
+      }
+    }
+
+    .core2-journey {
+      width: 100%;
+      max-width: min(100%, 40rem);
+      margin: 0 auto;
+      padding: 0 clamp(6px, 2.5vw, 12px);
+    }
+    .core2-journey-bar {
+      display: flex;
+      gap: 4px;
+      width: 100%;
+      margin: 0 0 0.5rem;
+    }
+    .core2-journey-bar__segment {
+      flex: 1 1 0;
+      min-width: 0;
+      height: 5px;
+      border-radius: 9999px;
+      background: rgba(0, 0, 0, 0.08);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+      transition: background 0.35s ease, box-shadow 0.35s ease;
+      position: relative;
+      overflow: visible;
+    }
+    .core2-journey-bar__segment--complete {
+      background: linear-gradient(145deg, #F6D04C 0%, #F1C40F 50%, #D49A00 100%);
+      box-shadow:
+        0 1px 3px rgba(212, 154, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+
+    /* System-active (all steps complete): fully green segmented bar */
+    .core2-journey--all-complete {
+      background: rgba(16, 185, 129, 0.05);
+      border: none;
+      border-radius: var(--radius-xl, 16px);
+      padding: 0;
+      box-sizing: border-box;
+    }
+    .core2-journey-system-active-title {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 800;
+      color: rgba(6, 95, 70, 1);
+      margin: 0 0 0.65rem;
+      letter-spacing: 0.01em;
+      user-select: none;
+    }
+    .core2-journey-system-active-details {
+      margin-top: 0.35rem;
+      /* Match the same horizontal padding + max width as .core2-journey
+         so the 4 headings line up under the 4 bar segments. */
+      width: 100%;
+      max-width: min(100%, 40rem);
+      margin-left: auto;
+      margin-right: auto;
+      padding: 0 clamp(6px, 2.5vw, 12px);
+    }
+    .core2-journey-system-active-details summary {
+      cursor: pointer;
+      list-style: none;
+      display: block;
+      text-align: center;
+      font-size: inherit;
+      font-weight: inherit;
+      color: inherit;
+      padding: 0;
+      user-select: none;
+    }
+    .core2-journey-system-active-details summary::-webkit-details-marker {
+      display: none;
+    }
+    .core2-journey-system-active-details__list {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      /* Mirror .core2-journey-bar { gap: 4px } */
+      column-gap: 4px;
+      row-gap: 8px;
+      padding-top: 0.35rem;
+      align-items: start;
+      width: 100%;
+    }
+    .core2-journey-system-active-details__item {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary, #6b7280);
+      text-align: center;
+    }
+    .core2-journey-system-active-details__check {
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.16);
+      color: rgba(16, 185, 129, 1);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .core2-journey-bar--all-complete .core2-journey-bar__segment--complete {
+      background: linear-gradient(145deg, #10B981 0%, #059669 55%, #047857 100%);
+      box-shadow:
+        0 1px 3px rgba(16, 185, 129, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+
+    @media (max-width: 640px) {
+      .core2-journey-system-active-details__list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 4px;
+      }
+    }
+
+    @keyframes core2-traceability-green-glow {
+      0%, 100% {
+        opacity: 0.18;
+      }
+      50% {
+        opacity: 0.36;
+      }
+    }
+
+    /* When traceability is unlocked: keep the bar fill as-is (yellow/gray),
+       but add a clearer green glow layer around each 5px segment. */
+    .core2-journey-bar--trace-unlocked .core2-journey-bar__segment::after {
+      content: '';
+      position: absolute;
+      left: -3px;
+      right: -3px;
+      top: -10px;
+      bottom: -10px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.78);
+      filter: blur(10px);
+      opacity: 0.32;
+      pointer-events: none;
+      z-index: -1;
+      animation: none;
+    }
+    .core2-journey-labels {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.35rem 0.25rem;
+      margin: 0 0 0.75rem;
+      align-items: start;
+    }
+    .core2-journey-labels__text {
+      display: block;
+      font-size: clamp(0.5625rem, 1.85vw, 0.6875rem);
+      line-height: 1.25;
+      text-align: center;
+      color: var(--text-tertiary, #9ca3af);
+      font-weight: 500;
+      transition: color 0.25s ease, font-weight 0.25s ease;
+      hyphens: none;
+      word-break: break-word;
+    }
+    .core2-journey-labels__item--complete .core2-journey-labels__text {
+      color: var(--primary, #2563eb);
+      font-weight: 700;
+    }
+    .core2-journey-primary-bundle {
+      position: relative;
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 auto 0.5rem;
+      align-self: center;
+    }
+    .core2-journey-primary-bundle .core2-journey-primary.core2-journey-addinv-trigger {
+      margin-bottom: 0;
+    }
+    .core2-journey-primary {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 auto 0.5rem;
+      padding: 0.25rem 0 0;
+      border: none;
+      border-radius: 12px;
+      box-sizing: border-box;
+      text-decoration: none;
+      cursor: pointer;
+      font: inherit;
+      color: inherit;
+      background: transparent;
+      box-shadow: none;
+      transition: transform 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .core2-journey-primary:hover {
+      transform: translateY(-1px);
+    }
+    .core2-journey-primary:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 4px;
+      border-radius: 12px;
+    }
+    .core2-journey-primary__circle {
+      width: 3.25rem;
+      height: 3.25rem;
+      min-width: 3.25rem;
+      min-height: 3.25rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--primary, #2563eb);
+      background: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%);
+      box-shadow:
+        0 4px 14px rgba(0, 0, 0, 0.1),
+        0 0 0 1px rgba(255, 225, 120, 0.22);
+      transition: box-shadow 0.15s ease, background 0.15s ease;
+    }
+    .core2-journey-primary:hover .core2-journey-primary__circle {
+      background: linear-gradient(145deg, #FFE680 0%, #F1C40F 45%, #C47F00 100%);
+      box-shadow:
+        0 6px 18px rgba(0, 0, 0, 0.12),
+        0 0 0 1px rgba(255, 225, 120, 0.3);
+    }
+    .core2-journey-primary__circle svg {
+      width: 1.35rem;
+      height: 1.35rem;
+      display: block;
+    }
+    .core2-journey-primary__label {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      line-height: 1.3;
+      text-align: center;
+      color: var(--primary, #2563eb);
+      max-width: 16rem;
+      padding: 0 0.25rem;
+    }
+    .core2-journey-secondary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      line-height: 1.45;
+    }
+    .core2-journey-secondary__link {
+      color: var(--primary, #3b82f6);
+      font-weight: 400;
+      text-decoration: none;
+      padding: 0.3rem 0.45rem;
+      border-radius: 6px;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .core2-journey-secondary__link:hover {
+      text-decoration: none;
+      color: var(--primary, #2563eb);
+      background: rgba(59, 130, 246, 0.1);
+    }
+    .core2-journey-secondary__link:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 2px;
+    }
+    .core2-journey-secondary__invwrap {
+      position: relative;
+      display: inline-block;
+      vertical-align: middle;
+      width: fit-content;
+      max-width: 100%;
+    }
+    .core2-journey-addinv-trigger {
+      color: var(--primary, #3b82f6);
+      font-weight: 500;
+      font-size: inherit;
+      line-height: inherit;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 0.3rem 0.45rem;
+      border-radius: 6px;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .core2-journey-addinv-trigger:hover {
+      color: var(--primary, #2563eb);
+      background: rgba(59, 130, 246, 0.1);
+    }
+    .core2-journey-addinv-trigger:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 2px;
+    }
+    .core2-journey-addinv-menu {
+      position: absolute;
+      z-index: 1001;
+      left: 0;
+      top: calc(100% + 6px);
+      width: 100%;
+      min-width: 0;
+      padding: 0.35rem;
+      margin: 0;
+      list-style: none;
+      background: var(--bg-card, #fff);
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: var(--radius-lg, 12px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+      box-sizing: border-box;
+    }
+    .core2-journey-addinv-menu[hidden] {
+      display: none !important;
+    }
+    .core2-journey-addinv-menu__opt {
+      display: block;
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      margin: 0;
+      border-radius: var(--radius-md, 8px);
+      background: transparent;
+      color: var(--text-primary, #111827);
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-align: left;
+      text-decoration: none;
+      box-sizing: border-box;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .core2-journey-addinv-menu__opt:hover {
+      background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+    }
+    .core2-journey-addinv-menu__opt:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 0;
+    }
+    .core2-journey-secondary__sep {
+      color: var(--text-tertiary, #d1d5db);
+      user-select: none;
+      font-size: 0.65rem;
+    }
   </style>
 {% endblock %}
 
@@ -179,74 +604,74 @@
         {# System findings moved to /core/notifications #}
 
         <div class="max-content">
-          <section class="spa-form-section" aria-labelledby="core2-hub-title">
-            <h1 id="core2-hub-title" class="page-title">Process Hub</h1>
+          <section class="spa-form-section core2-journey-section" aria-label="Traceability bar">
+            <div id="core2-journey-bar"></div>
           </section>
 
-          <section class="spa-form-section" aria-label="Key metrics">
-          <div class="metrics-grid">
-            <div class="card metric-card">
-              <div class="metric-card-content">
-                <div>
-                  <p class="metric-label">Total Processes</p>
-                  <p class="metric-value" id="metric-total-processes">0</p>
-                </div>
-                <div class="metric-icon-wrapper blue">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-                    <polyline points="2 17 12 22 22 17"/>
-                    <polyline points="2 12 12 17 22 12"/>
-                  </svg>
-                </div>
+          <section class="spa-form-section" aria-labelledby="core2-hub-title">
+            <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
+              <div class="inventory-spa-header__banner" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
+                  <defs>
+                    <linearGradient id="core-line" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stop-color="#10B981"/>
+                      <stop offset="100%" stop-color="#22D3EE"/>
+                    </linearGradient>
+                    <linearGradient id="core-node-a" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#34D399"/>
+                      <stop offset="100%" stop-color="#059669"/>
+                    </linearGradient>
+                    <linearGradient id="core-node-b" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#22D3EE"/>
+                      <stop offset="100%" stop-color="#0EA5E9"/>
+                    </linearGradient>
+                    <linearGradient id="core-node-c" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#A7F3D0"/>
+                      <stop offset="100%" stop-color="#34D399"/>
+                    </linearGradient>
+                    <filter id="core-soft" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.12"/>
+                    </filter>
+                  </defs>
+                  <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
+                  <path d="M28 52 C 55 38, 75 38, 100 48 C 125 58, 145 38, 172 52" stroke="url(#core-line)" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.85"/>
+                  <g filter="url(#core-soft)">
+                    <circle cx="28" cy="52" r="14" fill="url(#core-node-a)"/>
+                    <circle cx="100" cy="48" r="16" fill="url(#core-node-b)"/>
+                    <circle cx="172" cy="52" r="14" fill="url(#core-node-c)"/>
+                  </g>
+                  <circle cx="28" cy="52" r="4" fill="#fff" opacity="0.9"/>
+                  <circle cx="100" cy="48" r="5" fill="#fff" opacity="0.9"/>
+                  <circle cx="172" cy="52" r="4" fill="#fff" opacity="0.9"/>
+                </svg>
               </div>
             </div>
-            
-            <div class="card metric-card">
-              <div class="metric-card-content">
-                <div>
-                  <p class="metric-label">Active Executions</p>
-                  <p class="metric-value" id="metric-active-executions">0</p>
-                  <p class="metric-subtext">In-flight</p>
-                </div>
-                <div class="metric-icon-wrapper amber">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                  </svg>
-                </div>
+            <h1 id="core2-hub-title" class="page-title">Core</h1>
+          </section>
+
+          <section class="spa-form-section core2-journey-section" aria-label="Traceability actions">
+            <div id="core2-journey-actions"></div>
+          </section>
+
+          <section class="spa-form-section core2-stats-panel" aria-label="Core overview stats">
+            <div class="core2-stats-hybrid" role="group" aria-label="Core metrics segmented">
+              <div class="core2-stats-hybrid__cell">
+                <div class="core2-stats-hybrid__label">Total Processes</div>
+                <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
+              </div>
+              <div class="core2-stats-hybrid__cell">
+                <div class="core2-stats-hybrid__label">Active Batches</div>
+                <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
+              </div>
+              <div class="core2-stats-hybrid__cell">
+                <div class="core2-stats-hybrid__label">Completed Batches</div>
+                <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
+              </div>
+              <div class="core2-stats-hybrid__cell">
+                <div class="core2-stats-hybrid__label">Inventory Items</div>
+                <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
               </div>
             </div>
-            
-            <div class="card metric-card">
-              <div class="metric-card-content">
-                <div>
-                  <p class="metric-label">Completed</p>
-                  <p class="metric-value" id="metric-completed">0</p>
-                  <p class="metric-subtext">All time</p>
-                </div>
-                <div class="metric-icon-wrapper green">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                  </svg>
-                </div>
-              </div>
-            </div>
-            
-            <div class="card metric-card">
-              <div class="metric-card-content">
-                <div>
-                  <p class="metric-label">Inventory Items</p>
-                  <p class="metric-value" id="metric-inventory">0</p>
-                  <p class="metric-subtext">Tracked</p>
-                </div>
-                <div class="metric-icon-wrapper blue">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
-                  </svg>
-                </div>
-            </div>
-          </div>
-          </div>
           </section>
 
           <!-- Traceability (sourcemap) -->
@@ -326,9 +751,9 @@
             -->
           </section>
 
-          <!-- Processes Section -->
-          <section class="spa-form-section" style="margin-top: 32px;" aria-labelledby="core2-section-processes">
-            <h2 id="core2-section-processes" class="spa-form-section-title">Processes</h2>
+          <!-- Product workflows Section -->
+          <section class="spa-form-section" style="margin-top: 32px;" aria-labelledby="core2-section-product-workflows">
+            <h2 id="core2-section-product-workflows" class="spa-form-section-title">PRODUCT WORKFLOWS</h2>
             <div class="core2-hub-card-stack">
               <a href="/core/flows/create" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-proc-create-title">
                 <span class="core2-hub-card__icon" aria-hidden="true">
@@ -343,7 +768,7 @@
                   </svg>
                 </span>
                 <span class="core2-hub-card__text">
-                  <h3 id="core2-proc-create-title" class="spa-form-section-title">Create new product</h3>
+                  <h3 id="core2-proc-create-title" class="spa-form-section-title">Create product workflow</h3>
                   <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Define process steps, inputs, outputs and custom data to record.</p>
                 </span>
               </a>
@@ -357,7 +782,7 @@
                   </svg>
                 </span>
                 <span class="core2-hub-card__text">
-                  <h3 id="core2-proc-view-title" class="spa-form-section-title">View products</h3>
+                  <h3 id="core2-proc-view-title" class="spa-form-section-title">View workflows</h3>
                   <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Open a product to run executions, edit steps, and manage inventory.</p>
                 </span>
               </a>
@@ -545,10 +970,250 @@
       if (finEl) finEl.textContent = String(counts.final);
     }
 
+    /** SVG icons for journey CTAs (24 viewBox; drawn at 26px inside 64px circle) */
+    var CORE2_JOURNEY_ICONS = {
+      inventory: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+      workflow: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="6" height="6" rx="1"/><rect x="9" y="8" width="6" height="6" rx="1"/><path d="M8 11h1"/><path d="M15 11h1"/><circle cx="19" cy="11" r="3"/><path d="M19 9.5v3"/><path d="M17.5 11h3"/></svg>',
+      execution: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+      trace: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-8 4z"/><path d="M8 2v16"/><path d="M16 6v16"/></svg>'
+    };
+
+    /**
+     * Segmented progress bar + milestone labels; one primary (circle + label) + text links.
+     */
+    function updateCore2JourneyCtasFromData(inventoryItems, processes, executions) {
+      const barWrap = document.getElementById('core2-journey-bar');
+      const actionsWrap = document.getElementById('core2-journey-actions');
+      if (!barWrap && !actionsWrap) return;
+      const items = inventoryItems || [];
+      const procs = processes || [];
+      const execs = (executions || []).filter(function (e) { return e && e.id; });
+      const hasInventory = items.length > 0;
+      const hasProcess = procs.length > 0;
+      const hasExecution = execs.length > 0;
+
+      var stage;
+      if (!hasInventory) stage = 1;
+      else if (!hasProcess) stage = 2;
+      else if (!hasExecution) stage = 3;
+      else stage = 4;
+
+      var primary;
+      if (stage === 1) {
+        primary = { label: 'Add to inventory', href: '/core/inventory/add/manual', icon: 'inventory', addInventoryDropdown: true };
+      } else if (stage === 2) {
+        primary = { label: 'Create product workflow', href: '/core/flows/create', icon: 'workflow' };
+      } else if (stage === 3) {
+        primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
+      } else {
+        primary = { label: 'Trace product flow', href: '/core/sourcemap', icon: 'trace' };
+      }
+
+      var addInv = { kind: 'addInventory' };
+      var recordExec = { label: 'Record production step', href: '/core/processes' };
+      var secondaries = [];
+      if (stage === 2) {
+        secondaries.push(addInv, recordExec);
+      } else if (stage === 3) {
+        secondaries.push(addInv, recordExec, { label: 'Create product workflow', href: '/core/flows/create' });
+      } else if (stage === 4) {
+        secondaries.push(addInv, recordExec);
+      }
+
+      var milestones = [
+        { complete: hasInventory, label: hasInventory ? 'Inventory populated' : 'Populate inventory', aria: hasInventory ? 'Inventory populated' : 'Populate inventory to unlock next step' },
+        { complete: hasProcess, label: hasProcess ? 'Product workflow created' : 'Create product workflow', aria: hasProcess ? 'Product workflow created' : 'Create product workflow to unlock execution recording' },
+        { complete: hasExecution, label: hasExecution ? 'Executions recorded' : 'Record product workflow', aria: hasExecution ? 'Executions recorded' : 'Record product workflow to unlock traceability' },
+        { complete: hasExecution, label: 'Traceability unlocked', aria: 'System traceability unlocked' }
+      ];
+
+      var filledCount = 0;
+      milestones.forEach(function (m) { if (m.complete) filledCount++; });
+      const allComplete = filledCount === 4;
+
+      if (barWrap) barWrap.innerHTML = '';
+      if (actionsWrap) actionsWrap.innerHTML = '';
+
+      const barRoot = document.createElement('div');
+      barRoot.className = 'core2-journey';
+      barRoot.setAttribute('role', 'navigation');
+      barRoot.setAttribute('aria-label', 'Traceability setup');
+      let barFinalEl = barRoot;
+      if (allComplete) barRoot.classList.add('core2-journey--all-complete');
+
+      const actionsRoot = document.createElement('div');
+      actionsRoot.className = 'core2-journey';
+      actionsRoot.setAttribute('role', 'navigation');
+      actionsRoot.setAttribute('aria-label', 'Traceability actions');
+
+      const bar = document.createElement('div');
+      bar.className = 'core2-journey-bar';
+      bar.setAttribute('role', 'progressbar');
+      bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', '4');
+      bar.setAttribute('aria-valuenow', String(filledCount));
+      bar.setAttribute('aria-label', 'Traceability milestones: ' + filledCount + ' of 4 complete');
+
+      if (allComplete) {
+        bar.classList.add('core2-journey-bar--all-complete');
+        const title = document.createElement('div');
+        title.className = 'core2-journey-system-active-title';
+        title.textContent = 'System active';
+        barRoot.appendChild(title);
+      }
+
+      // When not fully complete: add a green glow once execution recording is unlocked.
+      if (hasExecution && !allComplete) {
+        bar.classList.add('core2-journey-bar--trace-unlocked');
+      }
+      milestones.forEach(function (m) {
+        const seg = document.createElement('div');
+        seg.className = 'core2-journey-bar__segment' + (m.complete ? ' core2-journey-bar__segment--complete' : '');
+        seg.setAttribute('aria-hidden', 'true');
+        bar.appendChild(seg);
+      });
+      barRoot.appendChild(bar);
+
+      if (!allComplete) {
+        const labelsRow = document.createElement('div');
+        labelsRow.className = 'core2-journey-labels';
+        milestones.forEach(function (m) {
+          const cell = document.createElement('div');
+          cell.className = 'core2-journey-labels__item' + (m.complete ? ' core2-journey-labels__item--complete' : '');
+          const span = document.createElement('span');
+          span.className = 'core2-journey-labels__text';
+          span.textContent = m.label;
+          span.setAttribute('title', m.aria);
+          cell.appendChild(span);
+          labelsRow.appendChild(cell);
+        });
+        barRoot.appendChild(labelsRow);
+      } else {
+        const details = document.createElement('details');
+        details.className = 'core2-journey-system-active-details';
+
+        // Make the entire green bar area the click target (no visible wording).
+        const summary = document.createElement('summary');
+        summary.setAttribute('aria-label', 'System active milestones');
+        summary.textContent = '';
+        summary.appendChild(barRoot);
+        details.appendChild(summary);
+
+        const list = document.createElement('div');
+        list.className = 'core2-journey-system-active-details__list';
+
+        milestones.forEach(function (m) {
+          const item = document.createElement('div');
+          item.className = 'core2-journey-system-active-details__item';
+
+          const check = document.createElement('span');
+          check.className = 'core2-journey-system-active-details__check';
+          check.textContent = '✓';
+          item.appendChild(check);
+
+          const text = document.createElement('span');
+          text.textContent = m.label;
+          item.appendChild(text);
+
+          list.appendChild(item);
+        });
+
+        details.appendChild(list);
+        barFinalEl = details;
+      }
+
+      if (primary.addInventoryDropdown) {
+        const bundle = document.createElement('div');
+        bundle.className = 'core2-journey-primary-bundle';
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'core2-journey-primary core2-journey-addinv-trigger';
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-label', 'Add to inventory, choose how');
+        const circle = document.createElement('span');
+        circle.className = 'core2-journey-primary__circle';
+        circle.setAttribute('aria-hidden', 'true');
+        circle.innerHTML = CORE2_JOURNEY_ICONS[primary.icon] || CORE2_JOURNEY_ICONS.inventory;
+        const lbl = document.createElement('span');
+        lbl.className = 'core2-journey-primary__label';
+        lbl.textContent = primary.label;
+        trigger.appendChild(circle);
+        trigger.appendChild(lbl);
+        const menu = buildCore2AddInventoryMenuEl();
+        bundle.appendChild(trigger);
+        bundle.appendChild(menu);
+        actionsRoot.appendChild(bundle);
+        bindCore2JourneyAddInventoryDropdown(bundle);
+      } else {
+        const primaryA = document.createElement('a');
+        primaryA.className = 'core2-journey-primary';
+        primaryA.href = primary.href;
+        primaryA.setAttribute('hx-boost', 'false');
+        const circle = document.createElement('span');
+        circle.className = 'core2-journey-primary__circle';
+        circle.setAttribute('aria-hidden', 'true');
+        circle.innerHTML = CORE2_JOURNEY_ICONS[primary.icon] || CORE2_JOURNEY_ICONS.inventory;
+        const lbl = document.createElement('span');
+        lbl.className = 'core2-journey-primary__label';
+        lbl.textContent = primary.label;
+        primaryA.appendChild(circle);
+        primaryA.appendChild(lbl);
+        actionsRoot.appendChild(primaryA);
+      }
+
+      if (secondaries.length > 0) {
+        const sec = document.createElement('div');
+        sec.className = 'core2-journey-secondary';
+        secondaries.forEach(function (item, idx) {
+          if (idx > 0) {
+            const sep = document.createElement('span');
+            sep.className = 'core2-journey-secondary__sep';
+            sep.textContent = '·';
+            sep.setAttribute('aria-hidden', 'true');
+            sec.appendChild(sep);
+          }
+          if (item.kind === 'addInventory') {
+            const invWrap = document.createElement('div');
+            invWrap.className = 'core2-journey-secondary__invwrap';
+            const trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'core2-journey-addinv-trigger';
+            trigger.textContent = 'Add to inventory';
+            trigger.setAttribute('aria-expanded', 'false');
+            trigger.setAttribute('aria-haspopup', 'true');
+            trigger.setAttribute('aria-label', 'Add to inventory, choose how');
+            const menu = buildCore2AddInventoryMenuEl();
+            invWrap.appendChild(trigger);
+            invWrap.appendChild(menu);
+            sec.appendChild(invWrap);
+            bindCore2JourneyAddInventoryDropdown(invWrap);
+          } else {
+            const a = document.createElement('a');
+            a.href = item.href;
+            a.setAttribute('hx-boost', 'false');
+            a.className = 'core2-journey-secondary__link';
+            a.textContent = item.label;
+            sec.appendChild(a);
+          }
+        });
+        actionsRoot.appendChild(sec);
+      }
+
+      if (barWrap) barWrap.appendChild(barFinalEl);
+      if (actionsWrap) actionsWrap.appendChild(actionsRoot);
+    }
+
     async function loadInventoryV2() {
       try {
         const inventoryData = await CoreAPI.getInventory();
-        renderInventoryV2(inventoryData.inventory_items || []);
+        const items = inventoryData.inventory_items || [];
+        renderInventoryV2(items);
+        const [processesData, executionsData] = await Promise.all([
+          CoreAPI.getProcesses(),
+          CoreAPI.getExecutions(),
+        ]);
+        updateCore2JourneyCtasFromData(items, processesData.processes || [], executionsData.executions || []);
       } catch (error) {
         console.error('Failed to load inventory:', error);
       }
@@ -1139,16 +1804,21 @@
     // Load dashboard data on full page load and after HTMX swaps #page-content back to Process Hub (see base_spa.html)
     async function loadCoreHubDashboardData() {
       try {
-        const metrics = await CoreAPI.getMetrics();
+        const [metrics, processesData, inventoryData, executionsData] = await Promise.all([
+          CoreAPI.getMetrics(),
+          CoreAPI.getProcesses(),
+          CoreAPI.getInventory(),
+          CoreAPI.getExecutions(),
+        ]);
         updateMetricsV2(metrics);
-        await CoreAPI.getProcesses();
-        await loadInventoryV2();
+        const items = inventoryData.inventory_items || [];
+        renderInventoryV2(items);
+        updateCore2JourneyCtasFromData(items, processesData.processes || [], executionsData.executions || []);
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       }
       if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
       setupModalHandlers();
-      setupInventoryEntryHub();
     }
     window.loadCoreHubDashboardData = loadCoreHubDashboardData;
 
@@ -1244,845 +1914,86 @@
       return barcodeCameraCheckPromise;
     }
 
-    function setupInventoryEntryHub() {
-      const hubModal = document.getElementById('inventory-entry-hub-modal');
-      const addInventoryModal = document.getElementById('add-inventory-modal');
-      if (!hubModal) return;
+    /** SPA routes for add inventory (manual / CSV / barcode); barcode row toggled by camera availability. */
+    function buildCore2AddInventoryMenuEl() {
+      var menu = document.createElement('div');
+      menu.className = 'core2-journey-addinv-menu';
+      menu.hidden = true;
+      menu.setAttribute('role', 'menu');
+      var aMan = document.createElement('a');
+      aMan.href = '/core/inventory/add/manual';
+      aMan.setAttribute('hx-boost', 'false');
+      aMan.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__manual';
+      aMan.setAttribute('role', 'menuitem');
+      aMan.textContent = 'Manual entry';
+      var aCsv = document.createElement('a');
+      aCsv.href = '/core/inventory/add/csv';
+      aCsv.setAttribute('hx-boost', 'false');
+      aCsv.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__csv';
+      aCsv.setAttribute('role', 'menuitem');
+      aCsv.textContent = 'CSV upload';
+      var aScan = document.createElement('a');
+      aScan.href = '/core/inventory/add/barcode';
+      aScan.setAttribute('hx-boost', 'false');
+      aScan.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__scan';
+      aScan.setAttribute('role', 'menuitem');
+      aScan.textContent = 'Barcode / camera scan';
+      menu.appendChild(aMan);
+      menu.appendChild(aCsv);
+      menu.appendChild(aScan);
+      return menu;
+    }
 
-      function resetAddInventoryModalForManual() {
-        window._addInventoryBarcodeLookup = null;
-        var bi = document.getElementById('add-inventory-barcode-input');
-        var bdw = document.getElementById('add-inventory-barcode-display-wrap');
-        var nameEl = document.getElementById('add-inventory-name');
-        var unitEl = document.getElementById('add-inventory-unit');
-        var supplierEl = document.getElementById('add-inventory-supplier');
-        if (bi) bi.value = '';
-        if (bdw) bdw.style.display = 'none';
-        if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; }
-        if (unitEl) { unitEl.disabled = false; unitEl.style.background = ''; }
-        if (supplierEl) { supplierEl.readOnly = false; supplierEl.style.background = ''; }
+    function bindCore2JourneyAddInventoryDropdown(wrap) {
+      var trigger = wrap.querySelector('.core2-journey-addinv-trigger');
+      var menu = wrap.querySelector('.core2-journey-addinv-menu');
+      var scanLink = wrap.querySelector('.core2-journey-addinv-menu__scan');
+      if (!trigger || !menu) return;
+
+      var onDocClick = function (e) {
+        if (!wrap.contains(e.target)) closeMenu();
+      };
+      var onKey = function (e) {
+        if (e.key === 'Escape') closeMenu();
+      };
+
+      function closeMenu() {
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('click', onDocClick);
+        document.removeEventListener('keydown', onKey);
       }
-      const manualBtn = document.getElementById('inventory-entry-manual-btn');
-      if (manualBtn) {
-        manualBtn.addEventListener('click', function() {
-          hubModal.style.display = 'none';
-          resetAddInventoryModalForManual();
-          if (addInventoryModal) {
-            addInventoryModal.style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-          }
+
+      function openMenu() {
+        menu.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        document.addEventListener('click', onDocClick);
+        document.addEventListener('keydown', onKey);
+        isBarcodeCameraAvailable().then(function (has) {
+          if (scanLink) scanLink.style.display = has ? '' : 'none';
         });
       }
 
-      const csvBtn = document.getElementById('inventory-entry-csv-btn');
-      if (csvBtn) {
-        csvBtn.addEventListener('click', function() {
-          hubModal.style.display = 'none';
-          openCsvUploadModal();
-        });
-      }
-
-      const scanBtn = document.getElementById('inventory-entry-scan-btn');
-      if (scanBtn) {
-        isBarcodeCameraAvailable().then(function(hasCamera) {
-          if (!hasCamera) {
-            scanBtn.disabled = true;
-            scanBtn.style.opacity = '0.5';
-            scanBtn.style.cursor = 'not-allowed';
-            scanBtn.title = 'No camera detected on this device. Use Manual or CSV entry instead.';
-            var label = scanBtn.querySelector('span');
-            if (label) {
-              label.textContent = 'Scan Barcode (Camera unavailable)';
-            }
-          } else {
-            scanBtn.addEventListener('click', function() {
-              hubModal.style.display = 'none';
-              openBarcodeScanModal();
-            });
-          }
-        }).catch(function() {
-          scanBtn.disabled = true;
-          scanBtn.style.opacity = '0.5';
-          scanBtn.style.cursor = 'not-allowed';
-          scanBtn.title = 'No camera detected on this device. Use Manual or CSV entry instead.';
-          var label = scanBtn.querySelector('span');
-          if (label) {
-            label.textContent = 'Scan Barcode (Camera unavailable)';
-          }
-        });
-      }
-    }
-
-    // --- CSV Upload Modal ---
-    const CSV_TEMPLATE_HEADERS = 'Item Name,Quantity,Unit,Supplier Name,Purchase Date,Batch Number,Expiry Date';
-    let csvValidatedData = null;
-
-    function openCsvUploadModal() {
-      const modal = document.getElementById('csv-upload-modal');
-      if (!modal) return;
-      csvValidatedData = null;
-      document.getElementById('csv-preview-section').style.display = 'none';
-      document.getElementById('csv-drop-zone').style.display = 'flex';
-      document.getElementById('csv-file-input').value = '';
-      modal.style.display = 'flex';
-      document.body.style.overflow = 'hidden';
-    }
-
-    function closeCsvUploadModal() {
-      const modal = document.getElementById('csv-upload-modal');
-      if (modal) { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
-    }
-
-    document.getElementById('csv-download-template')?.addEventListener('click', function(e) {
-      const blob = new Blob([CSV_TEMPLATE_HEADERS + '\nExample Item,10,kg,ACME Ltd,2024-01-15,BATCH-001,2025-12-31'], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      this.href = url;
-      this.download = 'inventory_template.csv';
-      setTimeout(function() { URL.revokeObjectURL(url); }, 100);
-    });
-
-    function handleCsvFile(file) {
-      if (!file || !file.name) return;
-      const formData = new FormData();
-      formData.append('file', file);
-      document.getElementById('csv-drop-zone').style.display = 'none';
-      document.getElementById('csv-preview-section').style.display = 'flex';
-      document.getElementById('csv-preview-tbody').innerHTML = '<tr><td colspan="5" style="padding: 16px; color: var(--text-secondary);">Validating...</td></tr>';
-      CoreAPI.inventoryCsvValidate(formData).then(function(res) {
-        csvValidatedData = res;
-        renderCsvPreview(res);
-      }).catch(function(err) {
-        document.getElementById('csv-preview-tbody').innerHTML = '<tr><td colspan="5" style="padding: 16px; color: var(--error);">' + (err.message || 'Validation failed') + '</td></tr>';
-        document.getElementById('csv-preview-summary').textContent = '';
-      });
-    }
-
-    function renderCsvPreview(res) {
-      const tbody = document.getElementById('csv-preview-tbody');
-      const units = res.allowed_units || [];
-      tbody.innerHTML = '';
-      (res.rows || []).forEach(function(row, idx) {
-        const v = res.validation && res.validation[idx];
-        const status = v && v.status === 'error' ? 'error' : 'ok';
-        const ri = row.row_index;
-        const unitSelect = '<select class="csv-preview-select csv-row-unit" data-row-index="' + ri + '">' +
-          units.map(function(u) { return '<option value="' + (u.value || '') + '"' + (row.unit === u.value ? ' selected' : '') + '>' + (u.label || u.value) + '</option>'; }).join('') + '</select>';
-        const nameInput = '<input type="text" class="csv-preview-input csv-row-name" data-row-index="' + ri + '" value="' + escapeHtml(row.name || '') + '" placeholder="Item name">';
-        const qtyInput = '<input type="text" inputmode="decimal" class="csv-preview-input csv-row-quantity" data-row-index="' + ri + '" value="' + escapeHtml(row.quantity || '') + '" placeholder="0">';
-        const supplierInput = '<input type="text" class="csv-preview-input csv-row-supplier" data-row-index="' + ri + '" value="' + escapeHtml(row.supplier || '') + '" placeholder="Supplier">';
-        const tr = document.createElement('tr');
-        tr.style.borderBottom = '1px solid var(--border-default)';
-        tr.innerHTML = '<td style="padding: 8px;">' + (status === 'ok' ? '✓' : '⚠') + (v && v.message ? ' ' + escapeHtml(v.message) : '') + '</td><td style="padding: 8px;">' + nameInput + '</td><td style="padding: 8px;">' + qtyInput + '</td><td style="padding: 8px;">' + unitSelect + '</td><td style="padding: 8px;">' + supplierInput + '</td>';
-        tbody.appendChild(tr);
-      });
-      const okCount = (res.validation || []).filter(function(v) { return v.status === 'ok'; }).length;
-      const errCount = (res.validation || []).filter(function(v) { return v.status === 'error'; }).length;
-      var summary = okCount + ' row(s) valid' + (errCount ? ', ' + errCount + ' with errors (fix and confirm)' : '') + '. Edit any field then confirm.';
-      if (res.truncated && res.validated_count != null && res.max_rows_allowed != null) {
-        summary += ' Only first ' + res.validated_count + ' rows validated; maximum ' + res.max_rows_allowed + ' rows per file.';
-      } else if (res.truncated) {
-        summary += ' Only first ' + (res.rows && res.rows.length ? res.rows.length : 500) + ' rows validated; maximum 500 rows per file.';
-      }
-      document.getElementById('csv-preview-summary').textContent = summary;
-    }
-
-    document.getElementById('csv-back-btn')?.addEventListener('click', function() {
-      document.getElementById('csv-preview-section').style.display = 'none';
-      document.getElementById('csv-drop-zone').style.display = 'flex';
-      csvValidatedData = null;
-    });
-
-    document.getElementById('csv-commit-btn')?.addEventListener('click', function() {
-      if (!csvValidatedData || !csvValidatedData.rows) return;
-      const tbody = document.getElementById('csv-preview-tbody');
-      const rows = csvValidatedData.rows.map(function(row) {
-        const ri = row.row_index;
-        const nameEl = tbody.querySelector('.csv-row-name[data-row-index="' + ri + '"]');
-        const qtyEl = tbody.querySelector('.csv-row-quantity[data-row-index="' + ri + '"]');
-        const unitEl = tbody.querySelector('.csv-row-unit[data-row-index="' + ri + '"]');
-        const supplierEl = tbody.querySelector('.csv-row-supplier[data-row-index="' + ri + '"]');
-        return Object.assign({}, row, {
-          name: nameEl ? (nameEl.value || '').trim() : row.name,
-          quantity: qtyEl ? (qtyEl.value || '').trim() : row.quantity,
-          unit: unitEl ? unitEl.value : row.unit,
-          supplier: supplierEl ? (supplierEl.value || '').trim() || null : row.supplier,
-        });
-      });
-      this.disabled = true;
-      CoreAPI.inventoryCsvCommit({ rows: rows }).then(function(res) {
-        closeCsvUploadModal();
-        if (res.created && res.created.length) {
-          showNotification('success', 'Inventory added', res.created.length + ' item(s) added from CSV.');
-          if (typeof loadInventoryV2 === 'function') loadInventoryV2();
-        }
-        if (res.errors && res.errors.length) {
-          var warnDetail = res.error || (res.errors.length + ' row(s) could not be added.');
-          showNotification('warning', 'Some rows failed', warnDetail);
-        }
-      }).catch(function(err) {
-        showNotification('error', 'Upload failed', err.message || 'Could not add inventory.');
-      }).finally(function() {
-        document.getElementById('csv-commit-btn').disabled = false;
-      });
-    });
-
-    document.getElementById('csv-drop-zone')?.addEventListener('click', function() { document.getElementById('csv-file-input').click(); });
-    document.getElementById('csv-file-input')?.addEventListener('change', function() { if (this.files && this.files[0]) handleCsvFile(this.files[0]); });
-    document.getElementById('csv-drop-zone')?.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); this.style.background = 'var(--bg-hover, rgba(0,0,0,0.03))'; });
-    document.getElementById('csv-drop-zone')?.addEventListener('dragleave', function(e) { e.preventDefault(); this.style.background = ''; });
-    document.getElementById('csv-drop-zone')?.addEventListener('drop', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      this.style.background = '';
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) handleCsvFile(e.dataTransfer.files[0]);
-    });
-    document.getElementById('csv-browse-btn')?.addEventListener('click', function(e) { e.stopPropagation(); document.getElementById('csv-file-input').click(); });
-    document.getElementById('csv-upload-modal-close')?.addEventListener('click', closeCsvUploadModal);
-
-    // --- Barcode Scan Modal ---
-    let barcodeStream = null;
-    let lastBarcodeValue = null;
-    let barcodeScanLoopId = null;
-    let lastCandidateBarcode = null;
-    let barcodeConfidenceCounter = 0;
-    let decodeInProgress = false;
-    let barcodeConsecutiveFailures = 0;
-    let lastBarcodeDecodeTime = 0;
-    let barcodeCandidateHistory = [];
-    let lastFrameQualityScore = null;
-    let lastFrameStabilityScore = null;
-    const BARCODE_SCAN_INTERVAL_MS = 250;
-    const DECODE_TIMEOUT_MS = 800;
-    const BARCODE_QUALITY_MIN_VARIANCE = 30;
-    const BARCODE_MOTION_DIFF_THRESHOLD = 600;
-    const BARCODE_STABILITY_DIFF_THRESHOLD = 40;
-    const BARCODE_CONFIDENCE_THRESHOLD = 0.5;
-    const BARCODE_EXPOSURE_STABILITY_MAX = 60;
-    const BARCODE_HISTORY_LENGTH = 10;
-    const BARCODE_VOTE_QUORUM = 5;
-    const BARCODE_EDGE_VOLATILITY_MAX = 0.45;
-    const BARCODE_CENTER_BORDER_MAX = 90;
-    let lastFrameEdgeScore = null;
-    let lowLightViolationCounter = 0;
-    let motionViolationCounter = 0;
-    const HYSTERESIS_LIMIT = 5;
-    let lastBarcodeStatusMessage = '';
-    let scannerStateEnterTime = Date.now();
-    const STATE_MIN_DWELL_MS = 900;
-
-    var SCANNER_STATE = { SCANNING: 0, VERIFYING: 1, LOW_LIGHT_WARNING: 2, HOLD_STEADY: 3, CONFIRMED: 4 };
-    var scannerState = SCANNER_STATE.SCANNING;
-
-    function transitionScannerState(newState, message) {
-      if (scannerState === newState) return;
-      var now = Date.now();
-      // Prevent rapid oscillation between states
-      if (now - scannerStateEnterTime < STATE_MIN_DWELL_MS) {
-        return;
-      }
-      scannerState = newState;
-      scannerStateEnterTime = now;
-      setBarcodeStatusDebounced(message);
-    }
-
-    function clampConfidence(score) {
-      return Math.max(0.15, Math.min(1, score));
-    }
-
-    function getFrameQualityScore(canvas) {
-      var ctx = canvas.getContext('2d');
-      var w = Math.min(canvas.width, 160);
-      var h = Math.min(canvas.height, 120);
-      var data = ctx.getImageData(0, 0, w, h).data;
-      var sum = 0, sumSq = 0, n = 0;
-      for (var i = 0; i < data.length; i += 4) {
-        var g = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        sum += g;
-        sumSq += g * g;
-        n++;
-      }
-      if (n === 0) return 0;
-      var mean = sum / n;
-      return (sumSq / n) - (mean * mean);
-    }
-
-    function frameStabilityScore(canvas) {
-      var ctx = canvas.getContext('2d');
-      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var d = img.data;
-      var cx = 0, cy = 0, total = 0;
-      for (var y = 0; y < canvas.height; y++) {
-        for (var x = 0; x < canvas.width; x++) {
-          var idx = (y * canvas.width + x) * 4;
-          var g = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
-          cx += x * g;
-          cy += y * g;
-          total += g;
-        }
-      }
-      if (!total) return 0;
-      cx /= total;
-      cy /= total;
-      return Math.sqrt(cx * cx + cy * cy);
-    }
-
-    function exposureStabilityScore(canvas) {
-      var ctx = canvas.getContext('2d');
-      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var d = img.data;
-      var brightnessSamples = [];
-      for (var i = 0; i < d.length; i += 4) {
-        brightnessSamples.push((d[i] + d[i + 1] + d[i + 2]) / 3);
-      }
-      if (!brightnessSamples.length) return 0;
-      var mean = brightnessSamples.reduce(function(a, b) { return a + b; }, 0) / brightnessSamples.length;
-      var variance = brightnessSamples.reduce(function(a, b) { return a + (b - mean) * (b - mean); }, 0) / brightnessSamples.length;
-      return Math.sqrt(variance);
-    }
-
-    function centerBorderLuminanceDiff(canvas) {
-      var ctx = canvas.getContext('2d');
-      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var d = img.data;
-      var w = canvas.width;
-      var h = canvas.height;
-      var margin = Math.floor(Math.min(w, h) * 0.15);
-      var cx1 = margin;
-      var cx2 = w - margin;
-      var cy1 = margin;
-      var cy2 = h - margin;
-      var centerSum = 0, centerN = 0;
-      var borderSum = 0, borderN = 0;
-      for (var y = 0; y < h; y++) {
-        for (var x = 0; x < w; x++) {
-          var idx = (y * w + x) * 4;
-          var g = (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
-          if (x >= cx1 && x < cx2 && y >= cy1 && y < cy2) {
-            centerSum += g;
-            centerN++;
-          } else {
-            borderSum += g;
-            borderN++;
-          }
-        }
-      }
-      var centerMean = centerN ? centerSum / centerN : 128;
-      var borderMean = borderN ? borderSum / borderN : 128;
-      return Math.abs(centerMean - borderMean);
-    }
-
-    function sobelEdgeDensity(canvas) {
-      var ctx = canvas.getContext('2d');
-      var w = canvas.width;
-      var h = canvas.height;
-      var img = ctx.getImageData(0, 0, w, h);
-      var d = img.data;
-      var step = 4;
-      var sum = 0, n = 0;
-      for (var y = 1; y < h - 1; y += step) {
-        for (var x = 1; x < w - 1; x += step) {
-          var idx = (y * w + x) * 4;
-          var g = function(xx, yy) { var i = (yy * w + xx) * 4; return (d[i] + d[i + 1] + d[i + 2]) / 3; };
-          var gx = g(x + 1, y) - g(x - 1, y);
-          var gy = g(x, y + 1) - g(x, y - 1);
-          sum += Math.sqrt(gx * gx + gy * gy);
-          n++;
-        }
-      }
-      return n ? sum / n : 0;
-    }
-
-    function stopBarcodeScanLoop() {
-      if (barcodeScanLoopId != null) {
-        cancelAnimationFrame(barcodeScanLoopId);
-        barcodeScanLoopId = null;
-      }
-    }
-
-    function safeSet(id, value) {
-      var el = document.getElementById(id);
-      if (el) el.textContent = value;
-    }
-
-    function setBarcodeStatus(msg) {
-      safeSet('barcode-capture-status', msg);
-    }
-
-    function setBarcodeStatusDebounced(msg) {
-      if (msg === lastBarcodeStatusMessage) return;
-      lastBarcodeStatusMessage = msg;
-      setBarcodeStatus(msg);
-    }
-
-    function isBarcodeScanMobile() {
-      return /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
-    }
-
-    function startBarcodeScanLoop() {
-      stopBarcodeScanLoop();
-      var video = document.getElementById('barcode-video');
-      var statusEl = document.getElementById('barcode-capture-status');
-      if (!video || !statusEl) return;
-      setBarcodeStatus('Scanning…');
-      function scheduleNext() {
-        if (barcodeScanLoopId != null) cancelAnimationFrame(barcodeScanLoopId);
-        barcodeScanLoopId = requestAnimationFrame(tick);
-      }
-      function tick() {
-        if (barcodeScanLoopId != null) {
-          cancelAnimationFrame(barcodeScanLoopId);
-          barcodeScanLoopId = null;
-        }
-        if (lastBarcodeValue) return;
-        if (!video.videoWidth || !video.readyState || video.readyState < 2) {
-          scheduleNext();
-          return;
-        }
-        if (decodeInProgress) {
-          scheduleNext();
-          return;
-        }
-        var now = Date.now();
-        var intervalMs = barcodeConsecutiveFailures >= 5 ? 600 : (barcodeConfidenceCounter >= 1 ? 300 : BARCODE_SCAN_INTERVAL_MS);
-        if (now - lastBarcodeDecodeTime < intervalMs) {
-          scheduleNext();
-          return;
-        }
-        lastBarcodeDecodeTime = now;
-
-        var canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-        var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
-        if (getFrameQualityScore(canvas) <= qualityThreshold) {
-          scheduleNext();
-          return;
-        }
-        lastFrameQualityScore = currentQuality;
-
-        var currentStability = frameStabilityScore(canvas);
-        if (lastFrameStabilityScore != null && Math.abs(currentStability - lastFrameStabilityScore) > BARCODE_STABILITY_DIFF_THRESHOLD) {
-          motionViolationCounter += 0.2;
-          if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
-        } else {
-          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
-        }
-        lastFrameStabilityScore = currentStability;
-
-        var exposureScore = exposureStabilityScore(canvas);
-
-        // ---- Adaptive exposure hysteresis window ----
-        var exposureUpper = BARCODE_EXPOSURE_STABILITY_MAX * 1.5;
-        var exposureLower = BARCODE_EXPOSURE_STABILITY_MAX * 0.8;
-
-        // Only trigger warning if violation persists
-        if (exposureScore > exposureUpper) {
-          lowLightViolationCounter++;
-        } else if (exposureScore < exposureLower) {
-          lowLightViolationCounter = Math.max(0, lowLightViolationCounter - 1);
-        }
-
-        // State transition only after hysteresis stabilization
-        if (lowLightViolationCounter >= HYSTERESIS_LIMIT && scannerState !== SCANNER_STATE.LOW_LIGHT_WARNING) {
-          transitionScannerState(
-            SCANNER_STATE.LOW_LIGHT_WARNING,
-            'Move to brighter area'
-          );
-          var hintEl = document.getElementById('barcode-low-light-hint');
-          if (hintEl) hintEl.style.display = 'block';
-        }
-        if (centerBorderLuminanceDiff(canvas) > BARCODE_CENTER_BORDER_MAX) {
-          lowLightViolationCounter++;
-          if (lowLightViolationCounter >= HYSTERESIS_LIMIT && scannerState !== SCANNER_STATE.LOW_LIGHT_WARNING) {
-            transitionScannerState(SCANNER_STATE.LOW_LIGHT_WARNING, 'Move to brighter area');
-            var hintEl2 = document.getElementById('barcode-low-light-hint');
-            if (hintEl2) hintEl2.style.display = 'block';
-          }
-        } else {
-          lowLightViolationCounter = Math.max(0, lowLightViolationCounter - 0.5);
-        }
-        var currentEdge = sobelEdgeDensity(canvas);
-        var edgeVolatility = lastFrameEdgeScore != null
-          ? Math.abs(currentEdge - lastFrameEdgeScore) / (lastFrameEdgeScore + 1)
-          : 0;
-        if (edgeVolatility > BARCODE_EDGE_VOLATILITY_MAX) {
-          motionViolationCounter += 0.2;
-          if (motionViolationCounter >= HYSTERESIS_LIMIT) transitionScannerState(SCANNER_STATE.HOLD_STEADY, 'Hold camera steady');
-        } else {
-          motionViolationCounter = Math.max(0, motionViolationCounter - 0.3);
-        }
-        lastFrameEdgeScore = currentEdge;
-
-        var qualityThreshold = Math.max(15, BARCODE_QUALITY_MIN_VARIANCE - Math.min(barcodeConsecutiveFailures, 10) * 2);
-        if (currentQuality <= qualityThreshold) { scheduleNext(); return; }
-
-        decodeInProgress = true;
-        var frameQualityForConfidence = currentQuality;
-        decodeBarcodeFromCanvas(canvas).then(function(value) {
-          decodeInProgress = false;
-          if (value && !lastBarcodeValue) {
-            barcodeCandidateHistory.push(value);
-            if (barcodeCandidateHistory.length > BARCODE_HISTORY_LENGTH) barcodeCandidateHistory.shift();
-            var counts = {};
-            for (var i = 0; i < barcodeCandidateHistory.length; i++) {
-              var v = barcodeCandidateHistory[i];
-              counts[v] = (counts[v] || 0) + 1;
-            }
-            var accepted = null;
-            for (var k in counts) { if (counts[k] >= BARCODE_VOTE_QUORUM) { accepted = k; break; } }
-            if (accepted) {
-              var voteRatio = counts[accepted] / barcodeCandidateHistory.length;
-              var qualityComponent = Math.max(0, Math.min(1, frameQualityForConfidence / 100));
-              var confidenceScore = voteRatio * qualityComponent;
-              confidenceScore = clampConfidence(confidenceScore);
-              var confidenceThreshold = isBarcodeScanMobile() ? 0.35 : 0.5;
-              if (confidenceScore >= confidenceThreshold) {
-                lastBarcodeValue = accepted;
-                barcodeCandidateHistory = [];
-                barcodeConsecutiveFailures = 0;
-                safeSet('barcode-result-value', accepted);
-                var preview = document.getElementById('barcode-result-preview');
-                if (preview) preview.style.display = 'block';
-                var addBtn = document.getElementById('barcode-add-to-inventory-btn');
-                if (addBtn) addBtn.style.display = 'inline-block';
-                transitionScannerState(SCANNER_STATE.CONFIRMED, 'Barcode confirmed.');
-                stopBarcodeScanLoop();
-              } else {
-                transitionScannerState(SCANNER_STATE.VERIFYING, 'Verifying barcode');
-              }
-            } else {
-              transitionScannerState(SCANNER_STATE.VERIFYING, 'Verifying barcode');
-            }
-          } else {
-            barcodeCandidateHistory = [];
-            if (value) { barcodeConsecutiveFailures = 0; }
-            else {
-              barcodeConsecutiveFailures++;
-              if (barcodeConsecutiveFailures >= 8) {
-                transitionScannerState(SCANNER_STATE.LOW_LIGHT_WARNING, 'Move to brighter area');
-                var hintEl = document.getElementById('barcode-low-light-hint');
-                if (hintEl) hintEl.style.display = 'block';
-              } else {
-                transitionScannerState(SCANNER_STATE.SCANNING, 'Scanning…');
-              }
-            }
-          }
-        }).catch(function() {
-          decodeInProgress = false;
-          barcodeConsecutiveFailures++;
-        });
-        scheduleNext();
-      }
-      scheduleNext();
-    }
-
-    function openBarcodeScanModal() {
-      var modal = document.getElementById('barcode-scan-modal');
-      if (!modal) return;
-      lastBarcodeValue = null;
-      lastCandidateBarcode = null;
-      barcodeConfidenceCounter = 0;
-      barcodeConsecutiveFailures = 0;
-      barcodeCandidateHistory = [];
-      lastFrameQualityScore = null;
-      lastFrameStabilityScore = null;
-      lastFrameEdgeScore = null;
-      lowLightViolationCounter = 0;
-      motionViolationCounter = 0;
-      lastBarcodeStatusMessage = '';
-      scannerState = SCANNER_STATE.SCANNING;
-      stopBarcodeScanLoop();
-      var resultPreview = document.getElementById('barcode-result-preview');
-      if (resultPreview) resultPreview.style.display = 'none';
-      var addInvBtn = document.getElementById('barcode-add-to-inventory-btn');
-      if (addInvBtn) addInvBtn.style.display = 'none';
-      var manualInput = document.getElementById('barcode-manual-input');
-      if (manualInput) manualInput.value = '';
-      var lowLightHint = document.getElementById('barcode-low-light-hint');
-      if (lowLightHint) lowLightHint.style.display = 'none';
-      transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
-      modal.style.display = 'flex';
-      document.body.style.overflow = 'hidden';
-      var cam = document.getElementById('barcode-camera-viewport');
-      var video = document.getElementById('barcode-video');
-      cam.style.display = 'block';
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        var constraints = { video: { facingMode: 'environment', width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 } }, audio: false };
-        navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-          barcodeStream = stream;
-          video.srcObject = stream;
-          video.onloadedmetadata = function() {
-            video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
-          };
-        }).catch(function() {
-          navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }).then(function(stream) {
-            barcodeStream = stream;
-            video.srcObject = stream;
-            video.onloadedmetadata = function() {
-              video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
-            };
-          }).catch(function() {
-            navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(function(stream) {
-              barcodeStream = stream;
-              video.srcObject = stream;
-              video.onloadedmetadata = function() {
-                video.play().then(function() { startBarcodeScanLoop(); }).catch(function() { startBarcodeScanLoop(); });
-              };
-            }).catch(function() { cam.style.display = 'none'; });
-          });
-        });
-      } else {
-        cam.style.display = 'none';
-      }
-    }
-
-    function closeBarcodeScanModal() {
-      stopBarcodeScanLoop();
-      if (barcodeStream) {
-        barcodeStream.getTracks().forEach(function(t) { t.stop(); });
-        barcodeStream = null;
-      }
-      var vid = document.getElementById('barcode-video');
-      if (vid) vid.srcObject = null;
-      const modal = document.getElementById('barcode-scan-modal');
-      if (modal) { modal.style.display = 'none'; document.body.style.overflow = 'auto'; }
-    }
-
-    function resizeCanvas(canvas, scale) {
-      var temp = document.createElement('canvas');
-      temp.width = Math.max(1, Math.floor(canvas.width * scale));
-      temp.height = Math.max(1, Math.floor(canvas.height * scale));
-      temp.getContext('2d').drawImage(canvas, 0, 0, temp.width, temp.height);
-      return temp;
-    }
-
-    function adaptiveContrastEnhance(canvas) {
-      var ctx = canvas.getContext('2d');
-      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var d = img.data;
-      var block = 32;
-      var w = canvas.width;
-      var h = canvas.height;
-
-      function blockMean(x, y) {
-        var sum = 0, n = 0;
-        for (var yy = y; yy < Math.min(y + block, h); yy++) {
-          for (var xx = x; xx < Math.min(x + block, w); xx++) {
-            var idx = (yy * w + xx) * 4;
-            sum += (d[idx] + d[idx + 1] + d[idx + 2]) / 3;
-            n++;
-          }
-        }
-        return n ? sum / n : 128;
-      }
-
-      for (var y = 0; y < h; y += block) {
-        for (var x = 0; x < w; x += block) {
-          var localMean = blockMean(x, y);
-          var gain = 128 / (localMean + 1);
-          for (var yy2 = y; yy2 < Math.min(y + block, h); yy2++) {
-            for (var xx2 = x; xx2 < Math.min(x + block, w); xx2++) {
-              var i = (yy2 * w + xx2) * 4;
-              d[i] = Math.min(255, d[i] * gain);
-              d[i + 1] = Math.min(255, d[i + 1] * gain);
-              d[i + 2] = Math.min(255, d[i + 2] * gain);
-            }
-          }
-        }
-      }
-
-      ctx.putImageData(img, 0, 0);
-      return canvas;
-    }
-
-    function decodeBarcodeFromCanvas(canvas) {
-      canvas = adaptiveContrastEnhance(canvas);
-      var formats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'code_93', 'upc_a', 'upc_e', 'itf', 'codabar', 'pdf417', 'aztec', 'data_matrix'];
-      function tryBarcodeDetector(targetCanvas) {
-        if (typeof BarcodeDetector === 'undefined') return Promise.resolve(null);
-        var detector;
-        try {
-          detector = new BarcodeDetector({ formats: formats });
-        } catch (e) {
-          try { detector = new BarcodeDetector(); } catch (e2) { return Promise.resolve(null); }
-        }
-        return detector.detect(targetCanvas).then(function(results) {
-          return results.length ? results[0].rawValue : null;
-        }).catch(function() { return null; });
-      }
-      function tryZxing(targetCanvas) {
-        return new Promise(function(resolve) {
-          targetCanvas.toBlob(function(blob) {
-            if (!blob) { resolve(null); return; }
-            var url = URL.createObjectURL(blob);
-            var img = new Image();
-            img.onload = function() {
-              URL.revokeObjectURL(url);
-              import('https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/+esm').then(function(zxing) {
-                var reader = new zxing.BrowserMultiFormatReader();
-                reader.decodeFromImageElement(img).then(function(result) {
-                  resolve(result ? result.getText() : null);
-                }).catch(function() { resolve(null); });
-              }).catch(function() { resolve(null); });
-            };
-            img.onerror = function() { URL.revokeObjectURL(url); resolve(null); };
-            img.src = url;
-          }, 'image/png');
-        });
-      }
-      function decodeOne(c) {
-        return tryBarcodeDetector(c).then(function(value) {
-          if (value) return value;
-          return tryZxing(c);
-        });
-      }
-      function withTimeout(p) {
-        return new Promise(function(resolve) {
-          var done = false;
-          var t = setTimeout(function() {
-            if (done) return;
-            done = true;
-            resolve(null);
-          }, DECODE_TIMEOUT_MS);
-          p.then(function(v) {
-            if (done) return;
-            done = true;
-            clearTimeout(t);
-            resolve(v);
-          }).catch(function() {
-            if (done) return;
-            done = true;
-            clearTimeout(t);
-            resolve(null);
-          });
-        });
-      }
-      return withTimeout(decodeOne(canvas)).then(function(value) {
-        if (value) return value;
-        return withTimeout(decodeOne(resizeCanvas(canvas, 0.75)));
-      }).then(function(value) {
-        if (value) return value;
-        return withTimeout(decodeOne(resizeCanvas(canvas, 0.5)));
-      });
-    }
-
-    document.getElementById('barcode-capture-btn')?.addEventListener('click', function() {
-      if (lastBarcodeValue) return;
-      const video = document.getElementById('barcode-video');
-      if (!video || !video.videoWidth) return;
-      transitionScannerState(SCANNER_STATE.SCANNING, 'Scanning…');
-      var canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      decodeBarcodeFromCanvas(canvas).then(function(value) {
-        if (value) {
-          lastBarcodeValue = value;
-          safeSet('barcode-result-value', value);
-          var prev = document.getElementById('barcode-result-preview');
-          if (prev) prev.style.display = 'block';
-          var addB = document.getElementById('barcode-add-to-inventory-btn');
-          if (addB) addB.style.display = 'inline-block';
-          transitionScannerState(SCANNER_STATE.CONFIRMED, 'Barcode confirmed.');
-          stopBarcodeScanLoop();
-        } else {
-          transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
-          showNotification('info', 'No barcode in shot', 'Hold the barcode in view or tap Capture again.');
-        }
-      }).catch(function(err) {
-        transitionScannerState(SCANNER_STATE.SCANNING, 'Point camera at barcode');
-        showNotification('error', 'Decode failed', err && err.message ? err.message : 'Try manual entry.');
-      });
-    });
-
-    document.getElementById('barcode-manual-input')?.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
+      trigger.addEventListener('click', function (e) {
         e.preventDefault();
-        var v = (this.value || '').trim();
-        if (v) {
-          lastBarcodeValue = v;
-          safeSet('barcode-result-value', v);
-          var resPrev = document.getElementById('barcode-result-preview');
-          if (resPrev) resPrev.style.display = 'block';
-          var addBtn2 = document.getElementById('barcode-add-to-inventory-btn');
-          if (addBtn2) addBtn2.style.display = 'inline-block';
-        }
-      }
-    });
-
-    function attachBarcodeModalHandlers() {
-      var closeBtn = document.getElementById('barcode-scan-modal-close');
-      var backBtn = document.getElementById('barcode-scan-back-btn');
-      var addToInvBtn = document.getElementById('barcode-add-to-inventory-btn');
-      if (closeBtn) closeBtn.addEventListener('click', closeBarcodeScanModal);
-      if (backBtn) backBtn.addEventListener('click', function() { closeBarcodeScanModal(); var hm = document.getElementById('inventory-entry-hub-modal'); if (hm) { hm.style.display = 'flex'; document.body.style.overflow = 'hidden'; } });
-      if (addToInvBtn) {
-        addToInvBtn.addEventListener('click', function() {
-          var code = lastBarcodeValue || (document.getElementById('barcode-result-value') && document.getElementById('barcode-result-value').textContent) || '';
-          closeBarcodeScanModal();
-          var addInventoryModalEl = document.getElementById('add-inventory-modal');
-          if (!addInventoryModalEl) return;
-          window._addInventorySourceMethod = 'barcode_scan';
-          CoreAPI.lookupBarcode(code).then(function(res) {
-            var form = addInventoryModalEl.querySelector('form');
-            var barcodeInput = document.getElementById('add-inventory-barcode-input');
-            var barcodeDisplayWrap = document.getElementById('add-inventory-barcode-display-wrap');
-            var barcodeDisplay = document.getElementById('add-inventory-barcode-display');
-            var nameEl = document.getElementById('add-inventory-name');
-            var unitEl = document.getElementById('add-inventory-unit');
-            var supplierEl = document.getElementById('add-inventory-supplier');
-            if (barcodeInput) barcodeInput.value = code || '';
-            if (barcodeDisplayWrap) barcodeDisplayWrap.style.display = code ? 'block' : 'none';
-            if (barcodeDisplay) barcodeDisplay.textContent = code || '';
-            if (res.exists) {
-              var p = res.product || {};
-              var pName = p.name !== undefined ? p.name : res.name;
-              var pUnit = p.unit !== undefined ? p.unit : res.unit;
-              var pSupplier = (p.supplier !== undefined ? p.supplier : res.supplier) || '';
-              window._addInventoryBarcodeLookup = { name: pName, unit: pUnit, supplier: pSupplier };
-              if (nameEl) { nameEl.value = pName || ''; nameEl.readOnly = true; nameEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
-              if (unitEl) { unitEl.value = pUnit || ''; unitEl.disabled = true; unitEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
-              if (supplierEl) { supplierEl.value = pSupplier || ''; supplierEl.readOnly = true; supplierEl.style.background = 'var(--bg-subtle, #f3f4f6)'; }
-              if (form) {
-                var q = form.querySelector('[name="quantity"]'); if (q) q.value = '';
-                var pd = form.querySelector('[name="purchaseDate"]'); if (pd) pd.value = '';
-                var bn = form.querySelector('[name="batchNumber"]'); if (bn) bn.value = '';
-                var ed = form.querySelector('[name="expiryDate"]'); if (ed) ed.value = '';
-                form.querySelector('[name="quantity"]').focus();
-              }
-            } else {
-              window._addInventoryBarcodeLookup = null;
-              if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; nameEl.value = ''; }
-              if (unitEl) { unitEl.disabled = false; unitEl.style.background = ''; }
-              if (supplierEl) { supplierEl.readOnly = false; supplierEl.style.background = ''; supplierEl.value = ''; }
-              if (nameEl) nameEl.focus();
-            }
-            addInventoryModalEl.style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-          }).catch(function() {
-            window._addInventoryBarcodeLookup = null;
-            var bi = document.getElementById('add-inventory-barcode-input');
-            var bdw = document.getElementById('add-inventory-barcode-display-wrap');
-            var bd = document.getElementById('add-inventory-barcode-display');
-            if (bi) bi.value = code || '';
-            if (bdw) bdw.style.display = code ? 'block' : 'none';
-            if (bd) bd.textContent = code || '';
-            addInventoryModalEl.style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-            var form = addInventoryModalEl.querySelector('form');
-            if (form) { form.querySelector('[name="name"]').value = ''; form.querySelector('[name="quantity"]').focus(); }
+        e.stopPropagation();
+        if (menu.hidden) {
+          document.querySelectorAll('.core2-journey-addinv-menu').forEach(function (m) {
+            m.hidden = true;
           });
-        });
-      }
+          document.querySelectorAll('.core2-journey-addinv-trigger').forEach(function (t) {
+            t.setAttribute('aria-expanded', 'false');
+          });
+          openMenu();
+        } else {
+          closeMenu();
+        }
+      });
+
+      menu.addEventListener('click', function (e) {
+        if (e.target.closest('a[href]')) closeMenu();
+      });
     }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', attachBarcodeModalHandlers);
-    } else {
-      attachBarcodeModalHandlers();
-    }
-    window.openCsvUploadModal = openCsvUploadModal;
-    window.openBarcodeScanModal = openBarcodeScanModal;
 
     // Attach the Create Process Form Handler Once + help tooltips
     document.addEventListener('DOMContentLoaded', () => {
@@ -2112,17 +2023,6 @@
           document.querySelectorAll('.help-tooltip.visible').forEach(t => t.classList.remove('visible'));
         }
       });
-      
-      // Attach the Add Inventory Form Handler Once
-      const inventoryForm = document.querySelector('#add-inventory-modal form');
-      if (inventoryForm) {
-        inventoryForm.addEventListener('submit', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          window.addInventoryItem(this);
-          return false;
-        });
-      }
 
       // Dispose moved to dedicated page; keep this helper for expired-item callsites.
       window.openRecordWastageModalForExpired = function(itemIds) {
@@ -2249,115 +2149,6 @@
       }
     }
 
-    // Add inventory handler with optimistic UI
-    window.addInventoryItem = function (form) {
-      const formData = new FormData(form);
-      const lookup = window._addInventoryBarcodeLookup;
-      const name = (formData.get('name') || (lookup && lookup.name) || '').trim();
-      const quantity = parseFloat(formData.get('quantity'));
-      const unit = formData.get('unit') || (lookup && lookup.unit) || '';
-      const supplier = (formData.get('supplier') || (lookup && lookup.supplier) || '').trim() || null;
-      const barcode = (formData.get('barcode') || '').trim() || null;
-      const purchaseDate = formData.get('purchaseDate') || null;
-      const batchNumber = formData.get('batchNumber')?.trim() || null;
-      const expiryDate = formData.get('expiryDate') || null;
-
-      if (!name) {
-        showNotification('error', 'Validation Error', 'Please enter an item name');
-        return false;
-      }
-
-      if (!quantity || isNaN(quantity) || quantity <= 0) {
-        showNotification('error', 'Validation Error', 'Please enter a quantity greater than 0');
-        return false;
-      }
-
-      if (!unit) {
-        showNotification('error', 'Validation Error', 'Please select a unit');
-        return false;
-      }
-
-      const tempId = `temp-inv-${Date.now()}`;
-
-      const optimisticItem = {
-        id: tempId,
-        name,
-        quantity: quantity.toString(),
-        unit,
-        inventory_type: 'raw_material', // Always raw_material for manually added items
-        supplier,
-        purchase_date: purchaseDate,
-        supplier_batch_number: batchNumber,
-        expiry_date: expiryDate,
-        created_at: new Date().toISOString(),
-        __optimistic: true,
-      };
-
-      // Close modal immediately
-      const modal = document.getElementById('add-inventory-modal');
-      if (modal) {
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-      }
-      form.reset();
-      if (window._addInventoryBarcodeLookup) window._addInventoryBarcodeLookup = null;
-
-      // Render immediately
-      prependInventoryItemV2(optimisticItem);
-
-      // Persist asynchronously
-      (async () => {
-        try {
-          const sourceMethod = window._addInventorySourceMethod || 'manual';
-          if (window._addInventorySourceMethod) window._addInventorySourceMethod = null;
-          const payload = {
-            name,
-            quantity,
-            unit,
-            inventory_type: 'raw_material',
-            supplier,
-            purchase_date: purchaseDate,
-            supplier_batch_number: batchNumber,
-            expiry_date: expiryDate,
-            source_method: sourceMethod,
-          };
-          if (barcode) payload.barcode = barcode;
-          const saved = await CoreAPI.createInventoryItem(payload);
-
-          replaceOptimisticInventoryV2(tempId, saved);
-
-          // If added from execution modal (missing raw material), refresh step dropdown and select new item
-          if (window.addInventoryContext && window.addInventoryContext.fromExecutionModal && typeof window.refreshExecutionModalInventory === 'function') {
-            await window.refreshExecutionModalInventory(saved);
-          }
-
-          // Update metrics
-          const metrics = await CoreAPI.getMetrics();
-          updateMetricsV2(metrics);
-
-          if (saved.quantity_added) {
-            showNotification('success', 'Quantity added', `Quantity added to "${saved.name}".`);
-          } else {
-            showNotification(
-              'success',
-              'Inventory Item Added',
-              `"${name}" has been added to inventory successfully.`
-            );
-          }
-        } catch (error) {
-          removeOptimisticInventoryV2(tempId);
-
-          showNotification(
-            'error',
-            'Failed to Add Inventory Item',
-            error.message || 'Failed to add inventory item. Please try again.'
-          );
-        }
-      })();
-
-      return false;
-    };
-    
     // Edit inventory handler
     let currentEditInventoryId = null;
     
@@ -2711,190 +2502,6 @@
   </div>
   
   <!-- Inventory Entry Hub: choose Manual / CSV / Barcode -->
-  <div class="modal-overlay" id="inventory-entry-hub-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
-    <div class="card inventory-entry-hub-card" style="max-width: 420px; width: 95vw; padding: 24px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Add to Inventory</h2>
-        <button type="button" data-modal-close class="btn-icon-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 20px 0;">Choose how you want to add inventory.</p>
-      <div style="display: flex; flex-direction: column; gap: 12px;">
-        <button type="button" id="inventory-entry-manual-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
-          <span style="flex: 1;">Manual Entry</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </button>
-        <button type="button" id="inventory-entry-csv-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
-          <span style="flex: 1;">Upload CSV Template</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </button>
-        <button type="button" id="inventory-entry-scan-btn" class="inventory-entry-hub-btn" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); color: var(--text-primary); font-size: 15px; font-weight: 500; cursor: pointer; text-align: left; min-height: 44px; transition: background 0.2s;">
-          <span style="flex: 1;">Scan Barcode / Camera</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Add Inventory Modal (Manual Entry) -->
-  <div class="modal-overlay" id="add-inventory-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
-    <div class="card" style="max-width: 500px; width: 95vw; padding: 24px; max-height: 90vh; overflow-y: auto;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Add Inventory Item</h2>
-        <button data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <form>
-        <input type="hidden" name="barcode" id="add-inventory-barcode-input" value="">
-        <div id="add-inventory-barcode-display-wrap" style="display: none; margin-bottom: 4px;">
-          <span style="font-size: 13px; color: var(--text-secondary);">Barcode: </span><span id="add-inventory-barcode-display" style="font-size: 13px; font-weight: 500; color: var(--text-primary);"></span>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 24px;">
-          <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Item Name</label>
-            <input type="text" name="name" id="add-inventory-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., Steel Rods">
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-            <div>
-              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity</label>
-              <input type="number" name="quantity" required step="0.01" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="0">
-            </div>
-            <div>
-              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit</label>
-              <select name="unit" id="add-inventory-unit" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                <option value="kg">Kilograms (kg)</option>
-                <option value="g">Grams (g)</option>
-                <option value="L">Liters (L)</option>
-                <option value="mL">Milliliters (mL)</option>
-                <option value="units">Units</option>
-                <option value="pcs">Pieces</option>
-              </select>
-            </div>
-          </div>
-          <div id="add-inventory-map-untracked-wrapper" style="display: none;">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Map to Untracked Item (optional)</label>
-            <select name="mapToUntrackedItemId" id="add-inventory-map-untracked-select" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="">— No mapping —</option>
-            </select>
-            <p id="add-inventory-untracked-hint" style="font-size: 12px; color: var(--text-secondary); margin-top: 6px; margin-bottom: 0;"></p>
-          </div>
-          <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Category</label>
-            <select name="inventoryType" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="raw_material">Raw material</option>
-              <option value="work_in_progress">Intermediate</option>
-              <option value="final_product">Final product</option>
-            </select>
-          </div>
-          <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Supplier (optional)</label>
-            <input type="text" name="supplier" id="add-inventory-supplier" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="Supplier name">
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-            <div>
-              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Purchase Date (optional)</label>
-              <input type="date" name="purchaseDate" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-            </div>
-            <div>
-              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Batch Number (optional)</label>
-              <input type="text" name="batchNumber" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;" placeholder="e.g., BN-2024-001">
-            </div>
-          </div>
-          <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Expiry Date (optional)</label>
-            <input type="date" name="expiryDate" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-          </div>
-        </div>
-        <div style="display: flex; gap: 12px; justify-content: flex-end;">
-          <button type="button" class="btn btn-secondary" data-modal-close style="min-height: 44px;">Cancel</button>
-          <button type="submit" class="btn btn-primary" style="min-height: 44px;">Add Inventory Item</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- CSV Bulk Upload Inventory Modal -->
-  <div class="modal-overlay" id="csv-upload-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
-    <div class="card csv-upload-modal-card" style="max-height: 90vh; display: flex; flex-direction: column; padding: 24px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Upload CSV</h2>
-        <button type="button" id="csv-upload-modal-close" data-modal-close style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px;">
-        <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 4px 0; line-height: 1.5;">Keep the column headers in your file. The template includes an example row for reference—replace it with your own data or remove it before uploading.</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
-          <a id="csv-download-template" href="#" download="inventory_template.csv" class="btn btn-secondary" style="min-height: 44px;">Download Template</a>
-        </div>
-        <div id="csv-drop-zone" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 24px; text-align: center; background: var(--bg-subtle, #f9fafb); cursor: pointer; min-height: 80px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;">
-          <span style="color: var(--text-secondary); font-size: 14px;">Drop CSV here or</span>
-          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display: none;">
-          <button type="button" class="btn btn-secondary btn-sm" id="csv-browse-btn" style="min-height: 44px;">Browse</button>
-        </div>
-        <div id="csv-preview-section" style="display: none; flex: 1; min-height: 0; flex-direction: column;">
-          <div class="csv-preview-wrap" style="border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: auto;">
-            <table class="csv-preview-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
-              <thead>
-                <tr style="border-bottom: 1px solid var(--border-default);">
-                  <th style="text-align: left; padding: 10px 8px;">Status</th>
-                  <th style="text-align: left; padding: 10px 8px;">Item Name</th>
-                  <th style="text-align: left; padding: 10px 8px;">Quantity</th>
-                  <th style="text-align: left; padding: 10px 8px;">Unit</th>
-                  <th style="text-align: left; padding: 10px 8px;">Supplier</th>
-                </tr>
-              </thead>
-              <tbody id="csv-preview-tbody"></tbody>
-            </table>
-          </div>
-          <p id="csv-preview-summary" style="font-size: 13px; color: var(--text-secondary); margin: 8px 0 0 0;"></p>
-          <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px;">
-            <button type="button" class="btn btn-secondary" id="csv-back-btn" style="min-height: 44px;">Back</button>
-            <button type="button" class="btn btn-primary" id="csv-commit-btn" style="min-height: 44px;">Confirm Add to Inventory</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Barcode / Camera Scan Modal -->
-  <div class="modal-overlay" id="barcode-scan-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
-    <div class="card" style="max-width: 520px; width: 95vw; max-height: 90vh; display: flex; flex-direction: column; padding: 24px;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-shrink: 0;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Scan Barcode</h2>
-        <button type="button" id="barcode-scan-modal-close" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); min-width: 44px; min-height: 44px;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div id="barcode-camera-viewport" style="width: 100%; aspect-ratio: 4/3; background: #000; border-radius: var(--radius-md); overflow: hidden; position: relative; display: none;">
-        <video id="barcode-video" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
-      </div>
-      <div style="display: flex; gap: 8px; margin-top: 12px;">
-        <button type="button" class="btn btn-primary" id="barcode-capture-btn" style="min-height: 44px; flex: 1;">Capture snapshot</button>
-      </div>
-      <p id="barcode-capture-status" style="font-size: 13px; color: var(--text-secondary); margin: 6px 0 0 0; min-height: 20px;">Point camera at barcode</p>
-      <p id="barcode-low-light-hint" style="display: none; font-size: 13px; color: var(--warning, #b45309); margin: 6px 0 0 0;">Lighting may be too low. Try moving closer to a light source.</p>
-      <div style="margin-top: 16px;">
-        <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Or enter barcode manually</label>
-        <input type="text" id="barcode-manual-input" placeholder="Enter barcode" style="width: 100%; padding: 12px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; min-height: 44px;">
-      </div>
-      <div id="barcode-result-preview" style="display: none; margin-top: 16px; padding: 16px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-subtle, #f9fafb);">
-        <p style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Scanned: <span id="barcode-result-value"></span></p>
-        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Use the form below to add this item to inventory.</p>
-      </div>
-      <div style="margin-top: 16px; display: flex; gap: 12px; justify-content: flex-end;">
-        <button type="button" class="btn btn-secondary" id="barcode-scan-back-btn" style="min-height: 44px;">Back</button>
-        <button type="button" class="btn btn-primary" id="barcode-add-to-inventory-btn" style="min-height: 44px; display: none;">Add to Inventory</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Edit Inventory Modal -->
   <div class="modal-overlay" id="edit-inventory-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
     <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
