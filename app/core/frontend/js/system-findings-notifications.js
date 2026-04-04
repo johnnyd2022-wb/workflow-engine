@@ -12,6 +12,71 @@
     untracked_items: 'Untracked items'
   };
 
+  /** Deep-link filter: ?category= matches system status bar routing (see core2 health nav). */
+  var NOTIFY_CATEGORY_CHECKS = {
+    traceability: ['untracked_items'],
+    inventory: ['expired_materials', 'output_expiry'],
+    availability: ['output_ready_date']
+  };
+
+  function getActiveNotificationCategoryFilter() {
+    try {
+      var q = new URLSearchParams(window.location.search || '');
+      var c = (q.get('category') || '').trim().toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(NOTIFY_CATEGORY_CHECKS, c)) {
+        return c;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return null;
+  }
+
+  function recordMatchesNotificationCategory(record, category) {
+    var allowed = NOTIFY_CATEGORY_CHECKS[category];
+    if (!allowed || !record || record.checkId == null) {
+      return false;
+    }
+    return allowed.indexOf(String(record.checkId)) !== -1;
+  }
+
+  function ensureCategoryFilterStrip(category) {
+    var listEl = document.getElementById('system-findings-list');
+    if (!listEl || !listEl.parentNode) {
+      return;
+    }
+    var id = 'notifications-category-filter-strip';
+    var strip = document.getElementById(id);
+    if (!category) {
+      if (strip) {
+        strip.remove();
+      }
+      return;
+    }
+    var labels = { traceability: 'Traceability', inventory: 'Inventory', availability: 'Availability' };
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.id = id;
+      strip.className = 'notifications-category-filter-strip';
+      listEl.parentNode.insertBefore(strip, listEl);
+    }
+    strip.textContent = '';
+    var p = document.createElement('p');
+    p.className = 'notifications-category-filter-strip__text';
+    p.appendChild(document.createTextNode('Filtered to '));
+    var strong = document.createElement('strong');
+    strong.textContent = labels[category] || category;
+    p.appendChild(strong);
+    p.appendChild(document.createTextNode('. '));
+    var a = document.createElement('a');
+    a.href = '/core/notifications';
+    a.className = 'notifications-category-filter-strip__clear';
+    a.setAttribute('hx-boost', 'false');
+    a.textContent = 'Show all notifications';
+    p.appendChild(a);
+    strip.appendChild(p);
+  }
+
   function todayDateKey() {
     var d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -668,6 +733,14 @@
     var todayKey = todayDateKey();
     var findings = await fetchFindings();
     var records = buildNotificationRecords(findings, todayKey);
+
+    var categoryFilter = getActiveNotificationCategoryFilter();
+    if (categoryFilter) {
+      records = records.filter(function (rec) {
+        return recordMatchesNotificationCategory(rec, categoryFilter);
+      });
+    }
+    ensureCategoryFilterStrip(categoryFilter);
 
     listEl.innerHTML = '';
 

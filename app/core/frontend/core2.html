@@ -158,6 +158,13 @@
       margin-bottom: 0.75rem;
       padding-left: max(0px, env(safe-area-inset-left));
       padding-right: max(0px, env(safe-area-inset-right));
+      box-sizing: border-box;
+    }
+    @media (min-width: 641px) {
+      .core2-journey-section {
+        padding-left: max(env(safe-area-inset-left), clamp(6px, 2.5vw, 18px));
+        padding-right: max(env(safe-area-inset-right), clamp(6px, 2.5vw, 18px));
+      }
     }
 
     /* Core Overview segmented stats panel (Stripe/Linear/Datadog-style). */
@@ -294,12 +301,15 @@
     }
     .core2-journey-system-active-title {
       text-align: center;
-      font-size: 14px;
+      font-size: clamp(13px, 2.8vw + 0.55rem, 15px);
       font-weight: 800;
       color: rgba(6, 95, 70, 1);
       margin: 0 0 0.65rem;
       letter-spacing: 0.01em;
       user-select: none;
+      line-height: 1.25;
+      padding: 0 4px;
+      box-sizing: border-box;
     }
     .core2-journey-system-active-details {
       margin-top: 0.35rem;
@@ -397,6 +407,224 @@
       pointer-events: none;
       z-index: -1;
       animation: none;
+    }
+
+    /* Health / compliance mode (post-onboarding): single integrity bar */
+    .core2-journey--health {
+      border-radius: var(--radius-xl, 16px);
+      padding: 10px clamp(8px, 3vw, 14px) 12px;
+      box-sizing: border-box;
+    }
+    .core2-journey--health-healthy {
+      background: rgba(16, 185, 129, 0.05);
+    }
+    .core2-journey--health-degraded {
+      background: rgba(245, 158, 11, 0.08);
+    }
+    .core2-journey--health-critical {
+      background: rgba(239, 68, 68, 0.07);
+    }
+    .core2-journey-system-health-title {
+      text-align: center;
+      font-size: clamp(13px, 2.8vw + 0.55rem, 15px);
+      font-weight: 800;
+      margin: 0 0 0.65rem;
+      letter-spacing: 0.01em;
+      user-select: none;
+      line-height: 1.25;
+    }
+    .core2-journey-system-health-title--healthy {
+      color: rgba(6, 95, 70, 1);
+    }
+    .core2-journey-system-health-title--degraded {
+      color: #b45309;
+    }
+    .core2-journey-system-health-title--critical {
+      color: #b91c1c;
+    }
+    .core2-journey-bar--health {
+      display: block;
+      width: 100%;
+      height: clamp(5px, 1.2vw, 7px);
+      min-height: 5px;
+      border-radius: 9999px;
+      background: rgba(0, 0, 0, 0.08);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+      margin: 0 0 0.5rem;
+      overflow: hidden;
+    }
+    .core2-journey-bar__health-fill {
+      height: 100%;
+      width: 100%;
+      border-radius: 9999px;
+      transition: background 0.35s ease, box-shadow 0.35s ease;
+    }
+    .core2-journey-bar__health-fill--healthy {
+      background: linear-gradient(145deg, #10B981 0%, #059669 55%, #047857 100%);
+      box-shadow:
+        0 1px 3px rgba(16, 185, 129, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    .core2-journey-bar__health-fill--degraded {
+      background: linear-gradient(145deg, #fbbf24 0%, #f59e0b 45%, #d97706 100%);
+      box-shadow:
+        0 1px 3px rgba(217, 119, 6, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    .core2-journey-bar__health-fill--critical {
+      background: linear-gradient(145deg, #f87171 0%, #ef4444 45%, #dc2626 100%);
+      box-shadow:
+        0 1px 3px rgba(220, 38, 38, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    .core2-journey-health-details-body {
+      width: 100%;
+      max-width: min(100%, 40rem);
+      margin-left: auto;
+      margin-right: auto;
+      padding: 0 clamp(4px, 2.5vw, 12px);
+      box-sizing: border-box;
+    }
+    .core2-journey-health-details.core2-journey-system-active-details[open] .core2-journey-health-details-body {
+      padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+    .core2-journey-health-empty {
+      margin: 0 0 0.65rem;
+      font-size: clamp(12px, 2.5vw + 0.5rem, 14px);
+      color: var(--text-secondary, #6b7280);
+      text-align: center;
+      line-height: 1.5;
+      max-width: 26rem;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .core2-journey-health-nav {
+      display: flex;
+      flex-direction: column;
+      gap: clamp(8px, 2vw, 12px);
+      padding-top: 0.35rem;
+      align-items: stretch;
+      width: 100%;
+      max-width: min(100%, 40rem);
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .core2-journey-health-nav__link {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      padding: clamp(12px, 2.5vw, 16px) clamp(12px, 3vw, 18px);
+      border-radius: var(--radius-md, 10px);
+      border: 1px solid var(--border-light, #e5e7eb);
+      background: var(--bg-card, #fff);
+      text-decoration: none;
+      color: inherit;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      min-height: 44px;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: rgba(59, 130, 246, 0.12);
+      width: 100%;
+      max-width: 100%;
+      cursor: pointer;
+    }
+    .core2-journey-health-nav__link:hover {
+      background: var(--bg-hover, rgba(0, 0, 0, 0.03));
+      border-color: var(--primary, #3b82f6);
+    }
+    .core2-journey-health-nav__link:focus-visible {
+      outline: 2px solid var(--primary, #3b82f6);
+      outline-offset: 2px;
+    }
+    .core2-journey-health-nav__category {
+      font-size: clamp(14px, 1.8vw + 0.65rem, 16px);
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: var(--text-primary, #111827);
+      line-height: 1.2;
+    }
+    .core2-journey-health-nav__meaning {
+      font-size: clamp(12px, 1.2vw + 0.55rem, 14px);
+      font-weight: 500;
+      line-height: 1.45;
+      color: var(--text-secondary, #6b7280);
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      word-break: break-word;
+      max-width: 100%;
+    }
+    .core2-journey-health-nav__all {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+      min-height: 44px;
+      padding: 10px 18px;
+      box-sizing: border-box;
+      font-size: clamp(12px, 1.2vw + 0.55rem, 14px);
+      font-weight: 600;
+      color: var(--primary, #2563eb);
+      text-decoration: none;
+      -webkit-tap-highlight-color: rgba(59, 130, 246, 0.12);
+      max-width: 100%;
+      text-align: center;
+    }
+    .core2-journey-health-nav__all:hover {
+      text-decoration: underline;
+    }
+
+    /* Narrow phones: full-width tap targets, slightly tighter chrome */
+    @media (max-width: 380px) {
+      .core2-journey--health {
+        padding: 8px 6px 10px;
+        border-radius: var(--radius-lg, 14px);
+      }
+      .core2-journey-health-nav__link {
+        padding: 12px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .core2-journey-section {
+        margin-bottom: 0.65rem;
+      }
+      .core2-journey {
+        padding: 0 clamp(4px, 3.5vw, 12px);
+      }
+      .core2-journey-system-active-details {
+        padding-left: clamp(4px, 3.5vw, 12px);
+        padding-right: clamp(4px, 3.5vw, 12px);
+      }
+      .core2-journey-bar--health {
+        margin-bottom: 0.4rem;
+      }
+    }
+
+    /* Laptop / small desktop: comfortable reading measure */
+    @media (min-width: 641px) and (max-width: 1279px) {
+      .core2-journey-health-nav__link {
+        padding: 14px 16px;
+      }
+    }
+
+    @media (min-width: 1280px) {
+      .core2-journey-health-nav {
+        gap: 10px;
+      }
+      .core2-journey-health-nav__link {
+        padding: 15px 18px;
+      }
+      .core2-journey-system-health-title {
+        font-size: 15px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .core2-journey-health-nav__link,
+      .core2-journey-bar__health-fill,
+      .core2-journey-bar__segment {
+        transition: none;
+      }
     }
     .core2-journey-labels {
       display: grid;
@@ -978,10 +1206,104 @@
       trace: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-8 4z"/><path d="M8 2v16"/><path d="M16 6v16"/></svg>'
     };
 
+    /** Collapsed health line: binary user-facing copy (severity remains on bar color). */
+    function core2HealthCollapsedTitle(state) {
+      if (state === 'healthy') return 'System Healthy';
+      return 'System Issues Detected';
+    }
+
+    function core2SignalToNotifyCategory(signalCategory) {
+      if (signalCategory === 'inventory_validity') return 'inventory';
+      if (signalCategory === 'traceability' || signalCategory === 'availability') return signalCategory;
+      return null;
+    }
+
+    /** User-facing copy: category label + what it means (Notifications carries actionable detail). */
+    var CORE2_HEALTH_CATEGORY_NAV = {
+      inventory: {
+        title: 'Inventory',
+        meaning: 'Product validity issues detected'
+      },
+      traceability: {
+        title: 'Traceability',
+        meaning: 'Production history cannot be fully reconstructed'
+      },
+      availability: {
+        title: 'Availability',
+        meaning: 'Items used before they were ready'
+      }
+    };
+
+    /**
+     * Expanded health panel: category + meaning; whole card links to filtered Notifications (no CTA line).
+     */
+    function buildCore2HealthCategoryNav(state, signals) {
+      var frag = document.createDocumentFragment();
+      var nav = document.createElement('nav');
+      nav.className = 'core2-journey-health-nav';
+      nav.setAttribute('aria-label', 'Open notifications by category');
+
+      var seen = {};
+      (signals || []).forEach(function (s) {
+        if (!s || !s.has_issue || !s.category) return;
+        var nc = core2SignalToNotifyCategory(s.category);
+        if (nc) seen[nc] = true;
+      });
+
+      var order = ['inventory', 'traceability', 'availability'];
+
+      var hasCategoryLinks = state !== 'healthy' && Object.keys(seen).length > 0;
+
+      if (!hasCategoryLinks) {
+        var p = document.createElement('p');
+        p.className = 'core2-journey-health-empty';
+        p.textContent = state === 'healthy'
+          ? 'No open issues. Notifications is where you review history and take action.'
+          : 'Review and resolve items in Notifications.';
+        nav.appendChild(p);
+        var allA = document.createElement('a');
+        allA.href = '/core/notifications';
+        allA.setAttribute('hx-boost', 'false');
+        allA.className = 'core2-journey-health-nav__all';
+        allA.textContent = 'Notifications';
+        allA.setAttribute('aria-label', 'Open notifications');
+        nav.appendChild(allA);
+        frag.appendChild(nav);
+        return frag;
+      }
+
+      order.forEach(function (key) {
+        if (!seen[key]) return;
+        var meta = CORE2_HEALTH_CATEGORY_NAV[key];
+        if (!meta) return;
+        var a = document.createElement('a');
+        a.className = 'core2-journey-health-nav__link';
+        a.href = '/core/notifications?category=' + encodeURIComponent(key);
+        a.setAttribute('hx-boost', 'false');
+        a.setAttribute(
+          'aria-label',
+          meta.title + ': ' + meta.meaning + '. Opens notifications filtered for this category.'
+        );
+        var spanCat = document.createElement('span');
+        spanCat.className = 'core2-journey-health-nav__category';
+        spanCat.textContent = meta.title;
+        var spanMean = document.createElement('span');
+        spanMean.className = 'core2-journey-health-nav__meaning';
+        spanMean.textContent = meta.meaning;
+        a.appendChild(spanCat);
+        a.appendChild(spanMean);
+        nav.appendChild(a);
+      });
+
+      frag.appendChild(nav);
+      return frag;
+    }
+
     /**
      * Segmented progress bar + milestone labels; one primary (circle + label) + text links.
+     * After onboarding (health mode), reuses the same strip for production integrity (API: system_status).
      */
-    function updateCore2JourneyCtasFromData(inventoryItems, processes, executions) {
+    function updateCore2JourneyCtasFromData(inventoryItems, processes, executions, systemStatus) {
       const barWrap = document.getElementById('core2-journey-bar');
       const actionsWrap = document.getElementById('core2-journey-actions');
       if (!barWrap && !actionsWrap) return;
@@ -1034,47 +1356,32 @@
       if (barWrap) barWrap.innerHTML = '';
       if (actionsWrap) actionsWrap.innerHTML = '';
 
-      const barRoot = document.createElement('div');
-      barRoot.className = 'core2-journey';
-      barRoot.setAttribute('role', 'navigation');
-      barRoot.setAttribute('aria-label', 'Traceability setup');
-      let barFinalEl = barRoot;
-      if (allComplete) barRoot.classList.add('core2-journey--all-complete');
-
-      const actionsRoot = document.createElement('div');
-      actionsRoot.className = 'core2-journey';
-      actionsRoot.setAttribute('role', 'navigation');
-      actionsRoot.setAttribute('aria-label', 'Traceability actions');
-
-      const bar = document.createElement('div');
-      bar.className = 'core2-journey-bar';
-      bar.setAttribute('role', 'progressbar');
-      bar.setAttribute('aria-valuemin', '0');
-      bar.setAttribute('aria-valuemax', '4');
-      bar.setAttribute('aria-valuenow', String(filledCount));
-      bar.setAttribute('aria-label', 'Traceability milestones: ' + filledCount + ' of 4 complete');
-
-      if (allComplete) {
-        bar.classList.add('core2-journey-bar--all-complete');
-        const title = document.createElement('div');
-        title.className = 'core2-journey-system-active-title';
-        title.textContent = 'System active';
-        barRoot.appendChild(title);
-      }
-
-      // When not fully complete: add a green glow once execution recording is unlocked.
-      if (hasExecution && !allComplete) {
-        bar.classList.add('core2-journey-bar--trace-unlocked');
-      }
-      milestones.forEach(function (m) {
-        const seg = document.createElement('div');
-        seg.className = 'core2-journey-bar__segment' + (m.complete ? ' core2-journey-bar__segment--complete' : '');
-        seg.setAttribute('aria-hidden', 'true');
-        bar.appendChild(seg);
-      });
-      barRoot.appendChild(bar);
+      let barFinalEl;
 
       if (!allComplete) {
+        const barRootNc = document.createElement('div');
+        barRootNc.className = 'core2-journey';
+        barRootNc.setAttribute('role', 'navigation');
+        barRootNc.setAttribute('aria-label', 'Traceability setup');
+
+        const barNc = document.createElement('div');
+        barNc.className = 'core2-journey-bar';
+        barNc.setAttribute('role', 'progressbar');
+        barNc.setAttribute('aria-valuemin', '0');
+        barNc.setAttribute('aria-valuemax', '4');
+        barNc.setAttribute('aria-valuenow', String(filledCount));
+        barNc.setAttribute('aria-label', 'Traceability milestones: ' + filledCount + ' of 4 complete');
+        if (hasExecution) {
+          barNc.classList.add('core2-journey-bar--trace-unlocked');
+        }
+        milestones.forEach(function (m) {
+          const seg = document.createElement('div');
+          seg.className = 'core2-journey-bar__segment' + (m.complete ? ' core2-journey-bar__segment--complete' : '');
+          seg.setAttribute('aria-hidden', 'true');
+          barNc.appendChild(seg);
+        });
+        barRootNc.appendChild(barNc);
+
         const labelsRow = document.createElement('div');
         labelsRow.className = 'core2-journey-labels';
         milestones.forEach(function (m) {
@@ -1087,12 +1394,76 @@
           cell.appendChild(span);
           labelsRow.appendChild(cell);
         });
-        barRoot.appendChild(labelsRow);
+        barRootNc.appendChild(labelsRow);
+        barFinalEl = barRootNc;
+      } else if (systemStatus && systemStatus.mode === 'health') {
+        const state = systemStatus.state || 'healthy';
+        const signals = systemStatus.signals || [];
+
+        const barRootH = document.createElement('div');
+        barRootH.className = 'core2-journey core2-journey--health core2-journey--health-' + state;
+        barRootH.setAttribute('role', 'navigation');
+        barRootH.setAttribute('aria-label', 'Production integrity status');
+
+        const titleH = document.createElement('div');
+        titleH.className = 'core2-journey-system-health-title core2-journey-system-health-title--' + state;
+        titleH.textContent = core2HealthCollapsedTitle(state);
+        barRootH.appendChild(titleH);
+
+        const barH = document.createElement('div');
+        barH.className = 'core2-journey-bar core2-journey-bar--health';
+        barH.setAttribute('role', 'presentation');
+        const fillH = document.createElement('div');
+        fillH.className = 'core2-journey-bar__health-fill core2-journey-bar__health-fill--' + state;
+        barH.appendChild(fillH);
+        barRootH.appendChild(barH);
+
+        const detailsH = document.createElement('details');
+        detailsH.className = 'core2-journey-system-active-details core2-journey-health-details';
+
+        const summaryH = document.createElement('summary');
+        summaryH.setAttribute('aria-label', 'Production integrity details');
+        summaryH.textContent = '';
+        summaryH.appendChild(barRootH);
+        detailsH.appendChild(summaryH);
+
+        const bodyH = document.createElement('div');
+        bodyH.className = 'core2-journey-health-details-body';
+        bodyH.appendChild(buildCore2HealthCategoryNav(state, signals));
+        detailsH.appendChild(bodyH);
+
+        barFinalEl = detailsH;
       } else {
+        const barRoot = document.createElement('div');
+        barRoot.className = 'core2-journey';
+        barRoot.setAttribute('role', 'navigation');
+        barRoot.setAttribute('aria-label', 'Traceability setup');
+        barRoot.classList.add('core2-journey--all-complete');
+
+        const bar = document.createElement('div');
+        bar.className = 'core2-journey-bar core2-journey-bar--all-complete';
+        bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-valuemin', '0');
+        bar.setAttribute('aria-valuemax', '4');
+        bar.setAttribute('aria-valuenow', '4');
+        bar.setAttribute('aria-label', 'Traceability milestones: 4 of 4 complete');
+
+        const title = document.createElement('div');
+        title.className = 'core2-journey-system-active-title';
+        title.textContent = 'System active';
+        barRoot.appendChild(title);
+
+        milestones.forEach(function (m) {
+          const seg = document.createElement('div');
+          seg.className = 'core2-journey-bar__segment' + (m.complete ? ' core2-journey-bar__segment--complete' : '');
+          seg.setAttribute('aria-hidden', 'true');
+          bar.appendChild(seg);
+        });
+        barRoot.appendChild(bar);
+
         const details = document.createElement('details');
         details.className = 'core2-journey-system-active-details';
 
-        // Make the entire green bar area the click target (no visible wording).
         const summary = document.createElement('summary');
         summary.setAttribute('aria-label', 'System active milestones');
         summary.textContent = '';
@@ -1121,6 +1492,11 @@
         details.appendChild(list);
         barFinalEl = details;
       }
+
+      const actionsRoot = document.createElement('div');
+      actionsRoot.className = 'core2-journey';
+      actionsRoot.setAttribute('role', 'navigation');
+      actionsRoot.setAttribute('aria-label', 'Traceability actions');
 
       if (primary.addInventoryDropdown) {
         const bundle = document.createElement('div');
@@ -1213,7 +1589,18 @@
           CoreAPI.getProcesses(),
           CoreAPI.getExecutions(),
         ]);
-        updateCore2JourneyCtasFromData(items, processesData.processes || [], executionsData.executions || []);
+        const procs = processesData.processes || [];
+        const execs = (executionsData.executions || []).filter(function (e) { return e && e.id; });
+        var systemStatus = null;
+        if (items.length > 0 && procs.length > 0 && execs.length > 0 && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
+          try {
+            var sf = await CoreAPI.getSystemFindings();
+            systemStatus = sf && sf.system_status ? sf.system_status : null;
+          } catch (err) {
+            console.warn('Could not load system status for journey bar:', err);
+          }
+        }
+        updateCore2JourneyCtasFromData(items, procs, execs, systemStatus);
       } catch (error) {
         console.error('Failed to load inventory:', error);
       }
@@ -1813,7 +2200,18 @@
         updateMetricsV2(metrics);
         const items = inventoryData.inventory_items || [];
         renderInventoryV2(items);
-        updateCore2JourneyCtasFromData(items, processesData.processes || [], executionsData.executions || []);
+        const procsHub = processesData.processes || [];
+        const execsHub = (executionsData.executions || []).filter(function (e) { return e && e.id; });
+        var systemStatusHub = null;
+        if (items.length > 0 && procsHub.length > 0 && execsHub.length > 0 && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
+          try {
+            var sfHub = await CoreAPI.getSystemFindings();
+            systemStatusHub = sfHub && sfHub.system_status ? sfHub.system_status : null;
+          } catch (err) {
+            console.warn('Could not load system status for journey bar:', err);
+          }
+        }
+        updateCore2JourneyCtasFromData(items, procsHub, execsHub, systemStatusHub);
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       }
