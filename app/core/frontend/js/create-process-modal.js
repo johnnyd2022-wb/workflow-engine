@@ -413,6 +413,8 @@
     }
     updateInputButtonsText();
     updateOutputButtonText();
+    syncStep4ModeSegments();
+    if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
     isRestoringDraft = false;
   };
   
@@ -573,6 +575,8 @@
         }
       }
     }
+    syncStep4ModeSegments();
+    updateStep4SummaryBar();
   }
   
   // Save draft to database
@@ -1118,6 +1122,8 @@
     if (batchNumberMode) batchNumberMode.value = 'optional';
     const evidenceMode = document.getElementById('guided-prompt-evidence-mode');
     if (evidenceMode) evidenceMode.value = 'optional';
+    if (typeof syncStep4ModeSegments === 'function') syncStep4ModeSegments();
+    if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
     guidedInputs = [];
     guidedOutputs = [];
     guidedPrompts = [];
@@ -1287,7 +1293,79 @@
     if (currentStep === 4) {
       ensureDocFileListener();
       syncDocInlineDisabledState();
+      syncStep4ModeSegments();
+      updateStep4SummaryBar();
     }
+  }
+
+  function formatStep4ModeLabel(value) {
+    if (value === 'required') return 'Required';
+    if (value === 'optional') return 'Optional';
+    return 'Off';
+  }
+
+  function syncStep4ModeSegments() {
+    const batchSel = document.getElementById('guided-prompt-batch-number-mode');
+    const evSel = document.getElementById('guided-prompt-evidence-mode');
+    document.querySelectorAll('.step4-segment[data-step4-mode-target="batch"]').forEach(function(btn) {
+      const on = batchSel && btn.getAttribute('data-value') === batchSel.value;
+      btn.classList.toggle('step4-segment--active', !!on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.step4-segment[data-step4-mode-target="evidence"]').forEach(function(btn) {
+      const on = evSel && btn.getAttribute('data-value') === evSel.value;
+      btn.classList.toggle('step4-segment--active', !!on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function updateStep4SummaryBar() {
+    const batchEl = document.getElementById('guided-prompt-batch-number-mode');
+    const evEl = document.getElementById('guided-prompt-evidence-mode');
+    if (!batchEl || !evEl) return;
+    const b = formatStep4ModeLabel(batchEl.value);
+    const e = formatStep4ModeLabel(evEl.value);
+    const traceFull = 'Batch (' + b + ') • Evidence (' + e + ')';
+    const summaryTrace = document.getElementById('step4-summary-trace');
+    if (summaryTrace) summaryTrace.textContent = traceFull;
+    const preview = document.getElementById('step4-trace-collapsed-preview');
+    if (preview) preview.textContent = 'Batch: ' + b + ' • Evidence: ' + e;
+    const n = document.querySelectorAll('#guided-prompts-list > div').length;
+    const sp = document.getElementById('step4-summary-prompts');
+    if (sp) sp.textContent = String(n);
+    const hint = document.getElementById('step4-prompts-section-hint');
+    if (hint) hint.textContent = n + (n === 1 ? ' prompt' : ' prompts') + ' configured';
+  }
+  window.updateStep4SummaryBar = updateStep4SummaryBar;
+
+  function initStep4SegmentControls() {
+    const root = document.getElementById('create-process-step-4');
+    if (!root || root.dataset.step4UiInit === '1') return;
+    root.dataset.step4UiInit = '1';
+    root.addEventListener('click', function(ev) {
+      const btn = ev.target.closest('.step4-segment[data-step4-mode-target]');
+      if (!btn || !root.contains(btn)) return;
+      ev.preventDefault();
+      const target = btn.getAttribute('data-step4-mode-target');
+      const val = btn.getAttribute('data-value');
+      const selId = target === 'batch' ? 'guided-prompt-batch-number-mode' : 'guided-prompt-evidence-mode';
+      const sel = document.getElementById(selId);
+      if (sel && val) {
+        sel.value = val;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    ['guided-prompt-batch-number-mode', 'guided-prompt-evidence-mode'].forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('change', function() {
+          syncStep4ModeSegments();
+          updateStep4SummaryBar();
+        });
+      }
+    });
+    syncStep4ModeSegments();
+    updateStep4SummaryBar();
   }
 
   // When a file is selected for step docs, disable inline title/content so file wins and UX is clear (no silent ignore).
@@ -3955,15 +4033,11 @@
     optionalOption.textContent = 'Optional';
     requiredSelect.appendChild(optionalOption);
     requiredField.appendChild(requiredSelect);
-    // Add explanation text
-    const requiredExplanation = document.createElement('p');
-    requiredExplanation.style.cssText = 'font-size: 11px; color: var(--text-tertiary, #9ca3af); margin: 0; line-height: 1.4;';
-    requiredExplanation.textContent = 'Required: This field must be filled to complete the execution. Recommended for batch numbers and traceability data. Optional: This field can be skipped during execution.';
-    requiredField.appendChild(requiredExplanation);
     contentArea.appendChild(requiredField);
     
     promptContainer.appendChild(contentArea);
     document.getElementById('guided-prompts-list').appendChild(promptContainer);
+    if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
   };
   
   // Collapse all prompts except the specified one
@@ -4015,6 +4089,7 @@
     const promptElement = document.getElementById(promptId);
     if (promptElement) {
       promptElement.remove();
+      if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
     }
   };
   
@@ -4907,5 +4982,7 @@
         panel.style.display = 'none';
       }
     };
+
+    initStep4SegmentControls();
   });
 })();
