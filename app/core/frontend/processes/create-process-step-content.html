@@ -31,24 +31,6 @@
   background: transparent;
   overflow: visible;
 }
-#create-process-step-4 .step4-summary-bar {
-  position: sticky;
-  top: 0;
-  z-index: 4;
-  margin: 0;
-  padding: 14px 0;
-  background: var(--bg-card, #ffffff);
-  border: none;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border-default, #e5e7eb);
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-primary, #111827);
-}
-#create-process-step-4 .step4-summary-line { margin: 0 0 4px 0; }
-#create-process-step-4 .step4-summary-line:last-child { margin-bottom: 0; }
-#create-process-step-4 .step4-summary-line--muted { color: var(--text-secondary, #6b7280); font-size: 12px; }
-#create-process-step-4 .step4-summary-label { font-weight: 600; margin-right: 6px; }
 #create-process-step-4 .step4-section {
   margin: 0;
   padding: 14px 0;
@@ -352,19 +334,7 @@
     <div id="create-process-step-4" class="create-process-step" style="display: none;" x-data="{ traceOpen: true, promptsOpen: false }">
       <div class="create-process-step-body create-process-step-body--step4">
         <div class="step4-stack">
-          <!-- 1. Top summary (sticky within page; first band of the card) -->
-          <div id="step4-summary-bar" class="step4-summary-bar" role="region" aria-label="Step configuration summary">
-            <div class="step4-summary-line">
-              <span class="step4-summary-label">Traceability:</span>
-              <span id="step4-summary-trace">Batch (Optional) • Evidence (Optional)</span>
-            </div>
-            <div class="step4-summary-line step4-summary-line--muted">
-              <span class="step4-summary-label">Prompts:</span>
-              <span id="step4-summary-prompts">0</span> configured
-            </div>
-          </div>
-
-          <!-- 2. Step Documentation -->
+          <!-- Step Documentation -->
           <div id="guided-step-docs-section" class="step4-section step4-section--documentation">
             <h3 class="step4-section-title">Step Documentation</h3>
             <p class="step4-microcopy">Write clear instructions for operators performing this step. Or upload a SOP document (PDF, DOCX, TXT).</p>
@@ -405,7 +375,7 @@
             <option value="dont_ask">dont_ask</option>
           </select>
 
-          <!-- 3. Traceability & Compliance (expanded by default, collapsible) -->
+          <!-- Traceability & Compliance (expanded by default, collapsible) -->
           <div class="step4-panel step4-panel--trace">
             <button type="button" class="step4-panel-header" @click="traceOpen = !traceOpen" :aria-expanded="traceOpen">
               <span class="step4-panel-header-text">
@@ -436,7 +406,7 @@
             </div>
           </div>
 
-          <!-- 4. Additional Prompts (collapsed by default) -->
+          <!-- Additional Prompts (collapsed by default) -->
           <div class="step4-panel step4-panel--prompts">
             <button type="button" class="step4-panel-header" @click="promptsOpen = !promptsOpen" :aria-expanded="promptsOpen">
               <span class="step4-panel-header-text">

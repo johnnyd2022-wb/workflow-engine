@@ -1325,14 +1325,9 @@
     if (!batchEl || !evEl) return;
     const b = formatStep4ModeLabel(batchEl.value);
     const e = formatStep4ModeLabel(evEl.value);
-    const traceFull = 'Batch (' + b + ') • Evidence (' + e + ')';
-    const summaryTrace = document.getElementById('step4-summary-trace');
-    if (summaryTrace) summaryTrace.textContent = traceFull;
     const preview = document.getElementById('step4-trace-collapsed-preview');
     if (preview) preview.textContent = 'Batch: ' + b + ' • Evidence: ' + e;
     const n = document.querySelectorAll('#guided-prompts-list > div').length;
-    const sp = document.getElementById('step4-summary-prompts');
-    if (sp) sp.textContent = String(n);
     const hint = document.getElementById('step4-prompts-section-hint');
     if (hint) hint.textContent = n + (n === 1 ? ' prompt' : ' prompts') + ' configured';
   }
