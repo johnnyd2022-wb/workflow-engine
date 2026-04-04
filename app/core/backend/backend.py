@@ -295,9 +295,35 @@ def flows():
 @core_bp.route("/core/flows/create", methods=["GET"])
 @requires_auth
 def flows_create():
-    """Serve the process creation SPA (guided step flow as full page)."""
+    """Redirect to step 1 URL so the top back link and bookmarks use one URL per step."""
+    from flask import redirect
+
+    qs = request.query_string.decode()
+    dest = "/core/flows/create/step/1"
+    if qs:
+        dest = dest + "?" + qs
+    return redirect(dest)
+
+
+@core_bp.route("/core/flows/create/step/<int:step>", methods=["GET"])
+@requires_auth
+def flows_create_step(step):
+    """Process creation SPA: one URL per wizard step (1–4) for predictable banner back navigation."""
+    if step < 1 or step > 4:
+        from flask import redirect
+
+        qs = request.query_string.decode()
+        dest = "/core/flows/create/step/1"
+        if qs:
+            dest = dest + "?" + qs
+        return redirect(dest)
     process_id = request.args.get("id")
-    return render_template("processes/process-flow-spa.html", active_page="core", process_id=process_id)
+    return render_template(
+        "processes/process-flow-spa.html",
+        active_page="core",
+        process_id=process_id,
+        flow_step=step,
+    )
 
 
 @core_bp.route("/core/notifications", methods=["GET"])

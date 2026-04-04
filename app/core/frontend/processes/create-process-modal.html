@@ -1,4 +1,5 @@
-<!-- Create Process Guided Flow Modal -->
+{# Transitional: canonical create/edit step flow is GET /core/flows/create (process-flow-spa.html + shared create-process-step-content.html). Keep this modal as a reference for copy and behaviour until flows2 is switched to navigate to the SPA only; then remove modal + openCreateProcessModal wiring. #}
+<!-- Create Process Guided Flow Modal (reference / parity with SPA; see note above) -->
 <div class="modal-overlay" id="create-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
   <div class="card" style="max-width: 700px; width: 90%; padding: 24px; max-height: 90vh; overflow-y: auto;">
     <style>
@@ -27,6 +28,32 @@
       .guided-inventory-card .card-meta-block .meta-line { font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0; line-height: 1.5; }
       .guided-inventory-card .card-meta-block .meta-line:first-child { margin-top: 10px; }
       .guided-inventory-card .card-meta-block .meta-label { font-weight: 500; color: var(--text-primary); }
+
+      /* Shared with process-flow-spa: stacked sections (divider rows) */
+      #create-process-modal .flow-spa-stack { display: flex; flex-direction: column; gap: 0; width: 100%; }
+      #create-process-modal .flow-spa-stack__item {
+        margin: 0; padding: 14px 0; border: none; border-radius: 0; background: transparent; box-sizing: border-box;
+      }
+      #create-process-modal .flow-spa-stack__item:not(:first-child) {
+        border-top: 1px solid var(--border-default, #e5e7eb);
+      }
+      #create-process-modal .flow-spa-stack__title {
+        font-size: 1rem; font-weight: 600; color: var(--text-primary, #111827); margin: 0 0 8px 0;
+      }
+      #create-process-modal .flow-spa-stack__text {
+        font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin: 0; line-height: 1.6;
+      }
+      #create-process-modal .flow-spa-stack__item--example {
+        margin-top: 12px; padding: 12px 0 0 12px; border-left: 3px solid var(--primary, #3b82f6);
+      }
+      #create-process-modal .flow-spa-panel--sub {
+        margin-bottom: 20px; padding: 16px; background: var(--bg-secondary, #f9fafb);
+        border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);
+      }
+      #create-process-modal .flow-spa-stack__item.flow-spa-panel--sub {
+        border-top: 1px solid var(--border-default, #e5e7eb) !important;
+        padding: 16px !important;
+      }
     </style>
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
       <div>

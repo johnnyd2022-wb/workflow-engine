@@ -175,6 +175,7 @@
                     <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;" id="step-count-text">0 steps in this process</p>
                   </div>
                   <div style="display: flex; gap: 8px; align-items: center;">
+                    {# TODO: prefer navigation to /core/flows/create?id=… (SPA); modal below is transitional reference. #}
                     <button id="create-edit-process-btn" class="btn btn-primary btn-sm" data-modal-open="create-process-modal" onclick="window.openCreateProcessModal(); return false;" style="margin-top: 0;">
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                       <span id="create-edit-process-btn-text">Create process</span>
@@ -3504,6 +3505,7 @@
   </script>
   
   <!-- Create Process Guided Flow Modal -->
+  {# create-process-modal: transitional; canonical UI is process-flow-spa.html — see comment on Create process button #}
   {% include 'processes/create-process-modal.html' %}
 
   <!-- Delete product (process) — same API as Process Hub cards -->

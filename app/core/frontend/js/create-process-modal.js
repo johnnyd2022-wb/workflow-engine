@@ -22,6 +22,399 @@
     const processId = urlParams.get('id');
     return `process-draft-${processId || 'new'}`;
   }
+
+  function isProcessFlowSpaPage() {
+    return document.body && document.body.getAttribute('data-page') === 'process-flow-spa';
+  }
+
+  function getProcessFlowSpaStorageKey() {
+    const processId = new URLSearchParams(window.location.search).get('id');
+    return 'process-flow-spa-wizard-v1-' + (processId || 'new');
+  }
+
+  function migrateProcessFlowSpaStorage() {
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (!id) return;
+    const newKey = 'process-flow-spa-wizard-v1-' + id;
+    if (sessionStorage.getItem(newKey)) return;
+    const legacy = sessionStorage.getItem('process-flow-spa-wizard-v1-new');
+    if (legacy) {
+      sessionStorage.setItem(newKey, legacy);
+    }
+  }
+
+  function collectSpaWizardOutputsPayload() {
+    const outputs = [];
+    const outputElements = document.querySelectorAll('#guided-outputs-list > div');
+    outputElements.forEach(outputEl => {
+      const name = outputEl.querySelector('.guided-output-name')?.value.trim();
+      const unitSelect = outputEl.querySelector('.guided-output-unit');
+      const unit = unitSelect ? (unitSelect.value || '').trim() : '';
+      const quantityInput = outputEl.querySelector('.guided-output-quantity');
+      const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
+      if (!name || !unit) return;
+      const existingId = outputEl.dataset.outputId || null;
+      const outputId = existingId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'out-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11));
+      const expiryModeEl = outputEl.querySelector('.guided-output-expiry-mode');
+      const expiryValueEl = outputEl.querySelector('.guided-output-expiry-value');
+      const expiryUnitEl = outputEl.querySelector('.guided-output-expiry-unit');
+      const warningValueEl = outputEl.querySelector('.guided-output-expiry-warning-value');
+      const warningUnitEl = outputEl.querySelector('.guided-output-expiry-warning-unit');
+      const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
+      const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
+      const readyDateUnitEl = outputEl.querySelector('.guided-output-ready-date-unit');
+      const readyDateWarnValueEl = outputEl.querySelector('.guided-output-ready-date-warning-value');
+      const readyDateWarnUnitEl = outputEl.querySelector('.guided-output-ready-date-warning-unit');
+      const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
+      const readyDateMode = readyDateModeEl ? readyDateModeEl.value : 'none';
+      const expiryValueRaw = expiryValueEl && expiryMode === 'fixed_duration' ? expiryValueEl.value.trim() : '';
+      const expiryValue = expiryValueRaw !== '' ? parseInt(expiryValueRaw, 10) : null;
+      const expiryUnit = expiryUnitEl && expiryMode === 'fixed_duration' ? ((expiryUnitEl.value || 'days') + '').trim() : 'days';
+      const warningValueRaw = warningValueEl && expiryMode === 'fixed_duration' ? warningValueEl.value.trim() : '';
+      const warningValue = warningValueRaw !== '' ? parseInt(warningValueRaw, 10) : 7;
+      const warningUnit = warningUnitEl && expiryMode === 'fixed_duration' ? ((warningUnitEl.value || 'days') + '').trim() : 'days';
+      const extra_data = {};
+      if (expiryMode === 'fixed_duration' && expiryValue > 0) {
+        extra_data.custom_expiry = {
+          enabled: true,
+          mode: 'fixed_duration',
+          duration_value: expiryValue,
+          duration_unit: (expiryUnit || 'days').trim(),
+          warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 7,
+          warning_unit: (warningUnit || 'days').trim(),
+          expiry_at: null,
+          rule_type: 'custom_output_expiry'
+        };
+      } else if (expiryMode === 'set_at_execution') {
+        extra_data.custom_expiry = {
+          enabled: true,
+          mode: 'set_at_execution',
+          duration_value: null,
+          duration_unit: null,
+          warning_value: null,
+          warning_unit: null,
+          expiry_at: null,
+          rule_type: 'custom_output_expiry'
+        };
+      }
+      if (readyDateMode === 'fixed_duration' && readyDateValueEl && readyDateValueEl.value.trim()) {
+        const rdVal = parseInt(readyDateValueEl.value, 10);
+        if (!isNaN(rdVal) && rdVal > 0) {
+          const rdUnit = (readyDateUnitEl && readyDateUnitEl.value) ? readyDateUnitEl.value.trim() : 'days';
+          const rdWarnVal = (readyDateWarnValueEl && readyDateWarnValueEl.value.trim() !== '') ? parseInt(readyDateWarnValueEl.value, 10) : 0;
+          const rdWarnUnit = (readyDateWarnUnitEl && readyDateWarnUnitEl.value) ? readyDateWarnUnitEl.value.trim() : 'days';
+          extra_data.ready_date = {
+            enabled: true,
+            mode: 'fixed_duration',
+            duration_value: rdVal,
+            duration_unit: rdUnit,
+            warning_value: (typeof rdWarnVal === 'number' && !isNaN(rdWarnVal) && rdWarnVal >= 0) ? rdWarnVal : 0,
+            warning_unit: rdWarnUnit,
+            rule_type: 'custom_ready_date'
+          };
+        }
+      } else if (readyDateMode === 'set_at_execution') {
+        extra_data.ready_date = {
+          enabled: true,
+          mode: 'set_at_execution',
+          duration_value: null,
+          duration_unit: null,
+          warning_value: null,
+          warning_unit: null,
+          rule_type: 'custom_ready_date'
+        };
+      }
+      const outObj = {
+        id: outputId,
+        name: name,
+        unit: unit,
+        quantity: quantity ? parseFloat(quantity) : null,
+        is_variable: true,
+        requires_execution_confirmation: true
+      };
+      if (Object.keys(extra_data).length > 0) outObj.extra_data = extra_data;
+      outputs.push(outObj);
+    });
+    return outputs;
+  }
+
+  function serializeSpaWizardState() {
+    const stepName = document.getElementById('guided-step-name')?.value || '';
+    const stepDescription = document.getElementById('guided-step-description')?.value || '';
+    const inputs = [];
+    getAllGuidedInputElements().forEach(inputEl => {
+      const inputType = inputEl.dataset.inputType || 'new';
+      const nameInput = inputEl.querySelector('.guided-input-name');
+      let name = '';
+      if (nameInput) {
+        name = nameInput.classList.contains('searchable-dropdown-input') ? nameInput.value.trim() : nameInput.value.trim();
+      }
+      const quantityInput = inputEl.querySelector('.guided-input-quantity');
+      const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
+      const unitSelect = inputEl.querySelector('.guided-input-unit');
+      const unit = unitSelect ? unitSelect.value : '';
+      const executionTypeSelect = inputEl.querySelector('.guided-input-execution-type');
+      const executionType = executionTypeSelect ? executionTypeSelect.value : 'variable';
+      const sourceOutputId = inputEl.dataset.sourceOutputId || null;
+      const previousOutputDisplayName = inputEl.dataset.previousOutputDisplayName || null;
+      const inventoryPreselected = inputType === 'inventory' && nameInput && nameInput.type === 'hidden';
+      const isPreviousOutput = !executionTypeSelect;
+      const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
+      const requiresInventorySelection = isPreviousOutput ? true : (executionType === 'variable');
+      inputs.push({
+        inputType,
+        name,
+        quantity: quantity ? parseFloat(quantity) : null,
+        unit,
+        executionType,
+        source_output_id: sourceOutputId || undefined,
+        previousOutputDisplayName: previousOutputDisplayName || undefined,
+        inventoryPreselected,
+        is_variable: isVariable,
+        requires_inventory_selection: requiresInventorySelection
+      });
+    });
+    const outputs = collectSpaWizardOutputsPayload();
+    const prompts = collectCurrentPrompts();
+    const batchNumberMode = document.getElementById('guided-prompt-batch-number-mode')?.value || 'optional';
+    const evidenceMode = document.getElementById('guided-prompt-evidence-mode')?.value || 'optional';
+    let inputTab = 'inventory';
+    const activeTab = document.querySelector('.guided-inputs-tab.active');
+    if (activeTab && activeTab.dataset.inputTab) inputTab = activeTab.dataset.inputTab;
+    return {
+      v: 1,
+      stepName,
+      stepDescription,
+      inputs,
+      outputs,
+      prompts,
+      batchNumberMode,
+      evidenceMode,
+      inputTab,
+      createdSteps: JSON.parse(JSON.stringify(createdSteps))
+    };
+  }
+
+  window.persistSpaWizardState = function() {
+    if (!isProcessFlowSpaPage()) return;
+    try {
+      const payload = serializeSpaWizardState();
+      sessionStorage.setItem(getProcessFlowSpaStorageKey(), JSON.stringify(payload));
+    } catch (e) {
+      console.warn('persistSpaWizardState failed', e);
+    }
+  };
+
+  async function applyOutputPayloadToLastContainer(output) {
+    const outputContainers = document.querySelectorAll('#guided-outputs-list > div');
+    const lastOutputContainer = outputContainers[outputContainers.length - 1];
+    if (!lastOutputContainer || !output) return;
+    const nameInput = lastOutputContainer.querySelector('.guided-output-name');
+    if (nameInput) {
+      nameInput.value = output.name || '';
+      nameInput.dispatchEvent(new Event('input'));
+      nameInput.dispatchEvent(new Event('blur'));
+    }
+    const quantityInput = lastOutputContainer.querySelector('.guided-output-quantity');
+    if (quantityInput && output.quantity !== null && output.quantity !== undefined) {
+      quantityInput.value = output.quantity;
+    }
+    const unitSelect = lastOutputContainer.querySelector('.guided-output-unit');
+    if (unitSelect && output.unit) unitSelect.value = output.unit;
+    if (output.id) lastOutputContainer.dataset.outputId = output.id;
+    const nameDisplay = lastOutputContainer.querySelector('.guided-output-name-display');
+    const titleSpan = lastOutputContainer.querySelector('.guided-output-title');
+    if (nameDisplay && titleSpan && output.name) {
+      nameDisplay.textContent = output.name;
+      nameDisplay.style.display = 'inline';
+      titleSpan.style.display = 'none';
+    }
+    const ce = (output.extra_data || {}).custom_expiry;
+    const expiryModeEl = lastOutputContainer.querySelector('.guided-output-expiry-mode');
+    const expiryValueEl = lastOutputContainer.querySelector('.guided-output-expiry-value');
+    const expiryUnitEl = lastOutputContainer.querySelector('.guided-output-expiry-unit');
+    const warningValueEl = lastOutputContainer.querySelector('.guided-output-expiry-warning-value');
+    const warningUnitEl = lastOutputContainer.querySelector('.guided-output-expiry-warning-unit');
+    const expiryFieldsWrap = lastOutputContainer.querySelector('.guided-output-expiry-fields');
+    const fixedWrap = lastOutputContainer.querySelector('.guided-output-expiry-fixed-fields');
+    const execHint = lastOutputContainer.querySelector('.guided-output-expiry-exec-hint');
+    const enabled = !!(ce && ce.enabled);
+    let mode = enabled ? (ce.mode || null) : null;
+    if (enabled && !mode) {
+      mode = (ce.set_at_execution || ce.set_during_execution) ? 'set_at_execution' : 'fixed_duration';
+      if (ce.expiry_days != null) mode = 'fixed_duration';
+    }
+    if (expiryModeEl) {
+      expiryModeEl.value = enabled ? (mode || 'fixed_duration') : 'none';
+      const m = expiryModeEl.value;
+      if (expiryFieldsWrap) expiryFieldsWrap.style.display = m !== 'none' ? 'block' : 'none';
+      if (fixedWrap) fixedWrap.style.display = m === 'fixed_duration' ? 'block' : 'none';
+      if (execHint) execHint.style.display = m === 'set_at_execution' ? 'block' : 'none';
+    }
+    if (enabled) {
+      const durVal = ce.duration_value != null ? ce.duration_value : ce.expiry_days;
+      const durUnit = ce.duration_unit || 'days';
+      if (expiryValueEl && durVal != null) expiryValueEl.value = String(durVal);
+      if (expiryUnitEl && durUnit) expiryUnitEl.value = durUnit;
+      if (mode === 'fixed_duration') {
+        const warnVal = ce.warning_value != null ? ce.warning_value : ce.warning_days;
+        const warnUnit = ce.warning_unit || 'days';
+        if (warningValueEl && warnVal != null) warningValueEl.value = String(warnVal);
+        if (warningUnitEl && warnUnit) warningUnitEl.value = warnUnit;
+      } else {
+        if (warningValueEl) warningValueEl.value = '';
+        if (warningUnitEl) warningUnitEl.value = 'days';
+      }
+    }
+    const rd = (output.extra_data || {}).ready_date;
+    const readyDateModeEl = lastOutputContainer.querySelector('.guided-output-ready-date-mode');
+    const readyDateValueEl = lastOutputContainer.querySelector('.guided-output-ready-date-value');
+    const readyDateUnitEl = lastOutputContainer.querySelector('.guided-output-ready-date-unit');
+    const readyDateWarnValueEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-value');
+    const readyDateWarnUnitEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-unit');
+    const readyDateFieldsEl = lastOutputContainer.querySelector('.guided-output-ready-date-fields');
+    const readyDateFixedEl = lastOutputContainer.querySelector('.guided-output-ready-date-fixed-fields');
+    const readyDateExecHintEl = lastOutputContainer.querySelector('.guided-output-ready-date-exec-hint');
+    const readyDateWarnWrapEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-wrap');
+    const rdEnabled = !!(rd && rd.enabled);
+    let rdMode = rdEnabled ? (rd.mode || null) : null;
+    if (rdEnabled && !rdMode) {
+      rdMode = (rd.set_at_execution || rd.set_during_execution) ? 'set_at_execution' : 'fixed_duration';
+    }
+    if (readyDateModeEl) {
+      readyDateModeEl.value = rdEnabled ? (rdMode || 'fixed_duration') : 'none';
+      const rm = readyDateModeEl.value;
+      if (readyDateFieldsEl) readyDateFieldsEl.style.display = rm !== 'none' ? 'block' : 'none';
+      if (readyDateFixedEl) readyDateFixedEl.style.display = rm === 'fixed_duration' ? 'block' : 'none';
+      if (readyDateExecHintEl) readyDateExecHintEl.style.display = rm === 'set_at_execution' ? 'block' : 'none';
+      if (readyDateWarnWrapEl) readyDateWarnWrapEl.style.display = rm === 'fixed_duration' ? 'block' : 'none';
+    }
+    if (rdEnabled && rdMode === 'fixed_duration') {
+      const rdVal = rd.duration_value != null ? rd.duration_value : null;
+      const rdUnit = rd.duration_unit || 'days';
+      if (readyDateValueEl && rdVal != null) readyDateValueEl.value = String(rdVal);
+      if (readyDateUnitEl && rdUnit) readyDateUnitEl.value = rdUnit;
+      const rwVal = rd.warning_value != null ? rd.warning_value : 0;
+      const rwUnit = rd.warning_unit || 'days';
+      if (readyDateWarnValueEl) readyDateWarnValueEl.value = String(rwVal);
+      if (readyDateWarnUnitEl) readyDateWarnUnitEl.value = rwUnit;
+    }
+    const complianceWrapEl = lastOutputContainer.querySelector('.guided-output-compliance-wrap');
+    if (complianceWrapEl) {
+      const expNone = !enabled || (expiryModeEl && expiryModeEl.value === 'none');
+      const rdNone = !rdEnabled || (readyDateModeEl && readyDateModeEl.value === 'none');
+      const open = !(expNone && rdNone);
+      setTimeout(function() {
+        if (window.Alpine && typeof Alpine.$data === 'function') {
+          try {
+            const d = Alpine.$data(complianceWrapEl);
+            if (d && typeof d.advancedOpen !== 'undefined') {
+              d.advancedOpen = open;
+            }
+          } catch (e) {}
+        }
+      }, 0);
+    }
+  }
+
+  window.restoreSpaWizardState = async function() {
+    if (!isProcessFlowSpaPage()) return;
+    migrateProcessFlowSpaStorage();
+    const raw = sessionStorage.getItem(getProcessFlowSpaStorageKey());
+    if (!raw) return;
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      return;
+    }
+    if (!data || data.v !== 1) return;
+    isRestoringDraft = true;
+    const stepNameInput = document.getElementById('guided-step-name');
+    const stepDescInput = document.getElementById('guided-step-description');
+    if (stepNameInput) stepNameInput.value = data.stepName || '';
+    if (stepDescInput) stepDescInput.value = data.stepDescription || '';
+    if (Array.isArray(data.createdSteps)) {
+      createdSteps = data.createdSteps;
+    }
+    const listEl = getGuidedInputListElement('inventory');
+    if (listEl) listEl.innerHTML = '';
+    selectedInventoryItems.clear();
+    selectedPreviousOutputs.clear();
+    for (const inp of data.inputs || []) {
+      try {
+        if (inp.inputType === 'inventory' && inp.inventoryPreselected && inp.name) {
+          const categorized = await loadInventoryItems();
+          const allItems = [
+            ...(categorized.raw_material || []),
+            ...(categorized.work_in_progress || []),
+            ...(categorized.final_product || [])
+          ];
+          const item = allItems.find(i => i.name === inp.name);
+          if (item) {
+            await window.addGuidedInput('inventory', true, {
+              ...item,
+              quantity: inp.quantity,
+              unit: inp.unit,
+              executionType: inp.executionType
+            }, undefined);
+            const lastIn = getAllGuidedInputElements().slice(-1)[0];
+            const typeSelect = lastIn && lastIn.querySelector('.guided-input-execution-type.form-select');
+            if (typeSelect && inp.executionType && !((item.inventory_type || item.category) === 'raw_material')) {
+              typeSelect.value = inp.executionType;
+            }
+            continue;
+          }
+        }
+        const apiShape = {
+          name: inp.name,
+          quantity: inp.quantity,
+          unit: inp.unit,
+          is_variable: inp.is_variable,
+          requires_inventory_selection: inp.requires_inventory_selection,
+          source_output_id: inp.source_output_id
+        };
+        const container = await window.addGuidedInput(inp.inputType || 'new', true, undefined, apiShape);
+        if (container && listEl) listEl.appendChild(container);
+      } catch (err) {
+        console.warn('restore input failed', err);
+      }
+    }
+    const outputsList = document.getElementById('guided-outputs-list');
+    if (outputsList) outputsList.innerHTML = '';
+    for (const out of data.outputs || []) {
+      await window.addGuidedOutput();
+      await applyOutputPayloadToLastContainer(out);
+    }
+    const promptsList = document.getElementById('guided-prompts-list');
+    if (promptsList) promptsList.innerHTML = '';
+    for (const p of data.prompts || []) {
+      window.addGuidedPrompt();
+      const promptEls = document.querySelectorAll('#guided-prompts-list > div');
+      const lastP = promptEls[promptEls.length - 1];
+      if (lastP) {
+        const labelIn = lastP.querySelector('.guided-prompt-label');
+        const typeSel = lastP.querySelector('.guided-prompt-type');
+        const unitSel = lastP.querySelector('.guided-prompt-unit');
+        const reqSel = lastP.querySelector('.guided-prompt-required');
+        if (labelIn) labelIn.value = p.label || '';
+        if (typeSel) typeSel.value = p.type || 'text';
+        if (unitSel) unitSel.value = p.unit || '';
+        if (reqSel) reqSel.value = p.required ? 'true' : 'false';
+      }
+    }
+    const batchEl = document.getElementById('guided-prompt-batch-number-mode');
+    if (batchEl && data.batchNumberMode) batchEl.value = data.batchNumberMode;
+    const evEl = document.getElementById('guided-prompt-evidence-mode');
+    if (evEl && data.evidenceMode) evEl.value = data.evidenceMode;
+    if (data.inputTab) {
+      const tabBtn = document.querySelector('.guided-inputs-tab[data-input-tab="' + data.inputTab + '"]');
+      if (tabBtn) tabBtn.click();
+    }
+    updateInputButtonsText();
+    updateOutputButtonText();
+    isRestoringDraft = false;
+  };
   
   // Restore a step's data into the form (name, description, inputs, outputs, execution_prompts). Caller sets editingStepId.
   async function restoreStepIntoForm(step) {
@@ -184,6 +577,9 @@
   
   // Save draft to database
   window.saveDraft = async function() {
+    if (isProcessFlowSpaPage() && typeof window.persistSpaWizardState === 'function') {
+      window.persistSpaWizardState();
+    }
     const stepName = document.getElementById('guided-step-name')?.value.trim() || '';
     const stepDescription = document.getElementById('guided-step-description')?.value.trim() || '';
     
@@ -775,10 +1171,17 @@
     // Populate list: step name + Edit button. Use 1-based index for display (same fix as flows2) so single step shows "1" not stored step_number.
     existingList.innerHTML = '';
     const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+    const spaExisting = document.body && document.body.getAttribute('data-page') === 'process-flow-spa';
     sortedSteps.forEach((step, index) => {
       const displayNumber = index + 1;
       const row = document.createElement('div');
-      row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md);';
+      if (spaExisting) {
+        row.style.cssText =
+          'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; background: transparent; border: none; border-radius: 0;' +
+          (index > 0 ? 'border-top: 1px solid var(--border-default, #e5e7eb);' : '');
+      } else {
+        row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md);';
+      }
       const left = document.createElement('div');
       left.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
       const stepNum = document.createElement('span');
@@ -1254,6 +1657,17 @@
       }
     }
     
+    if (isProcessFlowSpaPage()) {
+      if (typeof window.persistSpaWizardState === 'function') {
+        window.persistSpaWizardState();
+      }
+      if (currentStep < totalSteps) {
+        const qs = window.location.search || '';
+        window.location.href = '/core/flows/create/step/' + (currentStep + 1) + qs;
+      }
+      return;
+    }
+
     if (currentStep < totalSteps) {
       currentStep++;
       updateStepDisplay();
@@ -2010,6 +2424,9 @@
         quantityInput.required = true;
         quantityInput.setAttribute('data-inventory-required', 'true');
         quantityInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+        if (preSelectedItem.quantity != null && preSelectedItem.quantity !== '') {
+          quantityInput.value = preSelectedItem.quantity;
+        }
         quantityField.appendChild(quantityInput);
         contentArea.appendChild(quantityField);
         
@@ -2082,6 +2499,9 @@
                 : 'Use this exact input every execution: The system will use the same quantity and unit for every execution without prompting.';
             }
           });
+          if (preSelectedItem.executionType === 'variable' || preSelectedItem.executionType === 'static') {
+            typeSelect.value = preSelectedItem.executionType;
+          }
         }
         contentArea.appendChild(typeField);
         
@@ -2555,11 +2975,117 @@
         const metaBlock = document.createElement('div');
         metaBlock.className = 'card-meta-block';
         metaBlock.style.display = 'none';
-        metaBlock.innerHTML = metaHtml + '<div class="card-add-footer"><button type="button" class="card-add-btn btn btn-primary btn-sm">Add as input</button></div>';
-        
+        const metaContent = document.createElement('div');
+        metaContent.innerHTML = metaHtml;
+        metaBlock.appendChild(metaContent);
+
+        const addFooter = document.createElement('div');
+        addFooter.className = 'card-add-footer';
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'card-add-btn btn btn-primary btn-sm';
+        openBtn.textContent = 'Add as input';
+
+        const inlineWrap = document.createElement('div');
+        inlineWrap.className = 'guided-inv-inline-add';
+        inlineWrap.style.cssText = 'display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light, #eee);';
+        const invIsRaw = (item.inventory_type || item.category) === 'raw_material';
+        const qtyLab = document.createElement('label');
+        qtyLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
+        qtyLab.innerHTML = 'Quantity <span style="color:var(--error,#ef4444)">*</span>';
+        const qtyIn = document.createElement('input');
+        qtyIn.type = 'number';
+        qtyIn.step = '0.01';
+        qtyIn.min = '0.01';
+        qtyIn.placeholder = 'e.g. 1';
+        qtyIn.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
+        const unitLab = document.createElement('label');
+        unitLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
+        unitLab.innerHTML = 'Unit <span style="color:var(--error,#ef4444)">*</span>';
+        const unitSel = document.createElement('select');
+        unitSel.className = 'form-select';
+        unitSel.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-card);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
+        const emptyU = document.createElement('option');
+        emptyU.value = '';
+        emptyU.textContent = 'Select unit';
+        unitSel.appendChild(emptyU);
+        [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(function(unit) {
+          const o = document.createElement('option');
+          o.value = unit;
+          o.textContent = unit;
+          unitSel.appendChild(o);
+        });
+        if (item.unit) unitSel.value = item.unit;
+
+        let execSel = null;
+        if (!invIsRaw) {
+          execSel = document.createElement('select');
+          execSel.className = 'form-select';
+          execSel.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-card);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
+          [['variable', 'Select inventory at execution'], ['static', 'Use exact input every execution']].forEach(function(opt) {
+            const o = document.createElement('option');
+            o.value = opt[0];
+            o.textContent = opt[1];
+            execSel.appendChild(o);
+          });
+        }
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = 'btn btn-primary btn-sm';
+        confirmBtn.style.cssText = 'width:100%;margin-top:4px;';
+        confirmBtn.textContent = 'Click to add';
+
+        inlineWrap.appendChild(qtyLab);
+        inlineWrap.appendChild(qtyIn);
+        inlineWrap.appendChild(unitLab);
+        inlineWrap.appendChild(unitSel);
+        if (!invIsRaw && execSel) {
+          const execLab = document.createElement('label');
+          execLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
+          execLab.textContent = 'Execution type';
+          inlineWrap.appendChild(execLab);
+          inlineWrap.appendChild(execSel);
+        }
+        inlineWrap.appendChild(confirmBtn);
+
+        openBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openBtn.style.display = 'none';
+          inlineWrap.style.display = 'block';
+        });
+        confirmBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const q = parseFloat(qtyIn.value, 10);
+          const u = unitSel.value;
+          if (!q || q <= 0 || isNaN(q)) {
+            if (window.showNotification) window.showNotification('error', 'Quantity required', 'Enter a positive quantity.');
+            else alert('Enter a positive quantity.');
+            return;
+          }
+          if (!u) {
+            if (window.showNotification) window.showNotification('error', 'Unit required', 'Select a unit.');
+            else alert('Select a unit.');
+            return;
+          }
+          const exec = invIsRaw ? 'variable' : (execSel ? execSel.value : 'variable');
+          (async function() {
+            await window.addGuidedInput('inventory', true, Object.assign({}, item, { quantity: q, unit: u, executionType: exec }));
+            window.renderInventoryItemCards();
+            updateInputButtonsText();
+            const unified = document.getElementById('guided-inputs-list-unified');
+            if (unified && unified.firstElementChild) {
+              unified.firstElementChild.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          })();
+        });
+
+        addFooter.appendChild(openBtn);
+        addFooter.appendChild(inlineWrap);
+        metaBlock.appendChild(addFooter);
+
         const expandBtn = headerRow.querySelector('.card-expand-btn');
-        const addBtn = metaBlock.querySelector('.card-add-btn');
-        
+
         function toggleExpand() {
           const open = card.classList.toggle('expanded');
           metaBlock.style.display = open ? 'block' : 'none';
@@ -2572,15 +3098,7 @@
           e.stopPropagation();
           toggleExpand();
         });
-        addBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          (async function() {
-            await window.addGuidedInput('inventory', false, item);
-            window.renderInventoryItemCards();
-            updateInputButtonsText();
-          })();
-        });
-        
+
         card.appendChild(headerRow);
         card.appendChild(metaBlock);
         sectionEl.appendChild(card);
@@ -2856,17 +3374,18 @@
     expiryDurationLabel.textContent = 'Expiry period';
     fixedWrap.appendChild(expiryDurationLabel);
     const expiryDurationRow = document.createElement('div');
-    expiryDurationRow.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+    expiryDurationRow.className = 'guided-duration-row';
     const expiryValueInput = document.createElement('input');
     expiryValueInput.type = 'number';
-    expiryValueInput.className = 'guided-output-expiry-value';
+    expiryValueInput.className = 'guided-output-expiry-value guided-duration-value-input';
     expiryValueInput.min = '1';
     expiryValueInput.placeholder = '30';
-    expiryValueInput.style.cssText = 'flex: 1; width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+    expiryValueInput.setAttribute('inputmode', 'numeric');
+    expiryValueInput.style.cssText = 'border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
     expiryDurationRow.appendChild(expiryValueInput);
     const expiryUnitSelect = document.createElement('select');
-    expiryUnitSelect.className = 'guided-output-expiry-unit form-select';
-    expiryUnitSelect.style.cssText = 'width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+    expiryUnitSelect.className = 'guided-output-expiry-unit form-select guided-duration-unit-select';
+    expiryUnitSelect.style.cssText = 'border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
     timeUnits.forEach(u => {
       const opt = document.createElement('option');
       opt.value = u.value;
@@ -2894,18 +3413,19 @@
     warningWrap.appendChild(warningLabel);
 
     const warningRow = document.createElement('div');
-    warningRow.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+    warningRow.className = 'guided-duration-row';
     const warningValueInput = document.createElement('input');
     warningValueInput.type = 'number';
-    warningValueInput.className = 'guided-output-expiry-warning-value';
+    warningValueInput.className = 'guided-output-expiry-warning-value guided-duration-value-input';
     warningValueInput.min = '0';
     warningValueInput.placeholder = '7';
+    warningValueInput.setAttribute('inputmode', 'numeric');
     warningValueInput.title = 'Start showing amber warning when this amount of time remains until expiry (e.g. 7 days, 2 days, 12 hours). Must be the same or less than the expiry period.';
-    warningValueInput.style.cssText = 'flex: 1; width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+    warningValueInput.style.cssText = 'border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
     warningRow.appendChild(warningValueInput);
     const warningUnitSelect = document.createElement('select');
-    warningUnitSelect.className = 'guided-output-expiry-warning-unit form-select';
-    warningUnitSelect.style.cssText = 'width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+    warningUnitSelect.className = 'guided-output-expiry-warning-unit form-select guided-duration-unit-select';
+    warningUnitSelect.style.cssText = 'border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
     timeUnits.forEach(u => {
       const opt = document.createElement('option');
       opt.value = u.value;
@@ -2974,7 +3494,6 @@
       syncExpiryWarningValidation();
     });
     expiryPane.appendChild(expiryFieldsWrap);
-    contentArea.appendChild(expiryPane);
 
     // Ready date — sub-pane (same pattern as custom expiry: none | fixed_duration | set_at_execution)
     const READY_DATE_MODES = window.READY_DATE_MODES || { NONE: 'none', FIXED: 'fixed_duration', EXECUTION: 'set_at_execution' };
@@ -3022,17 +3541,18 @@
     readyDateDurationLabel.textContent = 'Ready after (period from step completion)';
     readyDateFixedWrap.appendChild(readyDateDurationLabel);
     const readyDateDurationRow = document.createElement('div');
-    readyDateDurationRow.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+    readyDateDurationRow.className = 'guided-duration-row';
     const readyDateValueInput = document.createElement('input');
     readyDateValueInput.type = 'number';
-    readyDateValueInput.className = 'guided-output-ready-date-value';
+    readyDateValueInput.className = 'guided-output-ready-date-value guided-duration-value-input';
     readyDateValueInput.min = '1';
     readyDateValueInput.placeholder = '7';
-    readyDateValueInput.style.cssText = 'flex: 1; width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+    readyDateValueInput.setAttribute('inputmode', 'numeric');
+    readyDateValueInput.style.cssText = 'border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
     readyDateDurationRow.appendChild(readyDateValueInput);
     const readyDateUnitSelect = document.createElement('select');
-    readyDateUnitSelect.className = 'guided-output-ready-date-unit form-select';
-    readyDateUnitSelect.style.cssText = 'width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+    readyDateUnitSelect.className = 'guided-output-ready-date-unit form-select guided-duration-unit-select';
+    readyDateUnitSelect.style.cssText = 'border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
     readyDateTimeUnits.forEach(u => {
       const opt = document.createElement('option');
       opt.value = u.value;
@@ -3057,17 +3577,18 @@
     readyDateWarnLabel.title = 'Alert the user ahead of time that their output will be ready in X period (e.g. 1 day, 1 week). Must be the same or less than the ready period.';
     readyDateWarnWrap.appendChild(readyDateWarnLabel);
     const readyDateWarnRow = document.createElement('div');
-    readyDateWarnRow.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+    readyDateWarnRow.className = 'guided-duration-row';
     const readyDateWarnValueInput = document.createElement('input');
     readyDateWarnValueInput.type = 'number';
-    readyDateWarnValueInput.className = 'guided-output-ready-date-warning-value';
+    readyDateWarnValueInput.className = 'guided-output-ready-date-warning-value guided-duration-value-input';
     readyDateWarnValueInput.min = '0';
     readyDateWarnValueInput.placeholder = '1';
-    readyDateWarnValueInput.style.cssText = 'flex: 1; width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
+    readyDateWarnValueInput.setAttribute('inputmode', 'numeric');
+    readyDateWarnValueInput.style.cssText = 'border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
     readyDateWarnRow.appendChild(readyDateWarnValueInput);
     const readyDateWarnUnitSelect = document.createElement('select');
-    readyDateWarnUnitSelect.className = 'guided-output-ready-date-warning-unit form-select';
-    readyDateWarnUnitSelect.style.cssText = 'width: 150px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
+    readyDateWarnUnitSelect.className = 'guided-output-ready-date-warning-unit form-select guided-duration-unit-select';
+    readyDateWarnUnitSelect.style.cssText = 'border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
     readyDateTimeUnits.forEach(u => {
       const opt = document.createElement('option');
       opt.value = u.value;
@@ -3135,7 +3656,44 @@
       syncReadyDateWarnValidation();
     });
     readyDatePane.appendChild(readyDateFieldsWrap);
-    contentArea.appendChild(readyDatePane);
+
+    const complianceWrap = document.createElement('div');
+    complianceWrap.className = 'guided-output-compliance-wrap';
+    complianceWrap.setAttribute('x-data', '{ advancedOpen: false }');
+
+    const complianceToggle = document.createElement('button');
+    complianceToggle.type = 'button';
+    complianceToggle.className = 'spa-advanced-toggle';
+    complianceToggle.setAttribute('x-on:click', 'advancedOpen = !advancedOpen');
+    const compLabel = document.createElement('span');
+    compLabel.className = 'spa-advanced-toggle__label spa-form-section-title';
+    compLabel.textContent = 'Compliance & Traceability';
+    const compTrack = document.createElement('span');
+    compTrack.className = 'spa-advanced-toggle__track';
+    compTrack.setAttribute(':class', "{ 'spa-advanced-toggle__track--on': advancedOpen }");
+    const compThumb = document.createElement('span');
+    compThumb.className = 'spa-advanced-toggle__thumb';
+    compTrack.appendChild(compThumb);
+    complianceToggle.appendChild(compLabel);
+    complianceToggle.appendChild(compTrack);
+    complianceWrap.appendChild(complianceToggle);
+
+    const complianceInner = document.createElement('div');
+    complianceInner.className = 'spa-advanced-fields spa-form-section guided-output-compliance-fields';
+    complianceInner.setAttribute('x-show', 'advancedOpen');
+    complianceInner.setAttribute('x-cloak', '');
+    complianceInner.style.marginTop = '10px';
+    complianceInner.appendChild(expiryPane);
+    complianceInner.appendChild(readyDatePane);
+    complianceWrap.appendChild(complianceInner);
+
+    contentArea.appendChild(complianceWrap);
+
+    setTimeout(function() {
+      if (window.Alpine && typeof Alpine.initTree === 'function') {
+        Alpine.initTree(complianceWrap);
+      }
+    }, 0);
 
     // Inline warning: when both expiry and ready date are fixed duration, expiry must be >= ready (show before Next)
     const expiryReadyErrorEl = document.createElement('div');
@@ -3908,13 +4466,20 @@
     summariesList.innerHTML = '';
     
     const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+    const spaPage = document.body && document.body.getAttribute('data-page') === 'process-flow-spa';
     sortedSteps.forEach((step, index) => {
       const displayNumber = index + 1;
       const stepId = `step-summary-${step.id || index}`;
       const summaryCard = document.createElement('div');
       summaryCard.id = stepId;
       summaryCard.dataset.expanded = 'false';
-      summaryCard.style.cssText = 'background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); padding: 16px; overflow: hidden;';
+      if (spaPage) {
+        summaryCard.style.cssText =
+          'padding: 14px 0; border: none; border-radius: 0; background: transparent; overflow: hidden;' +
+          (index > 0 ? 'border-top: 1px solid var(--border-default, #e5e7eb);' : '');
+      } else {
+        summaryCard.style.cssText = 'background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); padding: 16px; overflow: hidden;';
+      }
       
       // Header (clickable to expand/collapse)
       const stepHeader = document.createElement('div');
@@ -4231,7 +4796,23 @@
   
   // Close modal on overlay click or close button — show "Save as draft or discard?" first
   // Use data-create-step-close so the global [data-modal-close] handler (e.g. on flows2) does not run and close the modal before our prompt appears
-  document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('DOMContentLoaded', async function() {
+    if (isProcessFlowSpaPage()) {
+      const fs = parseInt(document.body.getAttribute('data-flow-step') || '1', 10);
+      if (!isNaN(fs) && fs >= 1 && fs <= 4) {
+        currentStep = fs;
+      }
+      if (typeof window.restoreSpaWizardState === 'function') {
+        await window.restoreSpaWizardState();
+      }
+      if (typeof window.updateStepDisplay === 'function') {
+        window.updateStepDisplay();
+      }
+      if (typeof window.spaSyncBannerBack === 'function') {
+        window.spaSyncBannerBack();
+      }
+    }
+
     const modal = document.getElementById('create-process-modal');
     if (modal) {
       const closeButtons = modal.querySelectorAll('[data-create-step-close]');

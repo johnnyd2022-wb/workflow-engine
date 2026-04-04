@@ -93,6 +93,51 @@
       color: var(--text-primary, #111827);
     }
 
+    /* Exception: amount + unit on one row (process step outputs). Full-width inputs would collapse the number field. */
+    #page-content .guided-duration-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #page-content .guided-duration-row .guided-duration-value-input {
+      flex: 1 1 8rem !important;
+      min-width: 7rem !important;
+      max-width: 100% !important;
+      width: auto !important;
+      display: block !important;
+      box-sizing: border-box !important;
+    }
+    #page-content .guided-duration-row .guided-duration-unit-select {
+      flex: 1 1 10rem !important;
+      min-width: min(100%, 11rem) !important;
+      max-width: 100% !important;
+      width: auto !important;
+      display: block !important;
+      box-sizing: border-box !important;
+    }
+    @media (min-width: 640px) and (max-width: 1023px) {
+      #page-content .guided-duration-row .guided-duration-value-input {
+        flex: 1 1 9rem !important;
+        min-width: 8rem !important;
+      }
+    }
+    @media (max-width: 639px) {
+      #page-content .guided-duration-row {
+        flex-direction: column;
+        gap: 8px;
+      }
+      #page-content .guided-duration-row .guided-duration-value-input,
+      #page-content .guided-duration-row .guided-duration-unit-select {
+        flex: 0 1 auto !important;
+        min-width: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+    }
+
     #page-content textarea {
       min-height: 6rem;
       resize: vertical;
@@ -970,16 +1015,31 @@
       el.classList.remove('spa-banner-back--hidden');
       el.removeAttribute('aria-hidden');
       el.removeAttribute('tabindex');
-      if (path === '/core/flows/create') {
+      var stepMatch = path.match(/^\/core\/flows\/create\/step\/(\d+)$/);
+      if (stepMatch) {
+        var stepNum = parseInt(stepMatch[1], 10);
         var processId = new URLSearchParams(window.location.search).get('id');
-        var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
-        el.setAttribute('href', dest);
+        var q = processId ? '?id=' + encodeURIComponent(processId) : '';
+        if (stepNum > 1) {
+          el.setAttribute('href', '/core/flows/create/step/' + (stepNum - 1) + q);
+        } else {
+          var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
+          el.setAttribute('href', dest);
+        }
+        el.setAttribute('data-spa-back-explicit', 'true');
+        return;
+      }
+      if (path === '/core/flows/create') {
+        var legacyPid = new URLSearchParams(window.location.search).get('id');
+        var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core';
+        el.setAttribute('href', legacyDest);
         el.setAttribute('data-spa-back-explicit', 'true');
         return;
       }
       el.setAttribute('href', '/core');
       el.removeAttribute('data-spa-back-explicit');
     }
+    window.spaSyncBannerBack = spaSyncBannerBack;
 
     function spaBannerBackInit() {
       var el = document.getElementById('spa-banner-back');
