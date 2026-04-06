@@ -208,25 +208,42 @@
     /* Step 2 input source tabs: match /core/inventory/dispose (dispose-tabs / dispose-tab) */
     .process-flow-spa .guided-inputs-tabs.dispose-tabs {
       display: flex;
-      flex-wrap: wrap;
-      gap: 20px;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: stretch;
+      gap: 0;
       margin: 4px 0 14px 0;
       border-bottom: 1px solid var(--border-default, #e5e7eb);
+      width: 100%;
+      box-sizing: border-box;
     }
     .process-flow-spa .guided-inputs-tab.dispose-tab {
-      flex: 0 1 auto;
+      flex: 1 1 0;
+      min-width: 0;
       border: none;
       border-bottom: 2px solid transparent;
       background: transparent;
       color: var(--text-secondary, #6b7280);
       border-radius: 0;
-      padding: 8px 0;
+      padding: 8px 4px;
       margin-bottom: -1px;
-      font-size: 0.875rem;
+      font-size: clamp(0.6875rem, 2.2vw, 0.875rem);
       font-weight: 500;
       cursor: pointer;
       transition: color 0.15s ease, border-color 0.15s ease;
-      min-height: 40px;
+      min-height: 44px;
+      line-height: 1.25;
+      text-align: center;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: none;
+      -webkit-hyphens: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
     }
     .process-flow-spa .guided-inputs-tab.dispose-tab:hover {
       color: var(--text-primary, #111827);
@@ -236,24 +253,21 @@
       color: var(--primary, #2563eb);
       border-bottom-color: var(--primary, #2563eb);
     }
-    @media (max-width: 479px) {
+    @media (min-width: 480px) {
+      .process-flow-spa .guided-inputs-tab.dispose-tab {
+        padding: 8px 10px;
+        min-height: 40px;
+      }
+    }
+    @media (min-width: 900px) {
       .process-flow-spa .guided-inputs-tabs.dispose-tabs {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0;
-        border-bottom: none;
+        gap: 12px;
       }
       .process-flow-spa .guided-inputs-tab.dispose-tab {
-        border-bottom: 1px solid var(--border-default, #e5e7eb);
-        border-radius: var(--radius-md, 8px);
-        margin-bottom: -1px;
-        padding: 12px 14px;
-        text-align: left;
-      }
-      .process-flow-spa .guided-inputs-tab.dispose-tab.active,
-      .process-flow-spa .guided-inputs-tab.dispose-tab[aria-selected="true"] {
-        border-bottom-color: var(--primary, #2563eb);
-        box-shadow: inset 3px 0 0 0 var(--primary, #2563eb);
+        flex: 0 1 auto;
+        padding: 8px 0;
+        font-size: 0.875rem;
+        white-space: nowrap;
       }
     }
     @media (min-width: 768px) {

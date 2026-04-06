@@ -2,7 +2,8 @@
 <style>
 /* Step 4 — match other steps: hairline stack only (flow-spa-stack pattern), no bordered outer shell */
 #create-process-step-4 [x-cloak] { display: none !important; }
-#create-process-step-4 .step4-mode-select-native {
+/* Shared: step 4 batch/evidence + step 3 output expiry/ready mode (hidden native <select> + segments) */
+.flow-mode-select-native {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -12,6 +13,59 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+.flow-mode-segmented {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+  gap: 0;
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  border: 1px solid var(--border-default, #e5e7eb);
+  box-sizing: border-box;
+}
+.flow-mode-segment {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 4px;
+  min-height: 44px;
+  border: none;
+  background: var(--bg-card, #fff);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (min-width: 480px) {
+  .flow-mode-segment {
+    font-size: 13px;
+    padding: 8px 10px;
+    min-height: 0;
+  }
+}
+.flow-mode-segment + .flow-mode-segment { border-left: 1px solid var(--border-default, #e5e7eb); }
+.flow-mode-segment:hover { background: var(--bg-secondary, #f9fafb); color: var(--text-primary); }
+.flow-mode-segment.flow-mode-segment--active {
+  background: var(--primary, #3b82f6);
+  color: #fff;
+}
+.flow-mode-segment.flow-mode-segment--active:hover { color: #fff; }
+#guided-outputs-list .guided-output-expiry-pane .flow-mode-segmented,
+#guided-outputs-list .guided-output-ready-date-pane .flow-mode-segmented {
+  margin-bottom: 10px;
 }
 #create-process-step-4 .create-process-step-body--step4 {
   display: flex;
@@ -90,56 +144,28 @@
   overflow: visible;
   border-top: 1px solid var(--border-default, #e5e7eb);
 }
-#create-process-step-4 .step4-panel-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: var(--text-primary);
+/* Match .step4-section vertical rhythm: space below hairline before section title */
+#create-process-step-4 .step4-panel .step4-spa-toggle {
+  padding-left: 0;
+  padding-right: 0;
+  padding-top: 14px;
+  padding-bottom: 4px;
 }
-#create-process-step-4 .step4-panel-header:hover { background: transparent; }
-#create-process-step-4 .step4-panel-header-text { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; flex: 1; }
+#create-process-step-4 .step4-toggle-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
 #create-process-step-4 .step4-panel-title { font-size: 15px; font-weight: 600; }
 #create-process-step-4 .step4-panel-preview { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
-#create-process-step-4 .step4-panel-chevron { flex-shrink: 0; transition: transform 0.2s; color: var(--text-tertiary); }
-#create-process-step-4 .step4-panel-chevron--open { transform: rotate(180deg); }
 #create-process-step-4 .step4-panel-body { padding: 0 0 14px 0; }
 #create-process-step-4 .step4-trace-block { padding-top: 4px; }
 #create-process-step-4 .step4-trace-block + .step4-trace-block { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light, #e5e7eb); }
 #create-process-step-4 .step4-trace-heading { font-size: 13px; font-weight: 600; margin: 0 0 6px 0; color: var(--text-primary); }
-#create-process-step-4 .step4-segmented {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  border-radius: var(--radius-md, 8px);
-  overflow: hidden;
-  border: 1px solid var(--border-default, #e5e7eb);
-}
-#create-process-step-4 .step4-segment {
-  flex: 1 1 auto;
-  min-width: 72px;
-  padding: 8px 10px;
-  border: none;
-  background: var(--bg-card, #fff);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-#create-process-step-4 .step4-segment + .step4-segment { border-left: 1px solid var(--border-default, #e5e7eb); }
-#create-process-step-4 .step4-segment:hover { background: var(--bg-secondary, #f9fafb); color: var(--text-primary); }
-#create-process-step-4 .step4-segment.step4-segment--active {
-  background: var(--primary, #3b82f6);
-  color: #fff;
-}
+#create-process-step-4 .step4-trace-block .flow-mode-segmented { margin-top: 2px; }
 #create-process-step-4 .step4-add-prompt-row { margin-bottom: 12px; }
 #create-process-step-4 .create-process-step-actions--step4 {
   margin-top: 16px;
@@ -248,13 +274,13 @@
         
         <!-- Tabs: same pattern as /core/inventory/dispose (dispose-tabs / dispose-tab) -->
         <div class="guided-inputs-tabs dispose-tabs" style="margin-bottom: 16px;">
-          <button type="button" class="guided-inputs-tab dispose-tab active" data-input-tab="inventory" id="input-tab-inventory" aria-selected="true">
+          <button type="button" class="guided-inputs-tab dispose-tab active" data-input-tab="inventory" id="input-tab-inventory" aria-selected="true" title="Inventory items">
             Inventory items
           </button>
-          <button type="button" class="guided-inputs-tab dispose-tab" data-input-tab="previous_output" id="input-tab-previous-output" aria-selected="false">
+          <button type="button" class="guided-inputs-tab dispose-tab" data-input-tab="previous_output" id="input-tab-previous-output" aria-selected="false" title="Outputs from previous steps">
             Outputs from previous steps
           </button>
-          <button type="button" class="guided-inputs-tab dispose-tab" data-input-tab="new" id="input-tab-new" aria-selected="false">
+          <button type="button" class="guided-inputs-tab dispose-tab" data-input-tab="new" id="input-tab-new" aria-selected="false" title="Other materials">
             Other materials
           </button>
         </div>
@@ -364,59 +390,63 @@
           </div>
 
           <!-- Native selects for batch/evidence (kept for JS compatibility; visually hidden, synced with segmented controls) -->
-          <select id="guided-prompt-batch-number-mode" class="step4-mode-select-native" aria-hidden="true" tabindex="-1">
+          <select id="guided-prompt-batch-number-mode" class="flow-mode-select-native" aria-hidden="true" tabindex="-1">
             <option value="required">required</option>
             <option value="optional" selected>optional</option>
             <option value="dont_ask">dont_ask</option>
           </select>
-          <select id="guided-prompt-evidence-mode" class="step4-mode-select-native" aria-hidden="true" tabindex="-1">
+          <select id="guided-prompt-evidence-mode" class="flow-mode-select-native" aria-hidden="true" tabindex="-1">
             <option value="required">required</option>
             <option value="optional" selected>optional</option>
             <option value="dont_ask">dont_ask</option>
           </select>
 
-          <!-- Traceability & Compliance (expanded by default, collapsible) -->
+          <!-- Traceability & Compliance (toggle like step 3 compliance; default on / expanded) -->
           <div class="step4-panel step4-panel--trace">
-            <button type="button" class="step4-panel-header" @click="traceOpen = !traceOpen" :aria-expanded="traceOpen">
-              <span class="step4-panel-header-text">
-                <span class="step4-panel-title">Traceability &amp; Compliance</span>
+            <button type="button" class="spa-advanced-toggle step4-spa-toggle" @click="traceOpen = !traceOpen" :aria-expanded="traceOpen" role="switch" :aria-checked="traceOpen">
+              <span class="step4-toggle-left">
+                <span class="spa-advanced-toggle__label step4-panel-title">Traceability &amp; Compliance</span>
                 <span class="step4-panel-preview" x-show="!traceOpen" id="step4-trace-collapsed-preview">Batch: Optional • Evidence: Optional</span>
               </span>
-              <svg class="step4-panel-chevron" :class="{ 'step4-panel-chevron--open': traceOpen }" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': traceOpen }">
+                <span class="spa-advanced-toggle__thumb"></span>
+              </span>
             </button>
             <div class="step4-panel-body" x-show="traceOpen" x-cloak>
               <div id="guided-prompt-batch-number-section" class="step4-trace-block">
                 <div class="step4-trace-heading">Batch / Run Identifier</div>
                 <p class="step4-microcopy">Link this step to a production batch or run for traceability</p>
-                <div class="step4-segmented" role="group" aria-label="Batch or run identifier">
-                  <button type="button" class="step4-segment" data-step4-mode-target="batch" data-value="required">Required</button>
-                  <button type="button" class="step4-segment" data-step4-mode-target="batch" data-value="optional">Optional</button>
-                  <button type="button" class="step4-segment" data-step4-mode-target="batch" data-value="dont_ask">Off</button>
+                <div class="flow-mode-segmented" role="group" aria-label="Batch or run identifier">
+                  <button type="button" class="flow-mode-segment" data-step4-mode-target="batch" data-value="required">Required</button>
+                  <button type="button" class="flow-mode-segment" data-step4-mode-target="batch" data-value="optional">Optional</button>
+                  <button type="button" class="flow-mode-segment" data-step4-mode-target="batch" data-value="dont_ask">Off</button>
                 </div>
               </div>
               <div id="guided-prompt-evidence-section" class="step4-trace-block">
                 <div class="step4-trace-heading">Evidence Capture</div>
                 <p class="step4-microcopy">Capture photos or documents as proof of execution (e.g. QC, compliance, validation)</p>
-                <div class="step4-segmented" role="group" aria-label="Evidence capture">
-                  <button type="button" class="step4-segment" data-step4-mode-target="evidence" data-value="required">Required</button>
-                  <button type="button" class="step4-segment" data-step4-mode-target="evidence" data-value="optional">Optional</button>
-                  <button type="button" class="step4-segment" data-step4-mode-target="evidence" data-value="dont_ask">Off</button>
+                <div class="flow-mode-segmented" role="group" aria-label="Evidence capture">
+                  <button type="button" class="flow-mode-segment" data-step4-mode-target="evidence" data-value="required">Required</button>
+                  <button type="button" class="flow-mode-segment" data-step4-mode-target="evidence" data-value="optional">Optional</button>
+                  <button type="button" class="flow-mode-segment" data-step4-mode-target="evidence" data-value="dont_ask">Off</button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Additional Prompts (collapsed by default) -->
+          <!-- Custom prompts (toggle like step 3; default off / collapsed) -->
           <div class="step4-panel step4-panel--prompts">
-            <button type="button" class="step4-panel-header" @click="promptsOpen = !promptsOpen" :aria-expanded="promptsOpen">
-              <span class="step4-panel-header-text">
-                <span class="step4-panel-title">Additional Prompts</span>
+            <button type="button" class="spa-advanced-toggle step4-spa-toggle" @click="promptsOpen = !promptsOpen" :aria-expanded="promptsOpen" role="switch" :aria-checked="promptsOpen">
+              <span class="step4-toggle-left">
+                <span class="spa-advanced-toggle__label step4-panel-title">Custom prompts</span>
                 <span class="step4-panel-preview" id="step4-prompts-section-hint">0 prompts configured</span>
               </span>
-              <svg class="step4-panel-chevron" :class="{ 'step4-panel-chevron--open': promptsOpen }" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': promptsOpen }">
+                <span class="spa-advanced-toggle__thumb"></span>
+              </span>
             </button>
             <div class="step4-panel-body" x-show="promptsOpen" x-cloak>
-              <p class="step4-microcopy">Add structured fields to capture extra data during execution</p>
+              <p class="step4-microcopy">Add structured fields to capture extra information when completing batch steps</p>
               <p class="step4-examples-line">e.g. Temperature (°C), Operator name, Quality grade, Pressure</p>
               <div class="step4-add-prompt-row">
                 <button type="button" class="btn btn-secondary btn-sm" onclick="window.addGuidedPrompt()" id="step4-add-prompt-btn">

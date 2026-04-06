@@ -527,6 +527,8 @@
             if (readyDateWarnValueEl && rd.warning_value != null) readyDateWarnValueEl.value = String(rd.warning_value);
             if (readyDateWarnUnitEl && rd.warning_unit) readyDateWarnUnitEl.value = rd.warning_unit;
           }
+          if (expiryModeEl) expiryModeEl.dispatchEvent(new Event('change', { bubbles: true }));
+          if (readyDateModeEl) readyDateModeEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
       }
     }
@@ -1304,17 +1306,78 @@
     return 'Off';
   }
 
+  function buildOutputModeSegmentRow(modeKind, spec) {
+    const wrap = document.createElement('div');
+    wrap.className = 'flow-mode-segmented';
+    wrap.setAttribute('role', 'group');
+    if (spec.ariaLabel) wrap.setAttribute('aria-label', spec.ariaLabel);
+    spec.options.forEach(function(opt) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'flow-mode-segment';
+      b.setAttribute('data-output-mode-kind', modeKind);
+      b.setAttribute('data-value', opt.value);
+      b.textContent = opt.label;
+      wrap.appendChild(b);
+    });
+    return wrap;
+  }
+
+  function syncOutputExpiryModeSegments(outputRow) {
+    if (!outputRow) return;
+    const sel = outputRow.querySelector('.guided-output-expiry-mode');
+    if (!sel) return;
+    outputRow.querySelectorAll('.flow-mode-segment[data-output-mode-kind="expiry"]').forEach(function(btn) {
+      const on = btn.getAttribute('data-value') === sel.value;
+      btn.classList.toggle('flow-mode-segment--active', !!on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function syncOutputReadyDateModeSegments(outputRow) {
+    if (!outputRow) return;
+    const sel = outputRow.querySelector('.guided-output-ready-date-mode');
+    if (!sel) return;
+    outputRow.querySelectorAll('.flow-mode-segment[data-output-mode-kind="ready_date"]').forEach(function(btn) {
+      const on = btn.getAttribute('data-value') === sel.value;
+      btn.classList.toggle('flow-mode-segment--active', !!on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function initGuidedOutputsListModeSegments() {
+    const list = document.getElementById('guided-outputs-list');
+    if (!list || list.dataset.flowModeOutputInit === '1') return;
+    list.dataset.flowModeOutputInit = '1';
+    list.addEventListener('click', function(ev) {
+      const btn = ev.target.closest('.flow-mode-segment[data-output-mode-kind]');
+      if (!btn || !list.contains(btn)) return;
+      ev.preventDefault();
+      const row = btn.closest('[id^="guided-output-"]');
+      if (!row) return;
+      const kind = btn.getAttribute('data-output-mode-kind');
+      const val = btn.getAttribute('data-value');
+      const sel = kind === 'expiry'
+        ? row.querySelector('.guided-output-expiry-mode')
+        : row.querySelector('.guided-output-ready-date-mode');
+      if (sel && val != null) {
+        sel.value = val;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  }
+
   function syncStep4ModeSegments() {
     const batchSel = document.getElementById('guided-prompt-batch-number-mode');
     const evSel = document.getElementById('guided-prompt-evidence-mode');
-    document.querySelectorAll('.step4-segment[data-step4-mode-target="batch"]').forEach(function(btn) {
+    document.querySelectorAll('#create-process-step-4 .flow-mode-segment[data-step4-mode-target="batch"]').forEach(function(btn) {
       const on = batchSel && btn.getAttribute('data-value') === batchSel.value;
-      btn.classList.toggle('step4-segment--active', !!on);
+      btn.classList.toggle('flow-mode-segment--active', !!on);
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
-    document.querySelectorAll('.step4-segment[data-step4-mode-target="evidence"]').forEach(function(btn) {
+    document.querySelectorAll('#create-process-step-4 .flow-mode-segment[data-step4-mode-target="evidence"]').forEach(function(btn) {
       const on = evSel && btn.getAttribute('data-value') === evSel.value;
-      btn.classList.toggle('step4-segment--active', !!on);
+      btn.classList.toggle('flow-mode-segment--active', !!on);
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
   }
@@ -1338,7 +1401,7 @@
     if (!root || root.dataset.step4UiInit === '1') return;
     root.dataset.step4UiInit = '1';
     root.addEventListener('click', function(ev) {
-      const btn = ev.target.closest('.step4-segment[data-step4-mode-target]');
+      const btn = ev.target.closest('.flow-mode-segment[data-step4-mode-target]');
       if (!btn || !root.contains(btn)) return;
       ev.preventDefault();
       const target = btn.getAttribute('data-step4-mode-target');
@@ -3404,7 +3467,7 @@
     // Custom output expiry — sub-pane inside this output (same visual style as Batch number / Evidence on step 4)
     const expiryPane = document.createElement('div');
     expiryPane.className = 'guided-output-expiry-pane';
-    expiryPane.style.cssText = 'margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);';
+    expiryPane.style.cssText = 'position: relative; margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);';
     const expiryLabel = document.createElement('label');
     expiryLabel.style.cssText = 'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;';
     expiryLabel.textContent = 'Custom output expiry';
@@ -3413,10 +3476,20 @@
     expiryDesc.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;';
     expiryDesc.textContent = 'Choose a fixed expiry period (e.g. 30 days) or have the operator set expiry when the step runs (duration or specific date/time).';
     expiryPane.appendChild(expiryDesc);
-    const expiryModeSelect = document.createElement('select');
-    expiryModeSelect.className = 'guided-output-expiry-mode form-select';
-    expiryModeSelect.style.cssText = 'width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 14px; box-sizing: border-box;';
     const EXPIRY_MODES = window.EXPIRY_MODES || { NONE: 'none', FIXED: 'fixed_duration', EXECUTION: 'set_at_execution' };
+    const expirySegRow = buildOutputModeSegmentRow('expiry', {
+      ariaLabel: 'Custom output expiry mode',
+      options: [
+        { value: EXPIRY_MODES.NONE, label: 'None' },
+        { value: EXPIRY_MODES.FIXED, label: 'Fixed period' },
+        { value: EXPIRY_MODES.EXECUTION, label: 'At execution' }
+      ]
+    });
+    expiryPane.appendChild(expirySegRow);
+    const expiryModeSelect = document.createElement('select');
+    expiryModeSelect.className = 'guided-output-expiry-mode flow-mode-select-native';
+    expiryModeSelect.setAttribute('aria-hidden', 'true');
+    expiryModeSelect.setAttribute('tabindex', '-1');
     const noExpiryOpt = document.createElement('option');
     noExpiryOpt.value = EXPIRY_MODES.NONE;
     noExpiryOpt.textContent = 'No custom expiry — output has no use-by rule';
@@ -3565,6 +3638,7 @@
       execHint.style.display = mode === (EXP.EXECUTION || 'set_at_execution') ? 'block' : 'none';
       warningWrap.style.display = mode === (EXP.FIXED || 'fixed_duration') ? 'block' : 'none';
       syncExpiryWarningValidation();
+      syncOutputExpiryModeSegments(outputContainer);
     });
     expiryPane.appendChild(expiryFieldsWrap);
 
@@ -3572,7 +3646,7 @@
     const READY_DATE_MODES = window.READY_DATE_MODES || { NONE: 'none', FIXED: 'fixed_duration', EXECUTION: 'set_at_execution' };
     const readyDatePane = document.createElement('div');
     readyDatePane.className = 'guided-output-ready-date-pane';
-    readyDatePane.style.cssText = 'margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);';
+    readyDatePane.style.cssText = 'position: relative; margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);';
     const readyDateLabel = document.createElement('label');
     readyDateLabel.style.cssText = 'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;';
     readyDateLabel.textContent = 'Ready date';
@@ -3581,9 +3655,19 @@
     readyDateDesc.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;';
     readyDateDesc.textContent = 'When can this output be used? No restriction, a fixed period after completion, or set by the operator at execution.';
     readyDatePane.appendChild(readyDateDesc);
+    const readyDateSegRow = buildOutputModeSegmentRow('ready_date', {
+      ariaLabel: 'Ready date mode',
+      options: [
+        { value: READY_DATE_MODES.NONE, label: 'None' },
+        { value: READY_DATE_MODES.FIXED, label: 'Fixed period' },
+        { value: READY_DATE_MODES.EXECUTION, label: 'At execution' }
+      ]
+    });
+    readyDatePane.appendChild(readyDateSegRow);
     const readyDateModeSelect = document.createElement('select');
-    readyDateModeSelect.className = 'guided-output-ready-date-mode form-select';
-    readyDateModeSelect.style.cssText = 'width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 14px; box-sizing: border-box;';
+    readyDateModeSelect.className = 'guided-output-ready-date-mode flow-mode-select-native';
+    readyDateModeSelect.setAttribute('aria-hidden', 'true');
+    readyDateModeSelect.setAttribute('tabindex', '-1');
     const noReadyOpt = document.createElement('option');
     noReadyOpt.value = READY_DATE_MODES.NONE;
     noReadyOpt.textContent = 'No ready date needed — product is available for use immediately';
@@ -3727,8 +3811,11 @@
       readyDateExecHint.style.display = mode === (READY_DATE_MODES.EXECUTION || 'set_at_execution') ? 'block' : 'none';
       readyDateWarnWrap.style.display = mode === (READY_DATE_MODES.FIXED || 'fixed_duration') ? 'block' : 'none';
       syncReadyDateWarnValidation();
+      syncOutputReadyDateModeSegments(outputContainer);
     });
     readyDatePane.appendChild(readyDateFieldsWrap);
+    expiryModeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    readyDateModeSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     const complianceWrap = document.createElement('div');
     complianceWrap.className = 'guided-output-compliance-wrap';
@@ -4607,7 +4694,7 @@
         details.push(`${step.outputs.length} output${step.outputs.length > 1 ? 's' : ''}`);
       }
       if (step.execution_prompts && step.execution_prompts.length > 0) {
-        details.push(`${step.execution_prompts.length} execution prompt${step.execution_prompts.length > 1 ? 's' : ''}`);
+        details.push(`${step.execution_prompts.length} prompt${step.execution_prompts.length > 1 ? 's' : ''}`);
       }
       
       if (details.length > 0) {
@@ -4660,12 +4747,12 @@
         expandedDetails.appendChild(outputsSection);
       }
       
-      // Execution Prompts
+      // Prompts
       if (step.execution_prompts && step.execution_prompts.length > 0) {
         const promptsSection = document.createElement('div');
         const promptsTitle = document.createElement('h5');
         promptsTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
-        promptsTitle.textContent = 'Execution Prompts:';
+        promptsTitle.textContent = 'Prompts:';
         promptsSection.appendChild(promptsTitle);
         
         step.execution_prompts.forEach(prompt => {
@@ -4979,5 +5066,6 @@
     };
 
     initStep4SegmentControls();
+    initGuidedOutputsListModeSegments();
   });
 })();
