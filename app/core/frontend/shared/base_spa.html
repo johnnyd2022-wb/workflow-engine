@@ -1002,6 +1002,41 @@
   <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
   <script>
+    /**
+     * Fallback URL for the process-flow wizard when history has no prior entry (e.g. opened in a new tab).
+     * Clicks normally use history.back() so the banner follows the real page sequence.
+     */
+    function spaFlowWizardBackHref(pathname, search) {
+      var path = (pathname || '').replace(/\/$/, '') || '/';
+      var base = '/core/flows/create';
+      if (path.indexOf(base + '/') !== 0) return null;
+      var rest = path.slice((base + '/').length);
+      var slug = rest.split('/').filter(function (s) { return s; })[0] || '';
+      var known = {
+        'step-name': true,
+        'inputs': true,
+        'outputs': true,
+        'evidence-and-prompts': true,
+        'summary': true
+      };
+      if (!slug || !known[slug]) return null;
+      var params = new URLSearchParams(search || '');
+      var wizPid = params.get('id');
+      var qsSame = typeof search === 'string' && search.length ? search : '';
+      var prevWiz = {
+        'inputs': '/core/flows/create/step-name',
+        'outputs': '/core/flows/create/inputs',
+        'evidence-and-prompts': '/core/flows/create/outputs',
+        'summary': '/core/flows/create/evidence-and-prompts'
+      };
+      if (slug === 'step-name') {
+        return wizPid ? '/core/flows?id=' + encodeURIComponent(wizPid) : '/core';
+      }
+      var prev = prevWiz[slug];
+      return (prev || '/core/flows/create/step-name') + qsSame;
+    }
+    window.spaFlowWizardBackHref = spaFlowWizardBackHref;
+
     function spaSyncBannerBack() {
       var el = document.getElementById('spa-banner-back');
       if (!el) return;
@@ -1029,6 +1064,12 @@
         el.setAttribute('data-spa-back-explicit', 'true');
         return;
       }
+      var wizBack = spaFlowWizardBackHref(path, window.location.search);
+      if (wizBack !== null) {
+        el.setAttribute('href', wizBack);
+        el.removeAttribute('data-spa-back-explicit');
+        return;
+      }
       if (path === '/core/flows/create') {
         var legacyPid = new URLSearchParams(window.location.search).get('id');
         var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core';
@@ -1049,6 +1090,18 @@
           e.preventDefault();
           return;
         }
+        /* Process-flow wizard: prefer real navigation history; fallback URL on href for new tab / empty stack. */
+        var pathNow = (window.location.pathname || '').replace(/\/$/, '') || '/';
+        var wizFallback = spaFlowWizardBackHref(pathNow, window.location.search);
+        if (wizFallback !== null) {
+          e.preventDefault();
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = wizFallback;
+          }
+          return;
+        }
         if (el.getAttribute('data-spa-back-explicit') === 'true') {
           return;
         }
@@ -1067,6 +1120,13 @@
       const indicator = document.getElementById('loading-indicator');
       if (indicator) {
         evt.detail.elt.setAttribute('hx-indicator', '#loading-indicator');
+      }
+    });
+
+    // After boosted navigation settles, re-sync href (afterOnLoad can be early relative to final pathname in some cases).
+    document.body.addEventListener('htmx:afterSettle', function () {
+      if (typeof spaSyncBannerBack === 'function') {
+        spaSyncBannerBack();
       }
     });
 

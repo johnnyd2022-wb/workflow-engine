@@ -1,13 +1,14 @@
-{# Canonical full-page create/edit process steps (base_spa). flows2 still embeds create-process-modal.html for reference until that path navigates here only. #}
+{# Shared layout + styles for multi-page process flow wizard (per-step templates extend this). #}
 {% extends "shared/base_spa.html" %}
 
 {% block body_class %}process-flow-spa{% endblock %}
-{% block body_extra_attrs %}data-page="process-flow-spa" data-flow-step="{{ flow_step | default(1) }}"{% endblock %}
+{% block body_extra_attrs %}data-page="process-flow-wizard" data-flow-wizard-page="{{ flow_wizard_page }}"{% endblock %}
 
-{% block title %}Create process steps | SupplyChain V2{% endblock %}
+{% block title %}{% block wizard_html_title %}Create process steps | SupplyChain V2{% endblock %}{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Create process steps">
+  {% include 'processes/create-process-step-content-styles.html' %}
   <style>
     /* Hero — same pattern as notifications.html */
     .process-flow-hero__header {
@@ -205,6 +206,69 @@
         align-items: stretch;
       }
     }
+
+    /* Wizard sticky rail on all steps: fixed above mobile bottom tab (styles2.css) */
+    .process-flow-spa {
+      --spa-mobile-bottom-tab-height: 56px;
+    }
+    .process-flow-spa .flow-wizard-sticky-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: env(safe-area-inset-bottom, 0px);
+      margin-top: 0;
+      z-index: 99;
+      padding-top: 16px;
+      padding-bottom: 16px;
+      background: var(--bg-app, hsl(220, 20%, 97%));
+      border-top: 1px solid var(--border-default, #e5e7eb);
+      box-sizing: border-box;
+    }
+    @media (min-width: 768px) {
+      .process-flow-spa .flow-wizard-sticky-bar {
+        left: 260px;
+      }
+      .app-layout:has(#sidebar.collapsed) .process-flow-spa .flow-wizard-sticky-bar {
+        left: 72px;
+      }
+    }
+    @media (max-width: 767px) {
+      .process-flow-spa .flow-wizard-sticky-bar {
+        bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: stretch;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        min-height: 56px;
+      }
+      .process-flow-spa .flow-wizard-sticky-bar__inner {
+        flex: 0 0 auto;
+        min-height: 0;
+        width: 100%;
+      }
+      .process-flow-spa .flow-wizard-sticky-bar__left {
+        min-height: 0;
+      }
+    }
+    .process-flow-spa .flow-wizard-sticky-bar__inner {
+      padding-left: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-left)));
+      padding-right: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-right)));
+    }
+    @media (max-width: 767px) {
+      .process-flow-spa .flow-wizard-sticky-bar__inner {
+        padding-left: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-left)));
+        padding-right: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-right)));
+      }
+    }
+    .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) .create-process-step-body {
+      padding-bottom: 16px;
+    }
+    .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) {
+      padding-bottom: 92px;
+    }
+
     /* Step 2 input source tabs: match /core/inventory/dispose (dispose-tabs / dispose-tab) */
     .process-flow-spa .guided-inputs-tabs.dispose-tabs {
       display: flex;
@@ -387,13 +451,13 @@
         <div class="max-content">
           <section class="card spa-primary-flat process-flow-card notifications-card" style="margin-top: 24px;" aria-labelledby="modal-title">
             <div class="card-header process-flow-hero__header">
-              <h1 id="modal-title" class="card-title">Create Process Step</h1>
+              <h1 id="modal-title" class="card-title">{% block wizard_title %}Create Process Step{% endblock %}</h1>
               <p id="modal-description" class="process-flow-hero__tagline">
-                You can expand existing steps to edit them, or use this interactive editor to add additional steps.
+                {% block wizard_tagline %}You can expand existing steps to edit them, or use this interactive editor to add additional steps.{% endblock %}
               </p>
             </div>
             <div class="card-content process-flow-card__content notifications-card__content">
-              {% include 'processes/create-process-step-content.html' %}
+              {% block wizard_card_body %}{% endblock %}
             </div>
           </section>
         </div>

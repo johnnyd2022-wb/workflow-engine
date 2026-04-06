@@ -295,34 +295,98 @@ def flows():
 @core_bp.route("/core/flows/create", methods=["GET"])
 @requires_auth
 def flows_create():
-    """Redirect to step 1 URL so the top back link and bookmarks use one URL per step."""
+    """Start the wizard at step 1. Anonymous entry (no process id) sets fresh=1 so session wizard state resets."""
     from flask import redirect
+    from urllib.parse import urlencode
 
-    qs = request.query_string.decode()
-    dest = "/core/flows/create/step/1"
-    if qs:
-        dest = dest + "?" + qs
+    base = "/core/flows/create/step-name"
+    args = request.args.to_dict(flat=True)
+    if "id" not in args and "fresh" not in args:
+        args["fresh"] = "1"
+    q = urlencode(sorted(args.items())) if args else ""
+    dest = base + (f"?{q}" if q else "")
     return redirect(dest)
 
 
 @core_bp.route("/core/flows/create/step/<int:step>", methods=["GET"])
 @requires_auth
 def flows_create_step(step):
-    """Process creation SPA: one URL per wizard step (1–4) for predictable banner back navigation."""
-    if step < 1 or step > 4:
-        from flask import redirect
+    """Legacy /step/N URLs redirect to the current wizard URLs (one route per page)."""
+    from flask import redirect
 
-        qs = request.query_string.decode()
-        dest = "/core/flows/create/step/1"
-        if qs:
-            dest = dest + "?" + qs
-        return redirect(dest)
+    qs = request.query_string.decode()
+    if step == 1:
+        dest = "/core/flows/create/step-name"
+    elif step == 2:
+        dest = "/core/flows/create/inputs"
+    elif step == 3:
+        dest = "/core/flows/create/outputs"
+    elif step == 4:
+        dest = "/core/flows/create/evidence-and-prompts"
+    else:
+        dest = "/core/flows/create/step-name"
+    if qs:
+        dest = dest + "?" + qs
+    return redirect(dest)
+
+
+@core_bp.route("/core/flows/create/step-name", methods=["GET"])
+@requires_auth
+def flows_create_step_name_page():
     process_id = request.args.get("id")
     return render_template(
-        "processes/process-flow-spa.html",
+        "processes/process-flow-step-name.html",
         active_page="core",
         process_id=process_id,
-        flow_step=step,
+        flow_wizard_page="step-name",
+    )
+
+
+@core_bp.route("/core/flows/create/inputs", methods=["GET"])
+@requires_auth
+def flows_create_inputs_page():
+    process_id = request.args.get("id")
+    return render_template(
+        "processes/process-flow-inputs.html",
+        active_page="core",
+        process_id=process_id,
+        flow_wizard_page="inputs",
+    )
+
+
+@core_bp.route("/core/flows/create/outputs", methods=["GET"])
+@requires_auth
+def flows_create_outputs_page():
+    process_id = request.args.get("id")
+    return render_template(
+        "processes/process-flow-outputs.html",
+        active_page="core",
+        process_id=process_id,
+        flow_wizard_page="outputs",
+    )
+
+
+@core_bp.route("/core/flows/create/evidence-and-prompts", methods=["GET"])
+@requires_auth
+def flows_create_evidence_and_prompts_page():
+    process_id = request.args.get("id")
+    return render_template(
+        "processes/process-flow-evidence-and-prompts.html",
+        active_page="core",
+        process_id=process_id,
+        flow_wizard_page="evidence-and-prompts",
+    )
+
+
+@core_bp.route("/core/flows/create/summary", methods=["GET"])
+@requires_auth
+def flows_create_summary_page():
+    process_id = request.args.get("id")
+    return render_template(
+        "processes/process-flow-summary.html",
+        active_page="core",
+        process_id=process_id,
+        flow_wizard_page="summary",
     )
 
 

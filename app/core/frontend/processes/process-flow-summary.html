@@ -1,0 +1,16 @@
+{% extends "processes/process-flow-spa.html" %}
+{% block wizard_html_title %}Process summary | SupplyChain V2{% endblock %}
+{% block wizard_title %}Process workflow summary{% endblock %}
+{% block wizard_tagline %}Review everything you have defined, add another step, or finish the workflow.{% endblock %}
+{% block wizard_card_body %}
+              {% include 'processes/process-wizard-fragment-shared-top.html' %}
+              <div id="process-flow-summary-empty" class="flow-spa-stack" style="display: none; margin-bottom: 16px;">
+                <div class="flow-spa-stack__item">
+                  <p class="flow-spa-stack__text" style="margin: 0;">No steps are in this workflow yet. Complete the step wizard first, then return here.</p>
+                  <p class="flow-spa-stack__text" style="margin: 10px 0 0 0;">
+                    <a class="btn btn-primary btn-sm" id="summary-goto-step-name" href="/core/flows/create/step-name{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Go to step 1</a>
+                  </p>
+                </div>
+              </div>
+              {% include 'processes/process-wizard-fragment-post-creation.html' %}
+{% endblock %}

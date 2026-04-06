@@ -167,11 +167,6 @@
 #create-process-step-4 .step4-trace-heading { font-size: 13px; font-weight: 600; margin: 0 0 6px 0; color: var(--text-primary); }
 #create-process-step-4 .step4-trace-block .flow-mode-segmented { margin-top: 2px; }
 #create-process-step-4 .step4-add-prompt-row { margin-bottom: 12px; }
-#create-process-step-4 .create-process-step-actions--step4 {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-default, #e5e7eb);
-}
 </style>
     <!-- Step Summaries Container (shown when adding another step) -->
     <div id="step-summaries-container" style="display: none; margin-bottom: 24px;">
@@ -243,12 +238,8 @@
           </div>
         </div>
       </div>
-      <div class="create-process-step-actions" style="display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()">
-          Save as draft
-        </button>
-        <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
-      </div>
+      {% set flow_wizard_sticky_variant = 'step_name' %}
+      {% include 'processes/process-wizard-sticky-bar.html' %}
     </div>
     
     <!-- Step 2: Inputs -->
@@ -259,7 +250,7 @@
           <div class="flow-spa-stack__item">
             <h3 class="flow-spa-stack__title">Define Inputs</h3>
             <p class="flow-spa-stack__text" style="margin-bottom: 0;">
-              Inputs are the physical materials you add to this step. Add from items in stock below, or define other materials. Added inputs appear here (expand to edit).
+              Inputs are the physical materials you add to this step. Add from items in stock below, or define other materials.
             </p>
           </div>
         </div>
@@ -310,14 +301,11 @@
             <span id="add-another-new-text">+ Add input</span>
           </button>
         </div>
+
       </div>
       </div>
-      <div class="create-process-step-actions" style="display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()">
-          Save as draft
-        </button>
-        <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
-      </div>
+      {% set flow_wizard_sticky_variant = 'inputs' %}
+      {% include 'processes/process-wizard-sticky-bar.html' %}
     </div>
     
     <!-- Step 3: Outputs -->
@@ -330,12 +318,14 @@
             Outputs are the products or materials produced by this step. These can be used as inputs in subsequent steps, creating a complete workflow chain.
           </p>
         </div>
-        <div class="flow-spa-stack__item flow-spa-stack__item--example">
-          <p class="flow-spa-stack__title" style="font-size: 13px; margin-bottom: 8px;">Example Workflow:</p>
-          <p class="flow-spa-stack__text" style="line-height: 1.5;">
-            <strong>Step 1 "Mixing":</strong> Outputs "Mixed Base" → <strong>Step 2 "Fermentation":</strong> Uses "Mixed Base" as input, outputs "Fermented Product" → <strong>Step 3 "Packaging":</strong> Uses "Fermented Product" as input, outputs "Final Product"
-          </p>
-        </div>
+        <details class="flow-spa-stack__item flow-wizard-example-disclosure" aria-label="Example workflow">
+          <summary class="flow-wizard-example-disclosure__summary">example</summary>
+          <div class="flow-wizard-example-disclosure__body">
+            <p class="flow-spa-stack__text" style="line-height: 1.5; margin: 0;">
+              <strong>Step 1 "Mixing":</strong> Outputs "Mixed Base" → <strong>Step 2 "Fermentation":</strong> Uses "Mixed Base" as input, outputs "Fermented Product" → <strong>Step 3 "Packaging":</strong> Uses "Fermented Product" as input, outputs "Final Product"
+            </p>
+          </div>
+        </details>
         <div id="guided-outputs-container" class="flow-spa-stack__item" style="margin-bottom: 0; padding-top: 4px;">
           <div id="guided-outputs-list" style="display: flex; flex-direction: column; gap: 0; margin-bottom: 0;">
             <!-- Outputs will be added here dynamically -->
@@ -348,12 +338,8 @@
         </div>
       </div>
       </div>
-      <div class="create-process-step-actions" style="display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()">
-          Save as draft
-        </button>
-        <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
-      </div>
+      {% set flow_wizard_sticky_variant = 'outputs' %}
+      {% include 'processes/process-wizard-sticky-bar.html' %}
     </div>
     
     <!-- Step 4: Step configuration (documentation, traceability, additional prompts) -->
@@ -458,12 +444,8 @@
           </div>
         </div>
       </div>
-      <div class="create-process-step-actions create-process-step-actions--step4" style="display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="window.saveDraft()">
-          Save as draft
-        </button>
-        <button type="button" class="btn btn-primary" id="create-step-submit-btn" onclick="window.createProcessFromGuidedFlow()">Create Step</button>
-      </div>
+      {% set flow_wizard_sticky_variant = 'evidence' %}
+      {% include 'processes/process-wizard-sticky-bar.html' %}
     </div>
     
     <!-- Post-Creation Options (shown after step is created) -->

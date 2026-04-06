@@ -1,0 +1,31 @@
+    <div id="create-process-step-3" class="create-process-step" style="display: block;">
+      <div class="create-process-step-body">
+      <div class="flow-spa-stack flow-spa-stack--step" style="margin-bottom: 24px;">
+        <div class="flow-spa-stack__item">
+          <h3 class="flow-spa-stack__title">Define Outputs</h3>
+          <p class="flow-spa-stack__text" style="margin-bottom: 0;">
+            Outputs are the products or materials produced by this step. These can be used as inputs in subsequent steps, creating a complete workflow chain.
+          </p>
+        </div>
+        <details class="flow-spa-stack__item flow-wizard-example-disclosure" aria-label="Example workflow">
+          <summary class="flow-wizard-example-disclosure__summary">example</summary>
+          <div class="flow-wizard-example-disclosure__body">
+            <p class="flow-spa-stack__text" style="line-height: 1.5; margin: 0;">
+              <strong>Step 1 "Mixing":</strong> Outputs "Mixed Base" → <strong>Step 2 "Fermentation":</strong> Uses "Mixed Base" as input, outputs "Fermented Product" → <strong>Step 3 "Packaging":</strong> Uses "Fermented Product" as input, outputs "Final Product"
+            </p>
+          </div>
+        </details>
+        <div id="guided-outputs-container" class="flow-spa-stack__item" style="margin-bottom: 0; padding-top: 4px;">
+          <div id="guided-outputs-list" style="display: flex; flex-direction: column; gap: 0; margin-bottom: 0;">
+          </div>
+          <div class="guided-outputs-add-row" style="display: flex; gap: 8px; border-top: 1px solid var(--border-default, #e5e7eb); padding-top: 14px; margin-top: 0;">
+            <button type="button" id="add-output-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedOutput()" style="flex: 1;">
+              + Add output
+            </button>
+          </div>
+        </div>
+      </div>
+      </div>
+      {% set flow_wizard_sticky_variant = 'outputs' %}
+      {% include 'processes/process-wizard-sticky-bar.html' %}
+    </div>
