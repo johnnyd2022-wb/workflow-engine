@@ -205,6 +205,20 @@
   min-height: 40px;
 }
 @media (max-width: 767px) {
+  .flow-wizard-sticky-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    min-height: 52px;
+    /* Equal vertical padding (base rule used 18px top vs 16px+bottom — that skewed content downward). */
+    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .flow-wizard-sticky-bar__inner {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    align-self: center;
+  }
   .flow-wizard-sticky-bar__left {
     min-height: 0;
   }

@@ -296,8 +296,9 @@ def flows():
 @requires_auth
 def flows_create():
     """Start the wizard at step 1. Anonymous entry (no process id) sets fresh=1 so session wizard state resets."""
-    from flask import redirect
     from urllib.parse import urlencode
+
+    from flask import redirect
 
     base = "/core/flows/create/step-name"
     args = request.args.to_dict(flat=True)

@@ -235,6 +235,19 @@
     @media (max-width: 767px) {
       .process-flow-spa .flow-wizard-sticky-bar {
         bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
+        /* Centre the action row vertically in the rail (block layout + padding made controls look low). */
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        min-height: 52px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+      }
+      .process-flow-spa .flow-wizard-sticky-bar__inner {
+        flex: 1 1 auto;
+        width: 100%;
+        min-height: 0;
+        align-self: center;
       }
     }
     .process-flow-spa .flow-wizard-sticky-bar__inner {
