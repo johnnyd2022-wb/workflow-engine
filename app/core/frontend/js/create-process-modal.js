@@ -4914,9 +4914,8 @@
       await commitGuidedStepToProcessApiFromSessionSnapshot(session);
       if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
       if (typeof updateStepSummaries === 'function') updateStepSummaries();
-      if (window.showNotification) {
-        window.showNotification('success', 'Step saved', 'Your step has been saved to the process.');
-      }
+      window.location.href = '/core/flows/create/next-steps' + (window.location.search || '');
+      return;
     } catch (e) {
       console.error(e);
       if (window.showNotification) {
@@ -6007,7 +6006,18 @@
     if (slug && slugToStep[slug]) {
       currentStep = slugToStep[slug];
     }
-    if (slug === 'summary') {
+    if (slug === 'next-steps') {
+      if (typeof window.restoreSpaWizardState === 'function') {
+        await window.restoreSpaWizardState();
+      }
+      const pidNs = new URLSearchParams(window.location.search || '').get('id');
+      if (pidNs) {
+        await mergeProcessStepsFromApiForCurrentProcess();
+        if (typeof window.persistSpaWizardState === 'function') {
+          window.persistSpaWizardState();
+        }
+      }
+    } else if (slug === 'summary') {
       if (typeof window.restoreSpaWizardState === 'function') {
         await window.restoreSpaWizardState();
       }

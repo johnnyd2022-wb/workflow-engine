@@ -391,6 +391,19 @@ def flows_create_summary_page():
     )
 
 
+@core_bp.route("/core/flows/create/next-steps", methods=["GET"])
+@requires_auth
+def flows_create_next_steps_page():
+    """After saving a step: choose add another step or finish the process."""
+    process_id = request.args.get("id")
+    return render_template(
+        "processes/process-flow-next-steps.html",
+        active_page="core",
+        process_id=process_id,
+        flow_wizard_page="next-steps",
+    )
+
+
 @core_bp.route("/core/notifications", methods=["GET"])
 @requires_auth
 def notifications_page():

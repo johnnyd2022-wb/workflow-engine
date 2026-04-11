@@ -4,7 +4,7 @@
   <div class="flow-wizard-sticky-bar__inner">
     <div class="flow-wizard-sticky-bar__left">
       {% if _v == 'summary' %}
-      <button type="button" class="btn btn-secondary" onclick="window.addAnotherStep()">+ Add another step</button>
+      <button type="button" class="btn btn-secondary flow-wizard-sticky-save" onclick="window.saveDraft()">Save as draft</button>
       {% else %}
       <button type="button" class="btn btn-secondary flow-wizard-sticky-save" onclick="window.saveDraft()">Save as draft</button>
       {% if _v == 'inputs' %}
@@ -27,7 +27,6 @@
       <button type="button" class="btn btn-primary" id="confirm-step-details-btn" onclick="window.createProcessFromGuidedFlow()">Review step</button>
       {% elif _v == 'summary' %}
       <button type="button" class="btn btn-primary" onclick="window.savePendingStepFromFlowWizard()">Save step</button>
-      <button type="button" class="btn btn-secondary" onclick="window.finishProcess()">Finish process</button>
       {% endif %}
     </div>
   </div>

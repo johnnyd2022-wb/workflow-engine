@@ -1017,7 +1017,8 @@
         'inputs': true,
         'outputs': true,
         'evidence-and-prompts': true,
-        'summary': true
+        'summary': true,
+        'next-steps': true
       };
       if (!slug || !known[slug]) return null;
       var params = new URLSearchParams(search || '');
@@ -1027,7 +1028,8 @@
         'inputs': '/core/flows/create/step-name',
         'outputs': '/core/flows/create/inputs',
         'evidence-and-prompts': '/core/flows/create/outputs',
-        'summary': '/core/flows/create/evidence-and-prompts'
+        'summary': '/core/flows/create/evidence-and-prompts',
+        'next-steps': '/core/flows/create/summary'
       };
       if (slug === 'step-name') {
         return wizPid ? '/core/flows?id=' + encodeURIComponent(wizPid) : '/core';

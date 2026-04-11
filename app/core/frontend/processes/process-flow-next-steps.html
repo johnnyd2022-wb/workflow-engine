@@ -1,0 +1,60 @@
+{% extends "processes/process-flow-spa.html" %}
+{% block wizard_html_title %}Next steps | SupplyChain V2{% endblock %}
+{% block wizard_title %}What would you like to do next?{% endblock %}
+{% block wizard_tagline %}Your step has been saved. You can add another step to this process or finish and lock in the workflow.{% endblock %}
+
+{% block head_extras %}
+{{ super() }}
+<style>
+  .process-flow-next-steps {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    min-height: min(52vh, 420px);
+    padding: 8px 0 28px;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+  .process-flow-next-steps__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+  }
+  .process-flow-next-steps__btn {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 22px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border-radius: var(--radius-md, 10px);
+    line-height: 1.35;
+  }
+  .process-flow-next-steps__btn.btn-primary {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+  .process-flow-next-steps__btn.btn-secondary {
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border-default, #e5e7eb);
+    color: var(--text-primary, #111827);
+  }
+  .process-flow-next-steps__btn.btn-secondary:hover {
+    background: var(--bg-secondary, #f9fafb);
+    border-color: var(--border-strong, #d1d5db);
+  }
+</style>
+{% endblock %}
+
+{% block wizard_card_body %}
+<div class="process-flow-next-steps" role="region" aria-label="Next steps">
+  <div class="process-flow-next-steps__actions">
+    <button type="button" class="btn btn-primary process-flow-next-steps__btn" onclick="window.addAnotherStep()">
+      Add another step
+    </button>
+    <button type="button" class="btn btn-secondary process-flow-next-steps__btn" onclick="window.finishProcess()">
+      Finish process
+    </button>
+  </div>
+</div>
+{% endblock %}
