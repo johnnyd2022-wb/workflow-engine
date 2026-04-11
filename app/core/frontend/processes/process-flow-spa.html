@@ -27,6 +27,56 @@
       margin-left: auto;
       margin-right: auto;
     }
+    .process-flow-hero__tagline:empty {
+      display: none;
+    }
+
+    /* Summary — compliance lists + action drill-down (hairline stack, no bordered cards) */
+    .process-flow-spa .flow-step-num-badge {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      border-radius: 50%;
+      background: var(--primary, #3b82f6);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .process-flow-spa ul.flow-compliance-step-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.875rem;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.6;
+    }
+    .process-flow-spa ul.flow-compliance-step-list li {
+      margin-bottom: 8px;
+    }
+    .process-flow-spa ul.flow-compliance-step-list li:last-child {
+      margin-bottom: 0;
+    }
+    /* Same alignment as former Actions drill rows: badge + label vertically centred */
+    .process-flow-spa .flow-compliance-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .process-flow-spa .flow-compliance-row__text {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-primary, #111827);
+      line-height: 1.35;
+    }
+    .process-flow-spa ul.flow-compliance-warnings {
+      color: var(--error, hsl(0, 75%, 55%));
+    }
     .process-flow-card .card-content.process-flow-card__content {
       padding-top: 0 !important;
     }
@@ -129,7 +179,8 @@
     .process-flow-spa #create-process-step-1.create-process-step[style*="block"],
     .process-flow-spa #create-process-step-2.create-process-step[style*="block"],
     .process-flow-spa #create-process-step-3.create-process-step[style*="block"],
-    .process-flow-spa #create-process-step-4.create-process-step[style*="block"] {
+    .process-flow-spa #create-process-step-4.create-process-step[style*="block"],
+    .process-flow-spa #process-flow-summary-wizard-shell.create-process-step[style*="block"] {
       flex: 0 0 auto !important;
       min-height: auto;
     }
@@ -142,7 +193,8 @@
     .process-flow-spa #create-process-step-1 .create-process-step-body,
     .process-flow-spa #create-process-step-2 .create-process-step-body,
     .process-flow-spa #create-process-step-3 .create-process-step-body,
-    .process-flow-spa #create-process-step-4 .create-process-step-body {
+    .process-flow-spa #create-process-step-4 .create-process-step-body,
+    .process-flow-spa #process-flow-summary-wizard-shell .create-process-step-body {
       flex: 0 0 auto;
       min-height: auto;
       overflow: visible;
@@ -208,8 +260,9 @@
     }
 
     /* Wizard sticky rail on all steps: fixed above mobile bottom tab (styles2.css) */
+    /* Must match real mobile .sidebar height (nav-link min-height 48px + .sidebar-nav padding 8px×2); 56px caused ~8px overlap with z-index 100 nav covering the rail bottom. */
     .process-flow-spa {
-      --spa-mobile-bottom-tab-height: 56px;
+      --spa-mobile-bottom-tab-height: 64px;
     }
     .process-flow-spa .flow-wizard-sticky-bar {
       position: fixed;
@@ -218,8 +271,7 @@
       bottom: env(safe-area-inset-bottom, 0px);
       margin-top: 0;
       z-index: 99;
-      padding-top: 16px;
-      padding-bottom: 16px;
+      padding: 0;
       background: var(--bg-app, hsl(220, 20%, 97%));
       border-top: 1px solid var(--border-default, #e5e7eb);
       box-sizing: border-box;
@@ -235,24 +287,28 @@
     @media (max-width: 767px) {
       .process-flow-spa .flow-wizard-sticky-bar {
         bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
-        /* Centre the action row vertically in the rail (block layout + padding made controls look low). */
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        min-height: 52px;
-        padding-top: 12px;
-        padding-bottom: 12px;
-      }
-      .process-flow-spa .flow-wizard-sticky-bar__inner {
-        flex: 1 1 auto;
-        width: 100%;
-        min-height: 0;
-        align-self: center;
       }
     }
+    /* Same vertical inset as desktop; no extra safe-area in padding (bar sits above bottom tab). */
     .process-flow-spa .flow-wizard-sticky-bar__inner {
+      padding-top: 16px;
+      padding-bottom: 16px;
       padding-left: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-left)));
       padding-right: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-right)));
+    }
+    .process-flow-spa .flow-wizard-sticky-bar--summary .flow-wizard-sticky-bar__inner {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    @media (max-width: 640px) {
+      .process-flow-spa .flow-wizard-sticky-bar--summary .flow-wizard-sticky-bar__inner {
+        flex-direction: column;
+        text-align: center;
+      }
     }
     @media (max-width: 767px) {
       .process-flow-spa .flow-wizard-sticky-bar__inner {
@@ -265,6 +321,12 @@
     }
     .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) {
       padding-bottom: 92px;
+    }
+    @media (max-width: 767px) {
+      .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) {
+        /* Tab + fixed rail: keep last field above both stacked layers */
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height) + 76px);
+      }
     }
 
     /* Step 2 input source tabs: match /core/inventory/dispose (dispose-tabs / dispose-tab) */

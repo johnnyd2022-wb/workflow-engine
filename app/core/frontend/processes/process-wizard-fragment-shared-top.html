@@ -1,6 +1,7 @@
-    <!-- Step Summaries Container (shown when adding another step) -->
-    <div id="step-summaries-container" style="display: none; margin-bottom: 24px;">
-      <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;">Created Steps</h3>
+    <!-- Step summaries + compliance (compliance panel filled on summary route only) -->
+    <div id="step-summaries-container" class="process-flow-step-summaries" style="display: none; margin-bottom: 24px;">
+      <div id="flow-compliance-panel" class="flow-compliance-panel" style="display: none;" aria-labelledby="modal-title"></div>
+      <h3 id="step-summaries-heading" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px 0;">Created Steps</h3>
       <div id="step-summaries-list" style="display: flex; flex-direction: column; gap: 0;">
       </div>
     </div>

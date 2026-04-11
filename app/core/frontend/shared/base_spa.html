@@ -1095,6 +1095,12 @@
         var wizFallback = spaFlowWizardBackHref(pathNow, window.location.search);
         if (wizFallback !== null) {
           e.preventDefault();
+          /* Flush wizard form state (prompts, docs, etc.) before leaving — evidence page is not on the next URL's DOM. */
+          if (typeof window.persistSpaWizardState === 'function') {
+            try {
+              window.persistSpaWizardState();
+            } catch (err) {}
+          }
           if (window.history.length > 1) {
             window.history.back();
           } else {

@@ -529,7 +529,8 @@
     }
     .main-content {
       margin-left: 0;
-      padding-bottom: 56px;
+      /* Match mobile bottom nav row height (see .sidebar min-height + nav-link); was 56px and underlapped content */
+      padding-bottom: 64px;
     }
   }
   

@@ -168,9 +168,10 @@
 #create-process-step-4 .step4-trace-block .flow-mode-segmented { margin-top: 2px; }
 #create-process-step-4 .step4-add-prompt-row { margin-bottom: 12px; }
 </style>
-    <!-- Step Summaries Container (shown when adding another step) -->
-    <div id="step-summaries-container" style="display: none; margin-bottom: 24px;">
-      <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;">Created Steps</h3>
+    <!-- Step summaries (compliance panel is summary-route only; see process-wizard-fragment-shared-top.html) -->
+    <div id="step-summaries-container" class="process-flow-step-summaries" style="display: none; margin-bottom: 24px;">
+      <div id="flow-compliance-panel" class="flow-compliance-panel" style="display: none;" aria-labelledby="modal-title"></div>
+      <h3 id="step-summaries-heading" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px 0;">Created Steps</h3>
       <div id="step-summaries-list" style="display: flex; flex-direction: column; gap: 0;">
         <!-- Step summaries will be added here -->
       </div>
@@ -319,7 +320,7 @@
           </p>
         </div>
         <details class="flow-spa-stack__item flow-wizard-example-disclosure" aria-label="Example workflow">
-          <summary class="flow-wizard-example-disclosure__summary">example</summary>
+          <summary class="flow-wizard-example-disclosure__summary">example<span class="flow-wizard-example-disclosure__hint" aria-hidden="true">(click to expand)</span></summary>
           <div class="flow-wizard-example-disclosure__body">
             <p class="flow-spa-stack__text" style="line-height: 1.5; margin: 0;">
               <strong>Step 1 "Mixing":</strong> Outputs "Mixed Base" → <strong>Step 2 "Fermentation":</strong> Uses "Mixed Base" as input, outputs "Fermented Product" → <strong>Step 3 "Packaging":</strong> Uses "Fermented Product" as input, outputs "Final Product"
@@ -349,8 +350,7 @@
           <!-- Step Documentation -->
           <div id="guided-step-docs-section" class="step4-section step4-section--documentation">
             <h3 class="step4-section-title">Step Documentation</h3>
-            <p class="step4-microcopy">Write clear instructions for operators performing this step. Or upload a SOP document (PDF, DOCX, TXT).</p>
-            <p class="step4-helper-line">Keep instructions focused on what the operator must do, not why</p>
+            <p class="step4-microcopy">Instructions shown to operators when completing this step</p>
             <div class="step4-doc-fields">
               <div>
                 <label for="guided-doc-inline-title" class="step4-field-label">Title <span class="step4-optional">(optional)</span></label>
@@ -358,12 +358,12 @@
               </div>
               <div>
                 <label for="guided-doc-inline-content" class="step4-field-label">Instructions <span class="step4-optional">(optional)</span></label>
-                <textarea id="guided-doc-inline-content" rows="4" placeholder="Plain text instructions for operators" class="step4-textarea"></textarea>
+                <textarea id="guided-doc-inline-content" rows="4" placeholder="Describe what the operator must do" class="step4-textarea"></textarea>
               </div>
               <div>
-                <label for="guided-doc-file" class="step4-field-label">SOP file upload <span class="step4-optional">(optional)</span></label>
+                <label for="guided-doc-file" class="step4-field-label">SOP file <span class="step4-optional">(optional)</span></label>
                 <input type="file" id="guided-doc-file" accept=".pdf,.doc,.docx,.md,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain" class="step4-file">
-                <p class="step4-file-hint">Max 20 MB. If you upload a file, inline fields above are ignored for this step.</p>
+                <p class="step4-file-hint">Upload a document instead of writing instructions (PDF, DOCX, TXT, max 20MB)</p>
               </div>
             </div>
           </div>
