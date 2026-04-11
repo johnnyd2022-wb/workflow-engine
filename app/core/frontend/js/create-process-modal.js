@@ -3858,7 +3858,7 @@
       options: [
         { value: EXPIRY_MODES.NONE, label: 'None' },
         { value: EXPIRY_MODES.FIXED, label: 'Fixed period' },
-        { value: EXPIRY_MODES.EXECUTION, label: 'At execution' }
+        { value: EXPIRY_MODES.EXECUTION, label: 'Operator defined' }
       ]
     });
     expiryPane.appendChild(expirySegRow);
@@ -3876,7 +3876,7 @@
     expiryModeSelect.appendChild(fixedExpiryOpt);
     const execExpiryOpt = document.createElement('option');
     execExpiryOpt.value = EXPIRY_MODES.EXECUTION;
-    execExpiryOpt.textContent = 'Set expiry during execution';
+    execExpiryOpt.textContent = 'Operator defined';
     expiryModeSelect.appendChild(execExpiryOpt);
     expiryPane.appendChild(expiryModeSelect);
     const expiryFieldsWrap = document.createElement('div');
@@ -3921,7 +3921,7 @@
     const execHint = document.createElement('p');
     execHint.className = 'guided-output-expiry-exec-hint';
     execHint.style.cssText = 'display: none; margin: 0 0 12px 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
-    execHint.textContent = 'Operator will set expiry during execution (duration or specific date/time).';
+    execHint.textContent = 'Operator will set expiry when this step runs (duration or specific date/time).';
     expiryFieldsWrap.appendChild(execHint);
 
     // Warning threshold (fixed_duration only — for set_at_execution we collect warning during execution)
@@ -4036,7 +4036,7 @@
       options: [
         { value: READY_DATE_MODES.NONE, label: 'None' },
         { value: READY_DATE_MODES.FIXED, label: 'Fixed period' },
-        { value: READY_DATE_MODES.EXECUTION, label: 'At execution' }
+        { value: READY_DATE_MODES.EXECUTION, label: 'Operator defined' }
       ]
     });
     readyDatePane.appendChild(readyDateSegRow);
@@ -4054,7 +4054,7 @@
     readyDateModeSelect.appendChild(fixedReadyOpt);
     const execReadyOpt = document.createElement('option');
     execReadyOpt.value = READY_DATE_MODES.EXECUTION;
-    execReadyOpt.textContent = 'Set ready date during execution';
+    execReadyOpt.textContent = 'Operator defined';
     readyDateModeSelect.appendChild(execReadyOpt);
     readyDatePane.appendChild(readyDateModeSelect);
     const readyDateFieldsWrap = document.createElement('div');
@@ -4099,7 +4099,7 @@
     const readyDateExecHint = document.createElement('p');
     readyDateExecHint.className = 'guided-output-ready-date-exec-hint';
     readyDateExecHint.style.cssText = 'display: none; margin: 0 0 12px 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
-    readyDateExecHint.textContent = 'You will be prompted for a date of availability each time you execute this step.';
+    readyDateExecHint.textContent = 'Operator will set ready date when this step runs (duration or specific date/time).';
     readyDateFieldsWrap.appendChild(readyDateExecHint);
     const readyDateWarnWrap = document.createElement('div');
     readyDateWarnWrap.className = 'guided-output-ready-date-warning-wrap';
