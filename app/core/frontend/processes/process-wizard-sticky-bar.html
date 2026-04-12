@@ -3,25 +3,20 @@
 <div class="flow-wizard-sticky-bar flow-wizard-sticky-bar--{{ _v }}" data-flow-sticky-variant="{{ _v }}" aria-live="polite"{% if _v == 'summary' %} id="flow-wizard-summary-sticky" style="display: none;"{% endif %}>
   <div class="flow-wizard-sticky-bar__inner">
     <div class="flow-wizard-sticky-bar__left">
-      {% if _v == 'summary' %}
-      <button type="button" class="btn btn-secondary flow-wizard-sticky-save" onclick="window.saveDraft()">Save as draft</button>
-      {% else %}
-      <button type="button" class="btn btn-secondary flow-wizard-sticky-save" onclick="window.saveDraft()">Save as draft</button>
       {% if _v == 'inputs' %}
-      <span class="flow-wizard-sticky-bar__sep" aria-hidden="true">|</span>
       <span id="guided-inputs-sticky-count" class="flow-wizard-sticky-meta">0 inputs</span>
       <span class="flow-wizard-sticky-bar__sep" aria-hidden="true">|</span>
       <button type="button" class="flow-wizard-sticky-clear-btn" id="guided-inputs-sticky-clear" aria-label="Clear all inputs" onclick="if(window.clearAllGuidedInputs)window.clearAllGuidedInputs()">clear</button>
       {% elif _v == 'outputs' %}
-      <span class="flow-wizard-sticky-bar__sep" aria-hidden="true">|</span>
       <span id="guided-outputs-sticky-count" class="flow-wizard-sticky-meta">0 outputs</span>
       <span class="flow-wizard-sticky-bar__sep" aria-hidden="true">|</span>
       <button type="button" class="flow-wizard-sticky-clear-btn" id="guided-outputs-sticky-clear" aria-label="Clear all outputs" onclick="if(window.clearAllGuidedOutputs)window.clearAllGuidedOutputs()">clear</button>
       {% endif %}
-      {% endif %}
     </div>
     <div class="flow-wizard-sticky-bar__right">
-      {% if _v == 'step_name' or _v == 'inputs' or _v == 'outputs' %}
+      {% if _v == 'process_overview' %}
+      <button type="button" class="btn btn-primary" onclick="window.goFromProcessOverviewToStepName()">Next</button>
+      {% elif _v == 'step_name' or _v == 'inputs' or _v == 'outputs' %}
       <button type="button" class="btn btn-primary" onclick="window.createProcessNextStep()">Next</button>
       {% elif _v == 'evidence' %}
       <button type="button" class="btn btn-primary" id="confirm-step-details-btn" onclick="window.createProcessFromGuidedFlow()">Review step</button>

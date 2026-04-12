@@ -1,0 +1,85 @@
+{% extends "processes/process-flow-spa.html" %}
+{% block wizard_html_title %}Process workflow | SupplyChain V2{% endblock %}
+{% block wizard_title %}Create a process workflow{% endblock %}
+{% block wizard_tagline %}Name your process and learn how workflows connect steps, inventory, and execution.{% endblock %}
+
+{% block head_extras %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+<style>
+  /* Overview is not inside .create-process-step; card-content overflow:hidden + flex was clipping/trapping scroll on mobile */
+  body[data-flow-wizard-page="process-overview"].process-flow-spa .process-flow-card .card-content.process-flow-card__content {
+    overflow: visible !important;
+    flex: 0 1 auto !important;
+    min-height: auto !important;
+  }
+  body[data-flow-wizard-page="process-overview"].process-flow-spa #page-content .max-content {
+    flex: 0 1 auto !important;
+    min-height: auto !important;
+  }
+  .process-flow-overview__banner-wrap {
+    margin-bottom: 20px;
+  }
+  .process-flow-overview--page {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    box-sizing: border-box;
+    /* Match wizard sticky inset so fields stay scrollable above rail + mobile tab */
+    padding-bottom: 92px;
+  }
+  @media (max-width: 767px) {
+    .process-flow-overview--page {
+      padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 64px) + 76px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+  .process-flow-overview__intro-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+  .process-flow-overview__intro {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--text-secondary, #6b7280);
+    margin: 0;
+  }
+</style>
+{% endblock %}
+
+{% block wizard_card_body %}
+<div class="process-flow-overview process-flow-overview--page">
+  <div class="process-flow-overview__banner-wrap">
+    {% include 'processes/process_flow_overview_banner.html' %}
+  </div>
+  <div class="process-flow-overview__intro-wrap">
+    <p class="process-flow-overview__intro">
+      A <strong>process workflow</strong> is the ordered set of steps your team follows to transform inputs into outputs—whether that is manufacturing, packaging, quality checks, or handoffs between stations. Each step can require inventory, capture evidence, and record batch information so every run stays traceable.
+    </p>
+    <p class="process-flow-overview__intro">
+      You will define one step at a time: what goes in, what comes out, and what operators must document. You can add more steps later and edit the workflow anytime; changes apply to future runs only.
+    </p>
+  </div>
+  <form class="spa-card-form" id="process-flow-overview-form" onsubmit="return false;" aria-label="Process workflow name">
+    <section class="spa-form-section" aria-labelledby="pov-section-process-name">
+      <h3 id="pov-section-process-name" class="spa-form-section-title">Process name</h3>
+      <div>
+        <label class="spa-field-label" for="guided-process-workflow-name">Name this workflow</label>
+        <input
+          type="text"
+          id="guided-process-workflow-name"
+          class="spa-inp"
+          autocomplete="off"
+          placeholder="e.g. Cold brew bottling line"
+          maxlength="200"
+        >
+      </div>
+    </section>
+  </form>
+  {% set flow_wizard_sticky_variant = 'process_overview' %}
+  {% include 'processes/process-wizard-sticky-bar.html' %}
+</div>
+{% endblock %}

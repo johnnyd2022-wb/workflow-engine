@@ -42,7 +42,7 @@
   function shouldMergePersistSpaFormFields() {
     if (isProcessFlowWizardPage()) return true;
     const slug = document.body && document.body.getAttribute('data-flow-wizard-page');
-    return slug === 'summary';
+    return slug === 'summary' || slug === 'process-overview';
   }
 
   function loadWizardSessionMergeBase() {
@@ -335,6 +335,13 @@
     const urlPid = new URLSearchParams(window.location.search || '').get('id');
     const processIdPersist = urlPid || (merge ? prev.processId || null : null) || null;
 
+    const workflowNameEl = document.getElementById('guided-process-workflow-name');
+    let workflowProcessName = workflowNameEl
+      ? (workflowNameEl.value || '').trim()
+      : merge && prev
+        ? (prev.workflowProcessName || '').trim()
+        : '';
+
     let createdStepsOut = JSON.parse(JSON.stringify(createdSteps));
     if (merge && prev) {
       createdStepsOut = preserveCreatedStepsIoFromPrev(prev, createdStepsOut);
@@ -368,6 +375,7 @@
       v: 1,
       stepName,
       stepDescription,
+      workflowProcessName,
       inputs,
       outputs,
       prompts,
@@ -392,6 +400,43 @@
       console.warn('persistSpaWizardState failed', e);
     }
   };
+
+  /**
+   * Persist without an in-progress step draft (empty step fields, no doc file payload).
+   * Keeps process id, workflowProcessName, and createdSteps.
+   * Required when the current route has no wizard DOM (e.g. next-steps): plain persistSpaWizardState
+   * would merge the previous session snapshot back in and repopulate the next step.
+   * Also call after saving a step so session does not still look like an unsaved draft (blocks Finish).
+   */
+  function persistClearedWizardDraftState() {
+    if (!isProcessFlowSpaPage()) return;
+    try {
+      const prev = loadWizardSessionMergeBase() || {};
+      const pid =
+        new URLSearchParams(window.location.search || '').get('id') || prev.processId || null;
+      const payload = {
+        v: 1,
+        stepName: '',
+        stepDescription: '',
+        workflowProcessName: (prev.workflowProcessName != null ? String(prev.workflowProcessName) : '').trim(),
+        inputs: [],
+        outputs: [],
+        prompts: [],
+        batchNumberMode: 'optional',
+        evidenceMode: 'optional',
+        inputTab: prev.inputTab || 'inventory',
+        editingStepId: null,
+        createdSteps: Array.isArray(createdSteps) ? JSON.parse(JSON.stringify(createdSteps)) : [],
+        docInlineTitle: '',
+        docInlineContent: '',
+        processId: pid,
+        docFileUpload: null
+      };
+      sessionStorage.setItem(getProcessFlowSpaStorageKey(), JSON.stringify(payload));
+    } catch (e) {
+      console.warn('persistClearedWizardDraftState failed', e);
+    }
+  }
 
   async function applyOutputPayloadToLastContainer(output) {
     const outputContainers = document.querySelectorAll('#guided-outputs-list > div');
@@ -524,6 +569,10 @@
     const stepDescInput = document.getElementById('guided-step-description');
     if (stepNameInput) stepNameInput.value = data.stepName || '';
     if (stepDescInput) stepDescInput.value = data.stepDescription || '';
+    const workflowNameInput = document.getElementById('guided-process-workflow-name');
+    if (workflowNameInput && Object.prototype.hasOwnProperty.call(data, 'workflowProcessName')) {
+      workflowNameInput.value = data.workflowProcessName != null ? data.workflowProcessName : '';
+    }
     if (Array.isArray(data.createdSteps)) {
       createdSteps = data.createdSteps;
     }
@@ -1377,7 +1426,8 @@
     guidedOutputs = [];
     guidedPrompts = [];
     selectedInventoryItems.clear();
-    
+    selectedPreviousOutputs.clear();
+
     // Reset button text to initial state
     updateInputButtonsText();
     updateOutputButtonText();
@@ -1830,6 +1880,8 @@
       reader.readAsDataURL(f);
     });
   }
+  window.ensureGuidedDocFileListener = ensureDocFileListener;
+
   // Expose for SPA page so it can sync step display without opening the modal
   window.updateStepDisplay = updateStepDisplay;
 
@@ -1960,6 +2012,24 @@
     return { valid: true };
   }
   
+  /** First wizard screen (process overview): require process name, then go to step-name. */
+  window.goFromProcessOverviewToStepName = function() {
+    const el = document.getElementById('guided-process-workflow-name');
+    const name = el ? String(el.value || '').trim() : '';
+    if (!name) {
+      if (window.showNotification) {
+        window.showNotification('error', 'Process name required', 'Enter a name for this process workflow.');
+      } else {
+        alert('Please enter a process name.');
+      }
+      return;
+    }
+    if (typeof window.persistSpaWizardState === 'function') {
+      window.persistSpaWizardState();
+    }
+    window.location.href = '/core/flows/create/step-name' + (window.location.search || '');
+  };
+
   // Navigate to next step
   window.createProcessNextStep = function() {
     if (currentStep === 1) {
@@ -4684,6 +4754,9 @@
   }
 
   function hasPendingUnsavedWizardStepForFinish() {
+    if (getFlowWizardPageSlug() === 'next-steps') {
+      return false;
+    }
     if (editingStepId) return false;
     return wizardSessionHasDraftStepData(loadWizardSessionMergeBase());
   }
@@ -4765,8 +4838,9 @@
     if (!processId && session.processId) processId = session.processId;
 
     if (!processId) {
+      const wfTitle = (session.workflowProcessName || '').trim();
       const newProcess = await CoreAPI.createProcess({
-        name: stepName || 'Untitled Process',
+        name: wfTitle || stepName || 'Untitled Process',
         description: stepDescription || '',
         is_draft: true
       });
@@ -4777,8 +4851,12 @@
     }
 
     let stepCount = 1;
-    const eid = editingStepId || session.editingStepId || null;
-    const stepBeingEdited = eid ? createdSteps.find(s => s.id === eid) : null;
+    // Match modal draft save: only update an existing row when explicitly editing it (in-memory id).
+    // Do not use session.editingStepId here — stale session + reconcile() could point at the wrong step
+    // and turn an "add another step" save into updateStep(step1).
+    const eid =
+      editingStepId != null && editingStepId !== '' ? editingStepId : null;
+    const stepBeingEdited = eid ? createdSteps.find(s => String(s.id) === String(eid)) : null;
 
     if (stepBeingEdited) {
       stepCount = stepBeingEdited.step_number ?? 1;
@@ -4871,7 +4949,9 @@
       createdSteps.push(stepSummary);
     }
 
-    editingStepId = saved.id;
+    // After creating a new step, clear editing id so the next wizard round (add another step)
+    // does not treat the saved step as "being edited" and overwrite it via updateStep.
+    editingStepId = wasEditingStepId ? saved.id : null;
     pendingGuidedDocFileUpload = null;
 
     if (isEditingExistingProcess) {
@@ -4912,7 +4992,7 @@
     }
     try {
       await commitGuidedStepToProcessApiFromSessionSnapshot(session);
-      if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
+      persistClearedWizardDraftState();
       if (typeof updateStepSummaries === 'function') updateStepSummaries();
       window.location.href = '/core/flows/create/next-steps' + (window.location.search || '');
       return;
@@ -5381,6 +5461,14 @@
       return;
     }
     if (editingStepId && createdSteps.some(s => s.id === editingStepId)) {
+      return;
+    }
+    const session = loadWizardSessionMergeBase();
+    // User is composing a new unsaved step (modal draft save always uses createStep for that case).
+    // Do not default to "last saved step" — that made Save on summary call updateStep on step N−1.
+    // When editing an existing step, editingStepId is already set from restoreSpaWizardState above.
+    if (wizardSessionHasDraftStepData(session)) {
+      editingStepId = null;
       return;
     }
     const sorted = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
@@ -5892,18 +5980,14 @@
 
     if (isProcessFlowWizardPage()) {
       resetForm(true);
-      if (typeof window.persistSpaWizardState === 'function') {
-        window.persistSpaWizardState();
-      }
+      persistClearedWizardDraftState();
       window.location.href = '/core/flows/create/step-name' + (window.location.search || '');
       return;
     }
 
     if (isProcessFlowSpaPage() && document.body.getAttribute('data-flow-wizard-page') === 'summary') {
       resetForm(true);
-      if (typeof window.persistSpaWizardState === 'function') {
-        window.persistSpaWizardState();
-      }
+      persistClearedWizardDraftState();
       window.location.href = '/core/flows/create/step-name' + (window.location.search || '');
       return;
     }
@@ -5924,18 +6008,13 @@
     updateStepDisplay();
   };
   
-  // Finish process
+  // Finish process (SPA: no confirmation modal — finalize draft and open flows2)
   window.finishProcess = function() {
-    // Show confirmation modal
-    const confirmationModal = document.getElementById('finish-process-confirmation-modal');
-    if (confirmationModal) {
-      confirmationModal.style.display = 'flex';
-    }
+    void window.confirmFinishProcess();
   };
-  
-  // Confirm finish process
+
+  // Confirm finish process (also used by legacy modal "Finish creating process" where present)
   window.confirmFinishProcess = async function() {
-    // Close confirmation modal
     const confirmationModal = document.getElementById('finish-process-confirmation-modal');
     if (confirmationModal) {
       confirmationModal.style.display = 'none';
@@ -5974,28 +6053,18 @@
         console.error('Error updating process draft status:', error);
       }
     }
-    
-    // Close main modal
-    closeModal();
-    
-    // Reload process data to update step count and display
-    if (window.loadProcessData) {
-      await window.loadProcessData();
-    } else if (window.loadSteps) {
-      await window.loadSteps();
-    }
-    
-    // Show success notification
+
+    const finishedStepCount = createdSteps.length;
     if (window.showNotification) {
       window.showNotification(
         'success',
-        'Process Created',
-        `Process has been created successfully with ${createdSteps.length} step${createdSteps.length > 1 ? 's' : ''}.`
+        'Process created',
+        `Your process is ready with ${finishedStepCount} step${finishedStepCount > 1 ? 's' : ''}.`
       );
     }
-    
-    // Reset everything
+
     resetForm(false);
+    closeModal();
   };
   
   async function initProcessFlowWizardFromDom() {
@@ -6006,7 +6075,28 @@
     if (slug && slugToStep[slug]) {
       currentStep = slugToStep[slug];
     }
-    if (slug === 'next-steps') {
+    if (slug === 'process-overview') {
+      if (typeof window.restoreSpaWizardState === 'function') {
+        await window.restoreSpaWizardState();
+      }
+      const pidOv = new URLSearchParams(window.location.search || '').get('id');
+      if (pidOv && typeof CoreAPI !== 'undefined' && CoreAPI.getProcess) {
+        try {
+          const proc = await CoreAPI.getProcess(pidOv);
+          if (proc && proc.name) {
+            const wf = document.getElementById('guided-process-workflow-name');
+            if (wf && !(wf.value || '').trim()) {
+              wf.value = proc.name;
+            }
+          }
+        } catch (e) {
+          console.warn('process-overview: could not load process', e);
+        }
+      }
+      if (typeof window.persistSpaWizardState === 'function') {
+        window.persistSpaWizardState();
+      }
+    } else if (slug === 'next-steps') {
       if (typeof window.restoreSpaWizardState === 'function') {
         await window.restoreSpaWizardState();
       }
@@ -6022,7 +6112,6 @@
         await window.restoreSpaWizardState();
       }
       await mergeProcessStepsFromApiForSummary();
-      reconcileEditingStepIdAfterStepsSync();
       if (typeof window.persistSpaWizardState === 'function') {
         window.persistSpaWizardState();
       }
@@ -6057,6 +6146,14 @@
       }
       if (typeof window.updateStepDisplay === 'function') {
         window.updateStepDisplay();
+      }
+      if (slug === 'evidence-and-prompts') {
+        if (typeof window.ensureGuidedDocFileListener === 'function') {
+          window.ensureGuidedDocFileListener();
+        }
+        if (typeof syncDocInlineDisabledState === 'function') {
+          syncDocInlineDisabledState();
+        }
       }
     }
     if (typeof window.spaSyncBannerBack === 'function') {

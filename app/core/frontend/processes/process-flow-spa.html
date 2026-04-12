@@ -523,37 +523,6 @@
         </div>
 
         <!-- Finish / Resume / Save-draft modals (required by create-process-modal.js) -->
-        <div class="modal-overlay" id="finish-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center;">
-          <div class="card" style="max-width: 600px; width: 90%; padding: 24px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-              <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Finish Creating Process</h2>
-              <button class="modal-close" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div style="margin-bottom: 24px;">
-              <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
-                <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">
-                  <strong>By finishing this process, you are locking in the process definition.</strong>
-                </p>
-                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
-                  Once you execute this process, your inventory will automatically update in real-time. Each execution will consume inputs and produce outputs according to the steps you've defined.
-                </p>
-                <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
-                  You can edit this process at any time by expanding the process steps in the process view. All changes will apply to future executions.
-                </p>
-              </div>
-              <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
-                Press <strong>"Finish creating process"</strong> to save and lock in this process, or select <strong>"Back"</strong> if you want to edit a step or add another step.
-              </p>
-            </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end;">
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'">Back</button>
-              <button type="button" class="btn btn-primary" onclick="window.confirmFinishProcess()">Finish creating process</button>
-            </div>
-          </div>
-        </div>
-
         <div class="modal-overlay" id="resume-draft-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1002; align-items: center; justify-content: center;">
           <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">

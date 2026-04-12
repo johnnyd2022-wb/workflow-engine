@@ -11,7 +11,7 @@
                     <div class="flow-spa-stack__item">
                       <p class="flow-spa-stack__text" style="margin: 0;">No steps are in this workflow yet. Complete the step wizard first, then return here.</p>
                       <p class="flow-spa-stack__text" style="margin: 10px 0 0 0;">
-                        <a class="btn btn-primary btn-sm" id="summary-goto-step-name" href="/core/flows/create/step-name{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Go to step 1</a>
+                        <a class="btn btn-primary btn-sm" id="summary-goto-step-name" href="/core/flows/create/process-overview{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">Start workflow</a>
                       </p>
                     </div>
                   </div>

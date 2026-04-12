@@ -300,7 +300,7 @@ def flows_create():
 
     from flask import redirect
 
-    base = "/core/flows/create/step-name"
+    base = "/core/flows/create/process-overview"
     args = request.args.to_dict(flat=True)
     if "id" not in args and "fresh" not in args:
         args["fresh"] = "1"
@@ -317,7 +317,7 @@ def flows_create_step(step):
 
     qs = request.query_string.decode()
     if step == 1:
-        dest = "/core/flows/create/step-name"
+        dest = "/core/flows/create/process-overview"
     elif step == 2:
         dest = "/core/flows/create/inputs"
     elif step == 3:
@@ -325,10 +325,23 @@ def flows_create_step(step):
     elif step == 4:
         dest = "/core/flows/create/evidence-and-prompts"
     else:
-        dest = "/core/flows/create/step-name"
+        dest = "/core/flows/create/process-overview"
     if qs:
         dest = dest + "?" + qs
     return redirect(dest)
+
+
+@core_bp.route("/core/flows/create/process-overview", methods=["GET"])
+@requires_auth
+def flows_create_process_overview_page():
+    """First wizard screen: process name + what a workflow is; then step-name."""
+    process_id = request.args.get("id")
+    return render_template(
+        "processes/process-flow-process-overview.html",
+        active_page="core",
+        process_id=process_id,
+        flow_wizard_page="process-overview",
+    )
 
 
 @core_bp.route("/core/flows/create/step-name", methods=["GET"])
