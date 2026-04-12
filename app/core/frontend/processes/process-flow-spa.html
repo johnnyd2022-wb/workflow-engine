@@ -329,70 +329,16 @@
       }
     }
 
-    /* Step 2 input source tabs: match /core/inventory/dispose (dispose-tabs / dispose-tab) */
-    .process-flow-spa .guided-inputs-tabs.dispose-tabs {
-      display: flex;
-      flex-direction: row;
-      flex-wrap: nowrap;
-      align-items: stretch;
-      gap: 0;
-      margin: 4px 0 14px 0;
-      border-bottom: 1px solid var(--border-default, #e5e7eb);
-      width: 100%;
-      box-sizing: border-box;
+    /* Step 2 input source + inventory category: flow-mode-segmented (parity with outputs) */
+    .process-flow-spa #create-process-step-2 .guided-inputs-source-tabs {
+      margin-bottom: 12px;
     }
-    .process-flow-spa .guided-inputs-tab.dispose-tab {
-      flex: 1 1 0;
-      min-width: 0;
-      border: none;
-      border-bottom: 2px solid transparent;
-      background: transparent;
-      color: var(--text-secondary, #6b7280);
-      border-radius: 0;
-      padding: 8px 4px;
-      margin-bottom: -1px;
-      font-size: clamp(0.6875rem, 2.2vw, 0.875rem);
-      font-weight: 500;
-      cursor: pointer;
-      transition: color 0.15s ease, border-color 0.15s ease;
-      min-height: 44px;
-      line-height: 1.25;
-      text-align: center;
+    .process-flow-spa #create-process-step-2 .guided-inputs-source-tabs .flow-mode-segment {
       white-space: normal;
-      word-break: normal;
-      overflow-wrap: break-word;
-      hyphens: none;
-      -webkit-hyphens: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
+      line-height: 1.25;
     }
-    .process-flow-spa .guided-inputs-tab.dispose-tab:hover {
-      color: var(--text-primary, #111827);
-    }
-    .process-flow-spa .guided-inputs-tab.dispose-tab.active,
-    .process-flow-spa .guided-inputs-tab.dispose-tab[aria-selected="true"] {
-      color: var(--primary, #2563eb);
-      border-bottom-color: var(--primary, #2563eb);
-    }
-    @media (min-width: 480px) {
-      .process-flow-spa .guided-inputs-tab.dispose-tab {
-        padding: 8px 10px;
-        min-height: 40px;
-      }
-    }
-    @media (min-width: 900px) {
-      .process-flow-spa .guided-inputs-tabs.dispose-tabs {
-        gap: 12px;
-      }
-      .process-flow-spa .guided-inputs-tab.dispose-tab {
-        flex: 0 1 auto;
-        padding: 8px 0;
-        font-size: 0.875rem;
-        white-space: nowrap;
-      }
+    .process-flow-spa #create-process-step-2 .guided-inventory-cat-segments {
+      margin-bottom: 12px;
     }
     @media (min-width: 768px) {
       .process-flow-spa .create-process-step-actions > .btn-primary {
@@ -409,6 +355,7 @@
     }
     .guided-inventory-section { display: flex; flex-direction: column; gap: 8px; }
     .guided-inventory-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; padding: 4px 0; border-bottom: 1px solid var(--border-default, #e5e7eb); }
+    .guided-inventory-cat-panel { display: flex; flex-direction: column; gap: 8px; width: 100%; }
     .guided-inventory-card { display: flex; flex-direction: column; align-items: stretch; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); background: var(--bg-card, #fff); color: var(--text-primary); font-size: 13px; text-align: left; width: 100%; min-height: 56px; box-sizing: border-box; overflow: hidden; }
     .guided-inventory-card:hover { border-color: var(--primary, #3b82f6); }
     .guided-inventory-card .card-header-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; }
@@ -453,7 +400,7 @@
       background: transparent !important;
       border-top: 1px solid var(--border-default, #e5e7eb) !important;
     }
-    .process-flow-spa .guided-inventory-section .guided-inventory-card:first-of-type {
+    .process-flow-spa .guided-inventory-cat-panel .guided-inventory-card:first-of-type {
       border-top: none !important;
     }
     .process-flow-spa .guided-inventory-card .card-header-row:hover {

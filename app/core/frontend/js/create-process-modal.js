@@ -312,7 +312,7 @@
     const evidenceMode = evEl ? evEl.value : (merge ? (prev.evidenceMode || 'optional') : 'optional');
 
     let inputTab = 'inventory';
-    const activeTab = document.querySelector('.guided-inputs-tab.active');
+    const activeTab = document.querySelector('.flow-mode-segment[data-input-tab].flow-mode-segment--active');
     if (activeTab && activeTab.dataset.inputTab) {
       inputTab = activeTab.dataset.inputTab;
     } else if (merge && prev.inputTab) {
@@ -690,7 +690,7 @@
       }
     }
     if (data.inputTab) {
-      const tabBtn = document.querySelector('.guided-inputs-tab[data-input-tab="' + data.inputTab + '"]');
+      const tabBtn = document.querySelector('.flow-mode-segment[data-input-tab="' + data.inputTab + '"]');
       if (tabBtn) tabBtn.click();
     }
     updateInputButtonsText();
@@ -3498,25 +3498,42 @@
     return lines.join('');
   }
   
-  // Render inventory cards by section (Raw materials, Intermediate, Final product); each card expandable with full metadata.
+  // Inventory category (Raw / Intermediate / Final): same flow-mode-segmented control as outputs expiry / Ready date
+  window.applyGuidedInventoryCategoryUI = function() {
+    const cat = window._guidedInventoryCat || 'raw_material';
+    document.querySelectorAll('#guided-inventory-category-tabs .flow-mode-segment[data-inventory-cat]').forEach(function(btn) {
+      const on = btn.getAttribute('data-inventory-cat') === cat;
+      btn.classList.toggle('flow-mode-segment--active', !!on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('#guided-inventory-cards-container .guided-inventory-cat-panel').forEach(function(el) {
+      el.style.display = el.getAttribute('data-inventory-cat') === cat ? '' : 'none';
+    });
+  };
+
+  // Render inventory cards by category (one visible panel at a time); each card expandable with full metadata.
   window.renderInventoryItemCards = async function() {
     const container = document.getElementById('guided-inventory-cards-container');
+    const catTabsWrap = document.getElementById('guided-inventory-category-tabs');
     if (!container) return;
     container.innerHTML = '';
-    
+    if (catTabsWrap) catTabsWrap.style.display = 'none';
+
     const categorized = await loadInventoryItems();
     const sections = [
-      { key: 'raw_material', title: 'Raw materials', items: categorized.raw_material || [] },
-      { key: 'work_in_progress', title: 'Intermediate', items: categorized.work_in_progress || [] },
-      { key: 'final_product', title: 'Final product', items: categorized.final_product || [] }
+      { key: 'raw_material', items: categorized.raw_material || [] },
+      { key: 'work_in_progress', items: categorized.work_in_progress || [] },
+      { key: 'final_product', items: categorized.final_product || [] }
     ];
-    
+
+    const availableByKey = { raw_material: 0, work_in_progress: 0, final_product: 0 };
     let totalAvailable = 0;
     sections.forEach(function(sec) {
       const available = (sec.items || []).filter(function(item) { return item && item.name && !selectedInventoryItems.has(item.name); });
+      availableByKey[sec.key] = available.length;
       totalAvailable += available.length;
     });
-    
+
     const totalItems = (categorized.raw_material || []).length + (categorized.work_in_progress || []).length + (categorized.final_product || []).length;
     if (totalAvailable === 0) {
       const msg = document.createElement('p');
@@ -3527,167 +3544,202 @@
       container.appendChild(msg);
       return;
     }
-    
+
+    if (catTabsWrap) catTabsWrap.style.display = '';
+
+    const order = ['raw_material', 'work_in_progress', 'final_product'];
+    let resolvedCat = window._guidedInventoryCat;
+    if (!resolvedCat || availableByKey[resolvedCat] === 0) {
+      resolvedCat = null;
+      for (let i = 0; i < order.length; i++) {
+        if (availableByKey[order[i]] > 0) {
+          resolvedCat = order[i];
+          break;
+        }
+      }
+      if (!resolvedCat) resolvedCat = 'raw_material';
+    }
+    window._guidedInventoryCat = resolvedCat;
+
+    function emptyCategoryMessage(secKey, totalInCat, availLen) {
+      const p = document.createElement('p');
+      p.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin: 0; padding: 8px 0;';
+      if (totalInCat === 0) {
+        if (secKey === 'raw_material') p.textContent = 'No raw materials in inventory yet.';
+        else if (secKey === 'work_in_progress') p.textContent = 'No intermediate items in inventory yet.';
+        else p.textContent = 'No final products in inventory yet.';
+      } else if (availLen === 0) {
+        p.textContent = 'All items in this category have been added.';
+      }
+      return p;
+    }
+
+    function buildInventoryCard(item) {
+      const card = document.createElement('div');
+      card.className = 'guided-inventory-card';
+      const summary = inventoryCardSummary(item);
+      const metaHtml = inventoryCardMetadataHtml(item);
+
+      const headerRow = document.createElement('div');
+      headerRow.className = 'card-header-row';
+      headerRow.innerHTML =
+        '<div class="card-header-text">' +
+          '<span class="card-name">' + escapeHtmlForText(item.name) + '</span>' +
+          (summary ? '<span class="card-summary" title="' + summary.replace(/"/g, '&quot;') + '">' + summary + '</span>' : '') +
+        '</div>' +
+        '<button type="button" class="card-expand-btn" aria-label="Toggle details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></button>';
+
+      const metaBlock = document.createElement('div');
+      metaBlock.className = 'card-meta-block';
+      metaBlock.style.display = 'none';
+      const metaContent = document.createElement('div');
+      metaContent.innerHTML = metaHtml;
+      metaBlock.appendChild(metaContent);
+
+      const addFooter = document.createElement('div');
+      addFooter.className = 'card-add-footer';
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'card-add-btn btn btn-primary btn-sm';
+      openBtn.textContent = 'Add as input';
+
+      const inlineWrap = document.createElement('div');
+      inlineWrap.className = 'guided-inv-inline-add';
+      inlineWrap.style.cssText = 'display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light, #eee);';
+      const invIsRaw = (item.inventory_type || item.category) === 'raw_material';
+      const qtyLab = document.createElement('label');
+      qtyLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
+      qtyLab.innerHTML = 'Quantity <span style="color:var(--error,#ef4444)">*</span>';
+      const qtyIn = document.createElement('input');
+      qtyIn.type = 'number';
+      qtyIn.step = '0.01';
+      qtyIn.min = '0.01';
+      qtyIn.placeholder = 'e.g. 1';
+      qtyIn.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
+      const unitLab = document.createElement('label');
+      unitLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
+      unitLab.innerHTML = 'Unit <span style="color:var(--error,#ef4444)">*</span>';
+      const unitSel = document.createElement('select');
+      unitSel.className = 'form-select';
+      unitSel.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-card);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
+      const emptyU = document.createElement('option');
+      emptyU.value = '';
+      emptyU.textContent = 'Select unit';
+      unitSel.appendChild(emptyU);
+      [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(function(unit) {
+        const o = document.createElement('option');
+        o.value = unit;
+        o.textContent = unit;
+        unitSel.appendChild(o);
+      });
+      if (item.unit) unitSel.value = item.unit;
+
+      let execSel = null;
+      if (!invIsRaw) {
+        execSel = document.createElement('select');
+        execSel.className = 'form-select';
+        execSel.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-card);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
+        [['variable', 'Select inventory at execution'], ['static', 'Use exact input every execution']].forEach(function(opt) {
+          const o = document.createElement('option');
+          o.value = opt[0];
+          o.textContent = opt[1];
+          execSel.appendChild(o);
+        });
+      }
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.className = 'btn btn-primary btn-sm';
+      confirmBtn.style.cssText = 'width:100%;margin-top:4px;';
+      confirmBtn.textContent = 'Click to add';
+
+      inlineWrap.appendChild(qtyLab);
+      inlineWrap.appendChild(qtyIn);
+      inlineWrap.appendChild(unitLab);
+      inlineWrap.appendChild(unitSel);
+      if (!invIsRaw && execSel) {
+        const execLab = document.createElement('label');
+        execLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
+        execLab.textContent = 'Execution type';
+        inlineWrap.appendChild(execLab);
+        inlineWrap.appendChild(execSel);
+      }
+      inlineWrap.appendChild(confirmBtn);
+
+      openBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openBtn.style.display = 'none';
+        inlineWrap.style.display = 'block';
+      });
+      confirmBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const q = parseFloat(qtyIn.value, 10);
+        const u = unitSel.value;
+        if (!q || q <= 0 || isNaN(q)) {
+          if (window.showNotification) window.showNotification('error', 'Quantity required', 'Enter a positive quantity.');
+          else alert('Enter a positive quantity.');
+          return;
+        }
+        if (!u) {
+          if (window.showNotification) window.showNotification('error', 'Unit required', 'Select a unit.');
+          else alert('Select a unit.');
+          return;
+        }
+        const exec = invIsRaw ? 'variable' : (execSel ? execSel.value : 'variable');
+        (async function() {
+          await window.addGuidedInput('inventory', true, Object.assign({}, item, { quantity: q, unit: u, executionType: exec }));
+          window.renderInventoryItemCards();
+          updateInputButtonsText();
+          const unified = document.getElementById('guided-inputs-list-unified');
+          if (unified && unified.firstElementChild) {
+            unified.firstElementChild.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        })();
+      });
+
+      addFooter.appendChild(openBtn);
+      addFooter.appendChild(inlineWrap);
+      metaBlock.appendChild(addFooter);
+
+      const expandBtn = headerRow.querySelector('.card-expand-btn');
+
+      function toggleExpand() {
+        const open = card.classList.toggle('expanded');
+        metaBlock.style.display = open ? 'block' : 'none';
+      }
+      headerRow.addEventListener('click', function(e) {
+        if (e.target.closest('.card-expand-btn')) return;
+        toggleExpand();
+      });
+      expandBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        toggleExpand();
+      });
+
+      card.appendChild(headerRow);
+      card.appendChild(metaBlock);
+      return card;
+    }
+
     sections.forEach(function(sec) {
       const available = (sec.items || []).filter(function(item) { return item && item.name && !selectedInventoryItems.has(item.name); });
-      if (available.length === 0) return;
-      
-      const sectionEl = document.createElement('div');
-      sectionEl.className = 'guided-inventory-section';
-      const titleEl = document.createElement('h4');
-      titleEl.className = 'guided-inventory-section-title';
-      titleEl.textContent = sec.title;
-      sectionEl.appendChild(titleEl);
-      
-      available.forEach(function(item) {
-        const card = document.createElement('div');
-        card.className = 'guided-inventory-card';
-        const summary = inventoryCardSummary(item);
-        const metaHtml = inventoryCardMetadataHtml(item);
-        
-        const headerRow = document.createElement('div');
-        headerRow.className = 'card-header-row';
-        headerRow.innerHTML =
-          '<div class="card-header-text">' +
-            '<span class="card-name">' + escapeHtmlForText(item.name) + '</span>' +
-            (summary ? '<span class="card-summary" title="' + summary.replace(/"/g, '&quot;') + '">' + summary + '</span>' : '') +
-          '</div>' +
-          '<button type="button" class="card-expand-btn" aria-label="Toggle details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></button>';
-        
-        const metaBlock = document.createElement('div');
-        metaBlock.className = 'card-meta-block';
-        metaBlock.style.display = 'none';
-        const metaContent = document.createElement('div');
-        metaContent.innerHTML = metaHtml;
-        metaBlock.appendChild(metaContent);
+      const totalInCat = (sec.items || []).filter(function(item) { return item && item.name; }).length;
 
-        const addFooter = document.createElement('div');
-        addFooter.className = 'card-add-footer';
-        const openBtn = document.createElement('button');
-        openBtn.type = 'button';
-        openBtn.className = 'card-add-btn btn btn-primary btn-sm';
-        openBtn.textContent = 'Add as input';
+      const panel = document.createElement('div');
+      panel.className = 'guided-inventory-cat-panel';
+      panel.setAttribute('data-inventory-cat', sec.key);
 
-        const inlineWrap = document.createElement('div');
-        inlineWrap.className = 'guided-inv-inline-add';
-        inlineWrap.style.cssText = 'display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light, #eee);';
-        const invIsRaw = (item.inventory_type || item.category) === 'raw_material';
-        const qtyLab = document.createElement('label');
-        qtyLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
-        qtyLab.innerHTML = 'Quantity <span style="color:var(--error,#ef4444)">*</span>';
-        const qtyIn = document.createElement('input');
-        qtyIn.type = 'number';
-        qtyIn.step = '0.01';
-        qtyIn.min = '0.01';
-        qtyIn.placeholder = 'e.g. 1';
-        qtyIn.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
-        const unitLab = document.createElement('label');
-        unitLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
-        unitLab.innerHTML = 'Unit <span style="color:var(--error,#ef4444)">*</span>';
-        const unitSel = document.createElement('select');
-        unitSel.className = 'form-select';
-        unitSel.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-card);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
-        const emptyU = document.createElement('option');
-        emptyU.value = '';
-        emptyU.textContent = 'Select unit';
-        unitSel.appendChild(emptyU);
-        [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(function(unit) {
-          const o = document.createElement('option');
-          o.value = unit;
-          o.textContent = unit;
-          unitSel.appendChild(o);
+      if (available.length === 0) {
+        panel.appendChild(emptyCategoryMessage(sec.key, totalInCat, available.length));
+      } else {
+        available.forEach(function(item) {
+          panel.appendChild(buildInventoryCard(item));
         });
-        if (item.unit) unitSel.value = item.unit;
-
-        let execSel = null;
-        if (!invIsRaw) {
-          execSel = document.createElement('select');
-          execSel.className = 'form-select';
-          execSel.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-card);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
-          [['variable', 'Select inventory at execution'], ['static', 'Use exact input every execution']].forEach(function(opt) {
-            const o = document.createElement('option');
-            o.value = opt[0];
-            o.textContent = opt[1];
-            execSel.appendChild(o);
-          });
-        }
-
-        const confirmBtn = document.createElement('button');
-        confirmBtn.type = 'button';
-        confirmBtn.className = 'btn btn-primary btn-sm';
-        confirmBtn.style.cssText = 'width:100%;margin-top:4px;';
-        confirmBtn.textContent = 'Click to add';
-
-        inlineWrap.appendChild(qtyLab);
-        inlineWrap.appendChild(qtyIn);
-        inlineWrap.appendChild(unitLab);
-        inlineWrap.appendChild(unitSel);
-        if (!invIsRaw && execSel) {
-          const execLab = document.createElement('label');
-          execLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
-          execLab.textContent = 'Execution type';
-          inlineWrap.appendChild(execLab);
-          inlineWrap.appendChild(execSel);
-        }
-        inlineWrap.appendChild(confirmBtn);
-
-        openBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          openBtn.style.display = 'none';
-          inlineWrap.style.display = 'block';
-        });
-        confirmBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          const q = parseFloat(qtyIn.value, 10);
-          const u = unitSel.value;
-          if (!q || q <= 0 || isNaN(q)) {
-            if (window.showNotification) window.showNotification('error', 'Quantity required', 'Enter a positive quantity.');
-            else alert('Enter a positive quantity.');
-            return;
-          }
-          if (!u) {
-            if (window.showNotification) window.showNotification('error', 'Unit required', 'Select a unit.');
-            else alert('Select a unit.');
-            return;
-          }
-          const exec = invIsRaw ? 'variable' : (execSel ? execSel.value : 'variable');
-          (async function() {
-            await window.addGuidedInput('inventory', true, Object.assign({}, item, { quantity: q, unit: u, executionType: exec }));
-            window.renderInventoryItemCards();
-            updateInputButtonsText();
-            const unified = document.getElementById('guided-inputs-list-unified');
-            if (unified && unified.firstElementChild) {
-              unified.firstElementChild.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-          })();
-        });
-
-        addFooter.appendChild(openBtn);
-        addFooter.appendChild(inlineWrap);
-        metaBlock.appendChild(addFooter);
-
-        const expandBtn = headerRow.querySelector('.card-expand-btn');
-
-        function toggleExpand() {
-          const open = card.classList.toggle('expanded');
-          metaBlock.style.display = open ? 'block' : 'none';
-        }
-        headerRow.addEventListener('click', function(e) {
-          if (e.target.closest('.card-expand-btn')) return;
-          toggleExpand();
-        });
-        expandBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          toggleExpand();
-        });
-
-        card.appendChild(headerRow);
-        card.appendChild(metaBlock);
-        sectionEl.appendChild(card);
-      });
-      
-      container.appendChild(sectionEl);
+      }
+      container.appendChild(panel);
     });
+
+    if (typeof window.applyGuidedInventoryCategoryUI === 'function') window.applyGuidedInventoryCategoryUI();
   };
   
   // Render list of previous step outputs in "Outputs from previous steps" tab; click to add as input.
@@ -6221,16 +6273,16 @@
       const isPreviousOutput = tab === 'previous_output';
       const isNew = tab === 'new';
       if (inputTabInventory) {
-        inputTabInventory.classList.toggle('active', isInventory);
-        inputTabInventory.setAttribute('aria-selected', isInventory ? 'true' : 'false');
+        inputTabInventory.classList.toggle('flow-mode-segment--active', isInventory);
+        inputTabInventory.setAttribute('aria-pressed', isInventory ? 'true' : 'false');
       }
       if (inputTabPreviousOutput) {
-        inputTabPreviousOutput.classList.toggle('active', isPreviousOutput);
-        inputTabPreviousOutput.setAttribute('aria-selected', isPreviousOutput ? 'true' : 'false');
+        inputTabPreviousOutput.classList.toggle('flow-mode-segment--active', isPreviousOutput);
+        inputTabPreviousOutput.setAttribute('aria-pressed', isPreviousOutput ? 'true' : 'false');
       }
       if (inputTabNew) {
-        inputTabNew.classList.toggle('active', isNew);
-        inputTabNew.setAttribute('aria-selected', isNew ? 'true' : 'false');
+        inputTabNew.classList.toggle('flow-mode-segment--active', isNew);
+        inputTabNew.setAttribute('aria-pressed', isNew ? 'true' : 'false');
       }
       if (panelInventory) panelInventory.style.display = isInventory ? 'block' : 'none';
       if (panelPreviousOutput) panelPreviousOutput.style.display = isPreviousOutput ? 'block' : 'none';
@@ -6241,6 +6293,19 @@
     if (inputTabInventory) inputTabInventory.addEventListener('click', function() { switchInputTab('inventory'); });
     if (inputTabPreviousOutput) inputTabPreviousOutput.addEventListener('click', function() { switchInputTab('previous_output'); });
     if (inputTabNew) inputTabNew.addEventListener('click', function() { switchInputTab('new'); });
+
+    const invCatTabs = document.getElementById('guided-inventory-category-tabs');
+    if (invCatTabs && !invCatTabs.dataset.guidedInvCatBound) {
+      invCatTabs.dataset.guidedInvCatBound = '1';
+      invCatTabs.addEventListener('click', function(e) {
+        const btn = e.target && e.target.closest ? e.target.closest('.flow-mode-segment[data-inventory-cat]') : null;
+        if (!btn || !invCatTabs.contains(btn)) return;
+        const cat = btn.getAttribute('data-inventory-cat');
+        if (!cat) return;
+        window._guidedInventoryCat = cat;
+        if (typeof window.applyGuidedInventoryCategoryUI === 'function') window.applyGuidedInventoryCategoryUI();
+      });
+    }
     
     // Show "Outputs from previous steps" tab only when there is at least one previous (saved/finished) step
     window.updatePreviousOutputTabVisibility = function() {
@@ -6261,7 +6326,7 @@
       } else {
         tab.style.display = 'none';
         tab.setAttribute('aria-hidden', 'true');
-        if (tab.classList.contains('active')) {
+        if (tab.classList.contains('flow-mode-segment--active')) {
           switchInputTab('inventory');
         }
         panel.style.display = 'none';

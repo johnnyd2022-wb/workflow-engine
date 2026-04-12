@@ -16,14 +16,14 @@
           </div>
         </div>
         
-        <div class="guided-inputs-tabs dispose-tabs" style="margin-bottom: 16px;">
-          <button type="button" class="guided-inputs-tab dispose-tab active" data-input-tab="inventory" id="input-tab-inventory" aria-selected="true" title="Inventory items">
-            Inventory items
+        <div class="flow-mode-segmented guided-inputs-source-tabs" role="group" aria-label="Input source">
+          <button type="button" class="flow-mode-segment flow-mode-segment--active" data-input-tab="inventory" id="input-tab-inventory" aria-pressed="true" title="Inventory">
+            Inventory
           </button>
-          <button type="button" class="guided-inputs-tab dispose-tab" data-input-tab="previous_output" id="input-tab-previous-output" aria-selected="false" title="Outputs from previous steps">
+          <button type="button" class="flow-mode-segment" data-input-tab="previous_output" id="input-tab-previous-output" aria-pressed="false" title="Outputs from previous steps">
             Outputs from previous steps
           </button>
-          <button type="button" class="guided-inputs-tab dispose-tab" data-input-tab="new" id="input-tab-new" aria-selected="false" title="Other materials">
+          <button type="button" class="flow-mode-segment" data-input-tab="new" id="input-tab-new" aria-pressed="false" title="Other materials">
             Other materials
           </button>
         </div>
@@ -32,6 +32,13 @@
           <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">
             Expand an item, enter quantity and unit (and execution type when shown), then click <strong>Click to add</strong>. The input is added at the top of the page — expand it there to edit.
           </p>
+          <div id="guided-inventory-category-tabs" style="display: none;">
+            <div class="flow-mode-segmented guided-inventory-cat-segments" role="group" aria-label="Inventory category">
+              <button type="button" class="flow-mode-segment flow-mode-segment--active" data-inventory-cat="raw_material" aria-pressed="true">Raw materials</button>
+              <button type="button" class="flow-mode-segment" data-inventory-cat="work_in_progress" aria-pressed="false">Intermediate</button>
+              <button type="button" class="flow-mode-segment" data-inventory-cat="final_product" aria-pressed="false">Final products</button>
+            </div>
+          </div>
           <div id="guided-inventory-cards-container" class="guided-inventory-cards-stack">
           </div>
         </div>
