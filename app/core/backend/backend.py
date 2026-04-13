@@ -1217,12 +1217,7 @@ def reorder_steps(process_id: str):
     try:
         with db_session.begin():
             # Lock all steps for this process to prevent concurrent reorder collisions.
-            locked = (
-                db_session.query(Step.id)
-                .filter(Step.process_id == process_uuid)
-                .with_for_update()
-                .all()
-            )
+            locked = db_session.query(Step.id).filter(Step.process_id == process_uuid).with_for_update().all()
             locked_ids = {sid for (sid,) in locked}
             if not locked_ids:
                 return jsonify({"error": "No steps to reorder"}), 400
