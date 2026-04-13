@@ -625,11 +625,6 @@
                 unit: inp.unit,
                 executionType: inp.executionType
               }, undefined);
-              const lastIn = getAllGuidedInputElements().slice(-1)[0];
-              const typeSelect = lastIn && lastIn.querySelector('.guided-input-execution-type.form-select');
-              if (typeSelect && inp.executionType && !((item.inventory_type || item.category) === 'raw_material')) {
-                typeSelect.value = inp.executionType;
-              }
               continue;
             }
           }
@@ -1681,11 +1676,11 @@
       : document.getElementById('guided-input-explanation-' + inputId);
     if (!explanation) return;
     if (value === 'variable') {
-      explanation.innerHTML = '<strong>At execution:</strong> Quantity and unit are confirmed when this step is run.';
+      explanation.innerHTML = '<strong>At execution:</strong> Quantity and unit are populated with these values and the operator confirms when this step is run.';
     } else if (value === 'static') {
-      explanation.innerHTML = '<strong>Fixed:</strong> The same quantity and unit are used every execution.';
+      explanation.innerHTML = '<strong>Fixed:</strong> The same quantity and unit are used every execution. Operators will not be prompted to confirm when this step runs.';
     } else {
-      explanation.innerHTML = '<strong>Prompt:</strong> Operators enter quantity (and unit if needed) each time.';
+      explanation.innerHTML = '<strong>Prompt:</strong> Operators are prompted to enter quantity and unit each time this step runs. This option is useful when the quantity and/or unit might be variable from batch to batch.';
     }
   }
 
@@ -1721,7 +1716,7 @@
     segWrap.setAttribute('role', 'group');
     segWrap.setAttribute('aria-label', 'How quantities are captured');
     [
-      { value: 'variable', label: 'At execution' },
+      { value: 'variable', label: 'Operator to confirm' },
       { value: 'static', label: 'Fixed' },
       { value: 'prompt', label: 'Prompt' }
     ].forEach(function(opt) {
@@ -2806,9 +2801,13 @@
     }
     const executionTypeSelect = container.querySelector('.guided-input-execution-type');
     if (executionTypeSelect) {
-      if (data.requires_inventory_selection) executionTypeSelect.value = 'variable';
-      else if (data.is_variable === false) executionTypeSelect.value = 'static';
-      else executionTypeSelect.value = 'prompt';
+      if (type === 'inventory') {
+        executionTypeSelect.value = 'variable';
+      } else {
+        if (data.requires_inventory_selection) executionTypeSelect.value = 'variable';
+        else if (data.is_variable === false) executionTypeSelect.value = 'static';
+        else executionTypeSelect.value = 'prompt';
+      }
       executionTypeSelect.dispatchEvent(new Event('change'));
     }
     if (type === 'new') syncGuidedNewInputExecutionSegments(container);
@@ -2992,7 +2991,7 @@
         if (typeof window.renderPreviousOutputsList === 'function') window.renderPreviousOutputsList();
         return;
       }
-      // Pre-selected item (e.g. from inventory cards): show quantity, unit, execution type only; no dropdown
+      // Pre-selected item (e.g. from inventory cards): show quantity, unit + hidden execution (variable); no execution dropdown
       if (type === 'inventory' && preSelectedItem && preSelectedItem.name) {
         nameDisplay.textContent = preSelectedItem.name;
         nameDisplay.style.display = 'inline';
@@ -3052,53 +3051,16 @@
         contentArea.appendChild(unitField);
         
         const typeField = document.createElement('div');
-        const isRaw = (preSelectedItem.inventory_type || preSelectedItem.category) === 'raw_material';
-        // Raw materials: hide Execution type, show helper only. Intermediate/final: show "Select inventory at execution" dropdown.
-        if (isRaw) {
-          const hiddenType = document.createElement('input');
-          hiddenType.type = 'hidden';
-          hiddenType.className = 'guided-input-execution-type';
-          hiddenType.value = 'variable';
-          typeField.appendChild(hiddenType);
-          const explanationDiv = document.createElement('div');
-          explanationDiv.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
-          explanationDiv.id = `guided-input-explanation-${inputId}`;
-          explanationDiv.textContent = inventoryExecutionHelperText(preSelectedItem);
-          typeField.appendChild(explanationDiv);
-        } else {
-          const typeLabel = document.createElement('label');
-          typeLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-          typeLabel.textContent = 'Execution Type';
-          typeField.appendChild(typeLabel);
-          const typeSelect = document.createElement('select');
-          typeSelect.className = 'guided-input-execution-type form-select';
-          typeSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
-          const variableOption = document.createElement('option');
-          variableOption.value = 'variable';
-          variableOption.textContent = 'Select inventory at execution';
-          typeSelect.appendChild(variableOption);
-          const staticOption = document.createElement('option');
-          staticOption.value = 'static';
-          staticOption.textContent = 'Use exact input every execution';
-          typeSelect.appendChild(staticOption);
-          typeField.appendChild(typeSelect);
-          const explanationDiv = document.createElement('div');
-          explanationDiv.style.cssText = 'margin-top: 8px; padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
-          explanationDiv.id = `guided-input-explanation-${inputId}`;
-          explanationDiv.textContent = inventoryExecutionHelperText(preSelectedItem);
-          typeField.appendChild(explanationDiv);
-          typeSelect.addEventListener('change', function() {
-            const explanation = document.getElementById(`guided-input-explanation-${inputId}`);
-            if (explanation) {
-              explanation.textContent = this.value === 'variable'
-                ? inventoryExecutionHelperText(preSelectedItem)
-                : 'Use this exact input every execution: The system will use the same quantity and unit for every execution without prompting.';
-            }
-          });
-          if (preSelectedItem.executionType === 'variable' || preSelectedItem.executionType === 'static') {
-            typeSelect.value = preSelectedItem.executionType;
-          }
-        }
+        const hiddenType = document.createElement('input');
+        hiddenType.type = 'hidden';
+        hiddenType.className = 'guided-input-execution-type';
+        hiddenType.value = 'variable';
+        typeField.appendChild(hiddenType);
+        const explanationDiv = document.createElement('div');
+        explanationDiv.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
+        explanationDiv.id = `guided-input-explanation-${inputId}`;
+        explanationDiv.textContent = inventoryExecutionHelperText(preSelectedItem);
+        typeField.appendChild(explanationDiv);
         contentArea.appendChild(typeField);
         
         inputContainer.appendChild(contentArea);
@@ -3215,32 +3177,9 @@
             nameDisplay.style.display = 'inline';
             titleSpan.style.display = 'none';
           }
-          // Raw materials only: hide Execution type box, show only helper. Intermediate/final: keep "Select inventory at execution" visible.
           if (type === 'inventory') {
-            const typeSelect = inputContainer.querySelector('.guided-input-execution-type.form-select');
-            const isRaw = (item.inventory_type || item.category) === 'raw_material';
-            if (typeSelect && isRaw) {
-              const typeField = typeSelect.parentElement;
-              if (typeField) {
-                const label = typeField.querySelector('label');
-                if (label) label.style.display = 'none';
-                typeSelect.style.display = 'none';
-                const hiddenType = document.createElement('input');
-                hiddenType.type = 'hidden';
-                hiddenType.className = 'guided-input-execution-type';
-                hiddenType.value = 'variable';
-                typeField.appendChild(hiddenType);
-                const explanation = document.getElementById('guided-input-explanation-' + inputId);
-                if (explanation) {
-                  explanation.style.marginTop = '0';
-                  explanation.textContent = inventoryExecutionHelperText(item);
-                }
-              }
-            } else if (typeSelect && !isRaw) {
-              typeSelect.value = 'variable';
-              const explanation = document.getElementById('guided-input-explanation-' + inputId);
-              if (explanation) explanation.textContent = inventoryExecutionHelperText(item);
-            }
+            const explanation = document.getElementById('guided-input-explanation-' + inputId);
+            if (explanation) explanation.textContent = inventoryExecutionHelperText(item);
           }
         },
         inputContainer,
@@ -3300,47 +3239,19 @@
       unitField.appendChild(unitSelect);
       contentArea.appendChild(unitField);
       
-      // Execution type dropdown (only for inventory, not for previous_output)
+      // Inventory: always select from stock at execution (same as raw materials); no execution-type dropdown.
       if (type === 'inventory') {
         const typeField = document.createElement('div');
-        const typeLabel = document.createElement('label');
-        typeLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-        typeLabel.textContent = 'Execution Type';
-        typeField.appendChild(typeLabel);
-        const typeSelect = document.createElement('select');
-        typeSelect.className = 'guided-input-execution-type form-select';
-        typeSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
-        
-        const variableOption = document.createElement('option');
-        variableOption.value = 'variable';
-        variableOption.textContent = 'Select inventory at execution';
-        typeSelect.appendChild(variableOption);
-        
-        const staticOption = document.createElement('option');
-        staticOption.value = 'static';
-        staticOption.textContent = 'Use this exact input every execution';
-        typeSelect.appendChild(staticOption);
-        
-        typeField.appendChild(typeSelect);
-        
-        // Explanation text
+        const hiddenType = document.createElement('input');
+        hiddenType.type = 'hidden';
+        hiddenType.className = 'guided-input-execution-type';
+        hiddenType.value = 'variable';
+        typeField.appendChild(hiddenType);
         const explanationDiv = document.createElement('div');
-        explanationDiv.style.cssText = 'margin-top: 8px; padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
+        explanationDiv.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
         explanationDiv.id = `guided-input-explanation-${inputId}`;
-        explanationDiv.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs. This allows you to track specific batches through your process.';
+        explanationDiv.textContent = inventoryExecutionHelperText(null);
         typeField.appendChild(explanationDiv);
-        
-        // Update explanation when type changes (use explanationDiv from closure; getElementById can be null if container not in DOM yet, e.g. during restoreStepIntoForm)
-        typeSelect.addEventListener('change', function() {
-          const explanation = document.getElementById(`guided-input-explanation-${inputId}`) || explanationDiv;
-          if (!explanation) return;
-          if (this.value === 'variable') {
-            explanation.innerHTML = '<strong>Select inventory at execution:</strong> You will choose which supplier batch is consumed when this step runs. This allows you to track specific batches through your process.';
-          } else {
-            explanation.innerHTML = '<strong>Use this exact input every execution:</strong> The system will use the same quantity and unit for every execution without prompting. Use this for consistent inputs that don\'t vary between batches.';
-          }
-        });
-        
         contentArea.appendChild(typeField);
       }
     } else {
@@ -3458,15 +3369,12 @@
     return parts.join(', ');
   }
 
-  // Helper text for execution-time selection: raw vs intermediate/final.
-  function inventoryExecutionHelperText(item) {
-    const isRaw = (item.inventory_type || item.category) === 'raw_material';
-    return isRaw
-      ? 'You will select which batch or supplier to use when this step runs.'
-      : 'You will select which inventory item in stock to use when this step runs.';
+  // Helper text: all inventory categories select specific stock at execution (same behavior as raw materials).
+  function inventoryExecutionHelperText(_item) {
+    return 'You will select which batch or supplier to use when this step runs.';
   }
   
-  // Build full metadata block. Raw: type + helper. Intermediate/final: type, unit, process, step, variable inputs + helper (no execution metadata: supplier/batch/dates/prompts/variable_output/previous_steps).
+  // Build full metadata block. Raw: type + helper. Intermediate/final: type, unit, process, step, made-from list + helper (no execution metadata: supplier/batch/dates/prompts/variable_output/previous_steps).
   function inventoryCardMetadataHtml(item) {
     const lines = [];
     const cat = item.inventory_type || item.category;
@@ -3486,7 +3394,7 @@
     }
     const ed = item.extra_data;
     if (ed && typeof ed === 'object' && ed.variable_inputs && Array.isArray(ed.variable_inputs) && ed.variable_inputs.length > 0) {
-      lines.push('<div class="meta-line"><span class="meta-label">Variable inputs:</span></div>');
+      lines.push('<div class="meta-line"><span class="meta-label">Made from:</span></div>');
       ed.variable_inputs.forEach(function(inp, idx) {
         const n = inp && inp.name ? inp.name : 'Input ' + (idx + 1);
         const q = inp && inp.quantity != null ? inp.quantity : '';
@@ -3606,7 +3514,6 @@
       const inlineWrap = document.createElement('div');
       inlineWrap.className = 'guided-inv-inline-add';
       inlineWrap.style.cssText = 'display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light, #eee);';
-      const invIsRaw = (item.inventory_type || item.category) === 'raw_material';
       const qtyLab = document.createElement('label');
       qtyLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
       qtyLab.innerHTML = 'Quantity <span style="color:var(--error,#ef4444)">*</span>';
@@ -3634,19 +3541,6 @@
       });
       if (item.unit) unitSel.value = item.unit;
 
-      let execSel = null;
-      if (!invIsRaw) {
-        execSel = document.createElement('select');
-        execSel.className = 'form-select';
-        execSel.style.cssText = 'width:100%;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-card);font-size:13px;margin-bottom:10px;box-sizing:border-box;';
-        [['variable', 'Select inventory at execution'], ['static', 'Use exact input every execution']].forEach(function(opt) {
-          const o = document.createElement('option');
-          o.value = opt[0];
-          o.textContent = opt[1];
-          execSel.appendChild(o);
-        });
-      }
-
       const confirmBtn = document.createElement('button');
       confirmBtn.type = 'button';
       confirmBtn.className = 'btn btn-primary btn-sm';
@@ -3657,13 +3551,6 @@
       inlineWrap.appendChild(qtyIn);
       inlineWrap.appendChild(unitLab);
       inlineWrap.appendChild(unitSel);
-      if (!invIsRaw && execSel) {
-        const execLab = document.createElement('label');
-        execLab.style.cssText = 'display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;';
-        execLab.textContent = 'Execution type';
-        inlineWrap.appendChild(execLab);
-        inlineWrap.appendChild(execSel);
-      }
       inlineWrap.appendChild(confirmBtn);
 
       openBtn.addEventListener('click', function(e) {
@@ -3685,9 +3572,8 @@
           else alert('Select a unit.');
           return;
         }
-        const exec = invIsRaw ? 'variable' : (execSel ? execSel.value : 'variable');
         (async function() {
-          await window.addGuidedInput('inventory', true, Object.assign({}, item, { quantity: q, unit: u, executionType: exec }));
+          await window.addGuidedInput('inventory', true, Object.assign({}, item, { quantity: q, unit: u, executionType: 'variable' }));
           window.renderInventoryItemCards();
           updateInputButtonsText();
           const unified = document.getElementById('guided-inputs-list-unified');
