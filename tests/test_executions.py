@@ -110,6 +110,7 @@ def _create_linear_process_n_steps(db, org_name, process_name, n_steps):
             process_id=process.id,
             org_id=org.id,
             step_number=i,
+            position=i * 1000,
             name=f"Step {i}",
             inputs=[{"name": prev_name, "quantity": 10 - i, "unit": "kg"}],
             outputs=[{"name": out_name, "quantity": 9 - i, "unit": "kg"}],

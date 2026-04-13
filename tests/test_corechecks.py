@@ -202,6 +202,7 @@ def _make_output_expiry_fixture(db, org_id, mode="set_at_execution", completed_a
         process_id=process.id,
         org_id=org_id,
         step_number=1,
+        position=1000,
         name="Single Step",
         description="One output with custom expiry",
         inputs=[],
