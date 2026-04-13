@@ -5584,38 +5584,31 @@
   }
 
   function stepSortKey(step) {
-    if (!step) return 0;
-    const p = step.position;
-    if (p !== null && p !== undefined && p !== '') {
-      const n = Number(p);
-      if (!Number.isNaN(n)) return n;
+    // Avoid JS float precision issues: treat position as a string-ish key.
+    // We only need stable ordering; server normalization keeps positions simple.
+    if (!step) return '';
+    if (step.position !== null && step.position !== undefined && step.position !== '') {
+      return String(step.position);
     }
-    return Number(step.step_number || 0);
+    return String(step.step_number || '');
   }
 
   function sortStepsForDisplay(steps) {
     return [...(steps || [])].sort(function(a, b) {
-      return stepSortKey(a) - stepSortKey(b);
+      const ka = stepSortKey(a);
+      const kb = stepSortKey(b);
+      if (ka < kb) return -1;
+      if (ka > kb) return 1;
+      return String(a && a.id || '').localeCompare(String(b && b.id || ''));
     });
-  }
-
-  function computePositionBetween(prevPos, nextPos) {
-    const a = prevPos === null || prevPos === undefined ? null : Number(prevPos);
-    const b = nextPos === null || nextPos === undefined ? null : Number(nextPos);
-    if (a === null && b === null) return 1;
-    if (a === null && b !== null) return b - 1;
-    if (a !== null && b === null) return a + 1;
-    if (Number.isNaN(a) || Number.isNaN(b)) return Date.now();
-    // Midpoint for "insert between" behaviour.
-    return (a + b) / 2;
   }
 
   async function persistStepOrderIfPossible() {
     const pid = new URLSearchParams(window.location.search || '').get('id');
     if (!pid || typeof CoreAPI === 'undefined' || !CoreAPI.reorderSteps) return;
-    const orders = createdSteps
+    const orders = sortStepsForDisplay(createdSteps)
       .filter(function(s) { return s && s.id; })
-      .map(function(s) { return { id: s.id, position: s.position }; });
+      .map(function(s) { return s.id; });
     try {
       await CoreAPI.reorderSteps(pid, orders);
     } catch (e) {
@@ -5702,25 +5695,8 @@
       createdSteps.splice(srcIdx, 1);
       createdSteps.splice(dstIdx, 0, moving);
 
-      // Recompute positions using midpoint logic to minimize renumbering.
-      const ordered = sortStepsForDisplay(createdSteps);
-      for (let i = 0; i < ordered.length; i++) {
-        const prev = i > 0 ? ordered[i - 1] : null;
-        const next = i < ordered.length - 1 ? ordered[i + 1] : null;
-        const prevPos = prev ? prev.position : null;
-        const nextPos = next ? next.position : null;
-        // Ensure each step has a stable numeric position. If missing, seed based on list order.
-        if (ordered[i].position === null || ordered[i].position === undefined || ordered[i].position === '') {
-          ordered[i].position = i + 1;
-        }
-        // If this is the moved element, place it between its new neighbors.
-        if (String(ordered[i].id) === String(srcId)) {
-          ordered[i].position = computePositionBetween(prevPos, nextPos);
-        }
-      }
-
-      // Apply updated positions back onto createdSteps (same objects, but keep safe).
-      createdSteps = ordered.map(function(s) { return { ...s }; });
+      // Server will normalize positions; we only persist the new order.
+      createdSteps = [...createdSteps].map(function(s) { return { ...s }; });
       if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
       await persistStepOrderIfPossible();
       updateStepSummaries();

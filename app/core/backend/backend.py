@@ -162,9 +162,16 @@ def _coerce_step_position(value):
     from decimal import Decimal
 
     try:
-        return Decimal(str(value))
+        pos = Decimal(str(value))
     except Exception:
         abort(400)
+    # Defensive bounds: reject NaN/Inf and negative/zero positions.
+    if not pos.is_finite() or pos <= 0:
+        abort(400)
+    # Guard against pathological magnitudes (prevents log spam / abuse).
+    if pos.copy_abs() > Decimal("1e30"):
+        abort(400)
+    return pos
 
 
 def _next_step_position(process_id: UUID) -> "Decimal":
@@ -1004,6 +1011,7 @@ def get_process(process_id: str):
             {
                 "id": str(step.id),
                 "step_number": step.step_number,
+                "position": str(step.position) if getattr(step, "position", None) is not None else None,
                 "name": step.name,
                 "description": step.description,
                 "inputs": step.inputs or [],
@@ -1158,7 +1166,10 @@ def update_step(process_id: str, step_id: str):
 @core_bp.route("/api/core/processes/<process_id>/steps/reorder", methods=["POST"])
 @requires_auth
 def reorder_steps(process_id: str):
-    """Batch reorder steps by updating their position values atomically."""
+    """Batch reorder steps by updating their position values atomically.
+
+    Client should send ordered IDs. Server normalizes positions to prevent precision entropy.
+    """
     org_id = UUID(g.org_id)
     try:
         process_uuid = UUID(process_id)
@@ -1171,41 +1182,67 @@ def reorder_steps(process_id: str):
         return jsonify({"error": "Process not found"}), 404
 
     data = request.get_json() or {}
-    orders = data.get("orders") or data.get("steps") or []
-    if not isinstance(orders, list) or not orders:
-        return jsonify({"error": "orders is required"}), 400
+    step_ids = data.get("step_ids") or data.get("ids") or data.get("ordered_step_ids")
+    if step_ids is None:
+        # Backwards compatibility: accept {orders:[{id,...},...]} but ignore client positions.
+        orders = data.get("orders") or data.get("steps") or []
+        if isinstance(orders, list) and orders:
+            step_ids = [(row.get("id") or row.get("step_id")) for row in orders if isinstance(row, dict)]
+    if not isinstance(step_ids, list) or not step_ids:
+        return jsonify({"error": "step_ids is required"}), 400
+
+    # Parse and de-duplicate while preserving order.
+    parsed_ids: list[UUID] = []
+    seen: set[UUID] = set()
+    for raw in step_ids:
+        try:
+            sid = UUID(str(raw))
+        except Exception:
+            return jsonify({"error": "Invalid step id"}), 400
+        if sid in seen:
+            continue
+        seen.add(sid)
+        parsed_ids.append(sid)
 
     from decimal import Decimal
 
-    updates: list[tuple[UUID, Decimal]] = []
-    for row in orders:
-        if not isinstance(row, dict):
-            return jsonify({"error": "Invalid orders payload"}), 400
-        sid = row.get("id") or row.get("step_id")
-        pos = row.get("position")
-        if not sid or pos is None:
-            return jsonify({"error": "Each order must include id and position"}), 400
-        try:
-            step_uuid = UUID(str(sid))
-            position = Decimal(str(pos))
-        except Exception:
-            return jsonify({"error": "Invalid id or position"}), 400
-        updates.append((step_uuid, position))
-
     try:
         with db_session.begin():
-            for step_uuid, position in updates:
-                updated = (
-                    db_session.query(Step)
-                    .filter(Step.id == step_uuid, Step.process_id == process_uuid)
-                    .update({"position": position})
+            # Lock all steps for this process to prevent concurrent reorder collisions.
+            locked = (
+                db_session.query(Step.id)
+                .filter(Step.process_id == process_uuid)
+                .with_for_update()
+                .all()
+            )
+            locked_ids = {sid for (sid,) in locked}
+            if not locked_ids:
+                return jsonify({"error": "No steps to reorder"}), 400
+
+            # Ensure request includes only steps from this process.
+            for sid in parsed_ids:
+                if sid not in locked_ids:
+                    return jsonify({"error": "Step not found"}), 404
+
+            # If the client omitted some steps, append them in current position order.
+            if len(parsed_ids) != len(locked_ids):
+                remaining = (
+                    db_session.query(Step.id)
+                    .filter(Step.process_id == process_uuid, ~Step.id.in_(parsed_ids))
+                    .order_by(Step.position)
+                    .all()
                 )
-                if updated != 1:
-                    raise ValueError("Step not found")
+                parsed_ids.extend([sid for (sid,) in remaining])
+
+            # Normalize positions with clean spacing.
+            spacing = Decimal("1000")
+            for i, sid in enumerate(parsed_ids, start=1):
+                new_pos = spacing * Decimal(i)
+                db_session.query(Step).filter(Step.id == sid, Step.process_id == process_uuid).update(
+                    {"position": new_pos}
+                )
+
         return jsonify({"message": "Reordered"}), 200
-    except ValueError:
-        db_session.rollback()
-        return jsonify({"error": "Step not found"}), 404
     except Exception:
         db_session.rollback()
         return jsonify({"error": "Failed to reorder steps"}), 500

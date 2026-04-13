@@ -105,9 +105,13 @@ window.CoreAPI = window.CoreAPI || {
     },
 
     async reorderSteps(processId, orders) {
+        // `orders` can be either an array of step ids (preferred) or an array of {id,...}.
+        const stepIds = Array.isArray(orders)
+            ? orders.map(o => (o && typeof o === 'object') ? (o.id || o.step_id) : o).filter(Boolean)
+            : [];
         return this.request(`/processes/${processId}/steps/reorder`, {
             method: 'POST',
-            body: { orders: orders || [] },
+            body: { step_ids: stepIds },
         });
     },
     

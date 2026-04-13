@@ -20,7 +20,7 @@ class Step(Base):
     step_number = Column(Integer, nullable=False)  # User-defined order
     # Flexible ordering key (Option B): allows drag/drop without bulk renumbering.
     # Stored as NUMERIC for stable sorting; UI can set fractional positions for "insert between".
-    position = Column(Numeric(30, 10), nullable=False, index=True)
+    position = Column(Numeric(50, 20), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     description = Column(String(1000), nullable=True)
     # Inputs and outputs stored as JSONB array
