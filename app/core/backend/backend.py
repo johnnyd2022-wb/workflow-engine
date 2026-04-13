@@ -168,13 +168,15 @@ def _flow_state_get(process_id: UUID | None) -> dict:
     state = session.get("flow_state")
     if not isinstance(state, dict):
         state = {}
-        session["flow_state"] = state
+    # Treat session values as immutable: always reassign.
+    state = dict(state)
     key = _flow_state_key(process_id)
     bucket = state.get(key)
     if not isinstance(bucket, dict):
         bucket = {"started": False, "max_step": 1}
         state[key] = bucket
-        session.modified = True
+    session["flow_state"] = state
+    session.modified = True
     return bucket
 
 
@@ -182,8 +184,9 @@ def _flow_state_reset(process_id: UUID | None) -> None:
     state = session.get("flow_state")
     if not isinstance(state, dict):
         state = {}
-        session["flow_state"] = state
+    state = dict(state)
     state[_flow_state_key(process_id)] = {"started": True, "max_step": 1}
+    session["flow_state"] = state
     session.modified = True
 
 
@@ -1031,16 +1034,20 @@ def add_step(process_id: str):
         return jsonify({"error": expiry_ready_errors[0]}), 400
 
     repo = ProcessRepository(db_session)
-    step = repo.add_step(
-        process_id=process_uuid,
-        org_id=org_id,
-        step_number=step_number_int,
-        name=name,
-        description=data.get("description"),
-        inputs=data.get("inputs", []),
-        outputs=data.get("outputs", []),
-        execution_prompts=data.get("execution_prompts", []),
-    )
+    try:
+        step = repo.add_step(
+            process_id=process_uuid,
+            org_id=org_id,
+            step_number=step_number_int,
+            name=name,
+            description=data.get("description"),
+            inputs=data.get("inputs", []),
+            outputs=data.get("outputs", []),
+            execution_prompts=data.get("execution_prompts", []),
+        )
+    except IntegrityError:
+        db_session.rollback()
+        return jsonify({"error": "Step number already exists"}), 409
 
     if not step:
         return jsonify({"error": "Process not found"}), 404
@@ -1087,17 +1094,21 @@ def update_step(process_id: str, step_id: str):
             return jsonify({"error": expiry_ready_errors[0]}), 400
 
     repo = ProcessRepository(db_session)
-    step = repo.update_step(
-        step_id=step_uuid,
-        process_id=process_uuid,
-        org_id=org_id,
-        step_number=data.get("step_number"),
-        name=data.get("name"),
-        description=data.get("description"),
-        inputs=data.get("inputs"),
-        outputs=data.get("outputs"),
-        execution_prompts=data.get("execution_prompts"),
-    )
+    try:
+        step = repo.update_step(
+            step_id=step_uuid,
+            process_id=process_uuid,
+            org_id=org_id,
+            step_number=data.get("step_number"),
+            name=data.get("name"),
+            description=data.get("description"),
+            inputs=data.get("inputs"),
+            outputs=data.get("outputs"),
+            execution_prompts=data.get("execution_prompts"),
+        )
+    except IntegrityError:
+        db_session.rollback()
+        return jsonify({"error": "Step number already exists"}), 409
 
     if not step:
         return jsonify({"error": "Step or process not found"}), 404

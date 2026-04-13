@@ -30,12 +30,9 @@ class ProcessRepository:
         self.db.commit()
         return process
 
-    def get_process_by_id(self, process_id: UUID, org_id: UUID | None = None) -> Process | None:
-        """Get process by ID, optionally scoped to org"""
-        query = self.db.query(Process).filter(Process.id == process_id)
-        if org_id:
-            query = query.filter(Process.org_id == org_id)
-        return query.first()
+    def get_process_by_id(self, process_id: UUID, org_id: UUID) -> Process | None:
+        """Get process by ID (must be scoped to org)."""
+        return self.db.query(Process).filter(Process.id == process_id, Process.org_id == org_id).first()
 
     def list_processes(self, org_id: UUID) -> list[Process]:
         """List all processes for an organisation"""
