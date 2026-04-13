@@ -152,10 +152,34 @@ def _assert_valid_step_write(process_id: UUID, requested_step_number: int | None
         q = q.filter(Step.id != step_id)
 
     existing_numbers = [n for (n,) in q.with_entities(Step.step_number).all() if isinstance(n, int)]
-    # For drag/drop and "insert step in between" we allow gaps and arbitrary renumbering,
-    # but we must keep step_number unique within a process.
-    if requested_step_number in existing_numbers:
-        abort(409)
+    # Option B: step_number is not canonical ordering. No uniqueness enforcement here.
+    return None
+
+
+def _coerce_step_position(value):
+    if value is None:
+        return None
+    from decimal import Decimal
+
+    try:
+        return Decimal(str(value))
+    except Exception:
+        abort(400)
+
+
+def _next_step_position(process_id: UUID) -> "Decimal":
+    from decimal import Decimal
+
+    max_pos = (
+        db_session.query(Step.position)
+        .filter(Step.process_id == process_id)
+        .order_by(Step.position.desc())
+        .limit(1)
+        .scalar()
+    )
+    if max_pos is None:
+        return Decimal("1")
+    return Decimal(str(max_pos)) + Decimal("1")
 
 
 def _flow_state_key(process_id: UUID | None) -> str:
@@ -1025,8 +1049,10 @@ def add_step(process_id: str):
     except Exception:
         return jsonify({"error": "Invalid step_number"}), 400
 
-    # Integrity enforcement at write boundary (prevents skipping ahead / collisions).
-    _assert_valid_step_write(process_uuid, step_number_int, step_id=None)
+    # Option B ordering: accept explicit position, else append.
+    position = _coerce_step_position(data.get("position"))
+    if position is None:
+        position = _next_step_position(process_uuid)
 
     outputs = data.get("outputs", [])
     expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
@@ -1039,6 +1065,7 @@ def add_step(process_id: str):
             process_id=process_uuid,
             org_id=org_id,
             step_number=step_number_int,
+            position=position,
             name=name,
             description=data.get("description"),
             inputs=data.get("inputs", []),
@@ -1047,7 +1074,7 @@ def add_step(process_id: str):
         )
     except IntegrityError:
         db_session.rollback()
-        return jsonify({"error": "Step number already exists"}), 409
+        return jsonify({"error": "Could not create step"}), 409
 
     if not step:
         return jsonify({"error": "Process not found"}), 404
@@ -1057,6 +1084,7 @@ def add_step(process_id: str):
             {
                 "id": str(step.id),
                 "step_number": step.step_number,
+                "position": str(step.position) if getattr(step, "position", None) is not None else None,
                 "name": step.name,
                 "description": step.description,
                 "inputs": step.inputs or [],
@@ -1080,12 +1108,8 @@ def update_step(process_id: str, step_id: str):
         return jsonify({"error": "Invalid process or step ID"}), 400
 
     data = request.get_json()
-    if data and "step_number" in data and data.get("step_number") is not None:
-        try:
-            step_number_int = int(data.get("step_number"))
-        except Exception:
-            return jsonify({"error": "Invalid step_number"}), 400
-        _assert_valid_step_write(process_uuid, step_number_int, step_id=step_uuid)
+    if data and "position" in data:
+        _coerce_step_position(data.get("position"))
 
     outputs = data.get("outputs")
     if outputs is not None:
@@ -1100,6 +1124,7 @@ def update_step(process_id: str, step_id: str):
             process_id=process_uuid,
             org_id=org_id,
             step_number=data.get("step_number"),
+            position=_coerce_step_position(data.get("position")) if "position" in data else None,
             name=data.get("name"),
             description=data.get("description"),
             inputs=data.get("inputs"),
@@ -1108,7 +1133,7 @@ def update_step(process_id: str, step_id: str):
         )
     except IntegrityError:
         db_session.rollback()
-        return jsonify({"error": "Step number already exists"}), 409
+        return jsonify({"error": "Could not update step"}), 409
 
     if not step:
         return jsonify({"error": "Step or process not found"}), 404
@@ -1118,6 +1143,7 @@ def update_step(process_id: str, step_id: str):
             {
                 "id": str(step.id),
                 "step_number": step.step_number,
+                "position": str(step.position) if getattr(step, "position", None) is not None else None,
                 "name": step.name,
                 "description": step.description,
                 "inputs": step.inputs or [],
@@ -1127,6 +1153,62 @@ def update_step(process_id: str, step_id: str):
         ),
         200,
     )
+
+
+@core_bp.route("/api/core/processes/<process_id>/steps/reorder", methods=["POST"])
+@requires_auth
+def reorder_steps(process_id: str):
+    """Batch reorder steps by updating their position values atomically."""
+    org_id = UUID(g.org_id)
+    try:
+        process_uuid = UUID(process_id)
+    except ValueError:
+        return jsonify({"error": "Invalid process ID"}), 400
+
+    # Ensure process belongs to org (IDOR guard).
+    repo = ProcessRepository(db_session)
+    if not repo.get_process_by_id(process_uuid, org_id=org_id):
+        return jsonify({"error": "Process not found"}), 404
+
+    data = request.get_json() or {}
+    orders = data.get("orders") or data.get("steps") or []
+    if not isinstance(orders, list) or not orders:
+        return jsonify({"error": "orders is required"}), 400
+
+    from decimal import Decimal
+
+    updates: list[tuple[UUID, Decimal]] = []
+    for row in orders:
+        if not isinstance(row, dict):
+            return jsonify({"error": "Invalid orders payload"}), 400
+        sid = row.get("id") or row.get("step_id")
+        pos = row.get("position")
+        if not sid or pos is None:
+            return jsonify({"error": "Each order must include id and position"}), 400
+        try:
+            step_uuid = UUID(str(sid))
+            position = Decimal(str(pos))
+        except Exception:
+            return jsonify({"error": "Invalid id or position"}), 400
+        updates.append((step_uuid, position))
+
+    try:
+        with db_session.begin():
+            for step_uuid, position in updates:
+                updated = (
+                    db_session.query(Step)
+                    .filter(Step.id == step_uuid, Step.process_id == process_uuid)
+                    .update({"position": position})
+                )
+                if updated != 1:
+                    raise ValueError("Step not found")
+        return jsonify({"message": "Reordered"}), 200
+    except ValueError:
+        db_session.rollback()
+        return jsonify({"error": "Step not found"}), 404
+    except Exception:
+        db_session.rollback()
+        return jsonify({"error": "Failed to reorder steps"}), 500
 
 
 @core_bp.route("/api/core/processes/<process_id>/steps/<step_id>", methods=["DELETE"])

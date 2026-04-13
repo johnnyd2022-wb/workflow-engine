@@ -5583,6 +5583,46 @@
     }
   }
 
+  function stepSortKey(step) {
+    if (!step) return 0;
+    const p = step.position;
+    if (p !== null && p !== undefined && p !== '') {
+      const n = Number(p);
+      if (!Number.isNaN(n)) return n;
+    }
+    return Number(step.step_number || 0);
+  }
+
+  function sortStepsForDisplay(steps) {
+    return [...(steps || [])].sort(function(a, b) {
+      return stepSortKey(a) - stepSortKey(b);
+    });
+  }
+
+  function computePositionBetween(prevPos, nextPos) {
+    const a = prevPos === null || prevPos === undefined ? null : Number(prevPos);
+    const b = nextPos === null || nextPos === undefined ? null : Number(nextPos);
+    if (a === null && b === null) return 1;
+    if (a === null && b !== null) return b - 1;
+    if (a !== null && b === null) return a + 1;
+    if (Number.isNaN(a) || Number.isNaN(b)) return Date.now();
+    // Midpoint for "insert between" behaviour.
+    return (a + b) / 2;
+  }
+
+  async function persistStepOrderIfPossible() {
+    const pid = new URLSearchParams(window.location.search || '').get('id');
+    if (!pid || typeof CoreAPI === 'undefined' || !CoreAPI.reorderSteps) return;
+    const orders = createdSteps
+      .filter(function(s) { return s && s.id; })
+      .map(function(s) { return { id: s.id, position: s.position }; });
+    try {
+      await CoreAPI.reorderSteps(pid, orders);
+    } catch (e) {
+      console.warn('persistStepOrderIfPossible failed', e);
+    }
+  }
+
   async function mergeProcessStepsFromApiForSummary() {
     if (!isProcessFlowSummaryPage()) return;
     await mergeProcessStepsFromApiForCurrentProcess();
@@ -5617,7 +5657,7 @@
     summariesContainer.style.display = 'block';
     summariesList.innerHTML = '';
 
-    const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+    const sortedSteps = sortStepsForDisplay(createdSteps);
     renderCompliancePanel(sortedSteps);
     if (isProcessFlowSummaryPage()) {
       summariesList.style.display = 'none';
@@ -5628,12 +5668,84 @@
     summariesList.style.display = '';
 
     const spaPage = document.body && (document.body.getAttribute('data-page') === 'process-flow-spa' || document.body.getAttribute('data-page') === 'process-flow-wizard');
+    // Drag/drop reorder state (HTML5 DnD)
+    let dragStepId = null;
+
+    function onDragStart(e) {
+      const card = e.currentTarget;
+      dragStepId = card && card.dataset ? card.dataset.stepId : null;
+      try {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragStepId || '');
+      } catch (err) {}
+      card.classList.add('step-summary-dragging');
+    }
+
+    function onDragEnd(e) {
+      const card = e.currentTarget;
+      if (card) card.classList.remove('step-summary-dragging');
+      dragStepId = null;
+    }
+
+    async function onDropOnCard(e) {
+      e.preventDefault();
+      const targetCard = e.currentTarget;
+      const targetId = targetCard && targetCard.dataset ? targetCard.dataset.stepId : null;
+      const srcId = dragStepId || (function() { try { return e.dataTransfer.getData('text/plain'); } catch (err) { return null; } })();
+      if (!srcId || !targetId || srcId === targetId) return;
+
+      const srcIdx = createdSteps.findIndex(function(s) { return s && String(s.id) === String(srcId); });
+      const dstIdx = createdSteps.findIndex(function(s) { return s && String(s.id) === String(targetId); });
+      if (srcIdx < 0 || dstIdx < 0) return;
+
+      const moving = createdSteps[srcIdx];
+      createdSteps.splice(srcIdx, 1);
+      createdSteps.splice(dstIdx, 0, moving);
+
+      // Recompute positions using midpoint logic to minimize renumbering.
+      const ordered = sortStepsForDisplay(createdSteps);
+      for (let i = 0; i < ordered.length; i++) {
+        const prev = i > 0 ? ordered[i - 1] : null;
+        const next = i < ordered.length - 1 ? ordered[i + 1] : null;
+        const prevPos = prev ? prev.position : null;
+        const nextPos = next ? next.position : null;
+        // Ensure each step has a stable numeric position. If missing, seed based on list order.
+        if (ordered[i].position === null || ordered[i].position === undefined || ordered[i].position === '') {
+          ordered[i].position = i + 1;
+        }
+        // If this is the moved element, place it between its new neighbors.
+        if (String(ordered[i].id) === String(srcId)) {
+          ordered[i].position = computePositionBetween(prevPos, nextPos);
+        }
+      }
+
+      // Apply updated positions back onto createdSteps (same objects, but keep safe).
+      createdSteps = ordered.map(function(s) { return { ...s }; });
+      if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
+      await persistStepOrderIfPossible();
+      updateStepSummaries();
+    }
+
+    function onDragOver(e) {
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
+    }
+
     sortedSteps.forEach((step, index) => {
       const displayNumber = index + 1;
       const stepId = `step-summary-${step.id || index}`;
       const summaryCard = document.createElement('div');
       summaryCard.id = stepId;
       summaryCard.dataset.expanded = 'false';
+      if (step && step.id) summaryCard.dataset.stepId = step.id;
+      // Enable drag/drop reorder for persisted steps (have IDs).
+      if (step && step.id) {
+        summaryCard.setAttribute('draggable', 'true');
+        summaryCard.addEventListener('dragstart', onDragStart);
+        summaryCard.addEventListener('dragend', onDragEnd);
+        summaryCard.addEventListener('dragover', onDragOver);
+        summaryCard.addEventListener('drop', onDropOnCard);
+      }
       if (spaPage) {
         summaryCard.style.cssText =
           'padding: 14px 0; border: none; border-radius: 0; background: transparent; overflow: hidden;' +
@@ -5646,6 +5758,15 @@
       const stepHeader = document.createElement('div');
       stepHeader.style.cssText = 'display: flex; align-items: center; gap: 12px; cursor: pointer;';
       stepHeader.onclick = () => toggleStepSummary(stepId);
+
+      // Drag handle hint (clickable header still works; drag anywhere on card).
+      if (step && step.id) {
+        const dragHint = document.createElement('div');
+        dragHint.setAttribute('aria-hidden', 'true');
+        dragHint.style.cssText = 'color: var(--text-tertiary, #9ca3af); font-size: 16px; line-height: 1; user-select: none;';
+        dragHint.textContent = '⋮⋮';
+        stepHeader.appendChild(dragHint);
+      }
       
       const expandIcon = document.createElement('svg');
       expandIcon.className = 'step-summary-expand-icon';
@@ -6200,7 +6321,7 @@
       if (!tab || !panel) return;
       let hasPreviousSteps = false;
       if (editingStepId) {
-        const sorted = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+        const sorted = sortStepsForDisplay(createdSteps);
         const idx = sorted.findIndex(function(s) { return s.id === editingStepId; });
         hasPreviousSteps = idx > 0;
       } else {

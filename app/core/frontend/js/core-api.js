@@ -103,6 +103,13 @@ window.CoreAPI = window.CoreAPI || {
             method: 'DELETE',
         });
     },
+
+    async reorderSteps(processId, orders) {
+        return this.request(`/processes/${processId}/steps/reorder`, {
+            method: 'POST',
+            body: { orders: orders || [] },
+        });
+    },
     
     // Alias for addStep
     async createStep(processId, stepData) {

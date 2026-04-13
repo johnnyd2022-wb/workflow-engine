@@ -82,6 +82,7 @@ class ProcessRepository:
         org_id: UUID,
         step_number: int,
         name: str,
+        position=None,
         description: str | None = None,
         inputs: list | None = None,
         outputs: list | None = None,
@@ -95,6 +96,7 @@ class ProcessRepository:
         step = Step(
             process_id=process_id,
             step_number=step_number,
+            position=position,
             name=name,
             description=description,
             inputs=inputs or [],
@@ -114,6 +116,7 @@ class ProcessRepository:
         org_id: UUID,
         step_number: int | None = None,
         name: str | None = None,
+        position=None,
         description: str | None = None,
         inputs: list | None = None,
         outputs: list | None = None,
@@ -130,6 +133,8 @@ class ProcessRepository:
 
         if step_number is not None:
             step.step_number = step_number
+        if position is not None:
+            step.position = position
         if name is not None:
             step.name = name
         if description is not None:
