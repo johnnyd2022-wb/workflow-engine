@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
+from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -67,6 +67,92 @@ core_bp = Blueprint(
     static_folder="../frontend",
     static_url_path="/static",
 )
+
+
+# --- Flow wizard safety helpers (query filtering + step integrity) ---
+_FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
+
+_FLOW_WIZARD_PAGE_TO_STEP = {
+    "process-overview": 1,
+    "step-name": 2,
+    "inputs": 3,
+    "outputs": 4,
+    "evidence-and-prompts": 5,
+    "summary": 6,
+    "next-steps": 7,
+}
+
+_FLOW_WIZARD_STEP_TO_PATH = {
+    1: "/core/flows/create/process-overview",
+    2: "/core/flows/create/step-name",
+    3: "/core/flows/create/inputs",
+    4: "/core/flows/create/outputs",
+    5: "/core/flows/create/evidence-and-prompts",
+    6: "/core/flows/create/summary",
+    7: "/core/flows/create/next-steps",
+}
+
+
+def _flow_process_id_from_request() -> int | None:
+    """Parse and validate ?id= as an int. If present but invalid, abort 400."""
+    if request.args.get("id") is None:
+        return None
+    pid = request.args.get("id", type=int)
+    if pid is None:
+        abort(400, "Invalid id")
+    return pid
+
+
+def _filtered_flow_query_args() -> dict[str, str]:
+    """Return a safe allowlisted query dict for flow routes."""
+    args: dict[str, str] = {}
+
+    pid = _flow_process_id_from_request()
+    if pid is not None:
+        args["id"] = str(pid)
+
+    if request.args.get("fresh") is not None:
+        # Treat "fresh" as a boolean flag; normalize to "1" when present.
+        args["fresh"] = "1"
+
+    return {k: v for k, v in args.items() if k in _FLOW_ALLOWED_QUERY_PARAMS}
+
+
+def _flow_qs() -> str:
+    """Safe query string for flows/create pages, including leading '?' or empty string."""
+    from urllib.parse import urlencode
+
+    args = _filtered_flow_query_args()
+    return ("?" + urlencode(sorted(args.items()))) if args else ""
+
+
+def _maybe_enforce_flow_wizard_step(flow_wizard_page: str, process_id: int | None):
+    """
+    Enforce basic wizard sequencing for *new* wizards (no ?id=).
+    This is intentionally lightweight: it prevents skipping ahead into later steps
+    when there's no persisted server-side object to anchor state.
+    """
+    if process_id is not None:
+        return None
+
+    requested = _FLOW_WIZARD_PAGE_TO_STEP.get(flow_wizard_page)
+    if not requested:
+        return None
+
+    started = bool(session.get("flow_wizard_started"))
+    if not started:
+        return redirect("/core/flows/create" + _flow_qs())
+
+    max_step = int(session.get("flow_wizard_max_step") or 1)
+    if requested > max_step + 1:
+        dest = _FLOW_WIZARD_STEP_TO_PATH.get(max_step, _FLOW_WIZARD_STEP_TO_PATH[1])
+        return redirect(dest + _flow_qs())
+
+    if requested > max_step:
+        session["flow_wizard_max_step"] = requested
+        session.modified = True
+
+    return None
 
 
 def validate_custom_expiry_warning_not_exceed_duration(
@@ -288,7 +374,7 @@ def inventory_dispose_confirm():
 @requires_auth
 def flows():
     """Serve the process workspace page (processes/flows2.html)."""
-    process_id = request.args.get("id")
+    process_id = request.args.get("id", type=int)
     return render_template("processes/flows2.html", active_page="core", process_id=process_id)
 
 
@@ -296,14 +382,21 @@ def flows():
 @requires_auth
 def flows_create():
     """Start the wizard at step 1. Anonymous entry (no process id) sets fresh=1 so session wizard state resets."""
-    from urllib.parse import urlencode
-
-    from flask import redirect
-
     base = "/core/flows/create/process-overview"
-    args = request.args.to_dict(flat=True)
+
+    args = _filtered_flow_query_args()
     if "id" not in args and "fresh" not in args:
         args["fresh"] = "1"
+
+    # Starting a new wizard (no id) initializes sequencing state.
+    if "id" not in args:
+        if args.get("fresh") == "1" or not session.get("flow_wizard_started"):
+            session["flow_wizard_started"] = True
+            session["flow_wizard_max_step"] = 1
+            session.modified = True
+
+    from urllib.parse import urlencode
+
     q = urlencode(sorted(args.items())) if args else ""
     dest = base + (f"?{q}" if q else "")
     return redirect(dest)
@@ -313,9 +406,7 @@ def flows_create():
 @requires_auth
 def flows_create_step(step):
     """Legacy /step/N URLs redirect to the current wizard URLs (one route per page)."""
-    from flask import redirect
-
-    qs = request.query_string.decode()
+    qs = _flow_qs()
     if step == 1:
         dest = "/core/flows/create/process-overview"
     elif step == 2:
@@ -326,20 +417,22 @@ def flows_create_step(step):
         dest = "/core/flows/create/evidence-and-prompts"
     else:
         dest = "/core/flows/create/process-overview"
-    if qs:
-        dest = dest + "?" + qs
-    return redirect(dest)
+    return redirect(dest + qs)
 
 
 @core_bp.route("/core/flows/create/process-overview", methods=["GET"])
 @requires_auth
 def flows_create_process_overview_page():
     """First wizard screen: process name + what a workflow is; then step-name."""
-    process_id = request.args.get("id")
+    process_id = _flow_process_id_from_request()
+    maybe_redirect = _maybe_enforce_flow_wizard_step("process-overview", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
     return render_template(
         "processes/process-flow-process-overview.html",
         active_page="core",
         process_id=process_id,
+        flow_qs=_flow_qs(),
         flow_wizard_page="process-overview",
     )
 
@@ -347,11 +440,15 @@ def flows_create_process_overview_page():
 @core_bp.route("/core/flows/create/step-name", methods=["GET"])
 @requires_auth
 def flows_create_step_name_page():
-    process_id = request.args.get("id")
+    process_id = _flow_process_id_from_request()
+    maybe_redirect = _maybe_enforce_flow_wizard_step("step-name", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
     return render_template(
         "processes/process-flow-step-name.html",
         active_page="core",
         process_id=process_id,
+        flow_qs=_flow_qs(),
         flow_wizard_page="step-name",
     )
 
@@ -359,11 +456,15 @@ def flows_create_step_name_page():
 @core_bp.route("/core/flows/create/inputs", methods=["GET"])
 @requires_auth
 def flows_create_inputs_page():
-    process_id = request.args.get("id")
+    process_id = _flow_process_id_from_request()
+    maybe_redirect = _maybe_enforce_flow_wizard_step("inputs", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
     return render_template(
         "processes/process-flow-inputs.html",
         active_page="core",
         process_id=process_id,
+        flow_qs=_flow_qs(),
         flow_wizard_page="inputs",
     )
 
@@ -371,11 +472,15 @@ def flows_create_inputs_page():
 @core_bp.route("/core/flows/create/outputs", methods=["GET"])
 @requires_auth
 def flows_create_outputs_page():
-    process_id = request.args.get("id")
+    process_id = _flow_process_id_from_request()
+    maybe_redirect = _maybe_enforce_flow_wizard_step("outputs", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
     return render_template(
         "processes/process-flow-outputs.html",
         active_page="core",
         process_id=process_id,
+        flow_qs=_flow_qs(),
         flow_wizard_page="outputs",
     )
 
@@ -383,11 +488,15 @@ def flows_create_outputs_page():
 @core_bp.route("/core/flows/create/evidence-and-prompts", methods=["GET"])
 @requires_auth
 def flows_create_evidence_and_prompts_page():
-    process_id = request.args.get("id")
+    process_id = _flow_process_id_from_request()
+    maybe_redirect = _maybe_enforce_flow_wizard_step("evidence-and-prompts", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
     return render_template(
         "processes/process-flow-evidence-and-prompts.html",
         active_page="core",
         process_id=process_id,
+        flow_qs=_flow_qs(),
         flow_wizard_page="evidence-and-prompts",
     )
 
@@ -395,11 +504,15 @@ def flows_create_evidence_and_prompts_page():
 @core_bp.route("/core/flows/create/summary", methods=["GET"])
 @requires_auth
 def flows_create_summary_page():
-    process_id = request.args.get("id")
+    process_id = _flow_process_id_from_request()
+    maybe_redirect = _maybe_enforce_flow_wizard_step("summary", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
     return render_template(
         "processes/process-flow-summary.html",
         active_page="core",
         process_id=process_id,
+        flow_qs=_flow_qs(),
         flow_wizard_page="summary",
     )
 
@@ -408,11 +521,15 @@ def flows_create_summary_page():
 @requires_auth
 def flows_create_next_steps_page():
     """After saving a step: choose add another step or finish the process."""
-    process_id = request.args.get("id")
+    process_id = _flow_process_id_from_request()
+    maybe_redirect = _maybe_enforce_flow_wizard_step("next-steps", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
     return render_template(
         "processes/process-flow-next-steps.html",
         active_page="core",
         process_id=process_id,
+        flow_qs=_flow_qs(),
         flow_wizard_page="next-steps",
     )
 
