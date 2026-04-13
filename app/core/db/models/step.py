@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -18,6 +18,9 @@ class Step(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     process_id = Column(UUID(as_uuid=True), ForeignKey("processes.id"), nullable=False, index=True)
     step_number = Column(Integer, nullable=False)  # User-defined order
+    # Flexible ordering key (Option B): allows drag/drop without bulk renumbering.
+    # Stored as NUMERIC for stable sorting; UI can set fractional positions for "insert between".
+    position = Column(Numeric(50, 20), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     description = Column(String(1000), nullable=True)
     # Inputs and outputs stored as JSONB array

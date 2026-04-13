@@ -103,6 +103,17 @@ window.CoreAPI = window.CoreAPI || {
             method: 'DELETE',
         });
     },
+
+    async reorderSteps(processId, orders) {
+        // `orders` can be either an array of step ids (preferred) or an array of {id,...}.
+        const stepIds = Array.isArray(orders)
+            ? orders.map(o => (o && typeof o === 'object') ? (o.id || o.step_id) : o).filter(Boolean)
+            : [];
+        return this.request(`/processes/${processId}/steps/reorder`, {
+            method: 'POST',
+            body: { step_ids: stepIds },
+        });
+    },
     
     // Alias for addStep
     async createStep(processId, stepData) {
@@ -339,13 +350,31 @@ window.CoreAPI = window.CoreAPI || {
         return this.request('/process-docs/inline', { method: 'POST', body });
     },
 
-    /** Upload SOP file for a step (admin). formData must include process_id, step_id, file; optional title. */
+    /** Upload SOP file for a step. formData must include process_id, step_id, file; optional title. */
     async uploadProcessDoc(formData) {
         const url = `${this.baseURL}/process-docs/upload`;
-        const config = { method: 'POST', body: formData };
-        const response = await fetch(url, { ...config, credentials: 'same-origin' });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        const csrfMeta = typeof document !== 'undefined' && document.querySelector
+            ? document.querySelector('meta[name="csrf-token"]')
+            : null;
+        const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
+        const headers = {};
+        if (csrfTok) {
+            headers['X-CSRFToken'] = csrfTok;
+            headers['X-CSRF-Token'] = csrfTok;
+        }
+        const response = await fetch(url, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers,
+        });
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            throw new Error(response.ok ? 'Invalid response from server.' : `HTTP ${response.status}`);
+        }
+        if (!response.ok) throw new Error(data.error || data.message || `HTTP ${response.status}`);
         return data;
     },
 

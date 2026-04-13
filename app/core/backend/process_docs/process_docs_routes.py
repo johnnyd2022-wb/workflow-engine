@@ -61,9 +61,8 @@ def register_routes(bp):
 
     @bp.route("/api/core/process-docs/upload", methods=["POST"])
     @requires_auth
-    @requires_role(UserRole.ADMIN)
     def process_docs_upload():
-        """Upload an SOP file for a process step. Admin only."""
+        """Upload an SOP file for a process step (same auth as POST /processes/.../steps)."""
         org_id = _org_uuid()
         if not org_id:
             return jsonify({"error": "Organisation context required"}), 400
@@ -117,9 +116,8 @@ def register_routes(bp):
 
     @bp.route("/api/core/process-docs/inline", methods=["POST"])
     @requires_auth
-    @requires_role(UserRole.ADMIN)
     def process_docs_inline():
-        """Create or update inline SOP. Admin only."""
+        """Create or update inline SOP (same auth as step create/update)."""
         org_id = _org_uuid()
         if not org_id:
             return jsonify({"error": "Organisation context required"}), 400

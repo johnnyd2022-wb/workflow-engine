@@ -1,13 +1,134 @@
+{# Shared layout + styles for multi-page process flow wizard (per-step templates extend this). #}
 {% extends "shared/base_spa.html" %}
 
 {% block body_class %}process-flow-spa{% endblock %}
-{% block body_extra_attrs %}data-page="process-flow-spa"{% endblock %}
+{% block body_extra_attrs %}data-page="process-flow-wizard" data-flow-wizard-page="{{ flow_wizard_page }}"{% endblock %}
 
-{% block title %}Create process steps | SupplyChain V2{% endblock %}
+{% block title %}{% block wizard_html_title %}Create process steps | SupplyChain V2{% endblock %}{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Create process steps">
+  {% include 'processes/create-process-step-content-styles.html' %}
   <style>
+    /* Hero — same pattern as notifications.html */
+    .process-flow-hero__header {
+      text-align: center;
+      padding: 0 0 12px 0;
+    }
+    .process-flow-hero__header .card-title {
+      margin: 0;
+    }
+    .process-flow-hero__tagline {
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      color: var(--text-secondary, #6b7280);
+      margin: 10px 0 0 0;
+      max-width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .process-flow-hero__tagline:empty {
+      display: none;
+    }
+
+    /* Summary — compliance lists + action drill-down (hairline stack, no bordered cards) */
+    .process-flow-spa .flow-step-num-badge {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      border-radius: 50%;
+      background: var(--primary, #3b82f6);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .process-flow-spa ul.flow-compliance-step-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.875rem;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.6;
+    }
+    .process-flow-spa ul.flow-compliance-step-list li {
+      margin-bottom: 8px;
+    }
+    .process-flow-spa ul.flow-compliance-step-list li:last-child {
+      margin-bottom: 0;
+    }
+    /* Same alignment as former Actions drill rows: badge + label vertically centred */
+    .process-flow-spa .flow-compliance-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .process-flow-spa .flow-compliance-row__text {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-primary, #111827);
+      line-height: 1.35;
+    }
+    .process-flow-spa ul.flow-compliance-warnings {
+      color: var(--error, hsl(0, 75%, 55%));
+    }
+    .process-flow-card .card-content.process-flow-card__content {
+      padding-top: 0 !important;
+    }
+
+    /* Stacked sections: hairline dividers, no bordered panels (notifications-style) */
+    .process-flow-spa .flow-spa-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+    }
+    .process-flow-spa .flow-spa-stack__item {
+      margin: 0;
+      padding: 14px 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-sizing: border-box;
+    }
+    .process-flow-spa .flow-spa-stack__item:not(:first-child) {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .process-flow-spa .flow-spa-stack__title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary, #111827);
+      margin: 0 0 8px 0;
+    }
+    .process-flow-spa .flow-spa-stack__text {
+      font-size: 0.875rem;
+      color: var(--text-secondary, #6b7280);
+      margin: 0;
+      line-height: 1.6;
+    }
+    .process-flow-spa .flow-spa-stack__item--example {
+      margin-top: 12px;
+      padding: 12px 0 0 0;
+      border-left: 3px solid var(--primary, #3b82f6);
+      padding-left: 12px;
+    }
+    .process-flow-spa .flow-spa-stack__item--example .flow-spa-stack__text {
+      font-size: 0.8125rem;
+    }
+
+    #step-summaries-list,
+    #existing-steps-list,
+    #guided-inputs-list-unified,
+    #guided-outputs-list,
+    #guided-prompts-list {
+      gap: 0 !important;
+    }
+
     /* Fill viewport column; horizontal width/padding come from shared/base_spa.html */
     .process-flow-spa #page-content.page-content {
       display: flex;
@@ -30,11 +151,11 @@
       margin-top: 24px;
     }
     .process-flow-spa .process-flow-card .card-header {
-      padding: 20px 20px 0 20px;
+      padding: 0 0 12px 0;
       flex-shrink: 0;
     }
     .process-flow-spa .process-flow-card .card-content {
-      padding: 20px;
+      padding: 0;
       flex: 1;
       min-height: 0;
       overflow: hidden;
@@ -54,50 +175,58 @@
       min-height: 0;
       min-width: 0;
     }
+    /* Steps 1–4: flex-basis 0 + min-height 0 on the step/body chain collapsed content to 0px (step 2 was still broken with nested flex:1;min-height:0 panels). Use intrinsic height; #page-content scrolls. */
+    .process-flow-spa #create-process-step-1.create-process-step[style*="block"],
+    .process-flow-spa #create-process-step-2.create-process-step[style*="block"],
+    .process-flow-spa #create-process-step-3.create-process-step[style*="block"],
+    .process-flow-spa #create-process-step-4.create-process-step[style*="block"],
+    .process-flow-spa #process-flow-summary-wizard-shell.create-process-step[style*="block"] {
+      flex: 0 0 auto !important;
+      min-height: auto;
+    }
     .process-flow-spa .create-process-step-body {
       flex: 1 1 0;
       min-height: 0;
       overflow-y: auto;
       min-width: 0;
     }
+    .process-flow-spa #create-process-step-1 .create-process-step-body,
+    .process-flow-spa #create-process-step-2 .create-process-step-body,
+    .process-flow-spa #create-process-step-3 .create-process-step-body,
+    .process-flow-spa #create-process-step-4 .create-process-step-body,
+    .process-flow-spa #process-flow-summary-wizard-shell .create-process-step-body {
+      flex: 0 0 auto;
+      min-height: auto;
+      overflow: visible;
+    }
     .process-flow-spa .create-process-step-actions {
       flex-shrink: 0;
       margin-top: auto;
       padding-top: 20px;
       border-top: 1px solid var(--border-light, #e5e7eb);
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
     }
     .process-flow-spa .card-content > #post-creation-options {
       flex-shrink: 0;
     }
-    .process-flow-spa #create-process-step-2 .create-process-step-body {
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-    .process-flow-spa #create-process-step-2 .guided-inputs-panel-inventory {
-      display: flex !important;
-      flex-direction: column;
-      flex: 1 1 0;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .process-flow-spa #create-process-step-2 #guided-inventory-cards-container.guided-inventory-cards-stack {
-      flex: 1 1 0;
-      min-height: 0;
-      max-height: none;
-      overflow-y: auto;
-    }
     @media (max-width: 767px) {
       .process-flow-spa .process-flow-card .card-header {
-        padding: 16px 16px 0 16px;
+        padding: 0 0 12px 0;
       }
       .process-flow-spa .process-flow-card .card-content {
-        padding: 16px;
+        padding: 0;
+      }
+      .process-flow-spa .process-flow-hero__tagline {
+        white-space: normal;
+        text-align: center;
       }
       .process-flow-spa #create-process-step-indicators {
         gap: 4px;
         flex-wrap: wrap;
         justify-content: center;
+        margin-bottom: 16px;
       }
       .process-flow-spa #create-process-step-indicators .step-indicator {
         width: 28px;
@@ -107,16 +236,126 @@
       .process-flow-spa #create-process-step-indicators > div[style*="40px"] {
         width: 24px;
       }
+      /* Action bars: Save draft + primary — full width on small screens; use page scroll elsewhere */
+      .process-flow-spa .create-process-step-actions {
+        flex-direction: column;
+        align-items: stretch;
+        padding-top: 16px;
+        gap: 10px;
+      }
+      .process-flow-spa .create-process-step-actions > .btn-sm,
+      .process-flow-spa .create-process-step-actions > .btn-primary {
+        width: 100%;
+        min-height: 44px;
+      }
+      .process-flow-spa #post-creation-options .btn {
+        min-height: 44px;
+        width: 100%;
+        max-width: 100%;
+      }
+      .process-flow-spa #post-creation-options > div > div {
+        flex-direction: column;
+        align-items: stretch;
+      }
     }
-    .guided-inputs-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border-default, #e5e7eb); }
-    .guided-inputs-tab { flex: 1; padding: 12px 16px; border: none; background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: background 0.2s, color 0.2s; }
-    .guided-inputs-tab:hover { background: var(--bg-hover, rgba(0,0,0,0.05)); color: var(--text-primary); }
-    .guided-inputs-tab.active { background: var(--bg-card, #fff); color: var(--primary, #3b82f6); border-bottom-color: var(--primary, #3b82f6); }
-    @media (min-width: 768px) { .guided-inputs-tab { padding: 14px 20px; font-size: 15px; } }
-    @media (max-width: 767px) { .guided-inputs-tab { padding: 10px 12px; font-size: 13px; min-width: 0; } }
+
+    /* Wizard sticky rail on all steps: fixed above mobile bottom tab (styles2.css) */
+    /* Must match real mobile .sidebar height (nav-link min-height 48px + .sidebar-nav padding 8px×2); 56px caused ~8px overlap with z-index 100 nav covering the rail bottom. */
+    .process-flow-spa {
+      --spa-mobile-bottom-tab-height: 64px;
+    }
+    .process-flow-spa .flow-wizard-sticky-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: env(safe-area-inset-bottom, 0px);
+      margin-top: 0;
+      z-index: 99;
+      padding: 0;
+      background: var(--bg-app, hsl(220, 20%, 97%));
+      border-top: 1px solid var(--border-default, #e5e7eb);
+      box-sizing: border-box;
+    }
+    @media (min-width: 768px) {
+      .process-flow-spa .flow-wizard-sticky-bar {
+        left: 260px;
+      }
+      .app-layout:has(#sidebar.collapsed) .process-flow-spa .flow-wizard-sticky-bar {
+        left: 72px;
+      }
+    }
+    @media (max-width: 767px) {
+      .process-flow-spa .flow-wizard-sticky-bar {
+        bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
+      }
+    }
+    /* Same vertical inset as desktop; no extra safe-area in padding (bar sits above bottom tab). */
+    .process-flow-spa .flow-wizard-sticky-bar__inner {
+      padding-top: 16px;
+      padding-bottom: 16px;
+      padding-left: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-left)));
+      padding-right: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-right)));
+    }
+    .process-flow-spa .flow-wizard-sticky-bar--summary .flow-wizard-sticky-bar__inner {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    @media (max-width: 640px) {
+      .process-flow-spa .flow-wizard-sticky-bar--summary .flow-wizard-sticky-bar__inner {
+        flex-direction: column;
+        text-align: center;
+      }
+    }
+    @media (max-width: 767px) {
+      .process-flow-spa .flow-wizard-sticky-bar__inner {
+        padding-left: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-left)));
+        padding-right: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-right)));
+      }
+    }
+    .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) .create-process-step-body {
+      padding-bottom: 16px;
+    }
+    .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) {
+      padding-bottom: 92px;
+    }
+    @media (max-width: 767px) {
+      .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) {
+        /* Tab + fixed rail: keep last field above both stacked layers */
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height) + 76px);
+      }
+    }
+
+    /* Step 2 input source + inventory category: flow-mode-segmented (parity with outputs) */
+    .process-flow-spa #create-process-step-2 .guided-inputs-source-tabs {
+      margin-bottom: 12px;
+    }
+    .process-flow-spa #create-process-step-2 .guided-inputs-source-tabs .flow-mode-segment {
+      white-space: normal;
+      line-height: 1.25;
+    }
+    .process-flow-spa #create-process-step-2 .guided-inventory-cat-segments {
+      margin-bottom: 12px;
+    }
+    @media (min-width: 768px) {
+      .process-flow-spa .create-process-step-actions > .btn-primary {
+        min-height: 40px;
+      }
+    }
     .guided-inventory-cards-stack { display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
+    /* SPA step 2: document scroll only — no inner scroll on inventory lists */
+    .process-flow-spa #create-process-step-2 .guided-inventory-cards-stack {
+      max-height: none !important;
+      overflow-y: visible !important;
+      gap: 0;
+      padding: 4px 0;
+    }
     .guided-inventory-section { display: flex; flex-direction: column; gap: 8px; }
     .guided-inventory-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; padding: 4px 0; border-bottom: 1px solid var(--border-default, #e5e7eb); }
+    .guided-inventory-cat-panel { display: flex; flex-direction: column; gap: 8px; width: 100%; }
     .guided-inventory-card { display: flex; flex-direction: column; align-items: stretch; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); background: var(--bg-card, #fff); color: var(--text-primary); font-size: 13px; text-align: left; width: 100%; min-height: 56px; box-sizing: border-box; overflow: hidden; }
     .guided-inventory-card:hover { border-color: var(--primary, #3b82f6); }
     .guided-inventory-card .card-header-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; }
@@ -134,50 +373,103 @@
     .guided-inventory-card .card-meta-block .meta-line { font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0; line-height: 1.5; }
     .guided-inventory-card .card-meta-block .meta-line:first-child { margin-top: 10px; }
     .guided-inventory-card .card-meta-block .meta-label { font-weight: 500; color: var(--text-primary); }
+
+    /* SPA: divider rows instead of bordered cards (matches /core/notifications list) */
+    .process-flow-spa #guided-inputs-list-unified > div,
+    .process-flow-spa #guided-outputs-list > div,
+    .process-flow-spa #guided-prompts-list > div {
+      border: none !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      margin-bottom: 0 !important;
+      border-top: 1px solid var(--border-default, #e5e7eb) !important;
+    }
+    .process-flow-spa #guided-inputs-list-unified > div:first-child,
+    .process-flow-spa #guided-outputs-list > div:first-child,
+    .process-flow-spa #guided-prompts-list > div:first-child {
+      border-top: none !important;
+    }
+    .process-flow-spa #guided-inputs-list-unified > div > div:first-child,
+    .process-flow-spa #guided-outputs-list > div > div:first-child,
+    .process-flow-spa #guided-prompts-list > div > div:first-child {
+      background: transparent !important;
+    }
+    .process-flow-spa .guided-inventory-card {
+      border: none !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      border-top: 1px solid var(--border-default, #e5e7eb) !important;
+    }
+    .process-flow-spa .guided-inventory-cat-panel .guided-inventory-card:first-of-type {
+      border-top: none !important;
+    }
+    .process-flow-spa .guided-inventory-card .card-header-row:hover {
+      background: var(--bg-secondary, #f9fafb);
+    }
+    .process-flow-spa #guided-previous-outputs-container .guided-inventory-cards-stack {
+      gap: 0;
+    }
+    .process-flow-spa #post-creation-options {
+      border-top: 1px solid var(--border-default, #e5e7eb) !important;
+      padding-top: 20px !important;
+    }
+    .process-flow-spa .flow-spa-panel--sub {
+      border: none !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      padding: 14px 0 !important;
+      border-top: 1px solid var(--border-default, #e5e7eb) !important;
+    }
+
+    /* Step 3 — Custom expiry & Ready date: stack sections with hairlines only (no nested bordered cards) */
+    .process-flow-spa .guided-output-compliance-fields {
+      background: transparent !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    .process-flow-spa .guided-output-compliance-fields .guided-output-expiry-pane,
+    .process-flow-spa .guided-output-compliance-fields .guided-output-ready-date-pane {
+      border: none !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      margin-bottom: 0 !important;
+      padding: 14px 0 0 0 !important;
+    }
+    .process-flow-spa .guided-output-compliance-fields .guided-output-ready-date-pane {
+      border-top: 1px solid var(--border-default, #e5e7eb) !important;
+      margin-top: 0 !important;
+      padding-top: 14px !important;
+    }
+    .process-flow-spa .guided-output-expiry-fields,
+    .process-flow-spa .guided-output-ready-date-fields {
+      border: none !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
   </style>
 {% endblock %}
 
 {% block content %}
         <div class="max-content">
-          <section class="card process-flow-card" style="margin-top: 24px;">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
-              <div style="flex: 1; min-width: 0;">
-                <h2 class="card-title">Create process step</h2>
-                <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">
-                  Define a new step: name, inputs, outputs, and execution prompts.
-                </p>
-              </div>
+          <section class="card spa-primary-flat process-flow-card notifications-card" style="margin-top: 24px;" aria-labelledby="modal-title">
+            <div class="card-header process-flow-hero__header">
+              <h1 id="modal-title" class="card-title">{% block wizard_title %}Create Process Step{% endblock %}</h1>
+              <p id="modal-description" class="process-flow-hero__tagline">
+                {% block wizard_tagline %}You can expand existing steps to edit them, or use this interactive editor to add additional steps.{% endblock %}
+              </p>
             </div>
-            <div class="card-content">
-              {% include 'processes/create-process-step-content.html' %}
+            <div class="card-content process-flow-card__content notifications-card__content">
+              {% block wizard_card_body %}{% endblock %}
             </div>
           </section>
         </div>
 
         <!-- Finish / Resume / Save-draft modals (required by create-process-modal.js) -->
-        <div class="modal-overlay" id="finish-process-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center;">
-          <div class="card" style="max-width: 600px; width: 90%; padding: 24px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-              <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Finish Creating Process</h2>
-              <button class="modal-close" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div style="margin-bottom: 24px;">
-              <div style="padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb); margin-bottom: 20px;">
-                <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;"><strong>By finishing this process, you are locking in the process definition.</strong></p>
-                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">Once you execute this process, your inventory will automatically update in real-time.</p>
-                <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">You can edit this process at any time in the process view.</p>
-              </div>
-              <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.6;">Press <strong>"Finish creating process"</strong> to save, or <strong>"Back"</strong> to add another step.</p>
-            </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end;">
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('finish-process-confirmation-modal').style.display = 'none'">Back</button>
-              <button type="button" class="btn btn-primary" onclick="window.confirmFinishProcess()">Finish creating process</button>
-            </div>
-          </div>
-        </div>
-
         <div class="modal-overlay" id="resume-draft-confirmation-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1002; align-items: center; justify-content: center;">
           <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
@@ -187,8 +479,12 @@
               </button>
             </div>
             <div style="margin-bottom: 24px;">
-              <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">To resume editing click <strong>Resume Draft</strong>, or <strong>Start New</strong> to start over.</p>
-              <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">Your previous progress will be restored.</p>
+              <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 12px 0; line-height: 1.6;">
+                To resume editing this process click <strong>Resume Draft</strong>, if you would like to start a new process click <strong>Start New</strong>.
+              </p>
+              <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+                Your previous progress will be restored, and you can continue where you left off.
+              </p>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
               <button type="button" class="btn btn-secondary" onclick="window.cancelResumeDraft()">Start New</button>
@@ -205,7 +501,15 @@
               </div>
               <div style="flex: 1; min-width: 0;">
                 <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Save your progress?</h2>
-                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;"><strong>Continue creating steps</strong>, <strong>save as draft</strong>, or <strong>discard</strong> and lose progress.</p>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;">
+                  <strong>Continue creating steps</strong> — get value in front of you quickly. You can save as draft anytime.
+                </p>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.55;">
+                  Or <strong>save as draft</strong> and all current step progress will be saved so you can continue later.
+                </p>
+                <p style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.55;">
+                  Or <strong>discard</strong> and all progress will be lost — you will need to start again.
+                </p>
               </div>
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;">

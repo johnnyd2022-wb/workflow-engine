@@ -1,0 +1,8 @@
+{% extends "processes/process-flow-spa.html" %}
+{% block wizard_html_title %}Step name | Create process | SupplyChain V2{% endblock %}
+{% block wizard_card_body %}
+              {% include 'processes/process-wizard-fragment-shared-top.html' %}
+              {% include 'processes/process-wizard-fragment-indicators.html' %}
+              {% include 'processes/process-wizard-fragment-step1.html' %}
+              {% include 'processes/process-wizard-fragment-post-creation.html' %}
+{% endblock %}

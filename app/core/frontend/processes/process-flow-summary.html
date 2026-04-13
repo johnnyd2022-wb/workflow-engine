@@ -1,0 +1,23 @@
+{% extends "processes/process-flow-spa.html" %}
+{% block wizard_html_title %}Step summary | SupplyChain V2{% endblock %}
+{% block wizard_title %}Step summary{% endblock %}
+{%- block wizard_tagline -%}
+{%- endblock %}
+{% block wizard_card_body %}
+              <div class="create-process-step" id="process-flow-summary-wizard-shell" style="display: block;">
+                <div class="create-process-step-body">
+                  {% include 'processes/process-wizard-fragment-shared-top.html' %}
+                  <div id="process-flow-summary-empty" class="flow-spa-stack" style="display: none; margin-bottom: 16px;">
+                    <div class="flow-spa-stack__item">
+                      <p class="flow-spa-stack__text" style="margin: 0;">No steps are in this workflow yet. Complete the step wizard first, then return here.</p>
+                      <p class="flow-spa-stack__text" style="margin: 10px 0 0 0;">
+                        <a class="btn btn-primary btn-sm" id="summary-goto-step-name" href="/core/flows/create/process-overview{{ flow_qs or '' }}">Start workflow</a>
+                      </p>
+                    </div>
+                  </div>
+                  <div id="post-creation-options" style="display: none;" aria-hidden="true"></div>
+                </div>
+                {% set flow_wizard_sticky_variant = 'summary' %}
+                {% include 'processes/process-wizard-sticky-bar.html' %}
+              </div>
+{% endblock %}

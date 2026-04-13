@@ -1,25 +1,41 @@
 /**
- * Process Flow SPA — full-page create/edit process step flow.
- * Reuses create-process-modal.js; this script only handles SPA-specific behavior:
- * - Back link, redirect on close/finish, and loadProcessData override.
+ * Process flow wizard (full-page): loadProcessData redirect + HTMX re-init after swap.
  */
 (function() {
   'use strict';
 
-  if (!document.body || !document.body.hasAttribute('data-page') || document.body.getAttribute('data-page') !== 'process-flow-spa') {
+  function isProcessFlowWizardShell() {
+    var p = document.body && document.body.getAttribute('data-page');
+    return p === 'process-flow-wizard';
+  }
+
+  if (!isProcessFlowWizardShell()) {
     return;
   }
 
-  // Banner back link for /core/flows/create is synced in shared/base_spa.html (spaSyncBannerBack).
-
-  // When modal logic calls loadProcessData (after close, save draft, or finish), redirect instead of refreshing in place.
   window.loadProcessData = function() {
     var id = new URLSearchParams(window.location.search).get('id');
     window.location.href = id ? '/core/flows?id=' + encodeURIComponent(id) : '/core';
   };
 
-  // Ensure step display is in sync when SPA loads (e.g. after navigation). Step 1 is already visible in HTML; modal script may have set currentStep.
-  if (typeof window.updateStepDisplay === 'function') {
-    window.updateStepDisplay();
-  }
+  document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (!evt.detail || !evt.detail.target || evt.detail.target.id !== 'page-content') {
+      return;
+    }
+    var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
+    if (path.indexOf('/core/flows/create/') !== 0) {
+      return;
+    }
+    if (typeof window.initProcessFlowWizardFromDom === 'function') {
+      window.initProcessFlowWizardFromDom();
+    }
+    if (window.Alpine && typeof Alpine.initTree === 'function') {
+      var step4 = document.getElementById('create-process-step-4');
+      if (step4) {
+        try {
+          Alpine.initTree(step4);
+        } catch (e) {}
+      }
+    }
+  });
 })();

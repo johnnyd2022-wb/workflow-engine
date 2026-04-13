@@ -1,0 +1,27 @@
+    <!-- Step summaries + compliance (compliance panel filled on summary route only) -->
+    <div id="step-summaries-container" class="process-flow-step-summaries" style="display: none; margin-bottom: 24px;">
+      <div id="flow-compliance-panel" class="flow-compliance-panel" style="display: none;" aria-labelledby="modal-title"></div>
+      <h3 id="step-summaries-heading" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px 0;">Created Steps</h3>
+      <div id="step-summaries-list" style="display: flex; flex-direction: column; gap: 0;">
+      </div>
+    </div>
+    
+    <!-- Existing steps list view (when editing a non-draft process) -->
+    <div id="existing-steps-list-view" style="display: none; margin-bottom: 24px;">
+      <div style="margin-bottom: 20px;">
+        <p style="font-size: 14px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.6;">
+          Edit an existing step or add a new one. Changes apply to future executions.
+        </p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6;">
+          To start a completely new process from scratch (replacing all current steps), click <strong>Start new</strong>.
+        </p>
+      </div>
+      <div id="existing-steps-list" style="display: flex; flex-direction: column; gap: 0; margin-bottom: 20px;">
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary" onclick="window.addNewStepFromEditView()">
+          + Add new step
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="window.startNewFromEditView()">Start new</button>
+      </div>
+    </div>

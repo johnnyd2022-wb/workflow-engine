@@ -164,6 +164,7 @@ def reset_demo_db(db: Session) -> dict:
             process_id=process.id,
             org_id=org_id,
             step_number=spec["step_number"],
+            position=int(spec["step_number"]) * 1000,
             name=spec["name"],
             description=spec.get("description"),
             inputs=spec.get("inputs", []),

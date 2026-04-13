@@ -1,0 +1,108 @@
+{% extends "processes/process-flow-spa.html" %}
+{% block wizard_html_title %}Next steps | SupplyChain V2{% endblock %}
+{% block wizard_title %}What would you like to do next?{% endblock %}
+{% block wizard_tagline %}{% endblock %}
+
+{% block head_extras %}
+{{ super() }}
+<style>
+  /* Hairline + text rail match flow-spa-stack width (full card content); buttons centered in-column */
+  .process-flow-next-steps {
+    width: 100%;
+    margin: 0;
+    padding: 8px 0 28px;
+    box-sizing: border-box;
+  }
+  .process-flow-next-steps__section {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    width: 100%;
+  }
+  /* Mirror the 20px below the divider (padding-top on section 2) above the line so the Add button doesn’t touch it */
+  .process-flow-next-steps__section:first-child {
+    padding-bottom: 20px;
+  }
+  .process-flow-next-steps__section + .process-flow-next-steps__section {
+    margin-top: 0;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-default, #e5e7eb);
+  }
+  .process-flow-next-steps__helper {
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    color: var(--text-secondary, #6b7280);
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .process-flow-next-steps__btn-row {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  .process-flow-next-steps__btn {
+    justify-content: center;
+    padding: 14px 28px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border-radius: var(--radius-md, 10px);
+    line-height: 1.35;
+    min-width: min(100%, 280px);
+  }
+  .process-flow-next-steps__btn.btn-primary {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+  .process-flow-next-steps__btn.btn-secondary {
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border-default, #e5e7eb);
+    color: var(--text-primary, #111827);
+  }
+  .process-flow-next-steps__btn.btn-secondary:hover {
+    background: var(--bg-secondary, #f9fafb);
+    border-color: var(--border-strong, #d1d5db);
+  }
+  .process-flow-next-steps .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
+{% endblock %}
+
+{% block wizard_card_body %}
+<div class="process-flow-next-steps" role="region" aria-label="Next steps">
+  <section class="process-flow-next-steps__section" aria-labelledby="next-steps-add-heading">
+    <h2 id="next-steps-add-heading" class="sr-only">Add another step</h2>
+    <p class="process-flow-next-steps__helper">
+      Build out your workflow the same way you already define how your product is made. Add more steps when your process has distinct stages, and use inputs from earlier steps—such as intermediate outputs—when your product transforms at each step so each stage stays traceable.
+    </p>
+    <div class="process-flow-next-steps__btn-row">
+      <button type="button" class="btn btn-primary process-flow-next-steps__btn" onclick="window.addAnotherStep()">
+        Add another step
+      </button>
+    </div>
+  </section>
+  <section class="process-flow-next-steps__section" aria-labelledby="next-steps-finish-heading">
+    <h2 id="next-steps-finish-heading" class="sr-only">Finish process</h2>
+    <p class="process-flow-next-steps__helper">
+      As you record completions of this process’s steps, your inventory will automatically update in real time, giving you a live view of where all your inventory is at any moment. Each step completion will consume inputs, produce outputs, and associate all recorded information with the completed batch according to the requirements you’ve defined for each step.
+    </p>
+    <p class="process-flow-next-steps__helper" style="margin-top: -4px;">
+      You can edit this process workflow at any time. All changes will apply to future executions.
+    </p>
+    <div class="process-flow-next-steps__btn-row">
+      <button type="button" class="btn btn-secondary process-flow-next-steps__btn" onclick="window.finishProcess()">
+        Finish process
+      </button>
+    </div>
+  </section>
+</div>
+{% endblock %}

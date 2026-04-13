@@ -39,22 +39,24 @@ class ExecutionRepository:
             _ = execution.id
 
             # Create execution steps for each step in the process
-            steps = self.db.query(Step).filter(Step.process_id == process_id).order_by(Step.step_number).all()
+            steps = self.db.query(Step).filter(Step.process_id == process_id).order_by(Step.position).all()
             execution_steps = []
             total_steps = len(steps)
 
             # Snapshot total_steps at creation for progress calculation integrity
             execution.total_steps = total_steps
 
-            # Determine terminal step (highest step_number)
-            terminal_step_number = max((s.step_number for s in steps), default=None) if steps else None
+            # Determine terminal step (last in position order).
+            terminal_index = total_steps
 
-            for step in steps:
-                is_terminal = (step.step_number == terminal_step_number) if terminal_step_number is not None else False
+            for i, step in enumerate(steps, start=1):
+                is_terminal = i == terminal_index if terminal_index else False
                 exec_step = ExecutionStep(
                     execution_id=execution.id,
                     step_id=step.id,
-                    step_number=step.step_number,
+                    # Snapshot an execution-local ordering index so later step reorders
+                    # do not change execution progression.
+                    step_number=i,
                     status=ExecutionStepStatus.PENDING,
                     is_terminal_step=is_terminal,
                 )

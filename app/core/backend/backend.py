@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, render_template, request, send_from_directory
+from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -26,6 +26,7 @@ from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.process import ProcessCategory
+from app.core.db.models.step import Step
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
@@ -67,6 +68,216 @@ core_bp = Blueprint(
     static_folder="../frontend",
     static_url_path="/static",
 )
+
+
+# --- Flow wizard safety helpers (query filtering + step integrity) ---
+_FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
+
+_FLOW_WIZARD_PAGE_TO_STEP = {
+    "process-overview": 1,
+    "step-name": 2,
+    "inputs": 3,
+    "outputs": 4,
+    "evidence-and-prompts": 5,
+    "summary": 6,
+    "next-steps": 7,
+}
+
+_FLOW_WIZARD_STEP_TO_PATH = {
+    1: "/core/flows/create/process-overview",
+    2: "/core/flows/create/step-name",
+    3: "/core/flows/create/inputs",
+    4: "/core/flows/create/outputs",
+    5: "/core/flows/create/evidence-and-prompts",
+    6: "/core/flows/create/summary",
+    7: "/core/flows/create/next-steps",
+}
+
+
+def _flow_process_id_from_request() -> UUID | None:
+    """Parse and validate ?id= as a UUID. If present but invalid, abort 400."""
+    raw = request.args.get("id")
+    if raw is None or raw == "":
+        return None
+    try:
+        return UUID(str(raw))
+    except Exception:
+        abort(400)
+
+
+def _assert_flow_process_access(process_id: UUID) -> None:
+    """
+    Object-level authorization for flow pages.
+    We scope access to the current tenant org; return 404 when not found to avoid ID enumeration.
+    """
+    org_raw = getattr(g, "org_id", None)
+    if not org_raw:
+        abort(400)
+    org_id = UUID(str(org_raw))
+    repo = ProcessRepository(db_session)
+    proc = repo.get_process_by_id(process_id, org_id=org_id)
+    if not proc:
+        abort(404)
+
+
+def _get_process_or_404(process_id: UUID):
+    """Shared helper for API endpoints: org-scoped process fetch with 404 on miss."""
+    org_raw = getattr(g, "org_id", None)
+    if not org_raw:
+        abort(400)
+    org_id = UUID(str(org_raw))
+    repo = ProcessRepository(db_session)
+    proc = repo.get_process_by_id(process_id, org_id=org_id)
+    if not proc:
+        abort(404)
+    return proc
+
+
+def _assert_valid_step_write(process_id: UUID, requested_step_number: int | None, step_id: UUID | None = None) -> None:
+    """
+    Enforce basic flow integrity at the mutation boundary.
+    This is not a security boundary (tenancy is handled by org-scoped process lookup),
+    but it prevents inconsistent state caused by skipping ahead or colliding step numbers.
+    """
+    if requested_step_number is None:
+        return
+    if not isinstance(requested_step_number, int) or requested_step_number < 1:
+        abort(400)
+
+    # Ensure process exists in current org (prevents IDOR & guarantees scope).
+    _ = _get_process_or_404(process_id)
+
+    q = db_session.query(Step).filter(Step.process_id == process_id)
+    if step_id is not None:
+        q = q.filter(Step.id != step_id)
+
+    [n for (n,) in q.with_entities(Step.step_number).all() if isinstance(n, int)]
+    # Option B: step_number is not canonical ordering. No uniqueness enforcement here.
+    return None
+
+
+def _coerce_step_position(value):
+    if value is None:
+        return None
+    from decimal import Decimal
+
+    try:
+        pos = Decimal(str(value))
+    except Exception:
+        abort(400)
+    # Defensive bounds: reject NaN/Inf and negative/zero positions.
+    if not pos.is_finite() or pos <= 0:
+        abort(400)
+    # Guard against pathological magnitudes (prevents log spam / abuse).
+    if pos.copy_abs() > Decimal("1e30"):
+        abort(400)
+    # Hard invariant: always store positions on the 1000-grid.
+    if (pos % Decimal("1000")) != 0:
+        abort(400)
+    return pos
+
+
+def _next_step_position(process_id: UUID) -> "Decimal":
+    from decimal import Decimal
+
+    max_pos = (
+        db_session.query(Step.position)
+        .filter(Step.process_id == process_id)
+        .order_by(Step.position.desc())
+        .limit(1)
+        .scalar()
+    )
+    if max_pos is None:
+        return Decimal("1000")
+    grid = Decimal("1000")
+    mp = Decimal(str(max_pos))
+    rem = mp % grid
+    if rem != 0:
+        mp = mp + (grid - rem)
+    return mp + grid
+
+
+def _flow_state_key(process_id: UUID | None) -> str:
+    # "new" wizard (no process yet) gets its own bucket, and existing processes
+    # get per-process state keyed by UUID string.
+    return str(process_id) if process_id is not None else "new"
+
+
+def _flow_state_get(process_id: UUID | None) -> dict:
+    state = session.get("flow_state")
+    if not isinstance(state, dict):
+        state = {}
+    # Treat session values as immutable: always reassign.
+    state = dict(state)
+    key = _flow_state_key(process_id)
+    bucket = state.get(key)
+    if not isinstance(bucket, dict):
+        bucket = {"started": False, "max_step": 1}
+        state[key] = bucket
+    session["flow_state"] = state
+    session.modified = True
+    return bucket
+
+
+def _flow_state_reset(process_id: UUID | None) -> None:
+    state = session.get("flow_state")
+    if not isinstance(state, dict):
+        state = {}
+    state = dict(state)
+    state[_flow_state_key(process_id)] = {"started": True, "max_step": 1}
+    session["flow_state"] = state
+    session.modified = True
+
+
+def _filtered_flow_query_args() -> dict[str, str]:
+    """Return a safe allowlisted query dict for flow routes."""
+    args: dict[str, str] = {}
+
+    pid = _flow_process_id_from_request()
+    if pid is not None:
+        _assert_flow_process_access(pid)
+        args["id"] = str(pid)
+
+    if request.args.get("fresh") is not None:
+        # Treat "fresh" as a boolean flag; normalize to "1" when present.
+        args["fresh"] = "1"
+
+    return {k: v for k, v in args.items() if k in _FLOW_ALLOWED_QUERY_PARAMS}
+
+
+def _flow_qs() -> str:
+    """Safe query string for flows/create pages, including leading '?' or empty string."""
+    from urllib.parse import urlencode
+
+    args = _filtered_flow_query_args()
+    return ("?" + urlencode(sorted(args.items()))) if args else ""
+
+
+def _maybe_enforce_flow_wizard_step(flow_wizard_page: str, process_id: int | None):
+    """
+    Enforce basic wizard sequencing for *new* wizards (no ?id=).
+    This is intentionally lightweight: it prevents skipping ahead into later steps
+    when there's no persisted server-side object to anchor state.
+    """
+    requested = _FLOW_WIZARD_PAGE_TO_STEP.get(flow_wizard_page)
+    if not requested:
+        return None
+
+    bucket = _flow_state_get(process_id)
+    started = bool(bucket.get("started"))
+    if not started:
+        return redirect("/core/flows/create" + _flow_qs())
+
+    max_step = int(bucket.get("max_step") or 1)
+    if requested > max_step + 1:
+        dest = _FLOW_WIZARD_STEP_TO_PATH.get(max_step, _FLOW_WIZARD_STEP_TO_PATH[1])
+        return redirect(dest + _flow_qs())
+
+    if requested > max_step:
+        bucket["max_step"] = requested
+        session.modified = True
+
+    return None
 
 
 def validate_custom_expiry_warning_not_exceed_duration(
@@ -288,16 +499,178 @@ def inventory_dispose_confirm():
 @requires_auth
 def flows():
     """Serve the process workspace page (processes/flows2.html)."""
-    process_id = request.args.get("id")
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
     return render_template("processes/flows2.html", active_page="core", process_id=process_id)
 
 
 @core_bp.route("/core/flows/create", methods=["GET"])
 @requires_auth
 def flows_create():
-    """Serve the process creation SPA (guided step flow as full page)."""
-    process_id = request.args.get("id")
-    return render_template("processes/process-flow-spa.html", active_page="core", process_id=process_id)
+    """Start the wizard at step 1. Anonymous entry (no process id) sets fresh=1 so session wizard state resets."""
+    base = "/core/flows/create/process-overview"
+
+    args = _filtered_flow_query_args()
+    if "id" not in args and "fresh" not in args:
+        args["fresh"] = "1"
+
+    # Initialize sequencing state (keyed by process id or "new").
+    pid = _flow_process_id_from_request()
+    if args.get("fresh") == "1" or not _flow_state_get(pid).get("started"):
+        _flow_state_reset(pid)
+
+    from urllib.parse import urlencode
+
+    q = urlencode(sorted(args.items())) if args else ""
+    dest = base + (f"?{q}" if q else "")
+    return redirect(dest)
+
+
+@core_bp.route("/core/flows/create/step/<int:step>", methods=["GET"])
+@requires_auth
+def flows_create_step(step):
+    """Legacy /step/N URLs redirect to the current wizard URLs (one route per page)."""
+    qs = _flow_qs()
+    if step == 1:
+        dest = "/core/flows/create/process-overview"
+    elif step == 2:
+        dest = "/core/flows/create/inputs"
+    elif step == 3:
+        dest = "/core/flows/create/outputs"
+    elif step == 4:
+        dest = "/core/flows/create/evidence-and-prompts"
+    else:
+        dest = "/core/flows/create/process-overview"
+    return redirect(dest + qs)
+
+
+@core_bp.route("/core/flows/create/process-overview", methods=["GET"])
+@requires_auth
+def flows_create_process_overview_page():
+    """First wizard screen: process name + what a workflow is; then step-name."""
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
+    maybe_redirect = _maybe_enforce_flow_wizard_step("process-overview", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
+    return render_template(
+        "processes/process-flow-process-overview.html",
+        active_page="core",
+        process_id=process_id,
+        flow_qs=_flow_qs(),
+        flow_wizard_page="process-overview",
+    )
+
+
+@core_bp.route("/core/flows/create/step-name", methods=["GET"])
+@requires_auth
+def flows_create_step_name_page():
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
+    maybe_redirect = _maybe_enforce_flow_wizard_step("step-name", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
+    return render_template(
+        "processes/process-flow-step-name.html",
+        active_page="core",
+        process_id=process_id,
+        flow_qs=_flow_qs(),
+        flow_wizard_page="step-name",
+    )
+
+
+@core_bp.route("/core/flows/create/inputs", methods=["GET"])
+@requires_auth
+def flows_create_inputs_page():
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
+    maybe_redirect = _maybe_enforce_flow_wizard_step("inputs", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
+    return render_template(
+        "processes/process-flow-inputs.html",
+        active_page="core",
+        process_id=process_id,
+        flow_qs=_flow_qs(),
+        flow_wizard_page="inputs",
+    )
+
+
+@core_bp.route("/core/flows/create/outputs", methods=["GET"])
+@requires_auth
+def flows_create_outputs_page():
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
+    maybe_redirect = _maybe_enforce_flow_wizard_step("outputs", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
+    return render_template(
+        "processes/process-flow-outputs.html",
+        active_page="core",
+        process_id=process_id,
+        flow_qs=_flow_qs(),
+        flow_wizard_page="outputs",
+    )
+
+
+@core_bp.route("/core/flows/create/evidence-and-prompts", methods=["GET"])
+@requires_auth
+def flows_create_evidence_and_prompts_page():
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
+    maybe_redirect = _maybe_enforce_flow_wizard_step("evidence-and-prompts", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
+    return render_template(
+        "processes/process-flow-evidence-and-prompts.html",
+        active_page="core",
+        process_id=process_id,
+        flow_qs=_flow_qs(),
+        flow_wizard_page="evidence-and-prompts",
+    )
+
+
+@core_bp.route("/core/flows/create/summary", methods=["GET"])
+@requires_auth
+def flows_create_summary_page():
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
+    maybe_redirect = _maybe_enforce_flow_wizard_step("summary", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
+    return render_template(
+        "processes/process-flow-summary.html",
+        active_page="core",
+        process_id=process_id,
+        flow_qs=_flow_qs(),
+        flow_wizard_page="summary",
+    )
+
+
+@core_bp.route("/core/flows/create/next-steps", methods=["GET"])
+@requires_auth
+def flows_create_next_steps_page():
+    """After saving a step: choose add another step or finish the process."""
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
+    maybe_redirect = _maybe_enforce_flow_wizard_step("next-steps", process_id)
+    if maybe_redirect is not None:
+        return maybe_redirect
+    return render_template(
+        "processes/process-flow-next-steps.html",
+        active_page="core",
+        process_id=process_id,
+        flow_qs=_flow_qs(),
+        flow_wizard_page="next-steps",
+    )
 
 
 @core_bp.route("/core/notifications", methods=["GET"])
@@ -646,6 +1019,7 @@ def get_process(process_id: str):
             {
                 "id": str(step.id),
                 "step_number": step.step_number,
+                "position": str(step.position) if getattr(step, "position", None) is not None else None,
                 "name": step.name,
                 "description": step.description,
                 "inputs": step.inputs or [],
@@ -686,6 +1060,15 @@ def add_step(process_id: str):
 
     if step_number is None or name is None:
         return jsonify({"error": "step_number and name are required"}), 400
+    try:
+        step_number_int = int(step_number)
+    except Exception:
+        return jsonify({"error": "Invalid step_number"}), 400
+
+    # Option B ordering: accept explicit position, else append.
+    position = _coerce_step_position(data.get("position"))
+    if position is None:
+        position = _next_step_position(process_uuid)
 
     outputs = data.get("outputs", [])
     expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
@@ -693,16 +1076,21 @@ def add_step(process_id: str):
         return jsonify({"error": expiry_ready_errors[0]}), 400
 
     repo = ProcessRepository(db_session)
-    step = repo.add_step(
-        process_id=process_uuid,
-        org_id=org_id,
-        step_number=step_number,
-        name=name,
-        description=data.get("description"),
-        inputs=data.get("inputs", []),
-        outputs=data.get("outputs", []),
-        execution_prompts=data.get("execution_prompts", []),
-    )
+    try:
+        step = repo.add_step(
+            process_id=process_uuid,
+            org_id=org_id,
+            step_number=step_number_int,
+            position=position,
+            name=name,
+            description=data.get("description"),
+            inputs=data.get("inputs", []),
+            outputs=data.get("outputs", []),
+            execution_prompts=data.get("execution_prompts", []),
+        )
+    except IntegrityError:
+        db_session.rollback()
+        return jsonify({"error": "Could not create step"}), 409
 
     if not step:
         return jsonify({"error": "Process not found"}), 404
@@ -712,6 +1100,7 @@ def add_step(process_id: str):
             {
                 "id": str(step.id),
                 "step_number": step.step_number,
+                "position": str(step.position) if getattr(step, "position", None) is not None else None,
                 "name": step.name,
                 "description": step.description,
                 "inputs": step.inputs or [],
@@ -735,6 +1124,9 @@ def update_step(process_id: str, step_id: str):
         return jsonify({"error": "Invalid process or step ID"}), 400
 
     data = request.get_json()
+    if data and "position" in data:
+        _coerce_step_position(data.get("position"))
+
     outputs = data.get("outputs")
     if outputs is not None:
         expiry_ready_errors = _validate_step_outputs_expiry_after_ready(outputs)
@@ -742,17 +1134,22 @@ def update_step(process_id: str, step_id: str):
             return jsonify({"error": expiry_ready_errors[0]}), 400
 
     repo = ProcessRepository(db_session)
-    step = repo.update_step(
-        step_id=step_uuid,
-        process_id=process_uuid,
-        org_id=org_id,
-        step_number=data.get("step_number"),
-        name=data.get("name"),
-        description=data.get("description"),
-        inputs=data.get("inputs"),
-        outputs=data.get("outputs"),
-        execution_prompts=data.get("execution_prompts"),
-    )
+    try:
+        step = repo.update_step(
+            step_id=step_uuid,
+            process_id=process_uuid,
+            org_id=org_id,
+            step_number=data.get("step_number"),
+            position=_coerce_step_position(data.get("position")) if "position" in data else None,
+            name=data.get("name"),
+            description=data.get("description"),
+            inputs=data.get("inputs"),
+            outputs=data.get("outputs"),
+            execution_prompts=data.get("execution_prompts"),
+        )
+    except IntegrityError:
+        db_session.rollback()
+        return jsonify({"error": "Could not update step"}), 409
 
     if not step:
         return jsonify({"error": "Step or process not found"}), 404
@@ -762,6 +1159,7 @@ def update_step(process_id: str, step_id: str):
             {
                 "id": str(step.id),
                 "step_number": step.step_number,
+                "position": str(step.position) if getattr(step, "position", None) is not None else None,
                 "name": step.name,
                 "description": step.description,
                 "inputs": step.inputs or [],
@@ -771,6 +1169,86 @@ def update_step(process_id: str, step_id: str):
         ),
         200,
     )
+
+
+@core_bp.route("/api/core/processes/<process_id>/steps/reorder", methods=["POST"])
+@requires_auth
+def reorder_steps(process_id: str):
+    """Batch reorder steps by updating their position values atomically.
+
+    Client should send ordered IDs. Server normalizes positions to prevent precision entropy.
+    """
+    org_id = UUID(g.org_id)
+    try:
+        process_uuid = UUID(process_id)
+    except ValueError:
+        return jsonify({"error": "Invalid process ID"}), 400
+
+    # Ensure process belongs to org (IDOR guard).
+    repo = ProcessRepository(db_session)
+    if not repo.get_process_by_id(process_uuid, org_id=org_id):
+        return jsonify({"error": "Process not found"}), 404
+
+    data = request.get_json() or {}
+    step_ids = data.get("step_ids") or data.get("ids") or data.get("ordered_step_ids")
+    if step_ids is None:
+        # Backwards compatibility: accept {orders:[{id,...},...]} but ignore client positions.
+        orders = data.get("orders") or data.get("steps") or []
+        if isinstance(orders, list) and orders:
+            step_ids = [(row.get("id") or row.get("step_id")) for row in orders if isinstance(row, dict)]
+    if not isinstance(step_ids, list) or not step_ids:
+        return jsonify({"error": "step_ids is required"}), 400
+
+    # Parse and de-duplicate while preserving order.
+    parsed_ids: list[UUID] = []
+    seen: set[UUID] = set()
+    for raw in step_ids:
+        try:
+            sid = UUID(str(raw))
+        except Exception:
+            return jsonify({"error": "Invalid step id"}), 400
+        if sid in seen:
+            continue
+        seen.add(sid)
+        parsed_ids.append(sid)
+
+    from decimal import Decimal
+
+    try:
+        with db_session.begin():
+            # Lock all steps for this process to prevent concurrent reorder collisions.
+            locked = db_session.query(Step.id).filter(Step.process_id == process_uuid).with_for_update().all()
+            locked_ids = {sid for (sid,) in locked}
+            if not locked_ids:
+                return jsonify({"error": "No steps to reorder"}), 400
+
+            # Ensure request includes only steps from this process.
+            for sid in parsed_ids:
+                if sid not in locked_ids:
+                    return jsonify({"error": "Step not found"}), 404
+
+            # If the client omitted some steps, append them in current position order.
+            if len(parsed_ids) != len(locked_ids):
+                remaining = (
+                    db_session.query(Step.id)
+                    .filter(Step.process_id == process_uuid, ~Step.id.in_(parsed_ids))
+                    .order_by(Step.position)
+                    .all()
+                )
+                parsed_ids.extend([sid for (sid,) in remaining])
+
+            # Normalize positions with clean spacing.
+            spacing = Decimal("1000")
+            for i, sid in enumerate(parsed_ids, start=1):
+                new_pos = spacing * Decimal(i)
+                db_session.query(Step).filter(Step.id == sid, Step.process_id == process_uuid).update(
+                    {"position": new_pos}
+                )
+
+        return jsonify({"message": "Reordered"}), 200
+    except Exception:
+        db_session.rollback()
+        return jsonify({"error": "Failed to reorder steps"}), 500
 
 
 @core_bp.route("/api/core/processes/<process_id>/steps/<step_id>", methods=["DELETE"])

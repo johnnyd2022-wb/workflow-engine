@@ -1,0 +1,32 @@
+    <div id="create-process-step-1" class="create-process-step" style="display: block;">
+      <div class="create-process-step-body">
+        <div class="flow-spa-stack flow-spa-stack--step" style="margin-bottom: 24px;">
+          <div class="flow-spa-stack__item">
+            <h3 class="flow-spa-stack__title">What are process steps?</h3>
+            <p class="flow-spa-stack__text">
+              Process steps allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
+            </p>
+          </div>
+          <div class="flow-spa-stack__item">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Step Name <span style="color: var(--error, #ef4444);">*</span>
+            </label>
+            <input type="text" id="guided-step-name" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
+              Use the name you already call this process internally. Example: Mixing, Fermentation, Tablet Pressing.
+            </p>
+          </div>
+          <div class="flow-spa-stack__item">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+              Description
+            </label>
+            <textarea id="guided-step-description" rows="3" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; resize: vertical;"></textarea>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 6px 0 0 0;">
+              Provide a high-level summary of what this process step involves. Example: Brief summary of what this step involves.
+            </p>
+          </div>
+        </div>
+      </div>
+      {% set flow_wizard_sticky_variant = 'step_name' %}
+      {% include 'processes/process-wizard-sticky-bar.html' %}
+    </div>

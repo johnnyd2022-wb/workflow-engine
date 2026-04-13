@@ -30,12 +30,9 @@ class ProcessRepository:
         self.db.commit()
         return process
 
-    def get_process_by_id(self, process_id: UUID, org_id: UUID | None = None) -> Process | None:
-        """Get process by ID, optionally scoped to org"""
-        query = self.db.query(Process).filter(Process.id == process_id)
-        if org_id:
-            query = query.filter(Process.org_id == org_id)
-        return query.first()
+    def get_process_by_id(self, process_id: UUID, org_id: UUID) -> Process | None:
+        """Get process by ID (must be scoped to org)."""
+        return self.db.query(Process).filter(Process.id == process_id, Process.org_id == org_id).first()
 
     def list_processes(self, org_id: UUID) -> list[Process]:
         """List all processes for an organisation"""
@@ -85,6 +82,7 @@ class ProcessRepository:
         org_id: UUID,
         step_number: int,
         name: str,
+        position=None,
         description: str | None = None,
         inputs: list | None = None,
         outputs: list | None = None,
@@ -98,6 +96,7 @@ class ProcessRepository:
         step = Step(
             process_id=process_id,
             step_number=step_number,
+            position=position,
             name=name,
             description=description,
             inputs=inputs or [],
@@ -117,6 +116,7 @@ class ProcessRepository:
         org_id: UUID,
         step_number: int | None = None,
         name: str | None = None,
+        position=None,
         description: str | None = None,
         inputs: list | None = None,
         outputs: list | None = None,
@@ -133,6 +133,8 @@ class ProcessRepository:
 
         if step_number is not None:
             step.step_number = step_number
+        if position is not None:
+            step.position = position
         if name is not None:
             step.name = name
         if description is not None:

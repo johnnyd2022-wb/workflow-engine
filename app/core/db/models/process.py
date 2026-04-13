@@ -37,7 +37,12 @@ class Process(Base):
 
     # Relationships
     organisation = relationship("Organisation", backref="processes")
-    steps = relationship("Step", back_populates="process", order_by="Step.step_number", cascade="all, delete-orphan")
+    steps = relationship(
+        "Step",
+        back_populates="process",
+        order_by="Step.position,Step.step_number",
+        cascade="all, delete-orphan",
+    )
     executions = relationship("Execution", back_populates="process", cascade="all, delete-orphan")
 
     def __repr__(self):

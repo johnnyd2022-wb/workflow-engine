@@ -1,0 +1,64 @@
+    <div id="create-process-step-2" class="create-process-step" style="display: block;">
+      <div class="create-process-step-body">
+      <div style="margin-bottom: 24px;">
+        <div class="flow-spa-stack flow-spa-stack--step" style="margin-bottom: 20px;">
+          <div class="flow-spa-stack__item">
+            <h3 class="flow-spa-stack__title">Define Inputs</h3>
+            <p class="flow-spa-stack__text" style="margin-bottom: 0;">
+              Inputs are the physical materials you add to this step. Add from items in stock below, or define other materials.
+            </p>
+          </div>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">Inputs added (expand to edit):</p>
+          <div id="guided-inputs-list-unified" style="display: flex; flex-direction: column; gap: 0; margin-bottom: 12px;">
+          </div>
+        </div>
+        
+        <div class="flow-mode-segmented guided-inputs-source-tabs" role="group" aria-label="Input source">
+          <button type="button" class="flow-mode-segment flow-mode-segment--active" data-input-tab="inventory" id="input-tab-inventory" aria-pressed="true" title="Inventory">
+            Inventory
+          </button>
+          <button type="button" class="flow-mode-segment" data-input-tab="previous_output" id="input-tab-previous-output" aria-pressed="false" title="Outputs from previous steps">
+            Outputs from previous steps
+          </button>
+          <button type="button" class="flow-mode-segment" data-input-tab="new" id="input-tab-new" aria-pressed="false" title="Other materials">
+            Other materials
+          </button>
+        </div>
+        
+        <div id="guided-inputs-panel-inventory" class="guided-inputs-panel" style="display: block;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 16px 0; line-height: 1.5;">
+            Expand an item, enter quantity and unit, then click <strong>Click to add</strong>. The input is added at the top of the page — expand it there to edit.
+          </p>
+          <div id="guided-inventory-category-tabs" style="display: none; margin-top: 14px;">
+            <div class="flow-mode-segmented guided-inventory-cat-segments" role="group" aria-label="Inventory category">
+              <button type="button" class="flow-mode-segment flow-mode-segment--active" data-inventory-cat="raw_material" aria-pressed="true">Raw materials</button>
+              <button type="button" class="flow-mode-segment" data-inventory-cat="work_in_progress" aria-pressed="false">Intermediate</button>
+              <button type="button" class="flow-mode-segment" data-inventory-cat="final_product" aria-pressed="false">Final products</button>
+            </div>
+          </div>
+          <div id="guided-inventory-cards-container" class="guided-inventory-cards-stack">
+          </div>
+        </div>
+        <div id="guided-inputs-panel-previous-output" class="guided-inputs-panel" style="display: none;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0; line-height: 1.5;">
+            Select an output from a previous step below; then set quantity and unit in the form that appears above.
+          </p>
+          <div id="guided-previous-outputs-container" class="guided-inventory-cards-stack">
+          </div>
+        </div>
+        <div id="guided-inputs-panel-new" class="guided-inputs-panel" style="display: none;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">
+            Define other materials used during this step that are not in your inventory (e.g. water, freshly foraged food). Set default quantity and unit or prompt at execution.
+          </p>
+          <button type="button" id="add-another-new-btn" class="btn btn-secondary btn-sm" onclick="window.addGuidedInput('new', false)">
+            <span id="add-another-new-text">+ Add input</span>
+          </button>
+        </div>
+      </div>
+      </div>
+      {% set flow_wizard_sticky_variant = 'inputs' %}
+      {% include 'processes/process-wizard-sticky-bar.html' %}
+    </div>

@@ -93,6 +93,51 @@
       color: var(--text-primary, #111827);
     }
 
+    /* Exception: amount + unit on one row (process step outputs). Full-width inputs would collapse the number field. */
+    #page-content .guided-duration-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #page-content .guided-duration-row .guided-duration-value-input {
+      flex: 1 1 8rem !important;
+      min-width: 7rem !important;
+      max-width: 100% !important;
+      width: auto !important;
+      display: block !important;
+      box-sizing: border-box !important;
+    }
+    #page-content .guided-duration-row .guided-duration-unit-select {
+      flex: 1 1 10rem !important;
+      min-width: min(100%, 11rem) !important;
+      max-width: 100% !important;
+      width: auto !important;
+      display: block !important;
+      box-sizing: border-box !important;
+    }
+    @media (min-width: 640px) and (max-width: 1023px) {
+      #page-content .guided-duration-row .guided-duration-value-input {
+        flex: 1 1 9rem !important;
+        min-width: 8rem !important;
+      }
+    }
+    @media (max-width: 639px) {
+      #page-content .guided-duration-row {
+        flex-direction: column;
+        gap: 8px;
+      }
+      #page-content .guided-duration-row .guided-duration-value-input,
+      #page-content .guided-duration-row .guided-duration-unit-select {
+        flex: 0 1 auto !important;
+        min-width: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+    }
+
     #page-content textarea {
       min-height: 6rem;
       resize: vertical;
@@ -957,6 +1002,48 @@
   <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
   <script>
+    /**
+     * Fallback URL for the process-flow wizard when history has no prior entry (e.g. opened in a new tab).
+     * Clicks normally use history.back() so the banner follows the real page sequence.
+     */
+    function spaFlowWizardBackHref(pathname, search) {
+      var path = (pathname || '').replace(/\/$/, '') || '/';
+      var base = '/core/flows/create';
+      if (path.indexOf(base + '/') !== 0) return null;
+      var rest = path.slice((base + '/').length);
+      var slug = rest.split('/').filter(function (s) { return s; })[0] || '';
+      var known = {
+        'process-overview': true,
+        'step-name': true,
+        'inputs': true,
+        'outputs': true,
+        'evidence-and-prompts': true,
+        'summary': true,
+        'next-steps': true
+      };
+      if (!slug || !known[slug]) return null;
+      var params = new URLSearchParams(search || '');
+      var wizPid = params.get('id');
+      var qsSame = typeof search === 'string' && search.length ? search : '';
+      var prevWiz = {
+        'step-name': '/core/flows/create/process-overview',
+        'inputs': '/core/flows/create/step-name',
+        'outputs': '/core/flows/create/inputs',
+        'evidence-and-prompts': '/core/flows/create/outputs',
+        'summary': '/core/flows/create/evidence-and-prompts',
+        'next-steps': '/core/flows/create/summary'
+      };
+      if (slug === 'process-overview') {
+        return wizPid ? '/core/flows?id=' + encodeURIComponent(wizPid) : '/core';
+      }
+      if (slug === 'step-name') {
+        return wizPid ? '/core/flows?id=' + encodeURIComponent(wizPid) : '/core/flows/create/process-overview' + qsSame;
+      }
+      var prev = prevWiz[slug];
+      return (prev || '/core/flows/create/process-overview') + qsSame;
+    }
+    window.spaFlowWizardBackHref = spaFlowWizardBackHref;
+
     function spaSyncBannerBack() {
       var el = document.getElementById('spa-banner-back');
       if (!el) return;
@@ -970,16 +1057,37 @@
       el.classList.remove('spa-banner-back--hidden');
       el.removeAttribute('aria-hidden');
       el.removeAttribute('tabindex');
-      if (path === '/core/flows/create') {
+      var stepMatch = path.match(/^\/core\/flows\/create\/step\/(\d+)$/);
+      if (stepMatch) {
+        var stepNum = parseInt(stepMatch[1], 10);
         var processId = new URLSearchParams(window.location.search).get('id');
-        var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
-        el.setAttribute('href', dest);
+        var q = processId ? '?id=' + encodeURIComponent(processId) : '';
+        if (stepNum > 1) {
+          el.setAttribute('href', '/core/flows/create/step/' + (stepNum - 1) + q);
+        } else {
+          var dest = processId ? '/core/flows?id=' + encodeURIComponent(processId) : '/core';
+          el.setAttribute('href', dest);
+        }
+        el.setAttribute('data-spa-back-explicit', 'true');
+        return;
+      }
+      var wizBack = spaFlowWizardBackHref(path, window.location.search);
+      if (wizBack !== null) {
+        el.setAttribute('href', wizBack);
+        el.removeAttribute('data-spa-back-explicit');
+        return;
+      }
+      if (path === '/core/flows/create') {
+        var legacyPid = new URLSearchParams(window.location.search).get('id');
+        var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core';
+        el.setAttribute('href', legacyDest);
         el.setAttribute('data-spa-back-explicit', 'true');
         return;
       }
       el.setAttribute('href', '/core');
       el.removeAttribute('data-spa-back-explicit');
     }
+    window.spaSyncBannerBack = spaSyncBannerBack;
 
     function spaBannerBackInit() {
       var el = document.getElementById('spa-banner-back');
@@ -987,6 +1095,24 @@
       el.addEventListener('click', function (e) {
         if (el.classList.contains('spa-banner-back--hidden')) {
           e.preventDefault();
+          return;
+        }
+        /* Process-flow wizard: prefer real navigation history; fallback URL on href for new tab / empty stack. */
+        var pathNow = (window.location.pathname || '').replace(/\/$/, '') || '/';
+        var wizFallback = spaFlowWizardBackHref(pathNow, window.location.search);
+        if (wizFallback !== null) {
+          e.preventDefault();
+          /* Flush wizard form state (prompts, docs, etc.) before leaving — evidence page is not on the next URL's DOM. */
+          if (typeof window.persistSpaWizardState === 'function') {
+            try {
+              window.persistSpaWizardState();
+            } catch (err) {}
+          }
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = wizFallback;
+          }
           return;
         }
         if (el.getAttribute('data-spa-back-explicit') === 'true') {
@@ -1007,6 +1133,13 @@
       const indicator = document.getElementById('loading-indicator');
       if (indicator) {
         evt.detail.elt.setAttribute('hx-indicator', '#loading-indicator');
+      }
+    });
+
+    // After boosted navigation settles, re-sync href (afterOnLoad can be early relative to final pathname in some cases).
+    document.body.addEventListener('htmx:afterSettle', function () {
+      if (typeof spaSyncBannerBack === 'function') {
+        spaSyncBannerBack();
       }
     });
 
