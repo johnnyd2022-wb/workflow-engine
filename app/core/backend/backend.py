@@ -171,6 +171,9 @@ def _coerce_step_position(value):
     # Guard against pathological magnitudes (prevents log spam / abuse).
     if pos.copy_abs() > Decimal("1e30"):
         abort(400)
+    # Hard invariant: always store positions on the 1000-grid.
+    if (pos % Decimal("1000")) != 0:
+        abort(400)
     return pos
 
 
@@ -185,8 +188,13 @@ def _next_step_position(process_id: UUID) -> "Decimal":
         .scalar()
     )
     if max_pos is None:
-        return Decimal("1")
-    return Decimal(str(max_pos)) + Decimal("1")
+        return Decimal("1000")
+    grid = Decimal("1000")
+    mp = Decimal(str(max_pos))
+    rem = mp % grid
+    if rem != 0:
+        mp = mp + (grid - rem)
+    return mp + grid
 
 
 def _flow_state_key(process_id: UUID | None) -> str:
