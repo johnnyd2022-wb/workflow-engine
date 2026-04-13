@@ -1153,6 +1153,7 @@ class TestCustomExpiryWarningNotExceedDuration:
             process_id=process.id,
             org_id=org_id,
             step_number=1,
+            position=1000,
             name="Step",
             inputs=[],
             outputs=[step_output],

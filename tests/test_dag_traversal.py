@@ -73,7 +73,8 @@ def synthetic_org(db):
     from app.core.db.repositories.organisation_repo import OrganisationRepository
 
     org_repo = OrganisationRepository(db)
-    org = org_repo.create_org("Synthetic Test Org")
+    # Use unique org name to avoid collisions if teardown is skipped due to earlier failures.
+    org = org_repo.create_org(f"Synthetic Test Org {uuid4()}")
     try:
         yield org.id
     finally:
