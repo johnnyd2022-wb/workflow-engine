@@ -151,7 +151,7 @@ def _assert_valid_step_write(process_id: UUID, requested_step_number: int | None
     if step_id is not None:
         q = q.filter(Step.id != step_id)
 
-    existing_numbers = [n for (n,) in q.with_entities(Step.step_number).all() if isinstance(n, int)]
+    [n for (n,) in q.with_entities(Step.step_number).all() if isinstance(n, int)]
     # Option B: step_number is not canonical ordering. No uniqueness enforcement here.
     return None
 
