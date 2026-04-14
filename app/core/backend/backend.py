@@ -19,7 +19,7 @@ from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution
 from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
-from app.core.db import db_session
+from app.core.db import SessionLocal, db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -1185,7 +1185,11 @@ def update_step(process_id: str, step_id: str):
 def reorder_steps(process_id: str):
     """Batch reorder steps by updating their position values atomically.
 
-    Client should send ordered IDs. Server normalizes positions to prevent precision entropy.
+    Preferred payload:
+      { "orders": [ { "id": "<uuid>", "position": 1000 }, ... ] }
+
+    Alias:
+      - { "steps": [ { "id": "<uuid>", "position": ... }, ... ] }
     """
     org_id = UUID(g.org_id)
     try:
@@ -1193,71 +1197,75 @@ def reorder_steps(process_id: str):
     except ValueError:
         return jsonify({"error": "Invalid process ID"}), 400
 
-    # Ensure process belongs to org (IDOR guard).
-    repo = ProcessRepository(db_session)
-    if not repo.get_process_by_id(process_uuid, org_id=org_id):
-        return jsonify({"error": "Process not found"}), 404
-
     data = request.get_json() or {}
-    step_ids = data.get("step_ids") or data.get("ids") or data.get("ordered_step_ids")
-    if step_ids is None:
-        # Backwards compatibility: accept {orders:[{id,...},...]} but ignore client positions.
-        orders = data.get("orders") or data.get("steps") or []
-        if isinstance(orders, list) and orders:
-            step_ids = [(row.get("id") or row.get("step_id")) for row in orders if isinstance(row, dict)]
-    if not isinstance(step_ids, list) or not step_ids:
-        return jsonify({"error": "step_ids is required"}), 400
 
-    # Parse and de-duplicate while preserving order.
-    parsed_ids: list[UUID] = []
-    seen: set[UUID] = set()
-    for raw in step_ids:
-        try:
-            sid = UUID(str(raw))
-        except Exception:
-            return jsonify({"error": "Invalid step id"}), 400
-        if sid in seen:
-            continue
-        seen.add(sid)
-        parsed_ids.append(sid)
+    # Explicit orders with positions (preferred).
+    orders = data.get("orders") or data.get("steps")
 
     from decimal import Decimal
 
     try:
-        with db_session.begin():
+        if not isinstance(orders, list) or not orders:
+            return jsonify({"error": "orders is required"}), 400
+
+        updates: list[tuple[UUID, Decimal]] = []
+        for row in orders:
+            if not isinstance(row, dict):
+                return jsonify({"error": "Invalid orders payload"}), 400
+            sid = row.get("id") or row.get("step_id")
+            pos = row.get("position")
+            if not sid or pos is None:
+                return jsonify({"error": "Each order must include id and position"}), 400
+            try:
+                step_uuid = UUID(str(sid))
+                position = Decimal(str(pos))
+            except Exception:
+                return jsonify({"error": "Invalid id or position"}), 400
+            updates.append((step_uuid, position))
+
+        # Use an isolated session for this write endpoint.
+        # The app's before_request tenant middleware uses the scoped_session for reads and can leave
+        # an open transaction on it; using a fresh SessionLocal avoids nested-transaction surprises
+        # and ensures the commit persists.
+        sess = SessionLocal()
+        with sess.begin():
+            # Ensure process belongs to org (IDOR guard).
+            repo = ProcessRepository(sess)
+            if not repo.get_process_by_id(process_uuid, org_id=org_id):
+                return jsonify({"error": "Process not found"}), 404
+
             # Lock all steps for this process to prevent concurrent reorder collisions.
-            locked = db_session.query(Step.id).filter(Step.process_id == process_uuid).with_for_update().all()
+            locked = sess.query(Step.id).filter(Step.process_id == process_uuid).with_for_update().all()
             locked_ids = {sid for (sid,) in locked}
             if not locked_ids:
                 return jsonify({"error": "No steps to reorder"}), 400
 
-            # Ensure request includes only steps from this process.
-            for sid in parsed_ids:
-                if sid not in locked_ids:
+            for step_uuid, position in updates:
+                if step_uuid not in locked_ids:
+                    return jsonify({"error": "Step not found"}), 404
+                updated = (
+                    sess.query(Step)
+                    .filter(Step.id == step_uuid, Step.process_id == process_uuid)
+                    .update({"position": position})
+                )
+                if updated != 1:
                     return jsonify({"error": "Step not found"}), 404
 
-            # If the client omitted some steps, append them in current position order.
-            if len(parsed_ids) != len(locked_ids):
-                remaining = (
-                    db_session.query(Step.id)
-                    .filter(Step.process_id == process_uuid, ~Step.id.in_(parsed_ids))
-                    .order_by(Step.position)
-                    .all()
-                )
-                parsed_ids.extend([sid for (sid,) in remaining])
-
-            # Normalize positions with clean spacing.
-            spacing = Decimal("1000")
-            for i, sid in enumerate(parsed_ids, start=1):
-                new_pos = spacing * Decimal(i)
-                db_session.query(Step).filter(Step.id == sid, Step.process_id == process_uuid).update(
-                    {"position": new_pos}
-                )
-
+        sess.close()
         return jsonify({"message": "Reordered"}), 200
-    except Exception:
-        db_session.rollback()
-        return jsonify({"error": "Failed to reorder steps"}), 500
+    except Exception as e:
+        try:
+            sess.rollback()  # type: ignore[name-defined]
+            sess.close()  # type: ignore[name-defined]
+        except Exception:
+            db_session.rollback()
+        try:
+            from flask import current_app
+
+            current_app.logger.exception("Failed to reorder steps process_id=%s", process_id)
+        except Exception:
+            pass
+        return jsonify({"error": "Failed to reorder steps", "details": str(e)}), 500
 
 
 @core_bp.route("/api/core/processes/<process_id>/steps/<step_id>", methods=["DELETE"])
