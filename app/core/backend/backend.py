@@ -266,7 +266,16 @@ def _maybe_enforce_flow_wizard_step(flow_wizard_page: str, process_id: int | Non
     bucket = _flow_state_get(process_id)
     started = bool(bucket.get("started"))
     if not started:
-        return redirect("/core/flows/create" + _flow_qs())
+        # If a process id is present, the wizard might have been started via the API
+        # (e.g. Save step creates the process) without first hitting /core/flows/create,
+        # so the session sequencing state for this process id was never initialized.
+        # In that case, initialize in-place and allow navigation to the requested page.
+        if process_id is not None:
+            bucket["started"] = True
+            bucket["max_step"] = max(int(bucket.get("max_step") or 1), int(requested or 1))
+            session.modified = True
+        else:
+            return redirect("/core/flows/create" + _flow_qs())
 
     max_step = int(bucket.get("max_step") or 1)
     if requested > max_step + 1:

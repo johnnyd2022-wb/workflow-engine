@@ -4782,7 +4782,8 @@
         description: stepDescription || '',
         is_draft: true
       });
-      processId = newProcess.id;
+      processId = (newProcess && (newProcess.id || newProcess.process_id || newProcess.processId)) || null;
+      if (!processId) throw new Error('Could not create process (missing id)');
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.set('id', processId);
       window.history.replaceState({}, '', newUrl);
@@ -4912,7 +4913,7 @@
       }
     }
 
-    return stepSummary;
+    return { processId: processId, step: stepSummary };
   }
 
   // Create step from guided flow — SPA evidence: review only (session). Persist to API via Save step on summary.
@@ -4929,10 +4930,18 @@
       return;
     }
     try {
-      await commitGuidedStepToProcessApiFromSessionSnapshot(session);
+      const commitResult = await commitGuidedStepToProcessApiFromSessionSnapshot(session);
       persistClearedWizardDraftState();
       if (typeof updateStepSummaries === 'function') updateStepSummaries();
-      window.location.href = '/core/flows/create/next-steps' + (window.location.search || '');
+      // Do not reuse window.location.search here: it can be "?id=" (empty) which causes the
+      // server wizard enforcement to bounce the user back to process-overview.
+      const pid =
+        (commitResult && commitResult.processId) ||
+        new URLSearchParams(window.location.search || '').get('id') ||
+        (session && session.processId) ||
+        '';
+      const qs = pid ? ('?id=' + encodeURIComponent(String(pid))) : '';
+      window.location.href = '/core/flows/create/next-steps' + qs;
       return;
     } catch (e) {
       console.error(e);
