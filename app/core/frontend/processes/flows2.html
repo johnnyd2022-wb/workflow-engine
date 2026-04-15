@@ -2,6 +2,8 @@
 
 {% block title %}Workflow | SupplyChain V2{% endblock %}
 
+{% block body_class %}flows2-page{% endblock %}
+
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Workflow details">
   <style>
@@ -32,6 +34,155 @@
     @keyframes inventory-untracked-pulse {
       0%, 100% { box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3); }
       50% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.5), 0 0 0 1px rgba(239, 68, 68, 0.4); }
+    }
+
+    /* Process hero: borderless, modern header + metric strip */
+    .flows2-process-head {
+      margin-bottom: 4px;
+      padding: 0 0 4px;
+    }
+    .flows2-process-head__text {
+      min-width: 0;
+    }
+    .flows2-process-head__title {
+      margin: 0;
+      font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--text-primary, #111827);
+    }
+    .flows2-process-head__desc {
+      margin: 10px 0 0 0;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      color: var(--text-secondary, #6b7280);
+      max-width: 50rem;
+    }
+    .flows2-process-head__delete {
+      color: var(--error, #ef4444);
+      font-weight: 600;
+    }
+    .flows2-process-head__delete:hover {
+      background: rgba(239, 68, 68, 0.08);
+      color: var(--error, #dc2626);
+    }
+    .flows2-process-head__stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+    }
+    @media (max-width: 720px) {
+      .flows2-process-head__stats {
+        grid-template-columns: 1fr;
+      }
+    }
+    .flows2-stat {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.035);
+      border: none;
+      box-sizing: border-box;
+    }
+    .flows2-stat__icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--text-tertiary, #64748b);
+      background: rgba(255, 255, 255, 0.55);
+    }
+    .flows2-stat--active .flows2-stat__icon {
+      color: var(--primary, #3b82f6);
+      background: rgba(59, 130, 246, 0.12);
+    }
+    .flows2-stat--done .flows2-stat__icon {
+      color: var(--success, #22c55e);
+      background: rgba(34, 197, 94, 0.12);
+    }
+    .flows2-stat__body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .flows2-stat__label {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-tertiary, #94a3b8);
+      line-height: 1.2;
+    }
+    .flows2-stat__value {
+      font-size: 1.375rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--text-primary, #111827);
+      font-variant-numeric: tabular-nums;
+    }
+    .flows2-stat--active .flows2-stat__value {
+      color: var(--primary, #2563eb);
+    }
+    .flows2-stat--done .flows2-stat__value {
+      color: var(--success-dark, #15803d);
+    }
+
+    /* Fixed bottom action bar (shared .spa-fixed-action-bar; same shell as process-flow-spa wizard rail) */
+    .flows2-page {
+      --spa-mobile-bottom-tab-height: 64px;
+    }
+    .flows2-page .spa-fixed-action-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: env(safe-area-inset-bottom, 0px);
+      margin-top: 0;
+      z-index: 99;
+      padding: 0;
+      background: var(--bg-app, hsl(220, 20%, 97%));
+      border-top: 1px solid var(--border-default, #e5e7eb);
+      box-sizing: border-box;
+    }
+    @media (min-width: 768px) {
+      .flows2-page .spa-fixed-action-bar {
+        left: 260px;
+      }
+      .app-layout:has(#sidebar.collapsed) .flows2-page .spa-fixed-action-bar {
+        left: 72px;
+      }
+    }
+    @media (max-width: 767px) {
+      .flows2-page .spa-fixed-action-bar {
+        bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
+      }
+    }
+    .flows2-page .spa-fixed-action-bar__inner {
+      padding-left: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-left)));
+      padding-right: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-right)));
+    }
+    @media (max-width: 767px) {
+      .flows2-page .spa-fixed-action-bar__inner {
+        padding-left: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-left)));
+        padding-right: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-right)));
+      }
+    }
+    .flows2-page #page-content.page-content {
+      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    }
+    @media (max-width: 767px) {
+      .flows2-page #page-content.page-content {
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height) + 72px + env(safe-area-inset-bottom, 0px));
+      }
     }
 
     /* Page-specific: tab selector (same family as wizard segmented selectors) */
@@ -262,66 +413,120 @@
 
 {% block content %}
         <div class="max-content">
-          <!-- Process Header -->
-          <div class="card" style="padding: 24px; margin-bottom: 18px;">
-            <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: 12px;">
-              <div style="flex: 1; min-width: 0;">
-                <h1 class="page-title" style="font-size: 24px;" id="process-name">Loading...</h1>
-                <p class="page-subtitle" id="process-description">Loading process details...</p>
-              </div>
-              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;">
-                <button type="button" class="btn btn-sm" id="delete-process-btn" onclick="showFlows2DeleteProcessModal()" style="background: var(--error, #ef4444); color: #fff; border: 1px solid var(--error, #ef4444); font-weight: 600;">
-                  Delete
-                </button>
-                <button class="btn btn-primary" id="start-execution-btn" onclick="startExecution()">
-                  <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                  </svg>
-                  Start New Batch
-                </button>
+          <section class="spa-form-section" aria-label="Workflow illustration">
+            <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
+              <div class="inventory-spa-header__banner" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
+                  <defs>
+                    <!-- Same bronze body gradient as top-bar bee (base_spa); unique id so it does not clash with #beeG -->
+                    <linearGradient id="flows2bee-brandG" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stop-color="#C6863A"/>
+                      <stop offset="45%" stop-color="#B87333"/>
+                      <stop offset="100%" stop-color="#6B3F10"/>
+                    </linearGradient>
+                    <!-- Matches .spa-banner-back / .bee-profile__button: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%) -->
+                    <linearGradient id="flows2bee-hex" x1="12%" y1="8%" x2="92%" y2="94%" gradientUnits="objectBoundingBox">
+                      <stop offset="0%" stop-color="#F6D04C"/>
+                      <stop offset="45%" stop-color="#F1C40F"/>
+                      <stop offset="100%" stop-color="#D49A00"/>
+                    </linearGradient>
+                    <linearGradient id="flows2bee-link" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stop-color="#D49A00"/>
+                      <stop offset="50%" stop-color="#F1C40F"/>
+                      <stop offset="100%" stop-color="#D49A00"/>
+                    </linearGradient>
+                    <filter id="flows2bee-soft" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="1.5" stdDeviation="1.75" flood-opacity="0.1"/>
+                    </filter>
+                  </defs>
+                  <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
+                  <!-- Process link under cells (flat-top hex geometry: R=10.5, half-height k≈9.093) -->
+                  <path d="M 36 51 C 58 48, 68 46, 90 47 C 112 48, 118 50, 134 51" stroke="url(#flows2bee-link)" stroke-width="1.25" stroke-linecap="round" fill="none" opacity="0.55" stroke-dasharray="3 4"/>
+                  <g filter="url(#flows2bee-soft)">
+                    <path d="M 46.5 51 L 41.25 60.093 L 30.75 60.093 L 25.5 51 L 30.75 41.907 L 41.25 41.907 Z" fill="url(#flows2bee-hex)" stroke="#C47F00" stroke-width="0.85" stroke-opacity="0.55" stroke-linejoin="round"/>
+                    <path d="M 100.5 47 L 95.25 56.093 L 84.75 56.093 L 79.5 47 L 84.75 37.907 L 95.25 37.907 Z" fill="url(#flows2bee-hex)" stroke="#C47F00" stroke-width="0.85" stroke-opacity="0.55" stroke-linejoin="round"/>
+                    <path d="M 144.5 51 L 139.25 60.093 L 128.75 60.093 L 123.5 51 L 128.75 41.907 L 139.25 41.907 Z" fill="url(#flows2bee-hex)" stroke="#C47F00" stroke-width="0.85" stroke-opacity="0.55" stroke-linejoin="round"/>
+                  </g>
+                  <circle cx="36" cy="51" r="2.2" fill="#fff" opacity="0.9" stroke="#D49A00" stroke-width="0.4" stroke-opacity="0.45"/>
+                  <circle cx="90" cy="47" r="2.4" fill="#fff" opacity="0.92" stroke="#D49A00" stroke-width="0.4" stroke-opacity="0.45"/>
+                  <circle cx="134" cy="51" r="2.2" fill="#fff" opacity="0.9" stroke="#D49A00" stroke-width="0.4" stroke-opacity="0.45"/>
+                  <!-- Same steampunk bee as account menu (base_spa bee-svg), scaled for banner -->
+                  <g transform="translate(151, 18) scale(0.36)">
+                    <g opacity="0.98">
+                      <path d="M26 38 C16 30 18 16 31 19 C44 22 45 38 34 42 C31 43 29 41 26 38 Z" fill="none" stroke="#E5E7EB" stroke-width="4" stroke-linecap="round"/>
+                      <path d="M27 36 C19 29 21 19 31 20" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+                      <path d="M74 38 C84 30 82 16 69 19 C56 22 55 38 66 42 C69 43 71 41 74 38 Z" fill="none" stroke="#E5E7EB" stroke-width="4" stroke-linecap="round"/>
+                      <path d="M73 36 C81 29 79 19 69 20" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+                      <g>
+                        <ellipse cx="50" cy="58" rx="18" ry="24" fill="url(#flows2bee-brandG)" stroke="#E5E7EB" stroke-opacity="0.45" stroke-width="1"/>
+                        <rect x="40" y="44" width="20" height="6" rx="3" fill="#2B1B08" opacity="0.85" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
+                        <rect x="40" y="54" width="20" height="6" rx="3" fill="#3A240B" opacity="0.9" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
+                        <rect x="40" y="64" width="20" height="6" rx="3" fill="#2B1B08" opacity="0.85" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
+                        <circle cx="50" cy="35" r="11" fill="#1F2937" opacity="0.92" stroke="#E5E7EB" stroke-opacity="0.35" stroke-width="1"/>
+                        <circle cx="46.3" cy="33.4" r="2.6" fill="#22C55E" opacity="0.98"/>
+                        <circle cx="53.7" cy="33.4" r="2.6" fill="#22C55E" opacity="0.98"/>
+                        <circle cx="46.3" cy="33.4" r="1.3" fill="#052E16" opacity="0.95"/>
+                        <circle cx="53.7" cy="33.4" r="1.3" fill="#052E16" opacity="0.95"/>
+                        <circle cx="45.7" cy="32.8" r="0.6" fill="#A7F3D0" opacity="0.95"/>
+                        <circle cx="53.1" cy="32.8" r="0.6" fill="#A7F3D0" opacity="0.95"/>
+                        <path d="M68 58 L82 54 L68 62 Z" fill="#1F2937" opacity="0.95"/>
+                        <circle cx="35" cy="52" r="2" fill="#E5E7EB" opacity="0.22"/>
+                        <circle cx="65" cy="52" r="2" fill="#E5E7EB" opacity="0.22"/>
+                        <circle cx="50" cy="78" r="2" fill="#E5E7EB" opacity="0.22"/>
+                        <path d="M44 26 L38 14" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round"/>
+                        <path d="M56 26 L62 14" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round"/>
+                        <circle cx="38" cy="14" r="4" fill="#1F2937" opacity="0.95"/>
+                        <circle cx="62" cy="14" r="4" fill="#1F2937" opacity="0.95"/>
+                        <circle cx="50" cy="35" r="13" fill="none" stroke="#E5E7EB" stroke-width="3" opacity="0.35"/>
+                      </g>
+                    </g>
+                  </g>
+                </svg>
               </div>
             </div>
-            
-            <!-- Stats Row -->
-            <div class="flex items-center gap-4 mt-6" style="padding-top: 24px; border-top: 1px solid var(--border-light);">
-              <div class="flex items-center gap-2">
-                <div style="padding: 8px; background: hsl(220, 20%, 96%); border-radius: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary);">
+          </section>
+          <section class="spa-form-section flows2-process-head" aria-labelledby="process-name">
+            <div class="flows2-process-head__text">
+              <h1 class="flows2-process-head__title" id="process-name">Loading...</h1>
+              <p class="flows2-process-head__desc" id="process-description">Loading process details...</p>
+            </div>
+            <div class="flows2-process-head__stats" role="group" aria-label="Process metrics">
+              <div class="flows2-stat flows2-stat--steps">
+                <div class="flows2-stat__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
                   </svg>
                 </div>
-                <div>
-                  <p style="font-size: 12px; color: var(--text-secondary);">Steps</p>
-                  <p style="font-size: 18px; font-weight: 600; color: var(--text-primary);" id="process-step-count">0</p>
+                <div class="flows2-stat__body">
+                  <span class="flows2-stat__label">Steps</span>
+                  <span class="flows2-stat__value" id="process-step-count">0</span>
                 </div>
               </div>
-              <div style="width: 1px; height: 32px; background: var(--border-light);"></div>
-              <div class="flex items-center gap-2">
-                <div style="padding: 8px; background: var(--primary-bg); border-radius: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+              <div class="flows2-stat flows2-stat--active">
+                <div class="flows2-stat__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                   </svg>
                 </div>
-                <div>
-                  <p style="font-size: 12px; color: var(--text-secondary);">In-progress</p>
-                  <p style="font-size: 18px; font-weight: 600; color: var(--primary);" id="process-active-count">0</p>
+                <div class="flows2-stat__body">
+                  <span class="flows2-stat__label">In progress</span>
+                  <span class="flows2-stat__value" id="process-active-count">0</span>
                 </div>
               </div>
-              <div style="width: 1px; height: 32px; background: var(--border-light);"></div>
-              <div class="flex items-center gap-2">
-                <div style="padding: 8px; background: var(--success-bg); border-radius: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
+              <div class="flows2-stat flows2-stat--done">
+                <div class="flows2-stat__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                     <polyline points="22 4 12 14.01 9 11.01"/>
                   </svg>
                 </div>
-                <div>
-                  <p style="font-size: 12px; color: var(--text-secondary);">Completed</p>
-                  <p style="font-size: 18px; font-weight: 600; color: var(--success-dark);" id="process-completed-count">0</p>
+                <div class="flows2-stat__body">
+                  <span class="flows2-stat__label">Completed</span>
+                  <span class="flows2-stat__value" id="process-completed-count">0</span>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
           
           <!-- Mode selector (replaces old tabs) -->
           <div class="flows2-mode">
@@ -394,7 +599,20 @@
               <!-- Inventory will be loaded dynamically -->
             </div>
           </div>
-        </div>
+
+          {% set spa_fixed_action_aria_label = 'Process workflow actions' %}
+          {% set spa_fixed_action_left_html %}
+                <button type="button" class="btn btn-sm btn-ghost flows2-process-head__delete" id="delete-process-btn" onclick="showFlows2DeleteProcessModal()">Delete Process workflow</button>
+          {% endset %}
+          {% set spa_fixed_action_right_html %}
+                <button type="button" class="btn btn-primary" id="start-execution-btn" onclick="startExecution()">
+                  <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  Start New Batch
+                </button>
+          {% endset %}
+          {% include 'shared/spa-fixed-action-bar.html' %}
         </div>
 
   <!-- Execute Step Modal (Shared) -->

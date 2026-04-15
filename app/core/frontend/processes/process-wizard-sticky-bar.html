@@ -1,8 +1,8 @@
 {# Central sticky action rail for wizard steps. Set flow_wizard_sticky_variant before include: step_name | inputs | outputs | evidence | summary #}
 {% set _v = flow_wizard_sticky_variant | default('step_name') %}
-<div class="flow-wizard-sticky-bar flow-wizard-sticky-bar--{{ _v }}" data-flow-sticky-variant="{{ _v }}" aria-live="polite"{% if _v == 'summary' %} id="flow-wizard-summary-sticky" style="display: none;"{% endif %}>
-  <div class="flow-wizard-sticky-bar__inner">
-    <div class="flow-wizard-sticky-bar__left">
+<div class="spa-fixed-action-bar flow-wizard-sticky-bar flow-wizard-sticky-bar--{{ _v }}" data-flow-sticky-variant="{{ _v }}" aria-live="polite"{% if _v == 'summary' %} id="flow-wizard-summary-sticky" style="display: none;"{% endif %}>
+  <div class="spa-fixed-action-bar__inner flow-wizard-sticky-bar__inner">
+    <div class="spa-fixed-action-bar__left flow-wizard-sticky-bar__left">
       {% if _v == 'inputs' %}
       <span id="guided-inputs-sticky-count" class="flow-wizard-sticky-meta">0 inputs</span>
       <span class="flow-wizard-sticky-bar__sep" aria-hidden="true">|</span>
@@ -13,7 +13,7 @@
       <button type="button" class="flow-wizard-sticky-clear-btn" id="guided-outputs-sticky-clear" aria-label="Clear all outputs" onclick="if(window.clearAllGuidedOutputs)window.clearAllGuidedOutputs()">clear</button>
       {% endif %}
     </div>
-    <div class="flow-wizard-sticky-bar__right">
+    <div class="spa-fixed-action-bar__right flow-wizard-sticky-bar__right">
       {% if _v == 'process_overview' %}
       <button type="button" class="btn btn-primary" onclick="window.goFromProcessOverviewToStepName()">Next</button>
       {% elif _v == 'step_name' or _v == 'inputs' or _v == 'outputs' %}

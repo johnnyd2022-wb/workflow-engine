@@ -1,0 +1,23 @@
+{# Bottom action rail (sticky in modals / scroll regions; fixed on SPA pages via page-level CSS).
+   Set before include (Jinja):
+     spa_fixed_action_right_html — markup for primary actions (required)
+     spa_fixed_action_left_html — optional secondary/meta slot (omit or empty for right-aligned actions only)
+     spa_fixed_action_aria_label — optional region label (default: Page actions)
+     spa_fixed_action_extra_class — optional extra classes on outer element
+#}
+{% set _left = spa_fixed_action_left_html | default('', true) %}
+{% set _right = spa_fixed_action_right_html | default('', true) %}
+{% set _label = spa_fixed_action_aria_label | default('Page actions') %}
+{% set _extra = spa_fixed_action_extra_class | default('') %}
+<div
+  class="spa-fixed-action-bar{% if not _left %} spa-fixed-action-bar--right-only{% endif %} {{ _extra }}"
+  role="region"
+  aria-label="{{ _label }}"
+>
+  <div class="spa-fixed-action-bar__inner">
+    {% if _left %}
+    <div class="spa-fixed-action-bar__left">{{ _left | safe }}</div>
+    {% endif %}
+    <div class="spa-fixed-action-bar__right">{{ _right | safe }}</div>
+  </div>
+</div>
