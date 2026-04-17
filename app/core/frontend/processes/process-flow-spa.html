@@ -264,7 +264,7 @@
     .process-flow-spa {
       --spa-mobile-bottom-tab-height: 64px;
     }
-    .process-flow-spa .flow-wizard-sticky-bar {
+    .process-flow-spa .spa-fixed-action-bar {
       position: fixed;
       left: 0;
       right: 0;
@@ -277,26 +277,24 @@
       box-sizing: border-box;
     }
     @media (min-width: 768px) {
-      .process-flow-spa .flow-wizard-sticky-bar {
+      .process-flow-spa .spa-fixed-action-bar {
         left: 260px;
       }
-      .app-layout:has(#sidebar.collapsed) .process-flow-spa .flow-wizard-sticky-bar {
+      .app-layout:has(#sidebar.collapsed) .process-flow-spa .spa-fixed-action-bar {
         left: 72px;
       }
     }
     @media (max-width: 767px) {
-      .process-flow-spa .flow-wizard-sticky-bar {
+      .process-flow-spa .spa-fixed-action-bar {
         bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
       }
     }
-    /* Same vertical inset as desktop; no extra safe-area in padding (bar sits above bottom tab). */
-    .process-flow-spa .flow-wizard-sticky-bar__inner {
-      padding-top: 16px;
-      padding-bottom: 16px;
+    /* Horizontal inset only here; vertical padding from shared .spa-fixed-action-bar__inner (matches metric rows). */
+    .process-flow-spa .spa-fixed-action-bar__inner {
       padding-left: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-left)));
       padding-right: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-right)));
     }
-    .process-flow-spa .flow-wizard-sticky-bar--summary .flow-wizard-sticky-bar__inner {
+    .process-flow-spa .flow-wizard-sticky-bar--summary .spa-fixed-action-bar__inner {
       display: flex;
       flex-direction: row;
       flex-wrap: wrap;
@@ -305,27 +303,27 @@
       gap: 12px;
     }
     @media (max-width: 640px) {
-      .process-flow-spa .flow-wizard-sticky-bar--summary .flow-wizard-sticky-bar__inner {
+      .process-flow-spa .flow-wizard-sticky-bar--summary .spa-fixed-action-bar__inner {
         flex-direction: column;
         text-align: center;
       }
     }
     @media (max-width: 767px) {
-      .process-flow-spa .flow-wizard-sticky-bar__inner {
+      .process-flow-spa .spa-fixed-action-bar__inner {
         padding-left: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-left)));
         padding-right: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-right)));
       }
     }
-    .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) .create-process-step-body {
+    .process-flow-spa .create-process-step:has(.spa-fixed-action-bar) .create-process-step-body {
       padding-bottom: 16px;
     }
-    .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) {
-      padding-bottom: 92px;
+    .process-flow-spa .create-process-step:has(.spa-fixed-action-bar) {
+      padding-bottom: 88px;
     }
     @media (max-width: 767px) {
-      .process-flow-spa .create-process-step:has(.flow-wizard-sticky-bar) {
+      .process-flow-spa .create-process-step:has(.spa-fixed-action-bar) {
         /* Tab + fixed rail: keep last field above both stacked layers */
-        padding-bottom: calc(var(--spa-mobile-bottom-tab-height) + 76px);
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height) + 72px);
       }
     }
 

@@ -164,59 +164,7 @@
 #create-process-step-4 .step4-trace-heading { font-size: 13px; font-weight: 600; margin: 0 0 6px 0; color: var(--text-primary); }
 #create-process-step-4 .step4-trace-block .flow-mode-segmented { margin-top: 2px; }
 #create-process-step-4 .step4-add-prompt-row { margin-bottom: 12px; }
-/* Wizard sticky rail (modal: sticky at end of scroll; SPA: fixed in process-flow-spa.html)
-   Vertical inset lives on __inner only (symmetric top/bottom) so alignment is identical at every breakpoint.
-   Modal adds safe-area to bottom padding only; SPA overrides padding-bottom to match padding-top. */
-.flow-wizard-sticky-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 15;
-  margin-top: 20px;
-  padding: 0;
-  background: var(--bg-app, hsl(220, 20%, 97%));
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  border-top: 1px solid var(--border-default, #e5e7eb);
-  box-sizing: border-box;
-}
-.flow-wizard-sticky-bar__inner {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: nowrap;
-  width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
-  box-sizing: border-box;
-  padding-top: 16px;
-  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  padding-left: clamp(6px, 1.5vw, 13px);
-  padding-right: clamp(6px, 1.5vw, 13px);
-}
-.flow-wizard-sticky-bar__left {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  flex: 1;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.25;
-}
-.flow-wizard-sticky-bar__right {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-.flow-wizard-sticky-bar__right .btn.btn-primary {
-  /* Match default .btn size (14px); avoid stray btn-sm on rail */
-  font-size: 14px;
-  font-weight: 500;
-}
+/* Wizard rail layout: shared .spa-fixed-action-bar in styles2.css (also used by flows2, future SPAs). */
 .flow-wizard-sticky-bar__sep {
   color: var(--text-tertiary, #9ca3af);
   font-size: 14px;

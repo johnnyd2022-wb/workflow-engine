@@ -1846,3 +1846,62 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ----- Shared SPA bottom action bar (create-process wizard, process-flow-spa, flows2, …) -----
+   Default: sticky at bottom of scroll container. Pages like process-flow-spa / flows2 override to fixed + sidebar inset.
+   Inner vertical padding matches metric “chip” rows (e.g. .flows2-stat: 12px). */
+.spa-fixed-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
+  margin-top: 20px;
+  padding: 0;
+  background: var(--bg-app, hsl(220, 20%, 97%));
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  border-top: 1px solid var(--border-default, #e5e7eb);
+  box-sizing: border-box;
+}
+.spa-fixed-action-bar__inner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: nowrap;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding-top: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: clamp(6px, 1.5vw, 13px);
+  padding-right: clamp(6px, 1.5vw, 13px);
+}
+.spa-fixed-action-bar--right-only .spa-fixed-action-bar__inner {
+  justify-content: flex-end;
+}
+.spa-fixed-action-bar__left {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.spa-fixed-action-bar__right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.spa-fixed-action-bar__right .btn.btn-primary {
+  font-size: 14px;
+  font-weight: 500;
+}

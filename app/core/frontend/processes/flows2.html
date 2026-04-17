@@ -1,46 +1,75 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="csrf-token" content="{{ csrf_token() }}">
-  <meta name="description" content="SupplyChain V2 - Process Flow Details">
-  <title>Process Flow | SupplyChain V2</title>
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Workflow | SupplyChain V2{% endblock %}
+
+{% block body_class %}flows2-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="SupplyChain V2 - Workflow details">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <style>
+    /* Shared segmented control (copied from create-process-step-content-styles.html) */
+    .flow-mode-segmented {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: stretch;
+      width: 100%;
+      max-width: 100%;
+      gap: 0;
+      border-radius: var(--radius-md, 8px);
+      overflow: hidden;
+      border: 1px solid var(--border-default, #e5e7eb);
+      box-sizing: border-box;
+    }
+    .flow-mode-segment {
+      flex: 1 1 0;
+      min-width: 0;
+      margin: 0;
+      padding: 10px 4px;
+      min-height: 44px;
+      border: none;
+      background: var(--bg-card, #fff);
+      color: var(--text-secondary, #6b7280);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    @media (min-width: 480px) {
+      .flow-mode-segment { font-size: 13px; padding: 8px 10px; min-height: 0; }
+    }
+    .flow-mode-segment + .flow-mode-segment { border-left: 1px solid var(--border-default, #e5e7eb); }
+    .flow-mode-segment:hover { background: var(--bg-secondary, #f9fafb); color: var(--text-primary, #111827); }
+    .flow-mode-segment.flow-mode-segment--active { background: var(--primary, #3b82f6); color: #fff; }
+    .flow-mode-segment.flow-mode-segment--active:hover { color: #fff; }
+
     /* Searchable dropdown styles */
-    .searchable-dropdown-container {
-      position: relative;
-    }
-    .searchable-dropdown-list {
-      z-index: 1000;
-    }
-    .searchable-dropdown-list .dropdown-item:hover {
-      background: var(--bg-hover, rgba(0, 0, 0, 0.05)) !important;
-    }
-    .searchable-dropdown-list .dropdown-item.selected {
-      background: var(--bg-hover, rgba(0, 0, 0, 0.05));
-    }
+    .searchable-dropdown-container { position: relative; }
+    .searchable-dropdown-list { z-index: 1000; }
+    .searchable-dropdown-list .dropdown-item:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.05)) !important; }
+    .searchable-dropdown-list .dropdown-item.selected { background: var(--bg-hover, rgba(0, 0, 0, 0.05)); }
+
     .inventory-items-scroll-container {
       scrollbar-width: thin;
       scrollbar-color: var(--border-default, #e5e7eb) transparent;
     }
-    .inventory-items-scroll-container::-webkit-scrollbar {
-      width: 6px;
-    }
-    .inventory-items-scroll-container::-webkit-scrollbar-track {
-      background: transparent;
-    }
+    .inventory-items-scroll-container::-webkit-scrollbar { width: 6px; }
+    .inventory-items-scroll-container::-webkit-scrollbar-track { background: transparent; }
     .inventory-items-scroll-container::-webkit-scrollbar-thumb {
       background-color: var(--border-default, #e5e7eb);
       border-radius: 3px;
     }
-    .inventory-items-scroll-container::-webkit-scrollbar-thumb:hover {
-      background-color: var(--text-tertiary, #9ca3af);
-    }
+    .inventory-items-scroll-container::-webkit-scrollbar-thumb:hover { background-color: var(--text-tertiary, #9ca3af); }
+
     /* Untracked inventory item (same as sourcemap check-needed) */
     .inventory-card-untracked {
       border: 2px solid var(--error, #ef4444);
@@ -51,223 +80,967 @@
       0%, 100% { box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3); }
       50% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.5), 0 0 0 1px rgba(239, 68, 68, 0.4); }
     }
-  </style>
-</head>
-<body>
-  <div class="app-layout">
-    <!-- Shared Sidebar - V2 Modern Dark -->
-    {% include 'shared/sidebar-v2.html' %}
-    
-    <!-- Main Content -->
-    <div class="main-content">
-      <!-- Header -->
-      <header class="main-header">
-        <div>
-          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">Supply Chain Management</h1>
-          <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Manage and monitor all your operational workflows</p>
-        </div>
-        <div class="header-actions">
-          <button class="header-icon-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-            <span class="header-notification-dot"></span>
-          </button>
-          <button class="header-icon-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
-        </div>
-      </header>
 
-      {% include 'shared/system-findings-banner.html' %}
-      
-      <!-- Page Content -->
-      <main class="page-content">
+    /* Process hero: borderless, modern header + metric strip */
+    .flows2-process-head {
+      margin-bottom: 4px;
+      padding: 0 0 4px;
+    }
+    .flows2-process-head__text {
+      min-width: 0;
+      text-align: center;
+    }
+    .flows2-process-head__title {
+      margin: 0;
+      font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--text-primary, #111827);
+    }
+    .flows2-process-head__desc {
+      margin: 10px auto 0 auto;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      color: var(--text-secondary, #6b7280);
+      max-width: 50rem;
+    }
+    .flows2-process-head__delete {
+      color: var(--error, #ef4444);
+      font-weight: 600;
+    }
+    .flows2-process-head__delete:hover {
+      background: rgba(239, 68, 68, 0.08);
+      color: var(--error, #dc2626);
+    }
+    .flows2-process-head__stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0;
+      margin-top: 22px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+    @media (max-width: 720px) {
+      /* Mobile: keep the 3 stat tiles side-by-side (no stacking). Tighten spacing + center the hero. */
+      .inventory-spa-header-wrap {
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .flows2-process-head__text {
+        text-align: center;
+      }
+      .flows2-process-head__desc {
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .flows2-process-head__stats {
+        /* Modern segmented surface (3-up, no overflow) */
+        gap: 0;
+        margin-top: 16px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+        overflow: hidden;
+      }
+      .flows2-stat {
+        /* Segment: icon + value on one line, label below */
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 10px 6px 9px;
+        gap: 4px;
+        border-radius: 0;
+        background: transparent;
+        position: relative;
+      }
+      .flows2-stat + .flows2-stat::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 10px;
+        bottom: 10px;
+        width: 1px;
+        background: rgba(15, 23, 42, 0.08);
+      }
+      .flows2-stat__icon {
+        display: none;
+      }
+      .flows2-stat__body {
+        align-items: center;
+      }
+      .flows2-stat__label {
+        font-size: 0.62rem;
+        letter-spacing: 0.05em;
+        line-height: 1.05;
+        white-space: nowrap;
+      }
+      .flows2-stat__value {
+        font-size: 1.05rem;
+      }
+      /* Make the middle label fit without abbreviation */
+      .flows2-stat--active .flows2-stat__label {
+        letter-spacing: 0.03em;
+      }
+    }
+    .flows2-stat {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-width: 0;
+      padding: 14px 14px;
+      border-radius: 0;
+      background: transparent;
+      border: none;
+      box-sizing: border-box;
+      position: relative;
+    }
+    .flows2-stat + .flows2-stat::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 12px;
+      bottom: 12px;
+      width: 1px;
+      background: rgba(15, 23, 42, 0.08);
+    }
+    .flows2-stat__icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--text-tertiary, #64748b);
+      background: rgba(255, 255, 255, 0.55);
+    }
+    .flows2-stat--active .flows2-stat__icon {
+      color: var(--primary, #3b82f6);
+      background: rgba(59, 130, 246, 0.12);
+    }
+    .flows2-stat--done .flows2-stat__icon {
+      color: var(--success, #22c55e);
+      background: rgba(34, 197, 94, 0.12);
+    }
+    .flows2-stat__body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .flows2-stat__icon {
+      width: 34px;
+      height: 34px;
+    }
+    .flows2-stat__label {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-tertiary, #94a3b8);
+      line-height: 1.2;
+    }
+    .flows2-stat__value {
+      font-size: 1.375rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--text-primary, #111827);
+      font-variant-numeric: tabular-nums;
+    }
+    .flows2-stat--active .flows2-stat__value {
+      color: var(--primary, #2563eb);
+    }
+    .flows2-stat--done .flows2-stat__value {
+      color: var(--success-dark, #15803d);
+    }
+
+    /* Fixed bottom action bar (shared .spa-fixed-action-bar; same shell as process-flow-spa wizard rail) */
+    .flows2-page {
+      --spa-mobile-bottom-tab-height: 64px;
+    }
+    .flows2-page .spa-fixed-action-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: env(safe-area-inset-bottom, 0px);
+      margin-top: 0;
+      z-index: 99;
+      padding: 0;
+      background: var(--bg-app, hsl(220, 20%, 97%));
+      border-top: 1px solid var(--border-default, #e5e7eb);
+      box-sizing: border-box;
+    }
+    @media (min-width: 768px) {
+      .flows2-page .spa-fixed-action-bar {
+        left: 260px;
+      }
+      .app-layout:has(#sidebar.collapsed) .flows2-page .spa-fixed-action-bar {
+        left: 72px;
+      }
+    }
+    @media (max-width: 767px) {
+      .flows2-page .spa-fixed-action-bar {
+        bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
+      }
+    }
+    .flows2-page .spa-fixed-action-bar__inner {
+      padding-left: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-left)));
+      padding-right: calc(clamp(7px, 1.35vw, 13px) + max(0px, env(safe-area-inset-right)));
+    }
+    @media (max-width: 767px) {
+      .flows2-page .spa-fixed-action-bar__inner {
+        padding-left: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-left)));
+        padding-right: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-right)));
+      }
+    }
+    .flows2-page #page-content.page-content {
+      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    }
+    @media (max-width: 767px) {
+      .flows2-page #page-content.page-content {
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height) + 72px + env(safe-area-inset-bottom, 0px));
+      }
+    }
+
+    /* Page-specific: tab selector (same family as wizard segmented selectors) */
+    .flows2-mode { margin-top: 20px; }
+    .flows2-panel { display: none; margin-top: 18px; }
+    .flows2-panel[data-active="true"] { display: block; }
+
+    /* Manage menu (sticky bar) */
+    .flows2-manage-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .flows2-manage-btn {
+      min-width: 152px;
+      justify-content: center;
+      background: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%);
+      color: rgba(17, 24, 39, 0.96);
+      border: none;
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 225, 120, 0.18);
+      transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+      font-weight: 700;
+    }
+    .flows2-manage-btn:hover {
+      transform: translateY(-1px);
+      background: linear-gradient(145deg, #FFE680 0%, #F1C40F 45%, #C47F00 100%);
+      box-shadow: 0 24px 56px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 225, 120, 0.25);
+    }
+    .flows2-manage-btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(255, 230, 128, 0.35), 0 24px 56px rgba(0, 0, 0, 0.28);
+    }
+    .flows2-manage-menu {
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 10px);
+      width: 100%;
+      min-width: 220px;
+      display: none;
+      padding: 8px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+      backdrop-filter: blur(10px);
+      box-sizing: border-box;
+      z-index: 100;
+      transform-origin: bottom left;
+    }
+    .flows2-manage-menu[data-open="true"] { display: block; }
+    .flows2-manage-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.28);
+      z-index: 98;
+    }
+    .flows2-manage-backdrop[data-open="true"] { display: block; }
+    @media (min-width: 768px) {
+      /* Desktop: no modal backdrop; only the upward popover */
+      .flows2-manage-backdrop { display: none !important; }
+    }
+
+    @media (max-width: 767px) {
+      /* Mobile: menu becomes a full-width sheet with a backdrop that blocks interactions behind it */
+      .flows2-manage-menu {
+        position: fixed;
+        left: 0;
+        right: 0;
+        width: auto;
+        min-width: 0;
+        bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+        border-radius: 18px 18px 0 0;
+        margin: 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        transform-origin: bottom center;
+        z-index: 100;
+      }
+      .flows2-manage-backdrop {
+        z-index: 99;
+      }
+      .flows2-manage-item {
+        padding: 12px 12px;
+        font-size: 16px;
+        border-radius: 14px;
+      }
+    }
+    .flows2-manage-item {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      width: 100%;
+      gap: 10px;
+      padding: 10px 10px;
+      margin: 0;
+      border: none;
+      background: transparent;
+      color: var(--text-primary, #111827);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.12s ease, transform 0.12s ease;
+      font-family: inherit;
+    }
+    .flows2-manage-item:hover {
+      background: rgba(15, 23, 42, 0.06);
+      transform: translateY(-1px);
+    }
+    .flows2-manage-item--danger {
+      color: var(--error, #ef4444);
+    }
+    .flows2-manage-item--danger:hover {
+      background: rgba(239, 68, 68, 0.08);
+    }
+
+    /* Steps list: premium, borderless expandable rows (SPA style) */
+    .steps-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+    }
+    .flow-step-num-badge {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      border-radius: 50%;
+      background: var(--primary, #3b82f6);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .flows2-step {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 0;
+      border: none;
+      border-radius: 14px;
+      background: transparent;
+      box-shadow: none;
+      box-sizing: border-box;
+      overflow: hidden;
+      transition: background 0.14s ease, box-shadow 0.14s ease;
+    }
+    .flows2-step + .flows2-step {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .flows2-step:hover {
+      background: rgba(15, 23, 42, 0.03);
+    }
+    .flows2-step:focus-within {
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    }
+    .flows2-step__header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      padding: 14px 12px;
+      background: transparent;
+    }
+    .flows2-step__drag {
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-tertiary, #9ca3af);
+      cursor: grab;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .flows2-step__drag:hover {
+      border-color: var(--border-default, #e5e7eb);
+      background: rgba(0, 0, 0, 0.03);
+      color: var(--text-primary, #111827);
+    }
+    .flows2-step__titlewrap {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      cursor: pointer;
+    }
+    .flows2-step__titlewrap:hover .flows2-step__title {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-color: rgba(59, 130, 246, 0.35);
+    }
+    .flows2-step__title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary, #111827);
+      line-height: 1.25;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+    .flows2-step__sub {
+      font-size: 12px;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.4;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+    .flows2-step__meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-tertiary, #9ca3af);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .flows2-step__toggle {
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--text-tertiary, #9ca3af);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+    }
+    .flows2-step__toggle:hover {
+      border-color: var(--border-default, #e5e7eb);
+      background: rgba(0, 0, 0, 0.03);
+      color: var(--text-primary, #111827);
+    }
+    .flows2-step__toggle svg { transition: transform 0.18s ease; }
+    .flows2-step[data-expanded="true"] .flows2-step__toggle svg { transform: rotate(180deg); }
+    .flows2-step[data-expanded="true"] .flows2-step__toggle { background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.18); color: var(--text-primary, #111827); }
+    .flows2-step__body {
+      /* Animate open/close (JS toggles data-expanded on .flows2-step) */
+      display: block;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
+      border-top: 1px solid var(--border-light, #e5e7eb);
+    }
+    .flows2-step[data-expanded="true"] .flows2-step__body {
+      max-height: 1800px;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .flows2-step__body-inner {
+      padding: 12px 12px 14px;
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .flows2-step__grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    @media (min-width: 1024px) {
+      .flows2-step__grid { grid-template-columns: 1fr 1fr; gap: 16px; }
+    }
+    .flows2-step__panel-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary, #6b7280);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 0 0 8px 0;
+    }
+    .flows2-step__actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(15, 23, 42, 0.06);
+    }
+
+    @media (max-width: 720px) {
+      .flows2-step__header { padding: 12px 12px; gap: 10px; }
+      .flows2-step__drag, .flows2-step__toggle { width: 34px; height: 34px; }
+      .flows2-step__body-inner { padding: 12px 12px 12px; }
+      .flows2-step__meta { display: none; }
+    }
+
+    /* Step expanded summary (clean, read-only; borderless hairline stack) */
+    .flows2-section {
+      padding: 14px 0;
+    }
+    .flows2-section + .flows2-section {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .flows2-section__title {
+      margin: 0 0 8px 0;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary, #6b7280);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .flows2-summary-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+    .flows2-summary-item {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      padding: 12px 12px;
+      min-width: 0;
+    }
+    .flows2-summary-item + .flows2-summary-item {
+      border-top: 1px solid rgba(15, 23, 42, 0.06);
+    }
+    .flows2-summary-item__main {
+      width: 100%;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .flows2-summary-item__row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+    .flows2-summary-item__title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary, #111827);
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .flows2-summary-item__sub {
+      font-size: 12px;
+      color: var(--text-secondary, #6b7280);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .flows2-chip {
+      align-self: flex-start;
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary, #6b7280);
+      background: rgba(15, 23, 42, 0.05);
+      border: none;
+      padding: 4px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+    }
+    .flows2-empty {
+      margin: 0;
+      padding: 6px 0;
+      font-size: 12px;
+      color: var(--text-secondary, #6b7280);
+    }
+    .flows2-summary-list--empty {
+      min-height: 54px;
+      display: flex;
+      align-items: stretch;
+    }
+    .flows2-cols {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      width: 100%;
+      min-width: 0;
+    }
+    @media (min-width: 1024px) {
+      .flows2-cols { grid-template-columns: 1fr 1fr; gap: 16px; }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
         <div class="max-content">
-          <!-- Back Link -->
-          <a href="/core" class="back-link">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"/>
-              <polyline points="12 19 5 12 12 5"/>
-            </svg>
-            Back to Process Hub
-          </a>
-          
-          <!-- Process Header Card -->
-          <div class="card" style="padding: 24px; margin-bottom: 24px;">
-            <div class="flex justify-between items-center" style="flex-wrap: wrap; gap: 12px;">
-              <div style="flex: 1; min-width: 0;">
-                <h1 class="page-title" style="font-size: 24px;" id="process-name">Loading...</h1>
-                <p class="page-subtitle" id="process-description">Loading process details...</p>
-              </div>
-              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;">
-                <button type="button" class="btn btn-sm" id="delete-process-btn" onclick="showFlows2DeleteProcessModal()" style="background: var(--error, #ef4444); color: #fff; border: 1px solid var(--error, #ef4444); font-weight: 600;">
-                  Delete
-                </button>
-                <button class="btn btn-primary" id="start-execution-btn" onclick="startExecution()">
-                  <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                  </svg>
-                  Start New Execution
-                </button>
+          <section class="spa-form-section" aria-label="Workflow illustration">
+            <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
+              <div class="inventory-spa-header__banner" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
+                  <defs>
+                    <!-- Match other SPA banners: connector + 3 nodes + soft shadow -->
+                    <linearGradient id="flows2honey-line" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stop-color="#6366f1"/>
+                      <stop offset="100%" stop-color="#22d3ee"/>
+                    </linearGradient>
+                    <linearGradient id="flows2honey-node-a" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#818cf8"/>
+                      <stop offset="100%" stop-color="#4f46e5"/>
+                    </linearGradient>
+                    <linearGradient id="flows2honey-node-b" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#fbbf24"/>
+                      <stop offset="100%" stop-color="#d97706"/>
+                    </linearGradient>
+                    <linearGradient id="flows2honey-node-c" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#34d399"/>
+                      <stop offset="100%" stop-color="#059669"/>
+                    </linearGradient>
+                    <filter id="flows2honey-soft" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.12"/>
+                    </filter>
+                  </defs>
+                  <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
+                  <!-- Connector: stays inside the edge nodes (starts/ends at node centers) -->
+                  <path d="M28 52 C 55 38, 75 38, 100 48 C 125 58, 145 38, 172 52" stroke="url(#flows2honey-line)" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.85"/>
+                  <g filter="url(#flows2honey-soft)">
+                    <!-- Honeycomb nodes (hexes) instead of circles; same layout as other SPA banners -->
+                    <polygon points="42,52 35,64.124 21,64.124 14,52 21,39.876 35,39.876" fill="url(#flows2honey-node-a)"/>
+                    <polygon points="116,48 108,61.856 92,61.856 84,48 92,34.144 108,34.144" fill="url(#flows2honey-node-b)"/>
+                    <polygon points="186,52 179,64.124 165,64.124 158,52 165,39.876 179,39.876" fill="url(#flows2honey-node-c)"/>
+                  </g>
+                  <circle cx="28" cy="52" r="4" fill="#fff" opacity="0.9"/>
+                  <circle cx="100" cy="48" r="5" fill="#fff" opacity="0.9"/>
+                  <circle cx="172" cy="52" r="4" fill="#fff" opacity="0.9"/>
+                </svg>
               </div>
             </div>
-            
-            <!-- Stats Row -->
-            <div class="flex items-center gap-4 mt-6" style="padding-top: 24px; border-top: 1px solid var(--border-light);">
-              <div class="flex items-center gap-2">
-                <div style="padding: 8px; background: hsl(220, 20%, 96%); border-radius: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary);">
+          </section>
+          <section class="spa-form-section flows2-process-head" aria-labelledby="process-name">
+            <div class="flows2-process-head__text">
+              <h1 class="flows2-process-head__title" id="process-name">Loading...</h1>
+              <p class="flows2-process-head__desc" id="process-description">Loading process details...</p>
+            </div>
+            <div class="flows2-process-head__stats" role="group" aria-label="Process metrics">
+              <div class="flows2-stat flows2-stat--steps">
+                <div class="flows2-stat__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>
                   </svg>
                 </div>
-                <div>
-                  <p style="font-size: 12px; color: var(--text-secondary);">Steps</p>
-                  <p style="font-size: 18px; font-weight: 600; color: var(--text-primary);" id="process-step-count">0</p>
+                <div class="flows2-stat__body">
+                  <span class="flows2-stat__label">Steps</span>
+                  <span class="flows2-stat__value" id="process-step-count">0</span>
                 </div>
               </div>
-              <div style="width: 1px; height: 32px; background: var(--border-light);"></div>
-              <div class="flex items-center gap-2">
-                <div style="padding: 8px; background: var(--primary-bg); border-radius: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+              <div class="flows2-stat flows2-stat--active">
+                <div class="flows2-stat__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                   </svg>
                 </div>
-                <div>
-                  <p style="font-size: 12px; color: var(--text-secondary);">Active</p>
-                  <p style="font-size: 18px; font-weight: 600; color: var(--primary);" id="process-active-count">0</p>
+                <div class="flows2-stat__body">
+                  <span class="flows2-stat__label">In progress</span>
+                  <span class="flows2-stat__value" id="process-active-count">0</span>
                 </div>
               </div>
-              <div style="width: 1px; height: 32px; background: var(--border-light);"></div>
-              <div class="flex items-center gap-2">
-                <div style="padding: 8px; background: var(--success-bg); border-radius: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
+              <div class="flows2-stat flows2-stat--done">
+                <div class="flows2-stat__icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                     <polyline points="22 4 12 14.01 9 11.01"/>
                   </svg>
                 </div>
-                <div>
-                  <p style="font-size: 12px; color: var(--text-secondary);">Completed</p>
-                  <p style="font-size: 18px; font-weight: 600; color: var(--success-dark);" id="process-completed-count">0</p>
+                <div class="flows2-stat__body">
+                  <span class="flows2-stat__label">Completed</span>
+                  <span class="flows2-stat__value" id="process-completed-count">0</span>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
           
-          <!-- Tabs -->
-          <div class="tabs">
-            <div class="tabs-list">
-              <button class="tab-trigger active" data-tab="tab-structure">Process Structure</button>
-              <button class="tab-trigger" data-tab="tab-executions">Executions <span class="badge badge-accent" style="margin-left:0.5rem;" id="executions-badge">0</span></button>
-              <button class="tab-trigger" data-tab="tab-inventory">Inventory</button>
+          <!-- Mode selector (replaces old tabs) -->
+          <div class="flows2-mode">
+            <div class="flow-mode-segmented" role="tablist" aria-label="Workflow sections">
+              <button type="button" class="flow-mode-segment flow-mode-segment--active" role="tab" aria-selected="true" data-flows2-target="structure">Process Structure</button>
+              <button type="button" class="flow-mode-segment" role="tab" aria-selected="false" data-flows2-target="batches">Batches <span class="badge badge-accent" style="margin-left:0.5rem;" id="executions-badge">0</span></button>
+              <button type="button" class="flow-mode-segment" role="tab" aria-selected="false" data-flows2-target="inventory">Inventory</button>
             </div>
-            
-            <!-- Structure Tab -->
-            <div id="tab-structure" class="tab-content active">
-              <section class="card" style="margin-top: 24px;">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-                  <div>
-                    <h2 class="card-title">Process Steps</h2>
-                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;" id="step-count-text">0 steps in this process</p>
-                  </div>
-                  <div style="display: flex; gap: 8px; align-items: center;">
-                    {# TODO: prefer navigation to /core/flows/create?id=… (SPA); modal below is transitional reference. #}
-                    <button id="create-edit-process-btn" class="btn btn-primary btn-sm" data-modal-open="create-process-modal" onclick="window.openCreateProcessModal(); return false;" style="margin-top: 0;">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                      <span id="create-edit-process-btn-text">Create process</span>
+          </div>
+
+          <!-- Structure -->
+          <div class="flows2-panel" id="flows2-panel-structure" data-active="true">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap: 12px; flex-wrap: wrap;">
+              <div>
+                <h2 class="card-title" style="margin: 0;">Process steps</h2>
+                <p class="page-subtitle" style="margin-top: 6px; margin-bottom: 0;" id="step-count-text">0 steps in this process</p>
+              </div>
+            </div>
+
+            <div class="steps-container" id="steps-container" style="margin-top: 16px;">
+              <!-- Steps will be loaded dynamically from backend -->
+            </div>
+            <p id="drag-hint-text" style="display: none; text-align: center; color: var(--text-tertiary); font-size: 12px; margin-top: 14px; padding: 8px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+              Drag steps to reorder them
+            </p>
+          </div>
+
+          <!-- Batches (was Executions) -->
+          <div class="flows2-panel" id="flows2-panel-batches" data-active="false">
+            <div style="display:flex; flex-direction:column; gap: 18px;">
+              <section class="spa-form-section" aria-label="In-progress batches">
+                <h2 class="spa-form-section-title" style="margin-bottom: 8px;">IN-PROGRESS BATCHES</h2>
+                <p class="page-subtitle" style="margin-top: 0; margin-bottom: 10px;"><span id="active-count">0</span> in-progress batch<span id="active-count-plural">es</span></p>
+                <div class="execution-list" id="active-executions-container"></div>
+              </section>
+
+              <section class="spa-form-section" aria-label="Completed batches">
+                <h2 class="spa-form-section-title" style="margin-bottom: 8px;">COMPLETED BATCHES</h2>
+                <p class="page-subtitle" style="margin-top: 0; margin-bottom: 10px;"><span id="completed-count">0</span> completed batch<span id="completed-count-plural">es</span></p>
+                <div class="execution-list" id="completed-executions-container"></div>
+              </section>
+            </div>
+          </div>
+
+          <!-- Inventory -->
+          <div class="flows2-panel" id="flows2-panel-inventory" data-active="false">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap: 12px; flex-wrap: wrap;">
+              <div>
+                <h2 class="card-title" style="margin: 0;">Inventory</h2>
+                <p class="page-subtitle" style="margin-top: 6px; margin-bottom: 0;">Track materials connected to this process</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" onclick="window.openModal('add-inventory-modal'); return false;" style="margin-top: 0;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add to Inventory
+              </button>
+            </div>
+            <div class="inventory-category-grid" id="inventory-container" style="margin-top: 16px;">
+              <!-- Inventory will be loaded dynamically -->
+            </div>
+          </div>
+
+          {% set spa_fixed_action_aria_label = 'Process workflow actions' %}
+          {% set spa_fixed_action_left_html %}
+                <div class="flows2-manage-wrap">
+                  <button type="button" class="btn flows2-manage-btn" id="flows2-manage-btn" aria-haspopup="menu" aria-expanded="false">
+                    Manage
+                  </button>
+                  <div class="flows2-manage-backdrop" id="flows2-manage-backdrop" data-open="false" aria-hidden="true"></div>
+                  <div class="flows2-manage-menu" id="flows2-manage-menu" role="menu" aria-label="Manage workflow" data-open="false">
+                    <button type="button" class="flows2-manage-item flows2-manage-item--danger" role="menuitem" id="flows2-manage-delete">
+                      Delete workflow
+                    </button>
+                    <button type="button" class="flows2-manage-item" role="menuitem" id="flows2-manage-edit">
+                      Edit workflow
+                    </button>
+                    <button type="button" class="flows2-manage-item" role="menuitem" id="flows2-manage-draft">
+                      Set workflow to draft
                     </button>
                   </div>
                 </div>
-                <div class="card-content">
-                  <div class="steps-container" id="steps-container">
-                    <!-- Steps will be loaded dynamically from backend -->
-                  </div>
-                  <p id="drag-hint-text" style="display: none; text-align: center; color: var(--text-tertiary); font-size: 12px; margin-top: 16px; padding: 8px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
-                      <line x1="3" y1="12" x2="21" y2="12"></line>
-                      <line x1="3" y1="6" x2="21" y2="6"></line>
-                      <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                    Drag steps to reorder them
-                  </p>
-                </div>
-              </section>
-            </div>
-            
-            <!-- Executions Tab -->
-            <div id="tab-executions" class="tab-content">
-              <!-- In-Flight Section -->
-              <section class="card" style="margin-top: 24px;">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-                  <div>
-                    <h2 class="card-title">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 8px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                      In-Flight Executions
-                    </h2>
-                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;"><span id="active-count">0</span> active execution<span id="active-count-plural">s</span></p>
-                  </div>
-                </div>
-                <div class="card-content">
-                  <div class="execution-list" id="active-executions-container">
-                    <!-- Active executions will be loaded dynamically -->
-                  </div>
-                </div>
-              </section>
-              
-              <!-- Completed Section -->
-              <section class="card" style="margin-top: 32px;">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-                  <div>
-                    <h2 class="card-title">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 8px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                      Completed Executions
-                    </h2>
-                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;"><span id="completed-count">0</span> completed execution<span id="completed-count-plural">s</span></p>
-                  </div>
-                </div>
-                <div class="card-content">
-                  <div class="execution-list" id="completed-executions-container">
-                    <!-- Completed executions will be loaded dynamically -->
-                  </div>
-                </div>
-              </section>
-            </div>
-            
-            <!-- Inventory Tab -->
-            <div id="tab-inventory" class="tab-content">
-              <section class="card" style="margin-top: 24px;">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-                  <div>
-                    <h2 class="card-title">Inventory</h2>
-                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Track materials connected to this process</p>
-                  </div>
-                  <button class="btn btn-secondary btn-sm" data-modal-open="add-inventory-modal" onclick="window.openModal('add-inventory-modal'); return false;" style="margin-top: 0;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Add to Inventory
-                  </button>
-                </div>
-                <div class="card-content">
-                  <div class="inventory-category-grid" id="inventory-container">
-                    <!-- Inventory will be loaded dynamically -->
-                  </div>
-                </div>
-              </section>
-            </div>
-          </div>
+          {% endset %}
+          {% set spa_fixed_action_right_html %}
+                <button type="button" class="btn btn-primary" id="start-execution-btn" onclick="startExecution()">
+                  <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  Start New Batch
+                </button>
+          {% endset %}
+          {% include 'shared/spa-fixed-action-bar.html' %}
         </div>
-      </main>
-    </div>
-  </div>
-  
-  <!-- Backend Integration Scripts -->
-  <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
-  <script src="/ui/shared/sidebar-v2.js"></script>
-  <script src="/ui/shared/account-info.js"></script>
+
+  <!-- Execute Step Modal (Shared) -->
+  {% include 'shared/execution-modal.html' %}
+
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
   <script>
+    // Segmented selector (Process Structure / Batches / Inventory)
+    (function () {
+      function setActive(target) {
+        var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-flows2-target]'));
+        var ids = ['structure', 'batches', 'inventory'];
+        ids.forEach(function (k) {
+          var p = document.getElementById('flows2-panel-' + k);
+          if (!p) return;
+          p.setAttribute('data-active', k === target ? 'true' : 'false');
+        });
+        buttons.forEach(function (b) {
+          var isActive = b.getAttribute('data-flows2-target') === target;
+          b.classList.toggle('flow-mode-segment--active', isActive);
+          b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+      }
+
+      function onClick(e) {
+        var btn = e.target && e.target.closest ? e.target.closest('[data-flows2-target]') : null;
+        if (!btn) return;
+        e.preventDefault();
+        var target = btn.getAttribute('data-flows2-target');
+        if (!target) return;
+        setActive(target);
+      }
+
+      function bind() {
+        document.addEventListener('click', onClick);
+      }
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+      else bind();
+      window.setFlows2ActivePanel = setActive;
+    })();
+
+    // Manage menu (sticky bar)
+    (function () {
+      function getEls() {
+        return {
+          btn: document.getElementById('flows2-manage-btn'),
+          menu: document.getElementById('flows2-manage-menu'),
+          backdrop: document.getElementById('flows2-manage-backdrop'),
+          del: document.getElementById('flows2-manage-delete'),
+          edit: document.getElementById('flows2-manage-edit'),
+          draft: document.getElementById('flows2-manage-draft'),
+        };
+      }
+
+      function syncDraftMenuLabel() {
+        var els = getEls();
+        if (!els.draft) return;
+        // currentProcess is a page-level variable populated by loadProcessData()
+        var isDraft = !!(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.is_draft);
+        els.draft.textContent = isDraft ? 'Set workflow to ready' : 'Set workflow to draft';
+      }
+
+      function openMenu() {
+        var els = getEls();
+        if (!els.btn || !els.menu) return;
+        syncDraftMenuLabel();
+        els.menu.setAttribute('data-open', 'true');
+        if (els.backdrop) els.backdrop.setAttribute('data-open', 'true');
+        els.btn.setAttribute('aria-expanded', 'true');
+      }
+      function closeMenu() {
+        var els = getEls();
+        if (!els.btn || !els.menu) return;
+        els.menu.setAttribute('data-open', 'false');
+        if (els.backdrop) els.backdrop.setAttribute('data-open', 'false');
+        els.btn.setAttribute('aria-expanded', 'false');
+      }
+      function isOpen() {
+        var els = getEls();
+        return !!(els.menu && els.menu.getAttribute('data-open') === 'true');
+      }
+
+      // Capture outside interactions so they close the sheet and do NOT trigger underlying UI (tabs, etc).
+      document.addEventListener('pointerdown', function (e) {
+        if (!isOpen()) return;
+        var els = getEls();
+        if (!els.btn || !els.menu) return;
+        var t = e.target;
+        if (t === els.btn || (els.btn.contains && els.btn.contains(t))) return;
+        if (els.menu.contains && els.menu.contains(t)) return;
+        // Outside: close and swallow the interaction
+        closeMenu();
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+
+      document.addEventListener('click', function (e) {
+        var els = getEls();
+        if (!els.btn || !els.menu) return;
+        var t = e.target;
+        if (t === els.btn || (els.btn.contains && els.btn.contains(t))) {
+          if (isOpen()) closeMenu(); else openMenu();
+          return;
+        }
+        if (els.menu.contains && els.menu.contains(t)) return;
+        if (isOpen()) closeMenu();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && isOpen()) closeMenu();
+      });
+
+      var els = getEls();
+      if (els.del) {
+        els.del.addEventListener('click', function (e) {
+          e.preventDefault();
+          closeMenu();
+          if (typeof showFlows2DeleteProcessModal === 'function') showFlows2DeleteProcessModal();
+        });
+      }
+      if (els.edit) {
+        els.edit.addEventListener('click', function (e) {
+          e.preventDefault();
+          closeMenu();
+          if (!processId) return;
+          window.location.href = '/core/flows2/edit?id=' + encodeURIComponent(processId);
+        });
+      }
+      if (els.draft) {
+        els.draft.addEventListener('click', async function (e) {
+          e.preventDefault();
+          closeMenu();
+          if (!processId) return;
+          try {
+            var nextIsDraft = !(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.is_draft);
+            await CoreAPI.updateProcess(processId, { is_draft: nextIsDraft });
+            if (typeof loadProcessData === 'function') await loadProcessData();
+            syncDraftMenuLabel();
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      }
+    })();
+
     // Configure execution modal callbacks before loading shared script
     window.ExecutionModalConfig = {
       onStepCompleted: async function() {
@@ -279,7 +1052,6 @@
     };
   </script>
   <script src="{{ url_for('core.serve_core_js', filename='execution-modal.js') }}"></script>
-  <script src="{{ url_for('core.serve_core_js', filename='create-process-modal.js') }}"></script>
   <script>
     // Global variable for notification timeout
     let notificationTimeout = null;
@@ -501,27 +1273,6 @@
         // Update stats
         document.getElementById('process-step-count').textContent = processData.steps?.length || 0;
         
-        // Update button text based on whether steps exist
-        const createEditBtn = document.getElementById('create-edit-process-btn');
-        const createEditBtnText = document.getElementById('create-edit-process-btn-text');
-        if (createEditBtn && createEditBtnText) {
-          if (processData.steps && processData.steps.length > 0) {
-            createEditBtnText.textContent = 'Edit process';
-            // Update icon to edit icon
-            const icon = createEditBtn.querySelector('svg');
-            if (icon) {
-              icon.innerHTML = '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>';
-            }
-          } else {
-            createEditBtnText.textContent = 'Create process';
-            // Reset icon to plus icon
-            const icon = createEditBtn.querySelector('svg');
-            if (icon) {
-              icon.innerHTML = '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>';
-            }
-          }
-        }
-        
         // Show draft status if applicable
         if (processData.is_draft) {
           // Add draft badge near process name or in header
@@ -554,16 +1305,6 @@
         // Load inventory
         await loadInventory();
         
-        // Show welcome modal when arriving from core2 "Create process" (define steps prompt)
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('welcome') === '1' && processId) {
-          const welcomeModal = document.getElementById('welcome-define-steps-modal');
-          if (welcomeModal) {
-            welcomeModal.style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-          }
-        }
-        
       } catch (error) {
         console.error('Failed to load process data:', error);
         document.getElementById('process-name').textContent = 'Error loading process';
@@ -574,18 +1315,18 @@
     window.loadProcessData = loadProcessData;
 
     if (!processId) {
-      const delBtn = document.getElementById('delete-process-btn');
-      if (delBtn) delBtn.style.display = 'none';
+      const manageBtn = document.getElementById('flows2-manage-btn');
+      if (manageBtn) manageBtn.style.display = 'none';
     }
 
     function showFlows2DeleteProcessModal() {
       if (!processId) return;
       const nameEl = document.getElementById('process-name');
-      const name = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'this product';
+      const name = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'this workflow';
       const modal = document.getElementById('flows2-delete-process-modal');
       const msg = document.getElementById('flows2-delete-confirmation-message');
       if (msg) {
-        msg.textContent = 'Are you sure you want to delete "' + name + '"? This action cannot be undone.';
+        msg.textContent = "Are you sure you want to delete workflow '" + name + "'? This action cannot be undone.";
       }
       if (modal) {
         modal.style.display = 'flex';
@@ -613,20 +1354,6 @@
       document.body.style.overflow = 'auto';
     }
     
-    function closeWelcomeDefineStepsModal() {
-      const welcomeModal = document.getElementById('welcome-define-steps-modal');
-      if (welcomeModal) {
-        welcomeModal.style.display = 'none';
-        document.body.style.overflow = 'auto';
-      }
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('welcome') === '1') {
-        urlParams.delete('welcome');
-        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
-        window.history.replaceState({}, '', newUrl);
-      }
-    }
-    
     // Render steps
     function renderSteps(steps) {
       const container = document.getElementById('steps-container');
@@ -650,8 +1377,19 @@
         stepCountText.textContent = `${steps.length} step${steps.length !== 1 ? 's' : ''} in this process`;
       }
       
-      // Sort steps by step_number
-      const sortedSteps = [...steps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+      function posNum(x) {
+        const n = x && x.position != null ? Number(x.position) : NaN;
+        return Number.isFinite(n) ? n : null;
+      }
+      // Prefer canonical ordering by position (reorder endpoint maintains it). Fall back to step_number.
+      const sortedSteps = [...steps].sort((a, b) => {
+        const ap = posNum(a);
+        const bp = posNum(b);
+        if (ap != null && bp != null) return ap - bp;
+        if (ap != null && bp == null) return -1;
+        if (ap == null && bp != null) return 1;
+        return (a.step_number || 0) - (b.step_number || 0);
+      });
       
       sortedSteps.forEach((step, index) => {
         const stepCard = createStepCard(step, index);
@@ -674,216 +1412,224 @@
     // Create step card (displayIndex is 0-based; badge shows displayIndex + 1 so first step always shows 1)
     function createStepCard(step, displayIndex) {
       const card = document.createElement('div');
-      card.className = 'step-card';
+      card.className = 'step-card flows2-step';
       card.setAttribute('data-step-id', step.id || `step-new-${Date.now()}`);
+      card.setAttribute('data-expanded', 'false');
       
       const inputs = step.inputs || [];
       const outputs = step.outputs || [];
       const executionPrompts = step.execution_prompts || [];
       const displayNumber = typeof displayIndex === 'number' ? displayIndex + 1 : (step.step_number || 1);
+      const hasConfigs = !!(step && (step.configurations || step.configuration || step.config || step.settings));
+
+      function fmtQty(q, unit) {
+        const hasQ = (q === 0 || q);
+        const qn = hasQ ? String(q) : '';
+        const u = (unit || '').toString().trim();
+        if (!qn && !u) return '';
+        if (!qn) return escapeHtml(u);
+        if (!u) return escapeHtml(qn);
+        return escapeHtml(qn + ' ' + u);
+      }
+
+      function inputModeLabel(i) {
+        const invSel = i && i.requires_inventory_selection === true;
+        const isVar = i && i.is_variable !== false;
+        if (invSel && isVar) return 'Select inventory at execution';
+        if (isVar) return 'Confirm at execution';
+        return 'Static';
+      }
+
+      function outputModeLabel(o) {
+        const invSel = o && o.requires_inventory_selection === true;
+        const isVar = o && o.is_variable !== false;
+        if (invSel && isVar) return 'Select inventory at execution';
+        if (isVar) return 'Confirm at execution';
+        return 'Static';
+      }
+
+      function promptFlag(labelLower) {
+        const p = (executionPrompts || []).find(x => (x && (x.label || '')).toString().toLowerCase() === labelLower);
+        if (!p) return null;
+        if (p.required === true) return 'Required';
+        if (p.required === false) return 'Optional';
+        return null;
+      }
+
+      const batchFlag = promptFlag('batch number');
+      const evidenceFlag = promptFlag('evidence');
+
+      const cfgObj = step && (step.configurations || step.configuration || step.config || step.settings) || null;
+      const cfgJson = hasConfigs ? escapeHtml(JSON.stringify(cfgObj, null, 2)) : '';
+
+      const inputsSummaryHtml = (inputs && inputs.length)
+        ? inputs.map(i => {
+            const name = escapeHtml((i && i.name) ? String(i.name) : '—');
+            const qty = fmtQty(i && i.quantity, i && i.unit);
+            const mode = escapeHtml(inputModeLabel(i));
+            return `
+              <div class="flows2-summary-item">
+                <div class="flows2-summary-item__main">
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">${name}</div>
+                    <div class="flows2-chip">${mode}</div>
+                  </div>
+                  <div class="flows2-summary-item__sub">${qty || ''}</div>
+                </div>
+              </div>
+            `;
+          }).join('')
+        : '<p class="flows2-empty">No inputs configured.</p>';
+
+      const outputsSummaryHtml = (outputs && outputs.length)
+        ? outputs.map(o => {
+            const name = escapeHtml((o && o.name) ? String(o.name) : '—');
+            const qty = fmtQty(o && o.quantity, o && o.unit);
+            const mode = escapeHtml(outputModeLabel(o));
+            const extra = (o && o.extra_data && typeof o.extra_data === 'object') ? o.extra_data : null;
+            const hasExpiry = !!(extra && extra.custom_expiry && extra.custom_expiry.enabled);
+            const hasReady = !!(extra && extra.ready_date && extra.ready_date.enabled);
+            const extras = [];
+            if (hasExpiry) extras.push('Expiry rules');
+            if (hasReady) extras.push('Ready date rules');
+            const extrasText = extras.length ? escapeHtml(extras.join(' • ')) : '';
+            const sub = [qty, extrasText].filter(Boolean).join(' • ');
+            return `
+              <div class="flows2-summary-item">
+                <div class="flows2-summary-item__main">
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">${name}</div>
+                    <div class="flows2-chip">${mode}</div>
+                  </div>
+                  <div class="flows2-summary-item__sub">${sub}</div>
+                </div>
+              </div>
+            `;
+          }).join('')
+        : '<p class="flows2-empty">No outputs configured.</p>';
+
+      function isTraceabilityOrSystemPrompt(p) {
+        if (!p) return false;
+        const labelRaw = (p.label || p.prompt || '').toString().trim().toLowerCase();
+        const typeRaw = (p.type || '').toString().trim().toLowerCase();
+        if (labelRaw === 'batch number' || labelRaw === 'evidence') return true;
+        if (typeRaw === 'evidence') return true;
+        return false;
+      }
+      const customPrompts = (executionPrompts || []).filter(p => !isTraceabilityOrSystemPrompt(p));
+
+      const promptsSummaryHtml = (customPrompts && customPrompts.length)
+        ? customPrompts.map(p => {
+            const label = escapeHtml((p && (p.label || p.prompt)) ? String(p.label || p.prompt) : '—');
+            const type = escapeHtml((p && p.type) ? String(p.type) : 'text');
+            const unit = escapeHtml((p && p.unit) ? String(p.unit) : '');
+            const req = (p && p.required === false) ? 'Optional' : 'Required';
+            const sub = [type, unit ? ('Unit: ' + unit) : ''].filter(Boolean).join(' • ');
+            return `
+              <div class="flows2-summary-item">
+                <div class="flows2-summary-item__main">
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">${label}</div>
+                    <div class="flows2-chip">${escapeHtml(req)}</div>
+                  </div>
+                  <div class="flows2-summary-item__sub">${escapeHtml(sub)}</div>
+                </div>
+              </div>
+            `;
+          }).join('')
+        : '';
+
+      // Best-effort documentation extraction from advanced config blocks (if present).
+      function pickDocs(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        return obj.docs || obj.documentation || obj.documents || obj.process_docs || obj.processDocs || null;
+      }
+      const docsObj = pickDocs(cfgObj);
+      const hasDocs = !!(docsObj && (Array.isArray(docsObj) ? docsObj.length : true));
+      const docsJson = hasDocs ? escapeHtml(JSON.stringify(docsObj, null, 2)) : '';
       
       card.innerHTML = `
-        <div class="step-header">
-          <div class="step-drag-handle" draggable="true" style="cursor: grab; padding: 8px; color: var(--text-tertiary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="Drag to reorder" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
+        <div class="flows2-step__header">
+          <button type="button" class="flows2-step__drag step-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="8" y1="6" x2="8" y2="6"></line>
+              <line x1="8" y1="12" x2="8" y2="12"></line>
+              <line x1="8" y1="18" x2="8" y2="18"></line>
+              <line x1="16" y1="6" x2="16" y2="6"></line>
+              <line x1="16" y1="12" x2="16" y2="12"></line>
+              <line x1="16" y1="18" x2="16" y2="18"></line>
             </svg>
+          </button>
+          <div class="flow-step-num-badge step-number" aria-label="Step number">${displayNumber}</div>
+          <div class="flows2-step__titlewrap" onclick="toggleStep(this)">
+            <p class="flows2-step__title">${escapeHtml(step.name || 'Unnamed step')}</p>
+            <p class="flows2-step__sub">${escapeHtml(step.description || '') || 'No description'}</p>
           </div>
-          <div class="step-number">${displayNumber}</div>
-          <div class="step-header-content" onclick="toggleStep(this)" style="flex: 1; display: flex; align-items: center; cursor: pointer;">
-            <div class="step-info">
-              <div class="step-name">${escapeHtml(step.name || 'Unnamed Step')}</div>
-              <div class="step-description">${escapeHtml(step.description || '')}</div>
-            </div>
-            <div class="step-meta">
-              <span>${inputs.length} input${inputs.length !== 1 ? 's' : ''}</span>
-              <span>${outputs.length} output${outputs.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div class="step-toggle">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
+          <div class="flows2-step__meta">
+            <span>${inputs.length} input${inputs.length !== 1 ? 's' : ''}</span>
+            <span>${outputs.length} output${outputs.length !== 1 ? 's' : ''}</span>
           </div>
+          <button type="button" class="flows2-step__toggle" onclick="toggleStep(this)" aria-label="Expand step">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
         </div>
-        <div class="step-content">
-          <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label" style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Step Name</label>
-            <input type="text" class="form-input step-name-input" value="${escapeHtml(step.name || 'Unnamed Step')}" placeholder="Enter step name" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+        <div class="flows2-step__body">
+          <div class="flows2-step__body-inner">
+          <div class="flows2-section">
+            <p class="flows2-section__title">Inputs</p>
+            <div class="flows2-summary-list">${inputsSummaryHtml}</div>
           </div>
-          <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label" style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Description</label>
-            <input type="text" class="form-input step-description-input" value="${escapeHtml(step.description || '')}" placeholder="Enter step description" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+
+          <div class="flows2-section">
+            <p class="flows2-section__title">Outputs</p>
+            <div class="flows2-summary-list">${outputsSummaryHtml}</div>
           </div>
-          <div class="io-section">
-            <div class="io-section-title">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
-              Inputs
-              <div style="margin-left:auto; display: flex; gap: 8px;">
-                <button class="btn btn-secondary btn-sm" onclick="addInputFromInventory(this)" title="Add from inventory">+ From Inventory</button>
-                <button class="btn btn-secondary btn-sm" onclick="addInputFromPreviousOutput(this)" title="Add from previous step output" style="display: none;" data-add-from-output-btn>+ From Output</button>
-                <button class="btn btn-secondary btn-sm" onclick="addNewInput(this)" title="Add new manual input">+ New Input</button>
+
+          <div class="flows2-section">
+            <p class="flows2-section__title">Traceability & compliance</p>
+            <div class="flows2-summary-list">
+              <div class="flows2-summary-item">
+                <div class="flows2-summary-item__main">
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">Batch number</div>
+                    <div class="flows2-chip">Required</div>
+                  </div>
+                  <div class="flows2-summary-item__sub">${escapeHtml(batchFlag || 'Off')}</div>
+                </div>
+              </div>
+              <div class="flows2-summary-item">
+                <div class="flows2-summary-item__main">
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">Evidence</div>
+                    <div class="flows2-chip">Required</div>
+                  </div>
+                  <div class="flows2-summary-item__sub">${escapeHtml(evidenceFlag || 'Off')}</div>
+                </div>
               </div>
             </div>
-            <div class="io-list">
-              ${inputs.length > 0 ? inputs.map(input => {
-                // Determine type: variable (inventory selection), confirm (editable qty/unit), or static
-                const isInventorySelection = input.requires_inventory_selection !== false && input.is_variable !== false;
-                const isConfirm = input.is_variable !== false && input.requires_inventory_selection === false;
-                const isStatic = input.is_variable === false && input.requires_inventory_selection === false;
-                // Default to confirm if unclear
-                const inputType = isInventorySelection ? 'variable' : isStatic ? 'static' : 'confirm';
-                return `
-                  <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
-                    <span class="io-item-name" style="flex: 1;">
-                      <input type="text" class="form-input io-name-input" value="${escapeHtml(input.name || '')}" placeholder="Material name" style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                    </span>
-                    <span class="io-item-quantity">
-                      <input type="number" class="form-input io-quantity-input" value="${input.quantity || ''}" placeholder="0" style="width: 80px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                    </span>
-                    <span class="io-item-unit">
-                      <select class="form-select io-unit-input" style="width: 90px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                        <option value="kg" ${input.unit === 'kg' ? 'selected' : ''}>kg</option>
-                        <option value="g" ${input.unit === 'g' ? 'selected' : ''}>g</option>
-                        <option value="L" ${input.unit === 'L' ? 'selected' : ''}>L</option>
-                        <option value="mL" ${input.unit === 'mL' ? 'selected' : ''}>mL</option>
-                        <option value="pcs" ${input.unit === 'pcs' ? 'selected' : ''}>pcs</option>
-                        <option value="units" ${input.unit === 'units' ? 'selected' : ''}>units</option>
-                      </select>
-                    </span>
-                    <span class="io-item-type" style="position: relative;">
-                      <select class="form-select io-type-input" style="width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                        <option value="confirm" ${inputType === 'confirm' ? 'selected' : ''}>Confirm at execution</option>
-                        <option value="static" ${inputType === 'static' ? 'selected' : ''}>Static</option>
-                      </select>
-                      <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Confirm at execution: You will confirm or override the quantity and unit when this step runs. Static: System will not prompt for confirmation upon execution.">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <line x1="12" y1="16" x2="12" y2="12"></line>
-                          <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                        </svg>
-                      </span>
-                    </span>
-                    <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.io-item').remove(); updateStepMeta(this.closest('.step-card'));" style="padding: 4px;">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                  </div>
-                `;
-              }).join('') : '<p style="color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;">No inputs defined</p>'}
-            </div>
           </div>
-          <div class="io-section">
-            <div class="io-section-title">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>
-              Outputs
-              <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="addOutput(this)">+ Add</button>
-            </div>
-            <div class="io-list">
-              ${outputs.length > 0 ? outputs.map(output => {
-                const isVariable = output.requires_execution_confirmation !== false && output.is_variable !== false; // Support both old and new format
-                return `
-                  <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
-                    <span class="io-item-name" style="flex: 1;">
-                      <input type="text" class="form-input io-name-input" value="${escapeHtml(output.name || '')}" placeholder="Product name" style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                    </span>
-                    <span class="io-item-quantity">
-                      <input type="number" class="form-input io-quantity-input" value="${output.quantity || ''}" placeholder="0" style="width: 80px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                    </span>
-                    <span class="io-item-unit">
-                      <select class="form-select io-unit-input" style="width: 90px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                        <option value="kg" ${output.unit === 'kg' ? 'selected' : ''}>kg</option>
-                        <option value="g" ${output.unit === 'g' ? 'selected' : ''}>g</option>
-                        <option value="L" ${output.unit === 'L' ? 'selected' : ''}>L</option>
-                        <option value="mL" ${output.unit === 'mL' ? 'selected' : ''}>mL</option>
-                        <option value="pcs" ${output.unit === 'pcs' ? 'selected' : ''}>pcs</option>
-                        <option value="units" ${output.unit === 'units' ? 'selected' : ''}>units</option>
-                      </select>
-                    </span>
-                    <span class="io-item-type" style="position: relative;">
-                      <select class="form-select io-type-input" style="width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                        <option value="variable" ${isVariable ? 'selected' : ''}>Confirm at execution</option>
-                        <option value="static" ${!isVariable ? 'selected' : ''}>Static</option>
-                      </select>
-                      <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Confirm at execution: You will confirm or override the actual quantity produced when this step runs. Static: System will not prompt for confirmation upon execution.">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <line x1="12" y1="16" x2="12" y2="12"></line>
-                          <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                        </svg>
-                      </span>
-                    </span>
-                    <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.io-item').remove(); updateStepMeta(this.closest('.step-card'));" style="padding: 4px;">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                  </div>
-                `;
-              }).join('') : '<p style="color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;">No outputs defined</p>'}
-            </div>
+
+          <div class="flows2-section">
+            <p class="flows2-section__title">Prompts</p>
+            <div class="flows2-summary-list${promptsSummaryHtml ? '' : ' flows2-summary-list--empty'}">${promptsSummaryHtml || '<div class="flows2-summary-item"><div class="flows2-summary-item__main"><div class="flows2-summary-item__row"><div class="flows2-summary-item__title">No custom prompts configured.</div></div><div class="flows2-summary-item__sub">Add prompts to capture operator inputs during execution.</div></div></div>'}</div>
           </div>
-          <div class="io-section" style="margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border-default);">
-            <div class="io-section-title" style="color: var(--text-secondary);">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-              Execution Prompts (recorded when step runs)
-              <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="addExecutionPrompt(this)">+ Add Prompt</button>
+
+          ${hasDocs ? `
+            <div class="flows2-section">
+              <p class="flows2-section__title">Documentation</p>
+              <pre style="margin:0; padding: 10px 0; overflow:auto; max-height: 240px;">${docsJson}</pre>
             </div>
-            <div class="io-list">
-              ${executionPrompts.length > 0 ? executionPrompts.map(prompt => {
-                return `
-                  <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
-                    <span class="io-item-name" style="flex: 1;">
-                      <input type="text" class="form-input prompt-label-input" value="${escapeHtml(prompt.label || '')}" placeholder="Label (e.g., Batch number)" style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                    </span>
-                    <span class="io-item-type">
-                      <select class="form-select prompt-type-input" style="width: 120px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                        <option value="text" ${prompt.type === 'text' ? 'selected' : ''}>Text</option>
-                        <option value="number" ${prompt.type === 'number' ? 'selected' : ''}>Number</option>
-                        <option value="date" ${prompt.type === 'date' ? 'selected' : ''}>Date</option>
-                        <option value="select" ${prompt.type === 'select' ? 'selected' : ''}>Select</option>
-                        <option value="evidence" ${prompt.type === 'evidence' ? 'selected' : ''}>Evidence (upload)</option>
-                      </select>
-                    </span>
-                    <span class="io-item-unit">
-                      <input type="text" class="form-input prompt-unit-input" value="${escapeHtml(prompt.unit || '')}" placeholder="Unit (optional)" style="width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                    </span>
-                    <span class="io-item-type">
-                      <select class="form-select prompt-required-input" style="width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-                        <option value="true" ${prompt.required !== false ? 'selected' : ''}>Required</option>
-                        <option value="false" ${prompt.required === false ? 'selected' : ''}>Optional</option>
-                      </select>
-                    </span>
-                    <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.io-item').remove(); updateStepMeta(this.closest('.step-card'));" style="padding: 4px;">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                      </svg>
-                    </button>
-                  </div>
-                `;
-              }).join('') : '<p style="color: var(--text-secondary); font-size: 14px; padding: 0.625rem 0.75rem;">No execution prompts defined</p>'}
+          ` : ''}
+
+          ${hasConfigs ? `
+            <div class="flows2-section">
+              <p class="flows2-section__title">Advanced settings</p>
+              <pre style="margin:0; padding: 10px 0; overflow:auto; max-height: 240px;">${cfgJson}</pre>
             </div>
-          </div>
-          <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-light);">
-            <button class="btn btn-secondary btn-sm" onclick="saveStep(this.closest('.step-card'))">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                <polyline points="7 3 7 8 15 8"></polyline>
-              </svg>
-              Save Step
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="deleteStep(this.closest('.step-card'))" style="color: var(--error);">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-              Delete Step
-            </button>
+          ` : ''}
+
           </div>
         </div>
       `;
@@ -895,15 +1641,8 @@
     window.toggleStep = function(header) {
       const stepCard = header.closest('.step-card');
       if (!stepCard) return;
-      const content = stepCard.querySelector('.step-content');
-      const toggle = stepCard.querySelector('.step-toggle');
-      
-      if (content) {
-        content.classList.toggle('expanded');
-      }
-      if (toggle) {
-        toggle.classList.toggle('expanded');
-      }
+      const expanded = stepCard.getAttribute('data-expanded') === 'true';
+      stepCard.setAttribute('data-expanded', expanded ? 'false' : 'true');
     };
     
     // Execution expand/collapse (global function for onclick)
@@ -1874,9 +2613,6 @@
       if (modal) {
         modal.style.display = 'none';
         document.body.style.overflow = '';
-        if (modalId === 'create-process-modal' && typeof loadProcessData === 'function') {
-          loadProcessData();
-        }
       }
     };
     
@@ -2857,7 +3593,7 @@
       const inputs = stepCard.querySelectorAll('.io-section:first-of-type .io-item').length;
       const outputs = stepCard.querySelectorAll('.io-section:last-of-type .io-item').length;
       
-      const stepMeta = stepCard.querySelector('.step-meta');
+      const stepMeta = stepCard.querySelector('.flows2-step__meta');
       if (stepMeta) {
         stepMeta.innerHTML = `
           <span>${inputs} input${inputs !== 1 ? 's' : ''}</span>
@@ -2990,7 +3726,7 @@
       if (!container || !processId) return;
       
       const stepCards = container.querySelectorAll('.step-card');
-      const updates = [];
+      const orderedIds = [];
       
       stepCards.forEach((card, index) => {
         const stepId = card.getAttribute('data-step-id');
@@ -3002,24 +3738,31 @@
           stepNumberEl.textContent = newStepNumber;
         }
         
-        // Only update if step has a valid ID (not a new unsaved step)
+        // Only include persisted steps for reorder endpoint
         if (stepId && !stepId.startsWith('step-new-') && !stepId.startsWith('temp-step-')) {
-          updates.push({
-            stepId: stepId,
-            stepNumber: newStepNumber
-          });
+          orderedIds.push(stepId);
         }
       });
       
-      // Save all updates to database
-      if (updates.length > 0) {
+      // Save order to backend (atomic reorder endpoint)
+      if (orderedIds.length > 0) {
         try {
-          // Update all steps in parallel
-          await Promise.all(updates.map(update => 
-            CoreAPI.updateStep(processId, update.stepId, {
-              step_number: update.stepNumber
-            })
-          ));
+          const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+          const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
+          const headers = { 'Content-Type': 'application/json' };
+          if (csrfTok) {
+            headers['X-CSRFToken'] = csrfTok;
+            headers['X-CSRF-Token'] = csrfTok;
+          }
+          const spacing = 1000;
+          const orders = orderedIds.map((id, idx) => ({ id, position: spacing * (idx + 1) }));
+          const res = await fetch(`/api/core/processes/${encodeURIComponent(processId)}/steps/reorder`, {
+            method: 'POST',
+            credentials: 'include',
+            headers,
+            body: JSON.stringify({ orders })
+          });
+          if (!res.ok) throw new Error('Failed to reorder');
           
           showNotification('success', 'Steps Reordered', 'Step order has been saved successfully.');
         } catch (error) {
@@ -3289,23 +4032,6 @@
         document.getElementById('process-name').textContent = 'No Process Selected';
         document.getElementById('process-description').textContent = 'Please select a process from the Process Hub';
       }
-      if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
-      // Welcome modal: Define steps now / I'll do this later
-      const welcomeDefineNowBtn = document.getElementById('welcome-define-now-btn');
-      const welcomeDefineLaterBtn = document.getElementById('welcome-define-later-btn');
-      if (welcomeDefineNowBtn) {
-        welcomeDefineNowBtn.addEventListener('click', function() {
-          closeWelcomeDefineStepsModal();
-          if (typeof window.openCreateProcessModal === 'function') {
-            window.openCreateProcessModal();
-          }
-        });
-      }
-      if (welcomeDefineLaterBtn) {
-        welcomeDefineLaterBtn.addEventListener('click', function() {
-          closeWelcomeDefineStepsModal();
-        });
-      }
     });
   </script>
   
@@ -3485,7 +4211,7 @@
             if (res && res.wastage_records && res.wastage_records.length && typeof window.showNotification === 'function') {
               window.showNotification('success', 'Inventory disposed', res.wastage_records.length + ' item(s) disposed. Quantity deducted from inventory.');
             }
-            if (typeof window.loadSystemFindingsBanner === 'function') window.loadSystemFindingsBanner();
+            // No-op: system findings banner removed from this page.
             if (typeof loadInventory === 'function') loadInventory();
           } catch (e) {
             if (typeof window.showNotification === 'function') window.showNotification('error', 'Failed to dispose of inventory', e.message || 'Could not dispose of inventory.');
@@ -3504,15 +4230,11 @@
     })();
   </script>
   
-  <!-- Create Process Guided Flow Modal -->
-  {# create-process-modal: transitional; canonical UI is process-flow-spa.html — see comment on Create process button #}
-  {% include 'processes/create-process-modal.html' %}
-
-  <!-- Delete product (process) — same API as Process Hub cards -->
-  <div class="modal-overlay" id="flows2-delete-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+  <!-- Delete workflow (process) — same API as Process Hub cards -->
+  <div class="modal-overlay" id="flows2-delete-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.28); z-index: 1000; align-items: center; justify-content: center;">
     <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete product</h2>
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete workflow</h2>
         <button type="button" onclick="cancelFlows2DeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -3526,41 +4248,6 @@
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button type="button" class="btn btn-secondary" onclick="cancelFlows2DeleteProcess()">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="confirmFlows2DeleteProcess()" style="background: var(--danger, #ef4444); border-color: var(--danger, #ef4444);">Delete</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Welcome: Define steps / inputs / outputs (shown after creating process from core2) -->
-  <style>
-    #welcome-define-steps-modal .welcome-card { max-width: 520px; width: 100%; padding: 20px; }
-    @media (min-width: 600px) { #welcome-define-steps-modal .welcome-card { padding: 24px; } }
-    @media (min-width: 1024px) { #welcome-define-steps-modal .welcome-card { padding: 28px; max-width: 560px; } }
-  </style>
-  <div class="modal-overlay" id="welcome-define-steps-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center; padding: 16px;">
-    <div class="card welcome-card">
-      <div style="text-align: center; margin-bottom: 20px;">
-        <div style="width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(59, 130, 246, 0.2)); display: flex; align-items: center; justify-content: center;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success, #10b981);">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-        </div>
-        <h2 style="font-size: 1.35rem; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">Process created</h2>
-        <p style="font-size: 0.95rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">You now have full visibility over this workflow. Define steps and materials to unlock traceability and real-time value.</p>
-      </div>
-      <div style="margin-bottom: 24px;">
-        <p style="font-size: 0.9375rem; font-weight: 500; color: var(--text-primary); margin: 0 0 12px 0;">Would you like to define your process steps, inputs, outputs, and execution metadata?</p>
-        <p style="font-size: 0.875rem; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">This gives you:</p>
-        <ul style="font-size: 0.875rem; color: var(--text-secondary); margin: 0; padding-left: 20px; line-height: 1.7;">
-          <li><strong>Traceability</strong> — End-to-end visibility from raw materials to finished product</li>
-          <li><strong>Live inventory</strong> — Stock levels update automatically when you run executions</li>
-          <li><strong>Real-time checks</strong> — See what’s in progress and what’s completed</li>
-          <li><strong>Notifications</strong> — Get alerts (e.g. expired materials, low stock) when you connect them</li>
-        </ul>
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-        <button type="button" class="btn btn-secondary" id="welcome-define-later-btn">I'll do this later</button>
-        <button type="button" class="btn btn-primary" id="welcome-define-now-btn">Define steps now</button>
       </div>
     </div>
   </div>
@@ -3603,8 +4290,4 @@
     }
   </style>
   
-  <!-- Execute Step Modal (Shared) -->
-  {% include 'shared/execution-modal.html' %}
-  <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
-</body>
-</html>
+{% endblock %}
