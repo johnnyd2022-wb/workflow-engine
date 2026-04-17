@@ -6,6 +6,7 @@
 
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Workflow details">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <style>
     /* Searchable dropdown styles */
     .searchable-dropdown-container { position: relative; }
@@ -43,6 +44,7 @@
     }
     .flows2-process-head__text {
       min-width: 0;
+      text-align: center;
     }
     .flows2-process-head__title {
       margin: 0;
@@ -53,7 +55,7 @@
       color: var(--text-primary, #111827);
     }
     .flows2-process-head__desc {
-      margin: 10px 0 0 0;
+      margin: 10px auto 0 auto;
       font-size: 0.9375rem;
       line-height: 1.5;
       color: var(--text-secondary, #6b7280);
@@ -70,24 +72,99 @@
     .flows2-process-head__stats {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
+      gap: 0;
       margin-top: 22px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
     }
     @media (max-width: 720px) {
+      /* Mobile: keep the 3 stat tiles side-by-side (no stacking). Tighten spacing + center the hero. */
+      .inventory-spa-header-wrap {
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .flows2-process-head__text {
+        text-align: center;
+      }
+      .flows2-process-head__desc {
+        margin-left: auto;
+        margin-right: auto;
+      }
       .flows2-process-head__stats {
-        grid-template-columns: 1fr;
+        /* Modern segmented surface (3-up, no overflow) */
+        gap: 0;
+        margin-top: 16px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+        overflow: hidden;
+      }
+      .flows2-stat {
+        /* Segment: icon + value on one line, label below */
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 10px 6px 9px;
+        gap: 4px;
+        border-radius: 0;
+        background: transparent;
+        position: relative;
+      }
+      .flows2-stat + .flows2-stat::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 10px;
+        bottom: 10px;
+        width: 1px;
+        background: rgba(15, 23, 42, 0.08);
+      }
+      .flows2-stat__icon {
+        display: none;
+      }
+      .flows2-stat__body {
+        align-items: center;
+      }
+      .flows2-stat__label {
+        font-size: 0.62rem;
+        letter-spacing: 0.05em;
+        line-height: 1.05;
+        white-space: nowrap;
+      }
+      .flows2-stat__value {
+        font-size: 1.05rem;
+      }
+      /* Make the middle label fit without abbreviation */
+      .flows2-stat--active .flows2-stat__label {
+        letter-spacing: 0.03em;
       }
     }
     .flows2-stat {
       display: flex;
       align-items: center;
-      gap: 12px;
+      justify-content: center;
+      gap: 10px;
       min-width: 0;
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: rgba(15, 23, 42, 0.035);
+      padding: 14px 14px;
+      border-radius: 0;
+      background: transparent;
       border: none;
       box-sizing: border-box;
+      position: relative;
+    }
+    .flows2-stat + .flows2-stat::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 12px;
+      bottom: 12px;
+      width: 1px;
+      background: rgba(15, 23, 42, 0.08);
     }
     .flows2-stat__icon {
       width: 38px;
@@ -113,6 +190,10 @@
       flex-direction: column;
       gap: 2px;
       min-width: 0;
+    }
+    .flows2-stat__icon {
+      width: 34px;
+      height: 34px;
     }
     .flows2-stat__label {
       font-size: 0.6875rem;
@@ -190,7 +271,13 @@
     .flows2-panel { display: none; margin-top: 18px; }
     .flows2-panel[data-active="true"] { display: block; }
 
-    /* Steps list: clean hairline stack (inputs-style separators) */
+    /* Steps list: premium, borderless expandable rows (SPA style) */
+    .steps-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+    }
     .flow-step-num-badge {
       width: 32px;
       height: 32px;
@@ -210,20 +297,31 @@
       display: flex;
       flex-direction: column;
       gap: 0;
-      padding: 14px 0;
+      padding: 0;
       border: none;
-      border-radius: 0;
+      border-radius: 14px;
       background: transparent;
+      box-shadow: none;
       box-sizing: border-box;
+      overflow: hidden;
+      transition: background 0.14s ease, box-shadow 0.14s ease;
     }
     .flows2-step + .flows2-step {
       border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .flows2-step:hover {
+      background: rgba(15, 23, 42, 0.03);
+    }
+    .flows2-step:focus-within {
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
     }
     .flows2-step__header {
       display: flex;
       align-items: center;
       gap: 12px;
       min-width: 0;
+      padding: 14px 12px;
+      background: transparent;
     }
     .flows2-step__drag {
       width: 36px;
@@ -231,7 +329,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border-radius: 10px;
+      border-radius: 12px;
       border: 1px solid transparent;
       background: transparent;
       color: var(--text-tertiary, #9ca3af);
@@ -241,7 +339,7 @@
     }
     .flows2-step__drag:hover {
       border-color: var(--border-default, #e5e7eb);
-      background: rgba(59, 130, 246, 0.05);
+      background: rgba(0, 0, 0, 0.03);
       color: var(--text-primary, #111827);
     }
     .flows2-step__titlewrap {
@@ -251,6 +349,11 @@
       flex-direction: column;
       gap: 2px;
       cursor: pointer;
+    }
+    .flows2-step__titlewrap:hover .flows2-step__title {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-color: rgba(59, 130, 246, 0.35);
     }
     .flows2-step__title {
       font-size: 15px;
@@ -283,26 +386,40 @@
       align-items: center;
       justify-content: center;
       border: 1px solid transparent;
-      border-radius: 10px;
+      border-radius: 12px;
       background: transparent;
       color: var(--text-tertiary, #9ca3af);
       cursor: pointer;
       flex-shrink: 0;
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
     }
     .flows2-step__toggle:hover {
       border-color: var(--border-default, #e5e7eb);
-      background: rgba(0, 0, 0, 0.04);
+      background: rgba(0, 0, 0, 0.03);
       color: var(--text-primary, #111827);
     }
-    .flows2-step__toggle svg { transition: transform 0.15s ease; }
+    .flows2-step__toggle svg { transition: transform 0.18s ease; }
     .flows2-step[data-expanded="true"] .flows2-step__toggle svg { transform: rotate(180deg); }
+    .flows2-step[data-expanded="true"] .flows2-step__toggle { background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.18); color: var(--text-primary, #111827); }
     .flows2-step__body {
-      display: none;
-      padding-top: 14px;
-      margin-top: 12px;
+      /* Animate open/close (JS toggles data-expanded on .flows2-step) */
+      display: block;
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
       border-top: 1px solid var(--border-light, #e5e7eb);
     }
-    .flows2-step[data-expanded="true"] .flows2-step__body { display: block; }
+    .flows2-step[data-expanded="true"] .flows2-step__body {
+      max-height: 1800px;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .flows2-step__body-inner {
+      padding: 12px 12px 14px;
+      background: rgba(255, 255, 255, 0.55);
+    }
 
     .flows2-step__grid {
       display: grid;
@@ -327,7 +444,14 @@
       flex-wrap: wrap;
       margin-top: 16px;
       padding-top: 14px;
-      border-top: 1px solid var(--border-light, #e5e7eb);
+      border-top: 1px solid rgba(15, 23, 42, 0.06);
+    }
+
+    @media (max-width: 720px) {
+      .flows2-step__header { padding: 12px 12px; gap: 10px; }
+      .flows2-step__drag, .flows2-step__toggle { width: 34px; height: 34px; }
+      .flows2-step__body-inner { padding: 12px 12px 12px; }
+      .flows2-step__meta { display: none; }
     }
 
     /* Step expanded summary (clean, read-only; borderless hairline stack) */
@@ -350,23 +474,35 @@
       flex-direction: column;
       gap: 0;
       width: 100%;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      overflow: hidden;
     }
     .flows2-summary-item {
       display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 0;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      padding: 12px 12px;
       min-width: 0;
     }
     .flows2-summary-item + .flows2-summary-item {
-      border-top: 1px solid var(--border-default, #e5e7eb);
+      border-top: 1px solid rgba(15, 23, 42, 0.06);
     }
     .flows2-summary-item__main {
-      flex: 1;
+      width: 100%;
       min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 3px;
+    }
+    .flows2-summary-item__row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex-wrap: wrap;
     }
     .flows2-summary-item__title {
       font-size: 13px;
@@ -382,21 +518,30 @@
       overflow-wrap: anywhere;
     }
     .flows2-chip {
+      align-self: flex-start;
       flex-shrink: 0;
       font-size: 11px;
       font-weight: 600;
       color: var(--text-secondary, #6b7280);
-      background: rgba(17, 24, 39, 0.04);
-      border: 1px solid rgba(17, 24, 39, 0.08);
+      background: rgba(15, 23, 42, 0.05);
+      border: none;
       padding: 4px 8px;
       border-radius: 999px;
       white-space: nowrap;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
     }
     .flows2-empty {
       margin: 0;
       padding: 6px 0;
       font-size: 12px;
       color: var(--text-secondary, #6b7280);
+    }
+    .flows2-summary-list--empty {
+      min-height: 54px;
+      display: flex;
+      align-items: stretch;
     }
     .flows2-cols {
       display: grid;
@@ -1133,10 +1278,12 @@
             return `
               <div class="flows2-summary-item">
                 <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__title">${name}</div>
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">${name}</div>
+                    <div class="flows2-chip">${mode}</div>
+                  </div>
                   <div class="flows2-summary-item__sub">${qty || ''}</div>
                 </div>
-                <div class="flows2-chip">${mode}</div>
               </div>
             `;
           }).join('')
@@ -1158,17 +1305,29 @@
             return `
               <div class="flows2-summary-item">
                 <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__title">${name}</div>
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">${name}</div>
+                    <div class="flows2-chip">${mode}</div>
+                  </div>
                   <div class="flows2-summary-item__sub">${sub}</div>
                 </div>
-                <div class="flows2-chip">${mode}</div>
               </div>
             `;
           }).join('')
         : '<p class="flows2-empty">No outputs configured.</p>';
 
-      const promptsSummaryHtml = (executionPrompts && executionPrompts.length)
-        ? executionPrompts.map(p => {
+      function isTraceabilityOrSystemPrompt(p) {
+        if (!p) return false;
+        const labelRaw = (p.label || p.prompt || '').toString().trim().toLowerCase();
+        const typeRaw = (p.type || '').toString().trim().toLowerCase();
+        if (labelRaw === 'batch number' || labelRaw === 'evidence') return true;
+        if (typeRaw === 'evidence') return true;
+        return false;
+      }
+      const customPrompts = (executionPrompts || []).filter(p => !isTraceabilityOrSystemPrompt(p));
+
+      const promptsSummaryHtml = (customPrompts && customPrompts.length)
+        ? customPrompts.map(p => {
             const label = escapeHtml((p && (p.label || p.prompt)) ? String(p.label || p.prompt) : '—');
             const type = escapeHtml((p && p.type) ? String(p.type) : 'text');
             const unit = escapeHtml((p && p.unit) ? String(p.unit) : '');
@@ -1177,10 +1336,12 @@
             return `
               <div class="flows2-summary-item">
                 <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__title">${label}</div>
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">${label}</div>
+                    <div class="flows2-chip">${escapeHtml(req)}</div>
+                  </div>
                   <div class="flows2-summary-item__sub">${escapeHtml(sub)}</div>
                 </div>
-                <div class="flows2-chip">${escapeHtml(req)}</div>
               </div>
             `;
           }).join('')
@@ -1223,6 +1384,7 @@
           </button>
         </div>
         <div class="flows2-step__body">
+          <div class="flows2-step__body-inner">
           <div class="flows2-section">
             <p class="flows2-section__title">Inputs</p>
             <div class="flows2-summary-list">${inputsSummaryHtml}</div>
@@ -1233,29 +1395,33 @@
             <div class="flows2-summary-list">${outputsSummaryHtml}</div>
           </div>
 
-          ${promptsSummaryHtml ? `
-            <div class="flows2-section">
-              <p class="flows2-section__title">Prompts</p>
-              <div class="flows2-summary-list">${promptsSummaryHtml}</div>
-            </div>
-          ` : ''}
-
           <div class="flows2-section">
             <p class="flows2-section__title">Traceability & compliance</p>
             <div class="flows2-summary-list">
               <div class="flows2-summary-item">
                 <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__title">Batch number</div>
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">Batch number</div>
+                    <div class="flows2-chip">Required</div>
+                  </div>
                   <div class="flows2-summary-item__sub">${escapeHtml(batchFlag || 'Off')}</div>
                 </div>
               </div>
               <div class="flows2-summary-item">
                 <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__title">Evidence</div>
+                  <div class="flows2-summary-item__row">
+                    <div class="flows2-summary-item__title">Evidence</div>
+                    <div class="flows2-chip">Required</div>
+                  </div>
                   <div class="flows2-summary-item__sub">${escapeHtml(evidenceFlag || 'Off')}</div>
                 </div>
               </div>
             </div>
+          </div>
+
+          <div class="flows2-section">
+            <p class="flows2-section__title">Prompts</p>
+            <div class="flows2-summary-list${promptsSummaryHtml ? '' : ' flows2-summary-list--empty'}">${promptsSummaryHtml || '<div class="flows2-summary-item"><div class="flows2-summary-item__main"><div class="flows2-summary-item__row"><div class="flows2-summary-item__title">No custom prompts configured.</div></div><div class="flows2-summary-item__sub">Add prompts to capture operator inputs during execution.</div></div></div>'}</div>
           </div>
 
           ${hasDocs ? `
@@ -1272,9 +1438,6 @@
             </div>
           ` : ''}
 
-          <div class="flows2-step__actions">
-            <button class="btn btn-secondary btn-sm" onclick="window.openCreateProcessModal(); return false;">Edit workflow</button>
-            <button class="btn btn-secondary btn-sm" onclick="deleteStep(this.closest('.step-card'))" style="color: var(--error);">Delete step</button>
           </div>
         </div>
       `;
