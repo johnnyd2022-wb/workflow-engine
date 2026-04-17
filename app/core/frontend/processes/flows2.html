@@ -262,17 +262,14 @@
       color: var(--success-dark, #15803d);
     }
 
-    /* Fixed bottom action bar (shared .spa-fixed-action-bar; same shell as process-flow-spa wizard rail) */
-    .flows2-page {
-      --spa-mobile-bottom-tab-height: 64px;
-    }
+    /* Fixed bottom action bar — mobile tab clearance via --spa-mobile-bottom-tab-height (styles2.css) */
     .flows2-page .spa-fixed-action-bar {
       position: fixed;
       left: 0;
       right: 0;
       bottom: env(safe-area-inset-bottom, 0px);
       margin-top: 0;
-      z-index: 99;
+      z-index: 220;
       padding: 0;
       background: var(--bg-app, hsl(220, 20%, 97%));
       border-top: 1px solid var(--border-default, #e5e7eb);
@@ -288,7 +285,7 @@
     }
     @media (max-width: 767px) {
       .flows2-page .spa-fixed-action-bar {
-        bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
+        bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px));
       }
     }
     .flows2-page .spa-fixed-action-bar__inner {
@@ -306,7 +303,7 @@
     }
     @media (max-width: 767px) {
       .flows2-page #page-content.page-content {
-        padding-bottom: calc(var(--spa-mobile-bottom-tab-height) + 72px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 72px + env(safe-area-inset-bottom, 0px));
       }
     }
 

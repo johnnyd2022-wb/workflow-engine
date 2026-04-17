@@ -351,6 +351,14 @@
       padding-bottom: 0 !important;
     }
 
+    /* Mobile: same tall header when menu is open (avoid slim desktop height + broken dropdown anchor). */
+    @media (max-width: 767px) {
+      .main-header.bee-menu-open {
+        height: var(--spa-mobile-topbar-height, 72px) !important;
+        min-height: var(--spa-mobile-topbar-height, 72px) !important;
+      }
+    }
+
     #page-content.page-content {
       --spa-column-inset: clamp(7px, 1.35vw, 13px);
       box-sizing: border-box;
@@ -602,6 +610,34 @@
       border-radius: calc(var(--bee-size) * 0.25);
     }
 
+    /* Mobile: compact chrome vs page CTAs (.btn ~14px + padding; flows2 Manage / Start new batch stay visually primary) */
+    @media (max-width: 767px) {
+      .bee-topbar-wrap {
+        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 72px) - 30px));
+      }
+      .bee-profile {
+        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 72px) - 30px));
+      }
+      .spa-banner-back svg {
+        width: 20px;
+        height: 20px;
+      }
+      .topbar-notifications svg {
+        width: 18px;
+        height: 18px;
+      }
+      .topbar-account {
+        gap: 10px;
+      }
+      .topbar-notifications__badge {
+        min-width: 16px;
+        height: 16px;
+        font-size: 10px;
+        top: -3px;
+        right: -3px;
+      }
+    }
+
     .bee-body {
       transform-origin: 50% 60%;
     }
@@ -758,6 +794,14 @@
     @media (max-width: 767px) {
       .bee-menu {
         border-radius: 0 0 var(--radius-xl, 14px) var(--radius-xl, 14px);
+        /* Anchor under the sticky top bar instead of overlapping the viewport top */
+        top: calc(env(safe-area-inset-top, 0px) + var(--spa-mobile-topbar-height, 72px));
+        max-height: calc(
+          100vh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 72px) - env(safe-area-inset-bottom, 0px)
+        );
+        max-height: calc(
+          100dvh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 72px) - env(safe-area-inset-bottom, 0px)
+        );
       }
     }
   </style>
@@ -1047,11 +1091,22 @@
     }
     window.spaFlowWizardBackHref = spaFlowWizardBackHref;
 
+    /** SPA main tabs (sidebar): no “up” affordance — only nested routes show the back control. */
+    function spaBannerBackIsMainTab(pathname) {
+      var p = (pathname || '').replace(/\/$/, '') || '/';
+      return (
+        p === '/core' ||
+        p === '/workflow-engine/integrations' ||
+        p === '/workflow-engine/settings'
+      );
+    }
+    window.spaBannerBackIsMainTab = spaBannerBackIsMainTab;
+
     function spaSyncBannerBack() {
       var el = document.getElementById('spa-banner-back');
       if (!el) return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
-      if (path === '/core') {
+      if (spaBannerBackIsMainTab(path)) {
         el.classList.add('spa-banner-back--hidden');
         el.setAttribute('aria-hidden', 'true');
         el.setAttribute('tabindex', '-1');
@@ -1092,6 +1147,18 @@
     }
     window.spaSyncBannerBack = spaSyncBannerBack;
 
+    /** Primary scroll container is #page-content (not the window). Use after layout settles. */
+    function spaResetMainScrollPosition() {
+      var pc = document.getElementById('page-content');
+      if (pc) pc.scrollTop = 0;
+      var mc = document.querySelector('.main-content');
+      if (mc) mc.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    }
+    window.spaResetMainScrollPosition = spaResetMainScrollPosition;
+
     function spaBannerBackInit() {
       var el = document.getElementById('spa-banner-back');
       if (!el) return;
@@ -1127,9 +1194,17 @@
         }
       });
       spaSyncBannerBack();
+      window.addEventListener('popstate', spaSyncBannerBack);
     }
 
-    document.addEventListener('DOMContentLoaded', spaBannerBackInit);
+    // Last path we already scrolled to top for (avoids duplicate settles + same-URL noise).
+    var spaLastScrollResetPath =
+      (window.location.pathname || '').replace(/\/$/, '') || '/';
+    document.addEventListener('DOMContentLoaded', function onSpaShellReady() {
+      spaLastScrollResetPath =
+        (window.location.pathname || '').replace(/\/$/, '') || '/';
+      spaBannerBackInit();
+    });
 
     // Global HTMX wiring
     document.body.addEventListener('htmx:configRequest', function (evt) {
@@ -1139,17 +1214,29 @@
       }
     });
 
-    // After boosted navigation settles, re-sync href (afterOnLoad can be early relative to final pathname in some cases).
-    document.body.addEventListener('htmx:afterSettle', function () {
+    // After boosted navigation settles: sync banner + scroll the real overflow parent (#page-content),
+    // not window (fixes tiny post-nav drift on mobile when the column scroll container kept its old scrollTop).
+    document.body.addEventListener('htmx:afterSettle', function (evt) {
       if (typeof spaSyncBannerBack === 'function') {
         spaSyncBannerBack();
       }
+      var tgt = evt.detail && evt.detail.target;
+      if (!tgt || tgt.id !== 'page-content') return;
+      var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
+      if (path === spaLastScrollResetPath) return;
+      spaLastScrollResetPath = path;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (typeof spaResetMainScrollPosition === 'function') {
+            spaResetMainScrollPosition();
+          }
+        });
+      });
     });
 
     // afterOnLoad: banner back state (HTMX keeps shell; sync from URL) + Process Hub data reload (see core2.html)
     document.body.addEventListener('htmx:afterOnLoad', function (evt) {
       spaSyncBannerBack();
-      window.scrollTo(0, 0);
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
       if (path !== '/core') return;
       if (typeof window.loadCoreHubDashboardData === 'function') {

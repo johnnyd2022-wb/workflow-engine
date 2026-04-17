@@ -4,29 +4,13 @@
 
 {% block head_extras %}
   <meta name="description" content="Accounting integrations for biz-e">
-  <style>
-    @media (max-width: 640px) {
-      .integrations-grid {
-        grid-template-columns: 1fr !important;
-      }
-      .integration-card-row {
-        flex-direction: column !important;
-        align-items: stretch !important;
-        justify-content: flex-start !important;
-      }
-      .integration-card-row .btn {
-        width: 100% !important;
-        min-width: 0 !important;
-        margin-top: 10px !important;
-      }
-    }
-  </style>
 {% endblock %}
 
 {% block topbar %}{% endblock %}
 
 {% block content %}
-  <div class="max-content">
+  {# Wrapper class ships with HTMX #page-content swaps (head_extras styles do not). Layout lives in styles2.css. #}
+  <div class="max-content integrations-page">
     <section class="spa-form-section spa-page-hero" aria-label="Integrations header">
       <div class="inventory-spa-header-wrap inventory-hub-banner-wrap" aria-hidden="true">
         <div class="inventory-spa-header__banner">
@@ -85,9 +69,9 @@
       </p>
     </section>
 
-    <div class="integrations-grid" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+    <div class="integrations-grid">
       <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
-        <div class="card-content integration-card-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div class="card-content integration-card-row">
           <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
             <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
               <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
@@ -100,12 +84,12 @@
               <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Coming soon</div>
             </div>
           </div>
-          <button type="button" class="btn btn-secondary btn-sm" disabled style="min-width: 92px;">Connect</button>
+          <button type="button" class="btn btn-secondary btn-sm integration-connect-btn" disabled>Connect</button>
         </div>
       </section>
 
       <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
-        <div class="card-content integration-card-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div class="card-content integration-card-row">
           <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
             <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
               <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
@@ -118,7 +102,7 @@
               <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Coming soon</div>
             </div>
           </div>
-          <button type="button" class="btn btn-secondary btn-sm" disabled style="min-width: 92px;">Connect</button>
+          <button type="button" class="btn btn-secondary btn-sm integration-connect-btn" disabled>Connect</button>
         </div>
       </section>
     </div>

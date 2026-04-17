@@ -106,6 +106,14 @@
     --node-pending: hsl(220, 15%, 60%);
     --node-pending-bg: hsl(220, 15%, 96%);
   }
+
+  /* Mobile chrome: bottom icon tab + matched top strip height (see @media max-width 767px .sidebar) */
+  @media (max-width: 767px) {
+    :root {
+      --spa-mobile-bottom-tab-height: 72px;
+      --spa-mobile-topbar-height: var(--spa-mobile-bottom-tab-height);
+    }
+  }
   
   /* ============================================
      BASE RESET & GLOBAL STYLES
@@ -305,13 +313,18 @@
     transition: all var(--transition-normal);
   }
   
-  .nav-link:hover {
+  .nav-link:hover:not(.active) {
     background: hsl(220, 20%, 15%);
     color: var(--sidebar-text-hover);
   }
   
+  /* Selected default (mobile bottom tab + fallback): mustard text + icon glow. Desktop left nav overrides ≥768px below. */
   .nav-link.active {
-    background: rgba(246, 208, 76, 0.10);
+    background: transparent;
+    color: var(--sidebar-text-active);
+  }
+  
+  .nav-link.active .nav-link-text {
     color: var(--sidebar-text-active);
   }
   
@@ -319,16 +332,16 @@
     padding: 6px;
     border-radius: var(--radius-md);
     transition: all var(--transition-normal);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.0);
+    box-shadow: none;
   }
   
-  .nav-link:hover .nav-link-icon-wrapper {
+  .nav-link:hover:not(.active) .nav-link-icon-wrapper {
     background: hsl(220, 20%, 18%);
   }
   
   .nav-link.active .nav-link-icon-wrapper {
-    background: rgba(246, 208, 76, 0.14);
-    box-shadow: 0 0 0 1px rgba(246, 208, 76, 0.55);
+    background: transparent;
+    box-shadow: 0 0 16px rgba(246, 208, 76, 0.55);
   }
   
   .nav-link-icon {
@@ -355,7 +368,7 @@
     transition: all var(--transition-normal);
   }
   
-  .nav-link:hover .nav-link-arrow {
+  .nav-link:hover:not(.active) .nav-link-arrow {
     opacity: 0.4;
     transform: translateX(0);
   }
@@ -478,7 +491,7 @@
       bottom: 0;
       height: auto;
       width: 100%;
-      min-height: 56px;
+      min-height: var(--spa-mobile-bottom-tab-height, 72px);
       flex-direction: row;
       border-right: none;
       border-top: 1px solid var(--sidebar-border);
@@ -524,6 +537,10 @@
       gap: 4px;
       padding: 8px 4px;
       min-height: 48px;
+      /* Avoid iOS/Safari nudging the main column after tap so the nav stays “pinned” visually */
+      scroll-margin: 0;
+      scroll-margin-block: 0;
+      scroll-margin-inline: 0;
     }
     .sidebar .nav-link-text {
       display: block;
@@ -538,10 +555,54 @@
     .sidebar .nav-link-icon-wrapper {
       padding: 6px;
     }
+
+    /* Bottom tab: subtler hover than full desktop row tint */
+    .sidebar .nav-link:hover:not(.active) {
+      background: transparent;
+      color: var(--sidebar-text-hover);
+    }
+    .sidebar .nav-link:hover:not(.active) .nav-link-icon-wrapper {
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: none;
+    }
     .main-content {
       margin-left: 0;
-      /* Match mobile bottom nav row height (see .sidebar min-height + nav-link); was 56px and underlapped content */
-      padding-bottom: 64px;
+      /* Bottom tab + home indicator inset */
+      padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  /* Left sidebar (laptop + desktop): active tab = flows2 Manage–style mustard fill; squarer than default nav pill. */
+  @media (min-width: 768px) {
+    .sidebar .nav-link {
+      border-radius: 8px;
+    }
+    .sidebar .nav-link.active {
+      background: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%);
+      color: rgba(17, 24, 39, 0.96);
+      font-weight: 700;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 225, 120, 0.2);
+    }
+    .sidebar .nav-link.active .nav-link-text,
+    .sidebar .nav-link.active .nav-link-icon {
+      color: rgba(17, 24, 39, 0.96);
+    }
+    .sidebar .nav-link.active .nav-link-icon-wrapper {
+      background: transparent;
+      box-shadow: none;
+    }
+    .sidebar .nav-link.active .nav-link-arrow {
+      color: rgba(17, 24, 39, 0.72);
+      opacity: 0.85;
+    }
+    .sidebar .nav-link.active:hover {
+      background: linear-gradient(145deg, #FFE680 0%, #F1C40F 45%, #C47F00 100%);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 225, 120, 0.28);
+      color: rgba(17, 24, 39, 0.96);
+    }
+    .sidebar .nav-link.active:hover .nav-link-text,
+    .sidebar .nav-link.active:hover .nav-link-icon {
+      color: rgba(17, 24, 39, 0.96);
     }
   }
   
@@ -568,8 +629,6 @@
     top: 0;
     z-index: 200;
     box-sizing: border-box;
-    /* ~1/20 viewport; modest floor so the strip stays usable on short viewports */
-    height: max(36px, calc(100vh / 20));
     background: hsl(218, 35%, 18%);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -578,6 +637,21 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
+  }
+
+  @media (max-width: 767px) {
+    .main-header {
+      /* Same visual height as mobile bottom icon bar */
+      height: var(--spa-mobile-topbar-height, 72px);
+      min-height: var(--spa-mobile-topbar-height, 72px);
+    }
+  }
+
+  @media (min-width: 768px) {
+    .main-header {
+      /* ~1/20 viewport; modest floor so the strip stays usable on short viewports */
+      height: max(36px, calc(100vh / 20));
+    }
   }
   
   .header-actions {
@@ -691,11 +765,12 @@
      PAGE HEADER
      ============================================ */
   
-  /* Shared SPA "hero" banner + title spacing (Core/Settings/Integrations). */
+  /* Shared SPA "hero" banner + title spacing (Core/Settings/Integrations).
+     Tighter banner → title rhythm (~half prior gap) on all breakpoints; overrides inventory-spa-header.css. */
   .spa-page-hero {
     text-align: center;
     margin-top: 18px;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
   }
   /* Core sits under the journey bar; give it a touch more breathing room. */
   .spa-page-hero--core {
@@ -704,13 +779,17 @@
   .spa-page-hero .inventory-spa-header-wrap {
     margin-left: auto;
     margin-right: auto;
+    margin-bottom: 6px;
   }
-  /* Use Integrations’ gap as the standard. */
+  .spa-page-hero .inventory-spa-header__banner {
+    padding: 14px 0 9px;
+    box-sizing: border-box;
+  }
   .spa-page-hero .page-title {
-    margin: 10px 0 0 0;
+    margin: 5px 0 0 0;
   }
   .spa-page-hero .page-subtitle {
-    margin: 6px 0 0 0;
+    margin: 3px 0 0 0;
   }
 
   .page-header {
@@ -1937,4 +2016,39 @@
 .spa-fixed-action-bar__right .btn.btn-primary {
   font-size: 14px;
   font-weight: 500;
+}
+
+/* Integrations (workflow_engine/integrations.html): layout lives here so HTMX #page-content swaps apply it.
+   Rules in head_extras only run on full document loads and were missing after SPA navigation. */
+.integrations-page .integrations-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.integrations-page .integration-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.integrations-page .integration-connect-btn {
+  min-width: 92px;
+  flex-shrink: 0;
+}
+@media (max-width: 767px) {
+  .integrations-page .integrations-grid {
+    grid-template-columns: 1fr;
+  }
+  .integrations-page .integration-card-row {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+  .integrations-page .integration-connect-btn {
+    width: 100%;
+    min-width: 0;
+    margin-top: 10px;
+    align-self: stretch;
+  }
 }
