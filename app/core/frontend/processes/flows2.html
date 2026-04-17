@@ -8,6 +8,50 @@
   <meta name="description" content="SupplyChain V2 - Workflow details">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <style>
+    /* Shared segmented control (copied from create-process-step-content-styles.html) */
+    .flow-mode-segmented {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: stretch;
+      width: 100%;
+      max-width: 100%;
+      gap: 0;
+      border-radius: var(--radius-md, 8px);
+      overflow: hidden;
+      border: 1px solid var(--border-default, #e5e7eb);
+      box-sizing: border-box;
+    }
+    .flow-mode-segment {
+      flex: 1 1 0;
+      min-width: 0;
+      margin: 0;
+      padding: 10px 4px;
+      min-height: 44px;
+      border: none;
+      background: var(--bg-card, #fff);
+      color: var(--text-secondary, #6b7280);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    @media (min-width: 480px) {
+      .flow-mode-segment { font-size: 13px; padding: 8px 10px; min-height: 0; }
+    }
+    .flow-mode-segment + .flow-mode-segment { border-left: 1px solid var(--border-default, #e5e7eb); }
+    .flow-mode-segment:hover { background: var(--bg-secondary, #f9fafb); color: var(--text-primary, #111827); }
+    .flow-mode-segment.flow-mode-segment--active { background: var(--primary, #3b82f6); color: #fff; }
+    .flow-mode-segment.flow-mode-segment--active:hover { color: #fff; }
+
     /* Searchable dropdown styles */
     .searchable-dropdown-container { position: relative; }
     .searchable-dropdown-list { z-index: 1000; }
