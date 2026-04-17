@@ -943,6 +943,7 @@
 
         <div
           class="bee-menu"
+          x-cloak
           x-show="open"
           x-transition:enter="transition ease-out duration-160"
           x-transition:enter-start="opacity-0"
@@ -996,6 +997,8 @@
   <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script src="/ui/shared/sidebar-v2.js"></script>
+  <script src="/ui/shared/password-policy.js"></script>
+  <script src="/ui/shared/workflow-engine-settings.js"></script>
 
   {# HTMX & Alpine for SPA-style navigation and local UI state #}
   <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous"></script>

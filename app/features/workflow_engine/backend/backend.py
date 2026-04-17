@@ -199,7 +199,7 @@ def compliance():
 @workflow_engine_bp.route("/workflow-engine/integrations")
 def integrations():
     """Render the integrations page"""
-    return render_template("integrations.html")
+    return render_template("integrations.html", active_page="integrations")
 
 
 @workflow_engine_bp.route("/workflow-engine/settings")

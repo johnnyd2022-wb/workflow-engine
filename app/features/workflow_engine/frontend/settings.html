@@ -1,14 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Settings — SupplyChain</title>
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block body_class %}settings-page{% endblock %}
+
+{% block head_extras %}
   <meta name="description" content="Configure your account and preferences">
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* Settings page: form and card overrides using styles2 tokens; responsive like process-flow-spa */
     .settings-page .page-content { padding: 16px; }
@@ -23,8 +20,7 @@
     .settings-page .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px hsla(210, 100%, 50%, 0.15); }
     .settings-page select.form-input { cursor: pointer; }
     .settings-page .text-error { color: var(--error); font-size: 0.875rem; }
-    .settings-page .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 1rem; border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-bottom: 0.75rem; background: var(--bg-card); }
-    .settings-page .toggle-row:last-child { margin-bottom: 0; }
+    .settings-page .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
     .settings-page .toggle-label { font-weight: 600; margin-bottom: 0.25rem; }
     .settings-page .toggle-desc { font-size: 0.875rem; color: var(--text-secondary); }
     .settings-page .switch { position: relative; width: 48px; height: 24px; flex-shrink: 0; }
@@ -63,33 +59,136 @@
       color: var(--text-primary, #1a1a1a);
     }
     .long-session-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    /* ---- Visual-only refresh: flows2-style crisp containers + divider rows ---- */
+    .settings-page .settings-hero {
+      text-align: center;
+      margin: 18px 0 16px 0;
+    }
+
+    .settings-page .settings-card.card {
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+      background: rgba(255, 255, 255, 0.72);
+      overflow: hidden; /* keeps divider lines crisp */
+    }
+    .settings-page .settings-card .card-header {
+      padding-bottom: 10px !important;
+    }
+    .settings-page .settings-card .card-content {
+      padding-top: 0 !important;
+    }
+
+    /* Turn form groups into a clean stack with dividers (no behavioral changes) */
+    .settings-page .settings-section-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+    }
+    .settings-page .settings-section-list > .form-group,
+    .settings-page .settings-section-list > .toggle-row,
+    .settings-page .settings-section-list > .spa-divider-row {
+      padding: 14px 0;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+    }
+    .settings-page .settings-section-list > .form-group + .form-group,
+    .settings-page .settings-section-list > .toggle-row + .toggle-row,
+    .settings-page .settings-section-list > .spa-divider-row + .spa-divider-row,
+    .settings-page .settings-section-list > .form-group + .toggle-row,
+    .settings-page .settings-section-list > .toggle-row + .form-group,
+    .settings-page .settings-section-list > .form-group + .spa-divider-row,
+    .settings-page .settings-section-list > .spa-divider-row + .form-group,
+    .settings-page .settings-section-list > .toggle-row + .spa-divider-row,
+    .settings-page .settings-section-list > .spa-divider-row + .toggle-row {
+      border-top: 1px solid rgba(15, 23, 42, 0.06);
+    }
+
+    /* Toggle row: remove boxed card feel, keep layout */
+    .settings-page .toggle-row {
+      border: none;
+      background: transparent;
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    /* Minor tightening so labels align like flows2 stacks */
+    .settings-page .form-group { margin-bottom: 0; }
+    .settings-page .form-input { max-width: 520px; }
   </style>
-</head>
-<body class="settings-page">
-  <div class="app-layout">
-    {% include 'shared/sidebar-v2.html' %}
+{% endblock %}
 
-    <div class="main-content">
-      <header class="main-header">
-        <div>
-          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--color-text-primary);">Settings</h1>
-          <p style="color: var(--color-text-secondary); font-size: 0.9375rem;">Configure your account and preferences</p>
-        </div>
-      </header>
+{% block content %}
+  <div class="max-content">
+    <div class="settings-hero">
+      <div class="inventory-spa-header-wrap inventory-hub-banner-wrap" aria-hidden="true">
+        <div class="inventory-spa-header__banner">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
+            <defs>
+              <linearGradient id="set-line" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#3B82F6"/>
+                <stop offset="100%" stop-color="#22C55E"/>
+              </linearGradient>
+              <linearGradient id="set-gear" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#DBEAFE"/>
+                <stop offset="100%" stop-color="#A7F3D0"/>
+              </linearGradient>
+              <filter id="set-soft" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.12"/>
+              </filter>
+            </defs>
 
-      <!-- Long-session warning: security nudge when timeout > 24h and 2FA disabled; not an enforcement mechanism -->
-      <div id="long-session-banner" class="long-session-banner" role="alert" aria-live="polite" style="display: none;">
-        <div class="long-session-banner-content">
-          <span class="long-session-banner-icon" aria-hidden="true">⚠</span>
-          <p class="long-session-banner-message">You've chosen a long session without 2FA. This is convenient, but less secure.</p>
-          <div class="long-session-banner-actions">
-            <button type="button" id="long-session-banner-dismiss" class="btn btn-ghost btn-sm">Dismiss</button>
-          </div>
+            <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
+
+            <!-- flow line -->
+            <path d="M26 52 C 55 36, 82 36, 100 46 C 118 56, 145 56, 174 40" stroke="url(#set-line)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+
+            <!-- gear -->
+            <g filter="url(#set-soft)">
+              <circle cx="102" cy="44" r="22" fill="url(#set-gear)"/>
+              <circle cx="102" cy="44" r="10" fill="none" stroke="#0F172A" stroke-width="2" opacity="0.55"/>
+              <g stroke="#0F172A" stroke-width="2" stroke-linecap="round" opacity="0.35">
+                <path d="M102 18v6"/>
+                <path d="M102 64v6"/>
+                <path d="M76 44h6"/>
+                <path d="M122 44h6"/>
+                <path d="M84 26l4 4"/>
+                <path d="M120 58l4 4"/>
+                <path d="M84 62l4-4"/>
+                <path d="M120 30l4-4"/>
+              </g>
+            </g>
+
+            <!-- sliders -->
+            <g filter="url(#set-soft)">
+              <rect x="24" y="28" width="52" height="40" rx="14" fill="#DBEAFE" opacity="0.65"/>
+              <path d="M34 40h32" stroke="#3B82F6" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+              <circle cx="46" cy="40" r="6" fill="#3B82F6" opacity="0.85"/>
+              <path d="M34 56h32" stroke="#22C55E" stroke-width="3" stroke-linecap="round" opacity="0.75"/>
+              <circle cx="58" cy="56" r="6" fill="#22C55E" opacity="0.75"/>
+            </g>
+          </svg>
         </div>
       </div>
+      <h1 class="page-title" style="margin: 0; text-align: center;">Settings</h1>
+      <p class="page-subtitle" style="margin: 6px 0 0 0; color: var(--text-secondary, #6b7280); text-align: center;">
+        Configure your account and preferences
+      </p>
+    </div>
 
-      <main class="page-content">
-        <div class="max-content">
+    <!-- Long-session warning: security nudge when timeout > 24h and 2FA disabled; not an enforcement mechanism -->
+    <div id="long-session-banner" class="long-session-banner" role="alert" aria-live="polite" style="display: none;">
+      <div class="long-session-banner-content">
+        <span class="long-session-banner-icon" aria-hidden="true">⚠</span>
+        <p class="long-session-banner-message">You've chosen a long session without 2FA. This is convenient, but less secure.</p>
+        <div class="long-session-banner-actions">
+          <button type="button" id="long-session-banner-dismiss" class="btn btn-ghost btn-sm">Dismiss</button>
+        </div>
+      </div>
+    </div>
           <section class="card settings-card">
             <div class="card-header" style="padding-bottom: 12px;">
               <h2 class="card-title" style="margin-bottom: 0;">Account Information</h2>
@@ -97,7 +196,7 @@
             <div class="card-content">
           
           <div id="settings-message" style="display: none; margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.875rem;"></div>
-          
+          <div class="settings-section-list">
           <div class="form-group">
             <label class="form-label">Company Name</label>
             <input 
@@ -155,7 +254,8 @@
             >
             <div id="settings-phone-error" class="text-error" style="display: none; margin-top: 0.5rem; font-size: 0.875rem;"></div>
           </div>
-          
+          </div>
+
           <button id="settings-save-btn" class="btn btn-primary" onclick="saveSettings()">Save Changes</button>
             </div>
           </section>
@@ -165,6 +265,7 @@
               <h2 class="card-title" style="margin-bottom: 0;">Notification Preferences</h2>
             </div>
             <div class="card-content">
+              <div class="settings-section-list">
               <div class="toggle-row">
                 <div>
                   <div class="toggle-label">Email Notifications</div>
@@ -194,6 +295,7 @@
                   <input type="checkbox">
                   <span class="switch-slider"></span>
                 </label>
+              </div>
               </div>
             </div>
           </section>
@@ -289,8 +391,6 @@
             </div>
           </section>
         </div>
-      </main>
-    </div>
   </div>
   
   <style>
@@ -442,11 +542,11 @@
       </div>
     </div>
   </div>
-  
-  
+
+{% endblock %}
+
+{% block scripts %}
   <script src="/ui/shared/password-policy.js"></script>
-  <script src="/ui/shared/account-info.js"></script>
-  <script src="/ui/shared/sidebar-v2.js"></script>
   <script>
     // Initialize account info component (HTML is already inlined in the page)
     // The component will render immediately, and data will load asynchronously
@@ -2026,5 +2126,4 @@
       }, 1000);
     }
   </script>
-</body>
-</html>
+{% endblock %}
