@@ -271,6 +271,118 @@
     .flows2-panel { display: none; margin-top: 18px; }
     .flows2-panel[data-active="true"] { display: block; }
 
+    /* Manage menu (sticky bar) */
+    .flows2-manage-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .flows2-manage-btn {
+      min-width: 152px;
+      justify-content: center;
+      background: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%);
+      color: rgba(17, 24, 39, 0.96);
+      border: none;
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 225, 120, 0.18);
+      transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+      font-weight: 700;
+    }
+    .flows2-manage-btn:hover {
+      transform: translateY(-1px);
+      background: linear-gradient(145deg, #FFE680 0%, #F1C40F 45%, #C47F00 100%);
+      box-shadow: 0 24px 56px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 225, 120, 0.25);
+    }
+    .flows2-manage-btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(255, 230, 128, 0.35), 0 24px 56px rgba(0, 0, 0, 0.28);
+    }
+    .flows2-manage-menu {
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 10px);
+      width: 100%;
+      min-width: 220px;
+      display: none;
+      padding: 8px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+      backdrop-filter: blur(10px);
+      box-sizing: border-box;
+      z-index: 100;
+      transform-origin: bottom left;
+    }
+    .flows2-manage-menu[data-open="true"] { display: block; }
+    .flows2-manage-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.28);
+      z-index: 98;
+    }
+    .flows2-manage-backdrop[data-open="true"] { display: block; }
+    @media (min-width: 768px) {
+      /* Desktop: no modal backdrop; only the upward popover */
+      .flows2-manage-backdrop { display: none !important; }
+    }
+
+    @media (max-width: 767px) {
+      /* Mobile: menu becomes a full-width sheet with a backdrop that blocks interactions behind it */
+      .flows2-manage-menu {
+        position: fixed;
+        left: 0;
+        right: 0;
+        width: auto;
+        min-width: 0;
+        bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+        border-radius: 18px 18px 0 0;
+        margin: 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        transform-origin: bottom center;
+        z-index: 100;
+      }
+      .flows2-manage-backdrop {
+        z-index: 99;
+      }
+      .flows2-manage-item {
+        padding: 12px 12px;
+        font-size: 16px;
+        border-radius: 14px;
+      }
+    }
+    .flows2-manage-item {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      width: 100%;
+      gap: 10px;
+      padding: 10px 10px;
+      margin: 0;
+      border: none;
+      background: transparent;
+      color: var(--text-primary, #111827);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.12s ease, transform 0.12s ease;
+      font-family: inherit;
+    }
+    .flows2-manage-item:hover {
+      background: rgba(15, 23, 42, 0.06);
+      transform: translateY(-1px);
+    }
+    .flows2-manage-item--danger {
+      color: var(--error, #ef4444);
+    }
+    .flows2-manage-item--danger:hover {
+      background: rgba(239, 68, 68, 0.08);
+    }
+
     /* Steps list: premium, borderless expandable rows (SPA style) */
     .steps-container {
       display: flex;
@@ -563,69 +675,39 @@
               <div class="inventory-spa-header__banner" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
                   <defs>
-                    <!-- Same bronze body gradient as top-bar bee (base_spa); unique id so it does not clash with #beeG -->
-                    <linearGradient id="flows2bee-brandG" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stop-color="#C6863A"/>
-                      <stop offset="45%" stop-color="#B87333"/>
-                      <stop offset="100%" stop-color="#6B3F10"/>
+                    <!-- Match other SPA banners: connector + 3 nodes + soft shadow -->
+                    <linearGradient id="flows2honey-line" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stop-color="#6366f1"/>
+                      <stop offset="100%" stop-color="#22d3ee"/>
                     </linearGradient>
-                    <!-- Matches .spa-banner-back / .bee-profile__button: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%) -->
-                    <linearGradient id="flows2bee-hex" x1="12%" y1="8%" x2="92%" y2="94%" gradientUnits="objectBoundingBox">
-                      <stop offset="0%" stop-color="#F6D04C"/>
-                      <stop offset="45%" stop-color="#F1C40F"/>
-                      <stop offset="100%" stop-color="#D49A00"/>
+                    <linearGradient id="flows2honey-node-a" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#818cf8"/>
+                      <stop offset="100%" stop-color="#4f46e5"/>
                     </linearGradient>
-                    <linearGradient id="flows2bee-link" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stop-color="#D49A00"/>
-                      <stop offset="50%" stop-color="#F1C40F"/>
-                      <stop offset="100%" stop-color="#D49A00"/>
+                    <linearGradient id="flows2honey-node-b" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#fbbf24"/>
+                      <stop offset="100%" stop-color="#d97706"/>
                     </linearGradient>
-                    <filter id="flows2bee-soft" x="-20%" y="-20%" width="140%" height="140%">
-                      <feDropShadow dx="0" dy="1.5" stdDeviation="1.75" flood-opacity="0.1"/>
+                    <linearGradient id="flows2honey-node-c" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#34d399"/>
+                      <stop offset="100%" stop-color="#059669"/>
+                    </linearGradient>
+                    <filter id="flows2honey-soft" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.12"/>
                     </filter>
                   </defs>
                   <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
-                  <!-- Process link under cells (flat-top hex geometry: R=10.5, half-height k≈9.093) -->
-                  <path d="M 36 51 C 58 48, 68 46, 90 47 C 112 48, 118 50, 134 51" stroke="url(#flows2bee-link)" stroke-width="1.25" stroke-linecap="round" fill="none" opacity="0.55" stroke-dasharray="3 4"/>
-                  <g filter="url(#flows2bee-soft)">
-                    <path d="M 46.5 51 L 41.25 60.093 L 30.75 60.093 L 25.5 51 L 30.75 41.907 L 41.25 41.907 Z" fill="url(#flows2bee-hex)" stroke="#C47F00" stroke-width="0.85" stroke-opacity="0.55" stroke-linejoin="round"/>
-                    <path d="M 100.5 47 L 95.25 56.093 L 84.75 56.093 L 79.5 47 L 84.75 37.907 L 95.25 37.907 Z" fill="url(#flows2bee-hex)" stroke="#C47F00" stroke-width="0.85" stroke-opacity="0.55" stroke-linejoin="round"/>
-                    <path d="M 144.5 51 L 139.25 60.093 L 128.75 60.093 L 123.5 51 L 128.75 41.907 L 139.25 41.907 Z" fill="url(#flows2bee-hex)" stroke="#C47F00" stroke-width="0.85" stroke-opacity="0.55" stroke-linejoin="round"/>
+                  <!-- Connector: stays inside the edge nodes (starts/ends at node centers) -->
+                  <path d="M28 52 C 55 38, 75 38, 100 48 C 125 58, 145 38, 172 52" stroke="url(#flows2honey-line)" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.85"/>
+                  <g filter="url(#flows2honey-soft)">
+                    <!-- Honeycomb nodes (hexes) instead of circles; same layout as other SPA banners -->
+                    <polygon points="42,52 35,64.124 21,64.124 14,52 21,39.876 35,39.876" fill="url(#flows2honey-node-a)"/>
+                    <polygon points="116,48 108,61.856 92,61.856 84,48 92,34.144 108,34.144" fill="url(#flows2honey-node-b)"/>
+                    <polygon points="186,52 179,64.124 165,64.124 158,52 165,39.876 179,39.876" fill="url(#flows2honey-node-c)"/>
                   </g>
-                  <circle cx="36" cy="51" r="2.2" fill="#fff" opacity="0.9" stroke="#D49A00" stroke-width="0.4" stroke-opacity="0.45"/>
-                  <circle cx="90" cy="47" r="2.4" fill="#fff" opacity="0.92" stroke="#D49A00" stroke-width="0.4" stroke-opacity="0.45"/>
-                  <circle cx="134" cy="51" r="2.2" fill="#fff" opacity="0.9" stroke="#D49A00" stroke-width="0.4" stroke-opacity="0.45"/>
-                  <!-- Same steampunk bee as account menu (base_spa bee-svg), scaled for banner -->
-                  <g transform="translate(151, 18) scale(0.36)">
-                    <g opacity="0.98">
-                      <path d="M26 38 C16 30 18 16 31 19 C44 22 45 38 34 42 C31 43 29 41 26 38 Z" fill="none" stroke="#E5E7EB" stroke-width="4" stroke-linecap="round"/>
-                      <path d="M27 36 C19 29 21 19 31 20" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
-                      <path d="M74 38 C84 30 82 16 69 19 C56 22 55 38 66 42 C69 43 71 41 74 38 Z" fill="none" stroke="#E5E7EB" stroke-width="4" stroke-linecap="round"/>
-                      <path d="M73 36 C81 29 79 19 69 20" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
-                      <g>
-                        <ellipse cx="50" cy="58" rx="18" ry="24" fill="url(#flows2bee-brandG)" stroke="#E5E7EB" stroke-opacity="0.45" stroke-width="1"/>
-                        <rect x="40" y="44" width="20" height="6" rx="3" fill="#2B1B08" opacity="0.85" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
-                        <rect x="40" y="54" width="20" height="6" rx="3" fill="#3A240B" opacity="0.9" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
-                        <rect x="40" y="64" width="20" height="6" rx="3" fill="#2B1B08" opacity="0.85" stroke="#E5E7EB" stroke-opacity="0.25" stroke-width="0.8"/>
-                        <circle cx="50" cy="35" r="11" fill="#1F2937" opacity="0.92" stroke="#E5E7EB" stroke-opacity="0.35" stroke-width="1"/>
-                        <circle cx="46.3" cy="33.4" r="2.6" fill="#22C55E" opacity="0.98"/>
-                        <circle cx="53.7" cy="33.4" r="2.6" fill="#22C55E" opacity="0.98"/>
-                        <circle cx="46.3" cy="33.4" r="1.3" fill="#052E16" opacity="0.95"/>
-                        <circle cx="53.7" cy="33.4" r="1.3" fill="#052E16" opacity="0.95"/>
-                        <circle cx="45.7" cy="32.8" r="0.6" fill="#A7F3D0" opacity="0.95"/>
-                        <circle cx="53.1" cy="32.8" r="0.6" fill="#A7F3D0" opacity="0.95"/>
-                        <path d="M68 58 L82 54 L68 62 Z" fill="#1F2937" opacity="0.95"/>
-                        <circle cx="35" cy="52" r="2" fill="#E5E7EB" opacity="0.22"/>
-                        <circle cx="65" cy="52" r="2" fill="#E5E7EB" opacity="0.22"/>
-                        <circle cx="50" cy="78" r="2" fill="#E5E7EB" opacity="0.22"/>
-                        <path d="M44 26 L38 14" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round"/>
-                        <path d="M56 26 L62 14" stroke="#E5E7EB" stroke-width="3" stroke-linecap="round"/>
-                        <circle cx="38" cy="14" r="4" fill="#1F2937" opacity="0.95"/>
-                        <circle cx="62" cy="14" r="4" fill="#1F2937" opacity="0.95"/>
-                        <circle cx="50" cy="35" r="13" fill="none" stroke="#E5E7EB" stroke-width="3" opacity="0.35"/>
-                      </g>
-                    </g>
-                  </g>
+                  <circle cx="28" cy="52" r="4" fill="#fff" opacity="0.9"/>
+                  <circle cx="100" cy="48" r="5" fill="#fff" opacity="0.9"/>
+                  <circle cx="172" cy="52" r="4" fill="#fff" opacity="0.9"/>
                 </svg>
               </div>
             </div>
@@ -689,13 +771,6 @@
                 <h2 class="card-title" style="margin: 0;">Process steps</h2>
                 <p class="page-subtitle" style="margin-top: 6px; margin-bottom: 0;" id="step-count-text">0 steps in this process</p>
               </div>
-              <div style="display:flex; gap: 8px; align-items:center;">
-                {# TODO: prefer navigation to /core/flows/create?id=… (SPA); modal below is transitional reference. #}
-                <button id="create-edit-process-btn" class="btn btn-primary btn-sm" data-modal-open="create-process-modal" onclick="window.openCreateProcessModal(); return false;" style="margin-top: 0;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  <span id="create-edit-process-btn-text">Create process</span>
-                </button>
-              </div>
             </div>
 
             <div class="steps-container" id="steps-container" style="margin-top: 16px;">
@@ -747,7 +822,23 @@
 
           {% set spa_fixed_action_aria_label = 'Process workflow actions' %}
           {% set spa_fixed_action_left_html %}
-                <button type="button" class="btn btn-sm btn-ghost flows2-process-head__delete" id="delete-process-btn" onclick="showFlows2DeleteProcessModal()">Delete Process workflow</button>
+                <div class="flows2-manage-wrap">
+                  <button type="button" class="btn flows2-manage-btn" id="flows2-manage-btn" aria-haspopup="menu" aria-expanded="false">
+                    Manage
+                  </button>
+                  <div class="flows2-manage-backdrop" id="flows2-manage-backdrop" data-open="false" aria-hidden="true"></div>
+                  <div class="flows2-manage-menu" id="flows2-manage-menu" role="menu" aria-label="Manage workflow" data-open="false">
+                    <button type="button" class="flows2-manage-item flows2-manage-item--danger" role="menuitem" id="flows2-manage-delete">
+                      Delete workflow
+                    </button>
+                    <button type="button" class="flows2-manage-item" role="menuitem" id="flows2-manage-edit">
+                      Edit workflow
+                    </button>
+                    <button type="button" class="flows2-manage-item" role="menuitem" id="flows2-manage-draft">
+                      Set workflow to draft
+                    </button>
+                  </div>
+                </div>
           {% endset %}
           {% set spa_fixed_action_right_html %}
                 <button type="button" class="btn btn-primary" id="start-execution-btn" onclick="startExecution()">
@@ -801,6 +892,109 @@
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
       else bind();
       window.setFlows2ActivePanel = setActive;
+    })();
+
+    // Manage menu (sticky bar)
+    (function () {
+      function getEls() {
+        return {
+          btn: document.getElementById('flows2-manage-btn'),
+          menu: document.getElementById('flows2-manage-menu'),
+          backdrop: document.getElementById('flows2-manage-backdrop'),
+          del: document.getElementById('flows2-manage-delete'),
+          edit: document.getElementById('flows2-manage-edit'),
+          draft: document.getElementById('flows2-manage-draft'),
+        };
+      }
+
+      function syncDraftMenuLabel() {
+        var els = getEls();
+        if (!els.draft) return;
+        // currentProcess is a page-level variable populated by loadProcessData()
+        var isDraft = !!(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.is_draft);
+        els.draft.textContent = isDraft ? 'Set workflow to ready' : 'Set workflow to draft';
+      }
+
+      function openMenu() {
+        var els = getEls();
+        if (!els.btn || !els.menu) return;
+        syncDraftMenuLabel();
+        els.menu.setAttribute('data-open', 'true');
+        if (els.backdrop) els.backdrop.setAttribute('data-open', 'true');
+        els.btn.setAttribute('aria-expanded', 'true');
+      }
+      function closeMenu() {
+        var els = getEls();
+        if (!els.btn || !els.menu) return;
+        els.menu.setAttribute('data-open', 'false');
+        if (els.backdrop) els.backdrop.setAttribute('data-open', 'false');
+        els.btn.setAttribute('aria-expanded', 'false');
+      }
+      function isOpen() {
+        var els = getEls();
+        return !!(els.menu && els.menu.getAttribute('data-open') === 'true');
+      }
+
+      // Capture outside interactions so they close the sheet and do NOT trigger underlying UI (tabs, etc).
+      document.addEventListener('pointerdown', function (e) {
+        if (!isOpen()) return;
+        var els = getEls();
+        if (!els.btn || !els.menu) return;
+        var t = e.target;
+        if (t === els.btn || (els.btn.contains && els.btn.contains(t))) return;
+        if (els.menu.contains && els.menu.contains(t)) return;
+        // Outside: close and swallow the interaction
+        closeMenu();
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+
+      document.addEventListener('click', function (e) {
+        var els = getEls();
+        if (!els.btn || !els.menu) return;
+        var t = e.target;
+        if (t === els.btn || (els.btn.contains && els.btn.contains(t))) {
+          if (isOpen()) closeMenu(); else openMenu();
+          return;
+        }
+        if (els.menu.contains && els.menu.contains(t)) return;
+        if (isOpen()) closeMenu();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && isOpen()) closeMenu();
+      });
+
+      var els = getEls();
+      if (els.del) {
+        els.del.addEventListener('click', function (e) {
+          e.preventDefault();
+          closeMenu();
+          if (typeof showFlows2DeleteProcessModal === 'function') showFlows2DeleteProcessModal();
+        });
+      }
+      if (els.edit) {
+        els.edit.addEventListener('click', function (e) {
+          e.preventDefault();
+          closeMenu();
+          if (!processId) return;
+          window.location.href = '/core/flows2/edit?id=' + encodeURIComponent(processId);
+        });
+      }
+      if (els.draft) {
+        els.draft.addEventListener('click', async function (e) {
+          e.preventDefault();
+          closeMenu();
+          if (!processId) return;
+          try {
+            var nextIsDraft = !(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.is_draft);
+            await CoreAPI.updateProcess(processId, { is_draft: nextIsDraft });
+            if (typeof loadProcessData === 'function') await loadProcessData();
+            syncDraftMenuLabel();
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      }
     })();
 
     // Configure execution modal callbacks before loading shared script
@@ -1036,27 +1230,6 @@
         // Update stats
         document.getElementById('process-step-count').textContent = processData.steps?.length || 0;
         
-        // Update button text based on whether steps exist
-        const createEditBtn = document.getElementById('create-edit-process-btn');
-        const createEditBtnText = document.getElementById('create-edit-process-btn-text');
-        if (createEditBtn && createEditBtnText) {
-          if (processData.steps && processData.steps.length > 0) {
-            createEditBtnText.textContent = 'Edit process';
-            // Update icon to edit icon
-            const icon = createEditBtn.querySelector('svg');
-            if (icon) {
-              icon.innerHTML = '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>';
-            }
-          } else {
-            createEditBtnText.textContent = 'Create process';
-            // Reset icon to plus icon
-            const icon = createEditBtn.querySelector('svg');
-            if (icon) {
-              icon.innerHTML = '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>';
-            }
-          }
-        }
-        
         // Show draft status if applicable
         if (processData.is_draft) {
           // Add draft badge near process name or in header
@@ -1109,18 +1282,18 @@
     window.loadProcessData = loadProcessData;
 
     if (!processId) {
-      const delBtn = document.getElementById('delete-process-btn');
-      if (delBtn) delBtn.style.display = 'none';
+      const manageBtn = document.getElementById('flows2-manage-btn');
+      if (manageBtn) manageBtn.style.display = 'none';
     }
 
     function showFlows2DeleteProcessModal() {
       if (!processId) return;
       const nameEl = document.getElementById('process-name');
-      const name = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'this product';
+      const name = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : 'this workflow';
       const modal = document.getElementById('flows2-delete-process-modal');
       const msg = document.getElementById('flows2-delete-confirmation-message');
       if (msg) {
-        msg.textContent = 'Are you sure you want to delete "' + name + '"? This action cannot be undone.';
+        msg.textContent = "Are you sure you want to delete workflow '" + name + "'? This action cannot be undone.";
       }
       if (modal) {
         modal.style.display = 'flex';
@@ -4062,11 +4235,11 @@
   {# create-process-modal: transitional; canonical UI is process-flow-spa.html — see comment on Create process button #}
   {% include 'processes/create-process-modal.html' %}
 
-  <!-- Delete product (process) — same API as Process Hub cards -->
-  <div class="modal-overlay" id="flows2-delete-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+  <!-- Delete workflow (process) — same API as Process Hub cards -->
+  <div class="modal-overlay" id="flows2-delete-process-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.28); z-index: 1000; align-items: center; justify-content: center;">
     <div class="card" style="max-width: 500px; width: 90%; padding: 24px;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete product</h2>
+        <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Delete workflow</h2>
         <button type="button" onclick="cancelFlows2DeleteProcess()" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>

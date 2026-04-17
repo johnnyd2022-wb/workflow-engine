@@ -1,0 +1,125 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Edit workflow | SupplyChain V2{% endblock %}
+
+{% block body_class %}flows2-edit-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="SupplyChain V2 - Edit workflow">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  <style>
+    .flows2-edit-head { text-align: center; }
+    .flows2-edit-sub { max-width: 54rem; margin: 10px auto 0; color: var(--text-secondary, #6b7280); font-size: 0.9375rem; line-height: 1.55; }
+
+    .flows2-edit-steps { display: flex; flex-direction: column; gap: 0; margin-top: 14px; }
+    .flows2-edit-step {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 12px;
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .flows2-edit-step:first-child { border-top: none; }
+    .flows2-edit-step__main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .flows2-edit-step__title { font-weight: 700; color: var(--text-primary, #111827); font-size: 14px; overflow-wrap: anywhere; }
+    .flows2-edit-step__sub { color: var(--text-secondary, #6b7280); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+    .flows2-edit-step__right { display: inline-flex; gap: 10px; flex-shrink: 0; }
+
+    .flows2-edit-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="max-content">
+    <section class="spa-form-section flows2-edit-head" aria-labelledby="flows2-edit-title">
+      <h1 id="flows2-edit-title" class="page-title">Edit workflow</h1>
+      <p class="flows2-edit-sub" id="flows2-edit-sub">Manage steps in this workflow. You can add a step, or open the full workflow editor to make deeper changes.</p>
+    </section>
+
+    <section class="spa-form-section" aria-label="Workflow steps">
+      <div class="flows2-edit-steps" id="flows2-edit-steps">
+        <p class="page-subtitle" style="margin: 0;">Loading steps…</p>
+      </div>
+      <div class="flows2-edit-actions">
+        <button type="button" class="btn btn-primary" id="flows2-edit-add-step">Add new step</button>
+        <button type="button" class="btn btn-secondary" id="flows2-edit-open-wizard">Open workflow editor</button>
+        <a class="btn btn-ghost" id="flows2-edit-back" href="/core/processes">Back</a>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var processId = params.get('id') || params.get('process_id') || '';
+      var stepsEl = document.getElementById('flows2-edit-steps');
+      var addBtn = document.getElementById('flows2-edit-add-step');
+      var openBtn = document.getElementById('flows2-edit-open-wizard');
+      var backA = document.getElementById('flows2-edit-back');
+
+      function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = (s == null) ? '' : String(s);
+        return d.innerHTML;
+      }
+
+      function hrefFlow() {
+        return '/core/flows2?id=' + encodeURIComponent(processId);
+      }
+      function hrefWizard() {
+        return '/core/flows/create?id=' + encodeURIComponent(processId);
+      }
+
+      if (backA && processId) backA.href = hrefFlow();
+
+      if (addBtn) addBtn.addEventListener('click', function () {
+        if (!processId) return;
+        window.location.href = hrefWizard();
+      });
+      if (openBtn) openBtn.addEventListener('click', function () {
+        if (!processId) return;
+        window.location.href = hrefWizard();
+      });
+
+      async function load() {
+        if (!stepsEl) return;
+        if (!processId) {
+          stepsEl.innerHTML = '<p class="page-subtitle" style="margin:0;">No workflow selected.</p>';
+          return;
+        }
+        try {
+          var data = await window.CoreAPI.getProcess(processId);
+          var steps = (data && data.steps) ? data.steps : [];
+          if (!steps.length) {
+            stepsEl.innerHTML = '<p class="page-subtitle" style="margin:0;">No steps yet.</p>';
+            return;
+          }
+          stepsEl.innerHTML = steps.map(function (s, idx) {
+            var title = esc(s && s.name ? s.name : ('Step ' + (idx + 1)));
+            var sub = esc(s && s.description ? s.description : '');
+            return '' +
+              '<div class="flows2-edit-step">' +
+                '<div class="flows2-edit-step__main">' +
+                  '<div class="flows2-edit-step__title">' + title + '</div>' +
+                  (sub ? '<div class="flows2-edit-step__sub">' + sub + '</div>' : '') +
+                '</div>' +
+                '<div class="flows2-edit-step__right">' +
+                  '<button type="button" class="btn btn-secondary btn-sm" onclick="window.location.href=\\'' + hrefWizard() + '\\'">Edit</button>' +
+                '</div>' +
+              '</div>';
+          }).join('');
+        } catch (e) {
+          console.error(e);
+          stepsEl.innerHTML = '<p class="page-subtitle" style="margin:0;">Failed to load steps.</p>';
+        }
+      }
+
+      load();
+    })();
+  </script>
+{% endblock %}
+
