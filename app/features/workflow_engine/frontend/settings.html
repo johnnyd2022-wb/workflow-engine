@@ -29,7 +29,17 @@
     .settings-page .switch-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; box-shadow: var(--shadow-sm); }
     .settings-page .switch input:checked + .switch-slider { background: var(--primary); }
     .settings-page .switch input:checked + .switch-slider:before { transform: translateX(24px); }
-    @media (max-width: 767px) { .settings-page .toggle-row { flex-wrap: wrap; gap: 0.75rem; } .settings-page .form-input { max-width: 100%; } }
+    @media (max-width: 767px) {
+      .settings-page .toggle-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .settings-page .toggle-row .switch {
+        align-self: flex-end;
+      }
+      .settings-page .form-input { max-width: 100%; }
+    }
     /* Modals and notifications that still use .glass-card */
     .settings-page .glass-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); }
     /* Long-session warning banner (non-blocking; same pattern as flows2 compliance banner) */
@@ -61,10 +71,6 @@
     .long-session-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
     /* ---- Visual-only refresh: flows2-style crisp containers + divider rows ---- */
-    .settings-page .settings-hero {
-      text-align: center;
-      margin: 18px 0 16px 0;
-    }
 
     .settings-page .settings-card.card {
       border: 1px solid rgba(15, 23, 42, 0.08);
@@ -118,12 +124,29 @@
     /* Minor tightening so labels align like flows2 stacks */
     .settings-page .form-group { margin-bottom: 0; }
     .settings-page .form-input { max-width: 520px; }
+
+    /* Mobile polish */
+    @media (max-width: 640px) {
+      .long-session-banner { padding: 12px 16px; }
+      .settings-page .settings-section-list > .form-group,
+      .settings-page .settings-section-list > .toggle-row,
+      .settings-page .settings-section-list > .spa-divider-row {
+        padding: 12px 0;
+      }
+      /* Session timeout row: avoid cramped 100px/110px inputs on small screens */
+      #session-timeout-input,
+      #session-timeout-unit {
+        width: 100% !important;
+      }
+    }
   </style>
 {% endblock %}
 
+{% block topbar %}{% endblock %}
+
 {% block content %}
   <div class="max-content">
-    <div class="settings-hero">
+    <section class="spa-form-section spa-page-hero" aria-label="Settings header">
       <div class="inventory-spa-header-wrap inventory-hub-banner-wrap" aria-hidden="true">
         <div class="inventory-spa-header__banner">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
@@ -173,11 +196,11 @@
           </svg>
         </div>
       </div>
-      <h1 class="page-title" style="margin: 0; text-align: center;">Settings</h1>
-      <p class="page-subtitle" style="margin: 6px 0 0 0; color: var(--text-secondary, #6b7280); text-align: center;">
+      <h1 class="page-title">Settings</h1>
+      <p class="page-subtitle" style="color: var(--text-secondary, #6b7280);">
         Configure your account and preferences
       </p>
-    </div>
+    </section>
 
     <!-- Long-session warning: security nudge when timeout > 24h and 2FA disabled; not an enforcement mechanism -->
     <div id="long-session-banner" class="long-session-banner" role="alert" aria-live="polite" style="display: none;">

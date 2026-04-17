@@ -4,12 +4,31 @@
 
 {% block head_extras %}
   <meta name="description" content="Accounting integrations for biz-e">
+  <style>
+    @media (max-width: 640px) {
+      .integrations-grid {
+        grid-template-columns: 1fr !important;
+      }
+      .integration-card-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+      }
+      .integration-card-row .btn {
+        width: 100% !important;
+        min-width: 0 !important;
+        margin-top: 10px !important;
+      }
+    }
+  </style>
 {% endblock %}
+
+{% block topbar %}{% endblock %}
 
 {% block content %}
   <div class="max-content">
-    <section class="spa-form-section" aria-label="Integrations header" style="text-align: center; margin-top: 18px; margin-bottom: 12px;">
-      <div class="inventory-spa-header-wrap inventory-hub-banner-wrap" aria-hidden="true" style="margin-left: auto; margin-right: auto;">
+    <section class="spa-form-section spa-page-hero" aria-label="Integrations header">
+      <div class="inventory-spa-header-wrap inventory-hub-banner-wrap" aria-hidden="true">
         <div class="inventory-spa-header__banner">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
             <defs>
@@ -60,15 +79,15 @@
         </div>
       </div>
 
-      <h1 class="page-title" style="margin: 10px 0 0 0;">Integrations</h1>
-      <p class="page-subtitle" style="margin: 6px 0 0 0; color: var(--text-secondary, #6b7280);">
+      <h1 class="page-title">Integrations</h1>
+      <p class="page-subtitle" style="color: var(--text-secondary, #6b7280);">
         Accounting integrations coming soon.
       </p>
     </section>
 
-    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+    <div class="integrations-grid" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
       <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
-        <div class="card-content" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div class="card-content integration-card-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
             <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
               <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
@@ -86,7 +105,7 @@
       </section>
 
       <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
-        <div class="card-content" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div class="card-content integration-card-row" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
             <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
               <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
