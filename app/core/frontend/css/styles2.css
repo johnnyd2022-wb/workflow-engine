@@ -792,6 +792,15 @@
     margin: 3px 0 0 0;
   }
 
+  /*
+   * Integrations & Settings: gap below subtitle block matches Core — space above the stats strip
+   * (.core2-stats-panel { margin-top: 18px }) below the secondary journey CTAs.
+   */
+  .integrations-page .spa-page-hero,
+  .settings-page .spa-page-hero {
+    margin-bottom: 18px;
+  }
+
   .page-header {
     display: flex;
     align-items: flex-start;

@@ -11,7 +11,7 @@
 {% block content %}
   {# Wrapper class ships with HTMX #page-content swaps (head_extras styles do not). Layout lives in styles2.css. #}
   <div class="max-content integrations-page">
-    <section class="spa-form-section spa-page-hero" aria-label="Integrations header">
+    <div class="spa-hub-yellow-sleeve">
       <div class="inventory-spa-header-wrap inventory-hub-banner-wrap" aria-hidden="true">
         <div class="inventory-spa-header__banner">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
@@ -62,7 +62,9 @@
           </svg>
         </div>
       </div>
+    </div>
 
+    <section class="spa-form-section spa-page-hero" aria-label="Integrations header">
       <h1 class="page-title">Integrations</h1>
       <p class="page-subtitle" style="color: var(--text-secondary, #6b7280);">
         Accounting integrations coming soon.

@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+    try {
+      if (localStorage.getItem('spa-theme') === 'dark') {
+        document.documentElement.setAttribute('data-spa-theme', 'dark');
+      }
+    } catch (e) {}
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -8,6 +15,9 @@
 
   {# Core styles & fonts #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='spa-theme.css') }}">
+  {# Dashboard: rules are scoped to .workflow-dashboard; inert on other pages. Kept here so HTMX #page-content swaps still have the sheet. #}
+  <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='dashboard_spa.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -361,13 +371,15 @@
 
     #page-content.page-content {
       --spa-column-inset: clamp(7px, 1.35vw, 13px);
+      /* Mirrors padding-top at each breakpoint (used e.g. full-bleed hero strips). */
+      --spa-page-padding-top: clamp(12px, 2.5vw, 32px);
       box-sizing: border-box;
       min-width: 0;
       width: 100%;
       max-width: 100%;
       overflow-x: clip;
       -webkit-overflow-scrolling: touch;
-      padding-top: clamp(12px, 2.5vw, 32px) !important;
+      padding-top: var(--spa-page-padding-top) !important;
       padding-bottom: clamp(16px, 3vw, 40px) !important;
       padding-left: max(0px, env(safe-area-inset-left)) !important;
       padding-right: max(0px, env(safe-area-inset-right)) !important;
@@ -375,13 +387,15 @@
     @media (max-width: 767px) {
       #page-content.page-content {
         --spa-column-inset: clamp(6px, 1.5vw, 11px);
-        padding-top: max(12px, env(safe-area-inset-top)) !important;
+        --spa-page-padding-top: max(12px, env(safe-area-inset-top));
+        padding-top: var(--spa-page-padding-top) !important;
         padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
       }
     }
     @media (min-width: 768px) and (max-width: 1279px) {
       #page-content.page-content {
-        padding-top: clamp(16px, 2.5vw, 24px) !important;
+        --spa-page-padding-top: clamp(16px, 2.5vw, 24px);
+        padding-top: var(--spa-page-padding-top) !important;
         padding-bottom: clamp(20px, 3vw, 32px) !important;
       }
     }
@@ -1049,6 +1063,51 @@
   <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
   <script>
+    (function () {
+      var KEY = 'spa-theme';
+      function apply(mode) {
+        var root = document.documentElement;
+        if (mode === 'dark') root.setAttribute('data-spa-theme', 'dark');
+        else root.removeAttribute('data-spa-theme');
+      }
+      function stored() {
+        try {
+          return localStorage.getItem(KEY);
+        } catch (e) {
+          return null;
+        }
+      }
+      window.SpaTheme = {
+        get: function () {
+          return stored() === 'dark' ? 'dark' : 'light';
+        },
+        set: function (mode) {
+          var dark = mode === 'dark';
+          apply(dark ? 'dark' : 'light');
+          try {
+            if (dark) localStorage.setItem(KEY, 'dark');
+            else localStorage.removeItem(KEY);
+          } catch (e) {}
+        },
+        applyStored: function () {
+          apply(stored() === 'dark' ? 'dark' : 'light');
+        }
+      };
+      window.syncSpaThemeToggle = function () {
+        var cb = document.getElementById('spa-theme-dark-toggle');
+        if (!cb || !window.SpaTheme) return;
+        cb.checked = window.SpaTheme.get() === 'dark';
+        if (cb.dataset.spaThemeBound) return;
+        cb.dataset.spaThemeBound = '1';
+        cb.addEventListener('change', function () {
+          window.SpaTheme.set(cb.checked ? 'dark' : 'light');
+        });
+      };
+      window.SpaTheme.applyStored();
+    })();
+  </script>
+
+  <script>
     /**
      * Fallback URL for the process-flow wizard when history has no prior entry (e.g. opened in a new tab).
      * Clicks normally use history.back() so the banner follows the real page sequence.
@@ -1096,6 +1155,7 @@
       var p = (pathname || '').replace(/\/$/, '') || '/';
       return (
         p === '/core' ||
+        p === '/workflow-engine/dashboard' ||
         p === '/workflow-engine/integrations' ||
         p === '/workflow-engine/settings'
       );
@@ -1204,6 +1264,9 @@
       spaLastScrollResetPath =
         (window.location.pathname || '').replace(/\/$/, '') || '/';
       spaBannerBackInit();
+      if (typeof window.syncSpaThemeToggle === 'function') {
+        window.syncSpaThemeToggle();
+      }
     });
 
     // Global HTMX wiring
@@ -1221,6 +1284,9 @@
         spaSyncBannerBack();
       }
       var tgt = evt.detail && evt.detail.target;
+      if (tgt && tgt.id === 'page-content' && typeof window.syncSpaThemeToggle === 'function') {
+        window.syncSpaThemeToggle();
+      }
       if (!tgt || tgt.id !== 'page-content') return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
       if (path === spaLastScrollResetPath) return;

@@ -139,6 +139,66 @@
         width: 100% !important;
       }
     }
+
+    .settings-page .settings-2fa-block {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+    .settings-page .settings-2fa-status {
+      margin: 0;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+    .settings-page .settings-2fa-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+    @media (min-width: 768px) {
+      .settings-page .settings-2fa-actions {
+        align-items: center;
+      }
+    }
+
+    /* Tablet / desktop: stack card content + form groups so buttons can align-self centre (same min-width as Update Password) */
+    @media (min-width: 768px) {
+      body.settings-page #page-content .settings-card > .card-content {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+      }
+      body.settings-page #page-content #password-reset-form {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+      }
+      body.settings-page #page-content .settings-card .form-group {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+      }
+      body.settings-page #page-content .settings-card .btn.btn-primary,
+      body.settings-page #page-content .settings-card .btn.btn-secondary {
+        align-self: center;
+        width: fit-content;
+        min-width: 260px;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+    }
+
+    /* Mobile: full-width primary/secondary in settings cards (incl. 2FA) */
+    @media (max-width: 767px) {
+      body.settings-page #page-content .settings-card .btn.btn-primary,
+      body.settings-page #page-content .settings-card .btn.btn-secondary {
+        width: 100%;
+        box-sizing: border-box;
+      }
+    }
   </style>
 {% endblock %}
 
@@ -146,7 +206,7 @@
 
 {% block content %}
   <div class="max-content">
-    <section class="spa-form-section spa-page-hero" aria-label="Settings header">
+    <div class="spa-hub-yellow-sleeve">
       <div class="inventory-spa-header-wrap inventory-hub-banner-wrap" aria-hidden="true">
         <div class="inventory-spa-header__banner">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
@@ -196,6 +256,9 @@
           </svg>
         </div>
       </div>
+    </div>
+
+    <section class="spa-form-section spa-page-hero" aria-label="Settings header">
       <h1 class="page-title">Settings</h1>
       <p class="page-subtitle" style="color: var(--text-secondary, #6b7280);">
         Configure your account and preferences
@@ -323,6 +386,25 @@
             </div>
           </section>
 
+          <section class="card settings-card" aria-label="Appearance">
+            <div class="card-header" style="padding-bottom: 12px;">
+              <h2 class="card-title" style="margin-bottom: 0;">Appearance</h2>
+            </div>
+            <div class="card-content">
+              <div class="settings-section-list">
+                <div class="toggle-row">
+                  <div>
+                    <div class="toggle-label">Dark mode</div>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="spa-theme-dark-toggle" name="spa-theme-dark" aria-label="Dark mode" />
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="card settings-card">
             <div class="card-header" style="padding-bottom: 12px;">
               <h2 class="card-title" style="margin-bottom: 0;">Security</h2>
@@ -399,14 +481,11 @@
               <h2 class="card-title" style="margin-bottom: 0;">Two-Factor Authentication</h2>
             </div>
             <div class="card-content">
-          <div id="2fa-status-section" class="toggle-row" style="margin-bottom: 0;">
-            <div>
-              <div style="font-weight: 600; margin-bottom: 0.25rem;">Two-Factor Authentication</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary);" id="2fa-status-text">
-                Status: <span id="2fa-status-value">Loading...</span>
-              </div>
-            </div>
-            <div id="2fa-action-buttons">
+          <div id="2fa-status-section" class="settings-2fa-block">
+            <p class="settings-2fa-status" id="2fa-status-text">
+              Status: <span id="2fa-status-value">Loading...</span>
+            </p>
+            <div id="2fa-action-buttons" class="settings-2fa-actions">
               <button id="enable-2fa-btn" class="btn btn-primary" style="display: none;">Enable 2FA</button>
               <button id="disable-2fa-btn" class="btn btn-primary" style="display: none;">Disable 2FA</button>
             </div>

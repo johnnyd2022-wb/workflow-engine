@@ -93,37 +93,8 @@ def index():
 @app.route("/dashboard")
 @requires_auth
 def dashboard():
-    """Dashboard for logged-in users"""
-    import os
-
-    from flask import g, render_template_string
-
-    # Get the path to the dashboard HTML file
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(app_dir, "features", "workflow_engine", "frontend", "dashboard.html")
-
-    with open(template_path, encoding="utf-8") as f:
-        template_content = f.read()
-
-    # Inject user and org info into template
-    # Prefer lightweight session values (no DB query), fallback to objects if available
-    user_email = getattr(g, "user_email", None) or (
-        g.current_user.email if hasattr(g, "current_user") and g.current_user else "Unknown"
-    )
-    user_role = g.current_user.role.value if hasattr(g, "current_user") and g.current_user else "Unknown"
-
-    org_name = getattr(g, "org_name", None) or (
-        g.current_org.name if hasattr(g, "current_org") and g.current_org else "Unknown"
-    )
-    org_status = g.current_org.status.value if hasattr(g, "current_org") and g.current_org else "Unknown"
-
-    # Replace placeholders with actual data
-    template_content = template_content.replace("{{user_email}}", user_email)
-    template_content = template_content.replace("{{user_role}}", user_role)
-    template_content = template_content.replace("{{org_name}}", org_name)
-    template_content = template_content.replace("{{org_status}}", org_status)
-
-    return render_template_string(template_content)
+    """Alias for the workflow-engine dashboard (SPA shell + shared sidebar)."""
+    return redirect("/workflow-engine/dashboard")
 
 
 @app.route("/healthcheck")

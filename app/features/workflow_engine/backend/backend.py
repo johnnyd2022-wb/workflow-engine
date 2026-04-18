@@ -187,7 +187,7 @@ def parent_processes():
 @workflow_engine_bp.route("/workflow-engine/dashboard")
 def dashboard():
     """Render the dashboard page"""
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", active_page="dashboard")
 
 
 @workflow_engine_bp.route("/workflow-engine/compliance")
