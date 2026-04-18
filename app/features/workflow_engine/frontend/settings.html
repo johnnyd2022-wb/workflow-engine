@@ -6,6 +6,7 @@
 
 {% block head_extras %}
   <meta name="description" content="Configure your account and preferences">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <style>
     /* Settings page: form and card overrides using styles2 tokens; responsive like process-flow-spa */
     .settings-page .page-content { padding: 16px; }
