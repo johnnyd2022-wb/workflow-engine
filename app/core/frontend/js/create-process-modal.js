@@ -41,6 +41,8 @@
   /** When true, serializeSpaWizardState merges missing DOM fields from session (summary page has no wizard form). */
   function shouldMergePersistSpaFormFields() {
     if (isProcessFlowWizardPage()) return true;
+    // Multi-route SPA: each page only mounts part of the wizard; persist must merge from session.
+    if (isProcessFlowSpaPage()) return true;
     const slug = document.body && document.body.getAttribute('data-flow-wizard-page');
     return slug === 'summary' || slug === 'process-overview';
   }
@@ -1190,7 +1192,7 @@
         
         // Show step summaries (for steps other than the one being edited)
         if (stepsForSummaries.length > 0) {
-          updateStepSummaries();
+          await updateStepSummaries();
         }
         
         // Restore the most recent step's data into the form for editing
@@ -4932,7 +4934,7 @@
     try {
       const commitResult = await commitGuidedStepToProcessApiFromSessionSnapshot(session);
       persistClearedWizardDraftState();
-      if (typeof updateStepSummaries === 'function') updateStepSummaries();
+      if (typeof updateStepSummaries === 'function') await updateStepSummaries();
       // Do not reuse window.location.search here: it can be "?id=" (empty) which causes the
       // server wizard enforcement to bounce the user back to process-overview.
       const pid =
@@ -5141,9 +5143,28 @@
       if (next.evidence_mode == null && draft.evidence_mode != null) {
         next.evidence_mode = draft.evidence_mode;
       }
+      if (!(next.documentation_summary || '').trim() && (draft.documentation_summary || '').trim()) {
+        next.documentation_summary = draft.documentation_summary;
+      }
     }
 
     if (!sessionTopLevelIoAppliesToStep(step, sortedSteps)) {
+      if (
+        !(next.documentation_summary || '').trim() &&
+        session.editingStepId != null &&
+        String(session.editingStepId) === String(step.id)
+      ) {
+        const du = session.docFileUpload;
+        if (du && du.base64) {
+          next.documentation_summary = 'SOP file attached (pending upload)';
+        } else {
+          const dt = (session.docInlineTitle || '').trim();
+          const dc = (session.docInlineContent || '').trim();
+          if (dt && dc) {
+            next.documentation_summary = 'Instructions: ' + dt;
+          }
+        }
+      }
       return next;
     }
 
@@ -5182,6 +5203,19 @@
       next.evidence_mode = session.evidenceMode;
     }
 
+    if (!(next.documentation_summary || '').trim()) {
+      const du = session.docFileUpload;
+      if (du && du.base64) {
+        next.documentation_summary = 'SOP file attached (pending upload)';
+      } else {
+        const dt = (session.docInlineTitle || '').trim();
+        const dc = (session.docInlineContent || '').trim();
+        if (dt && dc) {
+          next.documentation_summary = 'Instructions: ' + dt;
+        }
+      }
+    }
+
     return next;
   }
 
@@ -5205,7 +5239,7 @@
     return warnings;
   }
 
-  function renderCompliancePanel(sortedSteps) {
+  async function renderCompliancePanel(sortedSteps) {
     const panel = document.getElementById('flow-compliance-panel');
     const heading = document.getElementById('step-summaries-heading');
     if (!panel) return;
@@ -5247,7 +5281,27 @@
     const evidenceLabel = escHtml(formatTraceabilityModeLabel(tm.evidence));
 
     const purposeText = (step.description || '').trim();
-    const hasStepDocumentation = !!(step.documentation_summary && String(step.documentation_summary).trim());
+    let hasStepDocumentation = !!(
+      step.documentation_summary && String(step.documentation_summary).trim()
+    );
+    const stepIdForDocs =
+      step && step.id && String(step.id) !== '__pending__' ? String(step.id) : '';
+    if (
+      !hasStepDocumentation &&
+      stepIdForDocs &&
+      typeof CoreAPI !== 'undefined' &&
+      typeof CoreAPI.getStepDocumentation === 'function'
+    ) {
+      try {
+        const docRes = await CoreAPI.getStepDocumentation(stepIdForDocs);
+        const docs = docRes && Array.isArray(docRes.documents) ? docRes.documents : [];
+        if (docs.length > 0) {
+          hasStepDocumentation = true;
+        }
+      } catch (err) {
+        console.warn('Summary: could not verify step documentation', err);
+      }
+    }
 
     const inputs = (step.inputs || []).filter(function (i) {
       return i && summaryInputDisplayName(i);
@@ -5344,7 +5398,7 @@
     html +=
       '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Documentation and Custom prompts</h3>';
     html +=
-      '<p style="font-size:0.875rem;color:var(--text-primary);margin:0 0 12px 0;line-height:1.55;"><span style="color:var(--text-secondary);font-weight:500;">Step documentation:</span> ' +
+      '<p style="font-size:0.875rem;color:var(--text-primary);margin:0 0 12px 0;line-height:1.55;"><span style="color:var(--text-secondary);font-weight:500;">Attached step documentation:</span> ' +
       (hasStepDocumentation ? 'Yes' : 'No') +
       '</p>';
     if (customPrompts.length > 0) {
@@ -5631,7 +5685,7 @@
   }
 
   // Update step summaries display with expand/collapse
-  function updateStepSummaries() {
+  async function updateStepSummaries() {
     const summariesList = document.getElementById('step-summaries-list');
     const summariesContainer = document.getElementById('step-summaries-container');
     if (!summariesList || !summariesContainer) return;
@@ -5660,7 +5714,7 @@
     summariesList.innerHTML = '';
 
     const sortedSteps = sortStepsForDisplay(createdSteps);
-    renderCompliancePanel(sortedSteps);
+    await renderCompliancePanel(sortedSteps);
     if (isProcessFlowSummaryPage()) {
       summariesList.style.display = 'none';
       const summarySticky = document.getElementById('flow-wizard-summary-sticky');
@@ -5708,7 +5762,7 @@
       createdSteps = [...createdSteps].map(function(s) { return { ...s }; });
       if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
       await persistStepOrderIfPossible();
-      updateStepSummaries();
+      await updateStepSummaries();
     }
 
     function onDragOver(e) {
@@ -5917,6 +5971,122 @@
     });
   }
   
+  function mapApiInputToWizardSessionInput(apiIn) {
+    if (!apiIn) {
+      return {
+        inputType: 'new',
+        name: '',
+        quantity: null,
+        unit: '',
+        executionType: 'variable',
+        inventoryPreselected: false,
+        is_variable: true,
+        requires_inventory_selection: true
+      };
+    }
+    const inputType = apiIn.source_output_id ? 'previous_output' : (apiIn.requires_inventory_selection ? 'inventory' : 'new');
+    const name = summaryInputDisplayName(apiIn);
+    let executionType = 'variable';
+    if (inputType === 'previous_output') {
+      executionType = apiIn.is_variable !== false ? 'variable' : 'static';
+    } else if (inputType === 'inventory') {
+      executionType = apiIn.requires_inventory_selection ? 'variable' : 'static';
+    } else {
+      executionType = apiIn.is_variable !== false ? 'variable' : 'static';
+    }
+    const qty = apiIn.quantity;
+    let quantity = null;
+    if (qty != null && qty !== '') {
+      const n = typeof qty === 'number' ? qty : parseFloat(String(qty).trim());
+      quantity = isNaN(n) ? null : n;
+    }
+    const isPreviousOutput = inputType === 'previous_output';
+    const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
+    const requiresInventorySelection = isPreviousOutput ? true : executionType === 'variable';
+    return {
+      inputType,
+      name,
+      quantity,
+      unit: apiIn.unit || '',
+      executionType,
+      source_output_id: apiIn.source_output_id || undefined,
+      previousOutputDisplayName:
+        apiIn.previous_output_display_name || apiIn.previousOutputDisplayName || undefined,
+      inventoryPreselected: false,
+      is_variable: isVariable,
+      requires_inventory_selection: requiresInventorySelection
+    };
+  }
+
+  function mapApiOutputToWizardSessionOutput(apiOut) {
+    if (!apiOut) {
+      return {
+        id: null,
+        name: '',
+        unit: '',
+        quantity: null,
+        is_variable: true,
+        requires_execution_confirmation: true
+      };
+    }
+    const qty = apiOut.quantity;
+    let quantity = null;
+    if (qty != null && qty !== '') {
+      const n = typeof qty === 'number' ? qty : parseFloat(String(qty).trim());
+      quantity = isNaN(n) ? null : n;
+    }
+    const out = {
+      id: apiOut.id || null,
+      name: summaryOutputDisplayName(apiOut),
+      unit: apiOut.unit || '',
+      quantity,
+      is_variable: apiOut.is_variable !== false,
+      requires_execution_confirmation: apiOut.requires_execution_confirmation !== false
+    };
+    if (apiOut.extra_data && typeof apiOut.extra_data === 'object') {
+      out.extra_data = JSON.parse(JSON.stringify(apiOut.extra_data));
+    }
+    return out;
+  }
+
+  /**
+   * Session v1 payload compatible with restoreSpaWizardState / serializeSpaWizardState (deep-link edit).
+   */
+  function buildSpaWizardSessionPayloadFromApiStep(step, opts) {
+    const urlPid = opts && opts.processId != null ? opts.processId : null;
+    const workflowProcessName =
+      opts && opts.workflowProcessName != null ? String(opts.workflowProcessName).trim() : '';
+    const tm = deriveTraceabilityModes(step);
+    const inputs = (step.inputs || []).map(mapApiInputToWizardSessionInput);
+    const outputs = (step.outputs || []).map(mapApiOutputToWizardSessionOutput);
+    const prompts = (step.execution_prompts || []).filter(isCustomExecutionPrompt).map(function(p) {
+      return {
+        label: (p.label || '').trim(),
+        type: p.type || 'text',
+        unit: (p.unit || '').trim(),
+        required: p.required !== false
+      };
+    });
+    return {
+      v: 1,
+      stepName: step.name || '',
+      stepDescription: step.description || '',
+      workflowProcessName,
+      inputs,
+      outputs,
+      prompts,
+      batchNumberMode: tm.batch,
+      evidenceMode: tm.evidence,
+      inputTab: 'inventory',
+      editingStepId: step.id || null,
+      createdSteps: JSON.parse(JSON.stringify(createdSteps)),
+      docInlineTitle: '',
+      docInlineContent: '',
+      processId: urlPid,
+      docFileUpload: null
+    };
+  }
+
   // Toggle step summary expand/collapse
   function toggleStepSummary(stepId) {
     const summaryCard = document.getElementById(stepId);
@@ -5956,6 +6126,55 @@
     currentStep = 1;
     updateStepDisplay();
   };
+
+  /**
+   * Deep-link from workflow hub (/core/flows/create/next-steps) etc.: ?edit=<stepId> on step-name (after mergeProcessStepsFromApiForCurrentProcess).
+   * SPA routes mount only part of the form; seed session + restore so inputs/outputs survive navigation.
+   */
+  async function applyEditStepFromUrl(stepId) {
+    const step = createdSteps.find(function (s) {
+      return s && String(s.id) === String(stepId);
+    });
+    if (!step) {
+      console.warn('applyEditStepFromUrl: step not in createdSteps', stepId);
+      return;
+    }
+    const urlPid = new URLSearchParams(window.location.search || '').get('id');
+    let workflowProcessName = '';
+    if (urlPid && typeof CoreAPI !== 'undefined' && CoreAPI.getProcess) {
+      try {
+        const proc = await CoreAPI.getProcess(urlPid);
+        if (proc && proc.name != null) workflowProcessName = String(proc.name).trim();
+      } catch (e) {}
+    }
+
+    editingStepId = step.id;
+    resetForm(true);
+
+    const payload = buildSpaWizardSessionPayloadFromApiStep(step, {
+      processId: urlPid,
+      workflowProcessName
+    });
+    try {
+      sessionStorage.setItem(getProcessFlowSpaStorageKey(), JSON.stringify(payload));
+    } catch (e) {
+      console.warn('applyEditStepFromUrl session seed failed', e);
+    }
+
+    if (typeof window.restoreSpaWizardState === 'function') {
+      await window.restoreSpaWizardState();
+    }
+
+    const indicators = document.getElementById('create-process-step-indicators');
+    if (indicators) indicators.style.display = 'flex';
+    const slug = document.body.getAttribute('data-flow-wizard-page');
+    const slugToStep = { 'step-name': 1, inputs: 2, outputs: 3, 'evidence-and-prompts': 4 };
+    if (slug && slugToStep[slug]) {
+      currentStep = slugToStep[slug];
+    }
+    updateStepDisplay();
+  }
+  window.applyEditStepFromUrl = applyEditStepFromUrl;
   
   // Add new step from the "existing steps" view (when editing a non-draft process)
   window.addNewStepFromEditView = function() {
@@ -6165,7 +6384,7 @@
       const hasPending = wizardSessionHasDraftStepData(loadWizardSessionMergeBase());
       if (createdSteps.length > 0 || hasPending) {
         if (emptyEl) emptyEl.style.display = 'none';
-        updateStepSummaries();
+        await updateStepSummaries();
         const summariesContainer = document.getElementById('step-summaries-container');
         if (summariesContainer) summariesContainer.style.display = 'block';
         if (postCreationOptions) postCreationOptions.style.display = 'none';
@@ -6178,15 +6397,28 @@
         if (summariesContainer) summariesContainer.style.display = 'none';
       }
     } else {
-      if (typeof window.restoreSpaWizardState === 'function') {
+      const qsInit = new URLSearchParams(window.location.search || '');
+      const pid = qsInit.get('id');
+      const urlEditStepId = qsInit.get('edit');
+      const shouldApplyEditFromUrl = !!(urlEditStepId && slug === 'step-name');
+      if (shouldApplyEditFromUrl && typeof sessionStorage !== 'undefined' && pid) {
+        sessionStorage.removeItem('process-flow-spa-wizard-v1-' + pid);
+      }
+      if (!shouldApplyEditFromUrl && typeof window.restoreSpaWizardState === 'function') {
         await window.restoreSpaWizardState();
       }
-      const pid = new URLSearchParams(window.location.search || '').get('id');
       if (pid) {
         await mergeProcessStepsFromApiForCurrentProcess();
-        if (typeof window.persistSpaWizardState === 'function') {
-          window.persistSpaWizardState();
-        }
+      }
+      if (
+        shouldApplyEditFromUrl &&
+        urlEditStepId &&
+        typeof window.applyEditStepFromUrl === 'function'
+      ) {
+        await window.applyEditStepFromUrl(urlEditStepId);
+      }
+      if (pid && typeof window.persistSpaWizardState === 'function') {
+        window.persistSpaWizardState();
       }
       if (typeof window.updateStepDisplay === 'function') {
         window.updateStepDisplay();
