@@ -460,7 +460,8 @@ html[data-spa-theme="dark"] #page-content.page-content .spa-hub-yellow-sleeve .i
  * rounded TOP corners + same gradient as #page-content. Yellow remains visible only in the outer bottom
  * pockets (curve follows the sheet’s round, not an inward-rounded yellow box).
  */
-html[data-spa-theme="dark"] #page-content.page-content .max-content > .spa-hub-yellow-sleeve + .spa-form-section.spa-page-hero {
+html[data-spa-theme="dark"] #page-content.page-content .max-content > .spa-hub-yellow-sleeve + .spa-form-section.spa-page-hero,
+html[data-spa-theme="dark"] #page-content.page-content .max-content > .spa-hub-yellow-sleeve + section.process-flow-card {
   margin-top: calc(-1 * var(--spa-hub-sheet-radius));
   margin-inline: calc(-1 * var(--spa-column-inset));
   padding-inline: var(--spa-column-inset);

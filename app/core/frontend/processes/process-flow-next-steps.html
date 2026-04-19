@@ -1,4 +1,5 @@
 {% extends "processes/process-flow-spa.html" %}
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
 {% block wizard_html_title %}Next steps | SupplyChain V2{% endblock %}
 {% block wizard_title %}What would you like to do next?{% endblock %}
 {% block wizard_tagline %}{% endblock %}
@@ -77,12 +78,23 @@
 </style>
 {% endblock %}
 
+{% block wizard_more_information %}
+{% call flow_wizard_more_information('More information about next steps') %}
+      <p class="process-flow-wizard__intro">
+        Add another step when your process has distinct stages—just as you define how your product is made. You can chain inputs from earlier steps (for example an intermediate output) so every stage stays traceable in one workflow.
+      </p>
+      <p class="process-flow-wizard__intro">
+        When you record step completions, inventory updates in real time from the inputs and outputs you defined. Finish the process design when you are ready; you can edit the workflow any time, and changes apply only to future executions.
+      </p>
+{% endcall %}
+{% endblock %}
+
 {% block wizard_card_body %}
 <div class="process-flow-next-steps" role="region" aria-label="Next steps">
   <section class="process-flow-next-steps__section" aria-labelledby="next-steps-add-heading">
     <h2 id="next-steps-add-heading" class="sr-only">Add another step</h2>
     <p class="process-flow-next-steps__helper">
-      Build out your workflow the same way you already define how your product is made. Add more steps when your process has distinct stages, and use inputs from earlier steps—such as intermediate outputs—when your product transforms at each step so each stage stays traceable.
+      Keep building: add a step when you have another stage to model.
     </p>
     <div class="process-flow-next-steps__btn-row">
       <button type="button" class="btn btn-primary process-flow-next-steps__btn" onclick="window.addAnotherStep()">
@@ -93,10 +105,7 @@
   <section class="process-flow-next-steps__section" aria-labelledby="next-steps-finish-heading">
     <h2 id="next-steps-finish-heading" class="sr-only">Finish process</h2>
     <p class="process-flow-next-steps__helper">
-      As you record completions of this process’s steps, your inventory will automatically update in real time, giving you a live view of where all your inventory is at any moment. Each step completion will consume inputs, produce outputs, and associate all recorded information with the completed batch according to the requirements you’ve defined for each step.
-    </p>
-    <p class="process-flow-next-steps__helper" style="margin-top: -4px;">
-      You can edit this process workflow at any time. All changes will apply to future executions.
+      Or wrap up and save the workflow so you can run it when you are ready.
     </p>
     <div class="process-flow-next-steps__btn-row">
       <button type="button" class="btn btn-secondary process-flow-next-steps__btn" onclick="window.finishProcess()">

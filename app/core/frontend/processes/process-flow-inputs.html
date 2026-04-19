@@ -1,5 +1,15 @@
 {% extends "processes/process-flow-spa.html" %}
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
 {% block wizard_html_title %}Inputs | Create process | SupplyChain V2{% endblock %}
+
+{% block wizard_more_information %}
+{% call flow_wizard_more_information('More information about step inputs') %}
+      <p class="process-flow-wizard__intro">
+        Inputs are materials or intermediate products this step consumes—drawn from inventory or from outputs of earlier steps in the same workflow so batches stay linked end to end.
+      </p>
+{% endcall %}
+{% endblock %}
+
 {% block wizard_card_body %}
               {% include 'processes/process-wizard-fragment-shared-top.html' %}
               {% include 'processes/process-wizard-carried-step-fields.html' %}

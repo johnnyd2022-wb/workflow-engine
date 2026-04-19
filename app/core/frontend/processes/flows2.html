@@ -1550,11 +1550,19 @@
       }
 
       function promptFlag(labelLower) {
-        const p = (executionPrompts || []).find(x => (x && (x.label || '')).toString().toLowerCase() === labelLower);
+        const p = (executionPrompts || []).find(function (x) {
+          if (!x) return false;
+          const l = (x.label || '').toString().toLowerCase();
+          if (labelLower === 'evidence') {
+            const t = (x.type || '').toString().toLowerCase();
+            return t === 'evidence' || l === 'evidence';
+          }
+          return l === labelLower;
+        });
         if (!p) return null;
-        if (p.required === true) return 'Required';
+        // Match create-process-modal.js deriveTraceabilityModes: only explicit false is optional.
         if (p.required === false) return 'Optional';
-        return null;
+        return 'Required';
       }
 
       const batchFlag = promptFlag('batch number');
@@ -1695,18 +1703,16 @@
                 <div class="flows2-summary-item__main">
                   <div class="flows2-summary-item__row">
                     <div class="flows2-summary-item__title">Batch number</div>
-                    <div class="flows2-chip">Required</div>
+                    <div class="flows2-chip">${escapeHtml(batchFlag || 'Off')}</div>
                   </div>
-                  <div class="flows2-summary-item__sub">${escapeHtml(batchFlag || 'Off')}</div>
                 </div>
               </div>
               <div class="flows2-summary-item">
                 <div class="flows2-summary-item__main">
                   <div class="flows2-summary-item__row">
                     <div class="flows2-summary-item__title">Evidence</div>
-                    <div class="flows2-chip">Required</div>
+                    <div class="flows2-chip">${escapeHtml(evidenceFlag || 'Off')}</div>
                   </div>
-                  <div class="flows2-summary-item__sub">${escapeHtml(evidenceFlag || 'Off')}</div>
                 </div>
               </div>
             </div>

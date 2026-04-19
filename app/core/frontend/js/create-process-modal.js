@@ -1164,7 +1164,7 @@
         modalTitle.textContent = 'Edit Process - Add Step';
       }
       if (modalDescription) {
-        modalDescription.textContent = 'You can expand existing steps to edit them, or use this interactive editor to add additional steps.';
+        modalDescription.textContent = '';
       }
       
       // Flag is already set above, but ensure it's still true
@@ -1352,7 +1352,7 @@
           modalTitle.textContent = 'Create Process Step';
         }
         if (modalDescription) {
-          modalDescription.textContent = 'You can expand existing steps to edit them, or use this interactive editor to add additional steps.';
+          modalDescription.textContent = '';
         }
       } else {
         // If draft loaded, loadDraft() already set currentStep to the appropriate step
@@ -6008,7 +6008,7 @@
     const modalTitle = document.getElementById('modal-title');
     const modalDescription = document.getElementById('modal-description');
     if (modalTitle) modalTitle.textContent = 'Create Process Step';
-    if (modalDescription) modalDescription.textContent = 'You can expand existing steps to edit them, or use this interactive editor to add additional steps.';
+    if (modalDescription) modalDescription.textContent = '';
   };
   
   // Add another step

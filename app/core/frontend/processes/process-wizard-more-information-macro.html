@@ -1,0 +1,11 @@
+{# Caller supplies <p class="process-flow-wizard__intro">…</p> blocks inside the disclosure body. #}
+{% macro flow_wizard_more_information(aria_label) -%}
+<details class="process-flow-wizard__more flow-wizard-example-disclosure" aria-label="{{ aria_label }}">
+  <summary class="flow-wizard-example-disclosure__summary">
+    More information<span class="flow-wizard-example-disclosure__hint" aria-hidden="true">(click to expand)</span>
+  </summary>
+  <div class="flow-wizard-example-disclosure__body">
+    {{ caller() }}
+  </div>
+</details>
+{%- endmacro %}

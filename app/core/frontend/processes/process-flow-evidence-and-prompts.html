@@ -1,5 +1,18 @@
 {% extends "processes/process-flow-spa.html" %}
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
 {% block wizard_html_title %}Evidence & prompts | Create process | SupplyChain V2{% endblock %}
+
+{% block wizard_more_information %}
+{% call flow_wizard_more_information('More information about traceability and prompts') %}
+      <p class="process-flow-wizard__intro">
+        Batch or run identifiers and evidence capture tie each execution to the right production run. Mark them required, optional, or off according to how you operate and what you must prove for compliance.
+      </p>
+      <p class="process-flow-wizard__intro">
+        Custom prompts ask operators for structured data at run time—temperatures, checklists, free text, or other fields beyond standard inventory moves.
+      </p>
+{% endcall %}
+{% endblock %}
+
 {% block wizard_card_body %}
               {% include 'processes/process-wizard-fragment-shared-top.html' %}
               {% include 'processes/process-wizard-carried-step-fields.html' %}
