@@ -8,8 +8,8 @@
         </svg>
       </div>
       <div class="sidebar-logo-text">
-        <span class="sidebar-logo-title">SupplyChain</span>
-        <span class="sidebar-logo-subtitle">Business intelligence and compliance automation</span>
+        <span class="sidebar-logo-title">biz-e</span>
+        <span class="sidebar-logo-subtitle">Production control for manufacturing teams</span>
       </div>
     </div>
   </div>
@@ -37,8 +37,11 @@
         <a href="/core" hx-boost="false" class="nav-link{% if active_page == 'core' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6m9.66-9L16 12m-6 0L4.34 9M19.66 18L16 12m-6 0L4.34 18"/>
+              <path d="M3 21V9l6 3V9l6 3V7l6 4v10H3z"/>
+              <path d="M7 21v-4"/>
+              <path d="M11 21v-6"/>
+              <path d="M15 21v-3"/>
+              <path d="M19 21v-5"/>
             </svg>
           </div>
           <span class="nav-link-text">Core</span>
@@ -47,7 +50,8 @@
           </svg>
         </a>
       </li>
-      <li class="nav-item">
+      {# Compliance hidden for now (desktop + mobile). #}
+      {# <li class="nav-item">
         <a href="/workflow-engine/compliance" class="nav-link{% if active_page == 'compliance' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -59,12 +63,20 @@
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         </a>
-      </li>
+      </li> #}
       <li class="nav-item">
-        <a href="/workflow-engine/integrations" class="nav-link{% if active_page == 'integrations' %} active{% endif %}">
+        <a href="/workflow-engine/integrations" hx-boost="false" class="nav-link{% if active_page == 'integrations' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              <rect x="6" y="3" width="12" height="18" rx="2"/>
+              <path d="M9 7h6"/>
+              <path d="M9 11h.01"/>
+              <path d="M12 11h.01"/>
+              <path d="M15 11h.01"/>
+              <path d="M9 14h.01"/>
+              <path d="M12 14h.01"/>
+              <path d="M15 14h.01"/>
+              <path d="M9 17h6"/>
             </svg>
           </div>
           <span class="nav-link-text">Integrations</span>
@@ -74,12 +86,11 @@
         </a>
       </li>
       <li class="nav-item">
-        <a href="/workflow-engine/settings" class="nav-link{% if active_page == 'settings' %} active{% endif %}">
+        <a href="/workflow-engine/settings" hx-boost="false" class="nav-link{% if active_page == 'settings' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6"/>
-              <path d="M1 12h6m6 0h6"/>
+              <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
+              <path d="M19.4 15a7.8 7.8 0 0 0 .1-6l-2.1 1.2a6 6 0 0 0-1.2-1.2L17.4 6.9a7.8 7.8 0 0 0-6-.1L12 9.1a6 6 0 0 0-1.7 0L9 6.8a7.8 7.8 0 0 0-6 .1l1.2 2.1a6 6 0 0 0-1.2 1.2L.9 9a7.8 7.8 0 0 0 .1 6l2.1-1.2a6 6 0 0 0 1.2 1.2L3 17.1a7.8 7.8 0 0 0 6 .1l1.3-2.3a6 6 0 0 0 1.7 0l1.3 2.3a7.8 7.8 0 0 0 6-.1l-1.2-2.1a6 6 0 0 0 1.2-1.2L19.4 15z"/>
             </svg>
           </div>
           <span class="nav-link-text">Settings</span>

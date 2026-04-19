@@ -259,18 +259,15 @@
       }
     }
 
-    /* Wizard sticky rail on all steps: fixed above mobile bottom tab (styles2.css) */
-    /* Must match real mobile .sidebar height (nav-link min-height 48px + .sidebar-nav padding 8px×2); 56px caused ~8px overlap with z-index 100 nav covering the rail bottom. */
-    .process-flow-spa {
-      --spa-mobile-bottom-tab-height: 64px;
-    }
+    /* Wizard sticky rail: fixed above mobile bottom tab — height token is --spa-mobile-bottom-tab-height in styles2.css */
     .process-flow-spa .spa-fixed-action-bar {
       position: fixed;
       left: 0;
       right: 0;
       bottom: env(safe-area-inset-bottom, 0px);
       margin-top: 0;
-      z-index: 99;
+      /* Above mobile bottom nav (.sidebar z-index 200 on small screens) */
+      z-index: 220;
       padding: 0;
       background: var(--bg-app, hsl(220, 20%, 97%));
       border-top: 1px solid var(--border-default, #e5e7eb);
@@ -286,7 +283,7 @@
     }
     @media (max-width: 767px) {
       .process-flow-spa .spa-fixed-action-bar {
-        bottom: calc(var(--spa-mobile-bottom-tab-height) + env(safe-area-inset-bottom, 0px));
+        bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px));
       }
     }
     /* Horizontal inset only here; vertical padding from shared .spa-fixed-action-bar__inner (matches metric rows). */
@@ -323,7 +320,7 @@
     @media (max-width: 767px) {
       .process-flow-spa .create-process-step:has(.spa-fixed-action-bar) {
         /* Tab + fixed rail: keep last field above both stacked layers */
-        padding-bottom: calc(var(--spa-mobile-bottom-tab-height) + 72px);
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 72px);
       }
     }
 

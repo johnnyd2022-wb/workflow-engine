@@ -1,278 +1,113 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Integrations — Flume Workflow Engine Visibility</title>
-  <meta name="description" content="Connect your existing tools and systems with Flume">
-  
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/workflow-engine-static/styles_10.css">
-</head>
-<body>
-  <!-- Flume UI Version 5 — Liquid Depth Aesthetic with Darker Sidebar -->
-  
-  <button class="mobile-menu-toggle" aria-label="Toggle menu">
-    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M3 12h18M3 6h18M3 18h18"/>
-    </svg>
-  </button>
-  
-  <div class="mobile-overlay"></div>
-  
-  <div class="app-shell">
-    
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-logo">
-          <div class="logo-icon">F</div>
-          <div class="logo-text">Flume</div>
-        </div>
-      </div>
-      
-      <nav class="sidebar-nav">
-        <div class="nav-item">
-          <a href="/workflow-engine/dashboard" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <rect x="3" y="3" width="7" height="7" rx="1"/>
-              <rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-            <span>Dashboard</span>
-          </a>
-        </div>
+{% extends "shared/base_spa.html" %}
 
-        <div class="nav-item">
-          <a href="/workflow-engine/flow-engine" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3V7z"></path>
-            </svg>
-            <span>Flow Engine</span>
-          </a>
+{% block title %}Integrations{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Accounting integrations for biz-e">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+{% endblock %}
+
+{% block topbar %}{% endblock %}
+
+{% block content %}
+  {# Wrapper class ships with HTMX #page-content swaps (head_extras styles do not). Layout lives in styles2.css. #}
+  <div class="max-content integrations-page">
+    <div class="spa-hub-yellow-sleeve">
+      <div class="inventory-spa-header-wrap inventory-hub-banner-wrap" aria-hidden="true">
+        <div class="inventory-spa-header__banner">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
+            <defs>
+              <linearGradient id="int-line" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#0EA5E9"/>
+                <stop offset="100%" stop-color="#22C55E"/>
+              </linearGradient>
+              <linearGradient id="int-card" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#DBEAFE"/>
+                <stop offset="100%" stop-color="#A7F3D0"/>
+              </linearGradient>
+              <filter id="int-soft" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.12"/>
+              </filter>
+            </defs>
+
+            <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
+
+            <!-- subtle flow line -->
+            <path d="M24 52 C 55 36, 85 36, 100 46 C 115 56, 145 56, 176 40" stroke="url(#int-line)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+
+            <!-- invoice/receipt -->
+            <g filter="url(#int-soft)">
+              <path d="M74 22h44a10 10 0 0 1 10 10v38a0 0 0 0 1 0 0l-5-3-5 3-5-3-5 3-5-3-5 3-5-3-5 3-5-3-5 3-4-2V32a10 10 0 0 1 10-10z" fill="url(#int-card)"/>
+              <rect x="84" y="34" width="30" height="6" rx="3" fill="#0EA5E9" opacity="0.28"/>
+              <g opacity="0.55" stroke="#0F172A" stroke-width="2" stroke-linecap="round">
+                <path d="M84 46h20"/>
+                <path d="M84 54h26"/>
+                <path d="M84 62h14"/>
+              </g>
+            </g>
+
+            <!-- bar chart -->
+            <g filter="url(#int-soft)">
+              <rect x="140" y="28" width="40" height="42" rx="12" fill="#DBEAFE" opacity="0.7"/>
+              <path d="M150 62V48" stroke="#0EA5E9" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+              <path d="M162 62V40" stroke="#22C55E" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+              <path d="M174 62V52" stroke="#0EA5E9" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+            </g>
+
+            <!-- coin -->
+            <g filter="url(#int-soft)">
+              <circle cx="30" cy="54" r="14" fill="#FDE68A"/>
+              <circle cx="30" cy="54" r="8" fill="none" stroke="#F59E0B" stroke-width="2" opacity="0.75"/>
+              <path d="M27 54h6" stroke="#B45309" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+            </g>
+          </svg>
         </div>
-        
-        <div class="nav-item">
-          <a href="/workflow-engine/core" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6m9.66-9L16 12m-6 0L4.34 9M19.66 18L16 12m-6 0L4.34 18"/>
-            </svg>
-            <span>Core Flows</span>
-          </a>
-        </div>
-        
-        <div class="nav-item">
-          <a href="/workflow-engine/compliance" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            <span>Compliance</span>
-          </a>
-        </div>
-        
-        <div class="nav-item">
-          <a href="/workflow-engine/integrations" class="nav-link active">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
-            <span>Integrations</span>
-          </a>
-        </div>
-        
-        <div class="nav-item">
-          <a href="/workflow-engine/settings" class="nav-link">
-            <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6"/>
-              <path d="M1 12h6m6 0h6"/>
-            </svg>
-            <span>Settings</span>
-          </a>
-        </div>
-      </nav>
-    </aside>
-    
-    <main class="main-content">
-      
-      <header class="main-header">
-        <div>
-          <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem;">Integrations</h1>
-          <p style="color: var(--text-secondary); font-size: 0.9375rem;">Connect your existing tools and systems</p>
-        </div>
-        <div class="header-actions">
-          <button class="btn btn-primary">
-            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M12 4v16m8-8H4"/>
-            </svg>
-            Add Integration
-          </button>
-        </div>
-      </header>
-      
-      <div class="main-body">
-        
-        <div class="glass-card mb-4">
-          <h2 class="mb-3">Active Integrations</h2>
-          
-          <div class="grid grid-cols-3">
-            
-            <div class="metric-card">
-              <div class="metric-label">Connected Systems</div>
-              <div class="metric-value status-info">8</div>
-              <div class="metric-trend">All systems syncing</div>
-              <div class="metric-icon">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                </svg>
-              </div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-label">Data Synced Today</div>
-              <div class="metric-value status-success">2.4GB</div>
-              <div class="metric-trend">↑ 18% vs yesterday</div>
-              <div class="metric-icon">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                </svg>
-              </div>
-            </div>
-            
-            <div class="metric-card">
-              <div class="metric-label">API Health</div>
-              <div class="metric-value status-success">99.9%</div>
-              <div class="metric-trend">Last 30 days uptime</div>
-              <div class="metric-icon">
-                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-              </div>
-            </div>
-            
-          </div>
-        </div>
-        
-        <div class="glass-card mb-4">
-          <h3 class="mb-3">Connected Systems</h3>
-          
-          <div class="grid grid-cols-2">
-            
-            <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--panel-solid); display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 1rem;">
-                <div style="width: 48px; height: 48px; background: rgba(0, 120, 212, 0.1); border-radius: var(--radius-md); display: flex; align-items: center; justify-center;">
-                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24" style="color: var(--azure-blue);">
-                    <rect width="24" height="24" rx="4"/>
-                  </svg>
-                </div>
-                <div>
-                  <div style="font-weight: 600; margin-bottom: 0.25rem;">SAP ERP</div>
-                  <div style="font-size: 0.875rem; color: var(--text-secondary);">Enterprise Resource Planning</div>
-                </div>
-              </div>
-              <span style="display: inline-block; padding: 0.25rem 0.75rem; background: rgba(22, 163, 74, 0.1); color: var(--success); border-radius: 999px; font-size: 0.875rem; font-weight: 600;">Active</span>
-            </div>
-            
-            <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--panel-solid); display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 1rem;">
-                <div style="width: 48px; height: 48px; background: rgba(0, 120, 212, 0.1); border-radius: var(--radius-md); display: flex; align-items: center; justify-center;">
-                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24" style="color: var(--azure-blue);">
-                    <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
-                  </svg>
-                </div>
-                <div>
-                  <div style="font-weight: 600; margin-bottom: 0.25rem;">Oracle WMS</div>
-                  <div style="font-size: 0.875rem; color: var(--text-secondary);">Warehouse Management</div>
-                </div>
-              </div>
-              <span style="display: inline-block; padding: 0.25rem 0.75rem; background: rgba(22, 163, 74, 0.1); color: var(--success); border-radius: 999px; font-size: 0.875rem; font-weight: 600;">Active</span>
-            </div>
-            
-            <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--panel-solid); display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 1rem;">
-                <div style="width: 48px; height: 48px; background: rgba(0, 120, 212, 0.1); border-radius: var(--radius-md); display: flex; align-items: center; justify-center;">
-                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24" style="color: var(--azure-blue);">
-                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                </div>
-                <div>
-                  <div style="font-weight: 600; margin-bottom: 0.25rem;">QMS Pro</div>
-                  <div style="font-size: 0.875rem; color: var(--text-secondary);">Quality Management</div>
-                </div>
-              </div>
-              <span style="display: inline-block; padding: 0.25rem 0.75rem; background: rgba(22, 163, 74, 0.1); color: var(--success); border-radius: 999px; font-size: 0.875rem; font-weight: 600;">Active</span>
-            </div>
-            
-            <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--panel-solid); display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 1rem;">
-                <div style="width: 48px; height: 48px; background: rgba(0, 120, 212, 0.1); border-radius: var(--radius-md); display: flex; align-items: center; justify-center;">
-                  <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24" style="color: var(--azure-blue);">
-                    <path d="M3 6h18M3 6v12a2 2 0 002 2h14a2 2 0 002-2V6M5 6V4a2 2 0 012-2h10a2 2 0 012 2v2"/>
-                  </svg>
-                </div>
-                <div>
-                  <div style="font-weight: 600; margin-bottom: 0.25rem;">ColdChain Monitor</div>
-                  <div style="font-size: 0.875rem; color: var(--text-secondary);">Temperature Tracking</div>
-                </div>
-              </div>
-              <span style="display: inline-block; padding: 0.25rem 0.75rem; background: rgba(22, 163, 74, 0.1); color: var(--success); border-radius: 999px; font-size: 0.875rem; font-weight: 600;">Active</span>
-            </div>
-            
-          </div>
-        </div>
-        
-        <div class="glass-card">
-          <h3 class="mb-3">Available Integrations</h3>
-          <p style="color: var(--text-secondary); margin-bottom: 2rem;">
-            Connect Flume with your favorite tools and platforms
-          </p>
-          
-          <div class="grid grid-cols-3">
-            
-            <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--panel-solid); text-align: center; transition: all var(--transition-base); cursor: pointer;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-hover)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
-              <div style="width: 64px; height: 64px; background: rgba(0, 120, 212, 0.1); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
-                <svg width="32" height="32" fill="currentColor" viewBox="0 0 24 24" style="color: var(--azure-blue);">
-                  <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                </svg>
-              </div>
-              <div style="font-weight: 600; margin-bottom: 0.5rem;">Microsoft Dynamics</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">Business Applications</div>
-              <button class="btn btn-secondary btn-sm" style="width: 100%;">Connect</button>
-            </div>
-            
-            <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--panel-solid); text-align: center; transition: all var(--transition-base); cursor: pointer;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-hover)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
-              <div style="width: 64px; height: 64px; background: rgba(0, 120, 212, 0.1); border-radius: var(--radius-md); display: flex; align-items: center; justify-center; margin: 0 auto 1rem;">
-                <svg width="32" height="32" fill="currentColor" viewBox="0 0 24 24" style="color: var(--azure-blue);">
-                  <circle cx="12" cy="12" r="10"/>
-                </svg>
-              </div>
-              <div style="font-weight: 600; margin-bottom: 0.5rem;">Salesforce</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">CRM Platform</div>
-              <button class="btn btn-secondary btn-sm" style="width: 100%;">Connect</button>
-            </div>
-            
-            <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--panel-solid); text-align: center; transition: all var(--transition-base); cursor: pointer;" onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='var(--shadow-hover)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
-              <div style="width: 64px; height: 64px; background: rgba(0, 120, 212, 0.1); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
-                <svg width="32" height="32" fill="currentColor" viewBox="0 0 24 24" style="color: var(--azure-blue);">
-                  <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                </svg>
-              </div>
-              <div style="font-weight: 600; margin-bottom: 0.5rem;">Slack</div>
-              <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">Team Communication</div>
-              <button class="btn btn-secondary btn-sm" style="width: 100%;">Connect</button>
-            </div>
-            
-          </div>
-        </div>
-        
       </div>
-      
-    </main>
-    
+    </div>
+
+    <section class="spa-form-section spa-page-hero" aria-label="Integrations header">
+      <h1 class="page-title">Integrations</h1>
+      <p class="page-subtitle" style="color: var(--text-secondary, #6b7280);">
+        Accounting integrations coming soon.
+      </p>
+    </section>
+
+    <div class="integrations-grid">
+      <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
+        <div class="card-content integration-card-row">
+          <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+            <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="#13B5EA"/>
+                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.5" font-weight="700" fill="#ffffff">X</text>
+              </svg>
+            </div>
+            <div style="min-width: 0;">
+              <div style="font-weight: 700; color: var(--text-primary, #111827); line-height: 1.2;">Xero</div>
+              <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Coming soon</div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm integration-connect-btn" disabled>Connect</button>
+        </div>
+      </section>
+
+      <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
+        <div class="card-content integration-card-row">
+          <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+            <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="#7B3FF2"/>
+                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.25" font-weight="700" fill="#ffffff">M</text>
+              </svg>
+            </div>
+            <div style="min-width: 0;">
+              <div style="font-weight: 700; color: var(--text-primary, #111827); line-height: 1.2;">MYOB</div>
+              <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Coming soon</div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm integration-connect-btn" disabled>Connect</button>
+        </div>
+      </section>
+    </div>
   </div>
-  
-  <script src="/workflow-engine-static/common_4.js"></script>
-</body>
-</html>
+{% endblock %}

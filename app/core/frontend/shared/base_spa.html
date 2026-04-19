@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+    try {
+      if (localStorage.getItem('spa-theme') === 'dark') {
+        document.documentElement.setAttribute('data-spa-theme', 'dark');
+      }
+    } catch (e) {}
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -8,6 +15,9 @@
 
   {# Core styles & fonts #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='spa-theme.css') }}">
+  {# Dashboard: rules are scoped to .workflow-dashboard; inert on other pages. Kept here so HTMX #page-content swaps still have the sheet. #}
+  <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='dashboard_spa.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -351,15 +361,25 @@
       padding-bottom: 0 !important;
     }
 
+    /* Mobile: same tall header when menu is open (avoid slim desktop height + broken dropdown anchor). */
+    @media (max-width: 767px) {
+      .main-header.bee-menu-open {
+        height: var(--spa-mobile-topbar-height, 72px) !important;
+        min-height: var(--spa-mobile-topbar-height, 72px) !important;
+      }
+    }
+
     #page-content.page-content {
       --spa-column-inset: clamp(7px, 1.35vw, 13px);
+      /* Mirrors padding-top at each breakpoint (used e.g. full-bleed hero strips). */
+      --spa-page-padding-top: clamp(12px, 2.5vw, 32px);
       box-sizing: border-box;
       min-width: 0;
       width: 100%;
       max-width: 100%;
       overflow-x: clip;
       -webkit-overflow-scrolling: touch;
-      padding-top: clamp(12px, 2.5vw, 32px) !important;
+      padding-top: var(--spa-page-padding-top) !important;
       padding-bottom: clamp(16px, 3vw, 40px) !important;
       padding-left: max(0px, env(safe-area-inset-left)) !important;
       padding-right: max(0px, env(safe-area-inset-right)) !important;
@@ -367,13 +387,15 @@
     @media (max-width: 767px) {
       #page-content.page-content {
         --spa-column-inset: clamp(6px, 1.5vw, 11px);
-        padding-top: max(12px, env(safe-area-inset-top)) !important;
+        --spa-page-padding-top: max(12px, env(safe-area-inset-top));
+        padding-top: var(--spa-page-padding-top) !important;
         padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
       }
     }
     @media (min-width: 768px) and (max-width: 1279px) {
       #page-content.page-content {
-        padding-top: clamp(16px, 2.5vw, 24px) !important;
+        --spa-page-padding-top: clamp(16px, 2.5vw, 24px);
+        padding-top: var(--spa-page-padding-top) !important;
         padding-bottom: clamp(20px, 3vw, 32px) !important;
       }
     }
@@ -602,6 +624,34 @@
       border-radius: calc(var(--bee-size) * 0.25);
     }
 
+    /* Mobile: compact chrome vs page CTAs (.btn ~14px + padding; flows2 Manage / Start new batch stay visually primary) */
+    @media (max-width: 767px) {
+      .bee-topbar-wrap {
+        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 72px) - 30px));
+      }
+      .bee-profile {
+        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 72px) - 30px));
+      }
+      .spa-banner-back svg {
+        width: 20px;
+        height: 20px;
+      }
+      .topbar-notifications svg {
+        width: 18px;
+        height: 18px;
+      }
+      .topbar-account {
+        gap: 10px;
+      }
+      .topbar-notifications__badge {
+        min-width: 16px;
+        height: 16px;
+        font-size: 10px;
+        top: -3px;
+        right: -3px;
+      }
+    }
+
     .bee-body {
       transform-origin: 50% 60%;
     }
@@ -758,6 +808,14 @@
     @media (max-width: 767px) {
       .bee-menu {
         border-radius: 0 0 var(--radius-xl, 14px) var(--radius-xl, 14px);
+        /* Anchor under the sticky top bar instead of overlapping the viewport top */
+        top: calc(env(safe-area-inset-top, 0px) + var(--spa-mobile-topbar-height, 72px));
+        max-height: calc(
+          100vh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 72px) - env(safe-area-inset-bottom, 0px)
+        );
+        max-height: calc(
+          100dvh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 72px) - env(safe-area-inset-bottom, 0px)
+        );
       }
     }
   </style>
@@ -943,6 +1001,7 @@
 
         <div
           class="bee-menu"
+          x-cloak
           x-show="open"
           x-transition:enter="transition ease-out duration-160"
           x-transition:enter-start="opacity-0"
@@ -996,10 +1055,57 @@
   <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
   <script src="/ui/shared/sidebar-v2.js"></script>
+  <script src="/ui/shared/password-policy.js"></script>
+  <script src="/ui/shared/workflow-engine-settings.js"></script>
 
   {# HTMX & Alpine for SPA-style navigation and local UI state #}
   <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous"></script>
   <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+  <script>
+    (function () {
+      var KEY = 'spa-theme';
+      function apply(mode) {
+        var root = document.documentElement;
+        if (mode === 'dark') root.setAttribute('data-spa-theme', 'dark');
+        else root.removeAttribute('data-spa-theme');
+      }
+      function stored() {
+        try {
+          return localStorage.getItem(KEY);
+        } catch (e) {
+          return null;
+        }
+      }
+      window.SpaTheme = {
+        get: function () {
+          return stored() === 'dark' ? 'dark' : 'light';
+        },
+        set: function (mode) {
+          var dark = mode === 'dark';
+          apply(dark ? 'dark' : 'light');
+          try {
+            if (dark) localStorage.setItem(KEY, 'dark');
+            else localStorage.removeItem(KEY);
+          } catch (e) {}
+        },
+        applyStored: function () {
+          apply(stored() === 'dark' ? 'dark' : 'light');
+        }
+      };
+      window.syncSpaThemeToggle = function () {
+        var cb = document.getElementById('spa-theme-dark-toggle');
+        if (!cb || !window.SpaTheme) return;
+        cb.checked = window.SpaTheme.get() === 'dark';
+        if (cb.dataset.spaThemeBound) return;
+        cb.dataset.spaThemeBound = '1';
+        cb.addEventListener('change', function () {
+          window.SpaTheme.set(cb.checked ? 'dark' : 'light');
+        });
+      };
+      window.SpaTheme.applyStored();
+    })();
+  </script>
 
   <script>
     /**
@@ -1044,11 +1150,23 @@
     }
     window.spaFlowWizardBackHref = spaFlowWizardBackHref;
 
+    /** SPA main tabs (sidebar): no “up” affordance — only nested routes show the back control. */
+    function spaBannerBackIsMainTab(pathname) {
+      var p = (pathname || '').replace(/\/$/, '') || '/';
+      return (
+        p === '/core' ||
+        p === '/workflow-engine/dashboard' ||
+        p === '/workflow-engine/integrations' ||
+        p === '/workflow-engine/settings'
+      );
+    }
+    window.spaBannerBackIsMainTab = spaBannerBackIsMainTab;
+
     function spaSyncBannerBack() {
       var el = document.getElementById('spa-banner-back');
       if (!el) return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
-      if (path === '/core') {
+      if (spaBannerBackIsMainTab(path)) {
         el.classList.add('spa-banner-back--hidden');
         el.setAttribute('aria-hidden', 'true');
         el.setAttribute('tabindex', '-1');
@@ -1089,6 +1207,18 @@
     }
     window.spaSyncBannerBack = spaSyncBannerBack;
 
+    /** Primary scroll container is #page-content (not the window). Use after layout settles. */
+    function spaResetMainScrollPosition() {
+      var pc = document.getElementById('page-content');
+      if (pc) pc.scrollTop = 0;
+      var mc = document.querySelector('.main-content');
+      if (mc) mc.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    }
+    window.spaResetMainScrollPosition = spaResetMainScrollPosition;
+
     function spaBannerBackInit() {
       var el = document.getElementById('spa-banner-back');
       if (!el) return;
@@ -1124,9 +1254,20 @@
         }
       });
       spaSyncBannerBack();
+      window.addEventListener('popstate', spaSyncBannerBack);
     }
 
-    document.addEventListener('DOMContentLoaded', spaBannerBackInit);
+    // Last path we already scrolled to top for (avoids duplicate settles + same-URL noise).
+    var spaLastScrollResetPath =
+      (window.location.pathname || '').replace(/\/$/, '') || '/';
+    document.addEventListener('DOMContentLoaded', function onSpaShellReady() {
+      spaLastScrollResetPath =
+        (window.location.pathname || '').replace(/\/$/, '') || '/';
+      spaBannerBackInit();
+      if (typeof window.syncSpaThemeToggle === 'function') {
+        window.syncSpaThemeToggle();
+      }
+    });
 
     // Global HTMX wiring
     document.body.addEventListener('htmx:configRequest', function (evt) {
@@ -1136,17 +1277,32 @@
       }
     });
 
-    // After boosted navigation settles, re-sync href (afterOnLoad can be early relative to final pathname in some cases).
-    document.body.addEventListener('htmx:afterSettle', function () {
+    // After boosted navigation settles: sync banner + scroll the real overflow parent (#page-content),
+    // not window (fixes tiny post-nav drift on mobile when the column scroll container kept its old scrollTop).
+    document.body.addEventListener('htmx:afterSettle', function (evt) {
       if (typeof spaSyncBannerBack === 'function') {
         spaSyncBannerBack();
       }
+      var tgt = evt.detail && evt.detail.target;
+      if (tgt && tgt.id === 'page-content' && typeof window.syncSpaThemeToggle === 'function') {
+        window.syncSpaThemeToggle();
+      }
+      if (!tgt || tgt.id !== 'page-content') return;
+      var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
+      if (path === spaLastScrollResetPath) return;
+      spaLastScrollResetPath = path;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (typeof spaResetMainScrollPosition === 'function') {
+            spaResetMainScrollPosition();
+          }
+        });
+      });
     });
 
     // afterOnLoad: banner back state (HTMX keeps shell; sync from URL) + Process Hub data reload (see core2.html)
     document.body.addEventListener('htmx:afterOnLoad', function (evt) {
       spaSyncBannerBack();
-      window.scrollTo(0, 0);
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
       if (path !== '/core') return;
       if (typeof window.loadCoreHubDashboardData === 'function') {
