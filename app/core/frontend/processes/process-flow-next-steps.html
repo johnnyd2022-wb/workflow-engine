@@ -1,6 +1,7 @@
 {% extends "processes/process-flow-spa.html" %}
-{% block wizard_html_title %}Next steps | SupplyChain V2{% endblock %}
-{% block wizard_title %}What would you like to do next?{% endblock %}
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
+{% block wizard_html_title %}Review workflow | SupplyChain V2{% endblock %}
+{% block wizard_title %}Review workflow{% endblock %}
 {% block wizard_tagline %}{% endblock %}
 
 {% block head_extras %}
@@ -12,6 +13,9 @@
     margin: 0;
     padding: 8px 0 28px;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
   }
   .process-flow-next-steps__section {
     display: flex;
@@ -19,15 +23,6 @@
     align-items: stretch;
     gap: 12px;
     width: 100%;
-  }
-  /* Mirror the 20px below the divider (padding-top on section 2) above the line so the Add button doesn’t touch it */
-  .process-flow-next-steps__section:first-child {
-    padding-bottom: 20px;
-  }
-  .process-flow-next-steps__section + .process-flow-next-steps__section {
-    margin-top: 0;
-    padding-top: 20px;
-    border-top: 1px solid var(--border-default, #e5e7eb);
   }
   .process-flow-next-steps__helper {
     font-size: 0.8125rem;
@@ -74,16 +69,343 @@
     white-space: nowrap;
     border: 0;
   }
+
+  /* Steps list — same expandable row pattern as flows2.html */
+  .process-flow-next-steps .steps-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+  }
+  .process-flow-next-steps .next-steps-drag-hint {
+    display: none;
+    text-align: center;
+    color: var(--text-tertiary, #9ca3af);
+    font-size: 12px;
+    margin-top: 14px;
+    padding: 8px;
+  }
+  .process-flow-next-steps .flow-step-num-badge {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    background: var(--primary, #3b82f6);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .process-flow-next-steps .flows2-step {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    border: none;
+    border-radius: 14px;
+    background: transparent;
+    box-shadow: none;
+    box-sizing: border-box;
+    overflow: hidden;
+    transition: background 0.14s ease, box-shadow 0.14s ease;
+  }
+  .process-flow-next-steps .flows2-step + .flows2-step {
+    border-top: 1px solid var(--border-default, #e5e7eb);
+  }
+  .process-flow-next-steps .flows2-step:hover {
+    background: rgba(15, 23, 42, 0.03);
+  }
+  .process-flow-next-steps .flows2-step:focus-within {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  }
+  .process-flow-next-steps .flows2-step__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px 12px;
+    background: transparent;
+  }
+  .process-flow-next-steps .flows2-step__drag {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-tertiary, #9ca3af);
+    cursor: grab;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .process-flow-next-steps .flows2-step__drag:hover {
+    border-color: var(--border-default, #e5e7eb);
+    background: rgba(0, 0, 0, 0.03);
+    color: var(--text-primary, #111827);
+  }
+  .process-flow-next-steps .flows2-step__titlewrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    cursor: pointer;
+  }
+  .process-flow-next-steps .flows2-step__titlewrap:hover .flows2-step__title {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: rgba(59, 130, 246, 0.35);
+  }
+  .process-flow-next-steps .flows2-step__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary, #111827);
+    line-height: 1.25;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .process-flow-next-steps .flows2-step__sub {
+    font-size: 12px;
+    color: var(--text-secondary, #6b7280);
+    line-height: 1.4;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .process-flow-next-steps .flows2-step__header-edit {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+  .process-flow-next-steps .flows2-step__toggle {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-tertiary, #9ca3af);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+  }
+  .process-flow-next-steps .flows2-step__toggle:hover {
+    border-color: var(--border-default, #e5e7eb);
+    background: rgba(0, 0, 0, 0.03);
+    color: var(--text-primary, #111827);
+  }
+  .process-flow-next-steps .flows2-step__toggle svg { transition: transform 0.18s ease; }
+  .process-flow-next-steps .flows2-step[data-expanded="true"] .flows2-step__toggle svg { transform: rotate(180deg); }
+  .process-flow-next-steps .flows2-step[data-expanded="true"] .flows2-step__toggle {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.18);
+    color: var(--text-primary, #111827);
+  }
+  .process-flow-next-steps .flows2-step__body {
+    display: block;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: max-height 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
+    border-top: 1px solid var(--border-light, #e5e7eb);
+  }
+  .process-flow-next-steps .flows2-step[data-expanded="true"] .flows2-step__body {
+    max-height: 1800px;
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .process-flow-next-steps .flows2-step__body-inner {
+    padding: 12px 12px 14px;
+    background: rgba(255, 255, 255, 0.55);
+  }
+  .process-flow-next-steps .flows2-step__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  @media (min-width: 1024px) {
+    .process-flow-next-steps .flows2-step__grid { grid-template-columns: 1fr 1fr; gap: 16px; }
+  }
+  .process-flow-next-steps .flows2-step__panel-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary, #6b7280);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 8px 0;
+  }
+  @media (max-width: 720px) {
+    .process-flow-next-steps .flows2-step__header { padding: 12px 12px; gap: 8px; }
+    .process-flow-next-steps .flows2-step__drag, .process-flow-next-steps .flows2-step__toggle { width: 34px; height: 34px; }
+    .process-flow-next-steps .flows2-step__body-inner { padding: 12px 12px 12px; }
+  }
+  .process-flow-next-steps .flows2-section {
+    padding: 14px 0;
+  }
+  .process-flow-next-steps .flows2-section + .flows2-section {
+    border-top: 1px solid var(--border-default, #e5e7eb);
+  }
+  .process-flow-next-steps .flows2-section__title {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary, #6b7280);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .process-flow-next-steps .flows2-summary-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+  .process-flow-next-steps .flows2-summary-item {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 12px 12px;
+    min-width: 0;
+  }
+  .process-flow-next-steps .flows2-summary-item + .flows2-summary-item {
+    border-top: 1px solid rgba(15, 23, 42, 0.06);
+  }
+  .process-flow-next-steps .flows2-summary-item__main {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .process-flow-next-steps .flows2-summary-item__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+  .process-flow-next-steps .flows2-summary-item__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary, #111827);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  .process-flow-next-steps .flows2-summary-item__sub {
+    font-size: 12px;
+    color: var(--text-secondary, #6b7280);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .process-flow-next-steps .flows2-chip {
+    align-self: flex-start;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary, #6b7280);
+    background: rgba(15, 23, 42, 0.05);
+    border: none;
+    padding: 4px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+  }
+  .process-flow-next-steps .flows2-empty {
+    margin: 0;
+    padding: 6px 0;
+    font-size: 12px;
+    color: var(--text-secondary, #6b7280);
+  }
+  .process-flow-next-steps .flows2-summary-list--empty {
+    min-height: 54px;
+    display: flex;
+    align-items: stretch;
+  }
+  .process-flow-next-steps .next-steps-hub-empty {
+    font-size: 0.9375rem;
+    color: var(--text-secondary, #6b7280);
+    margin: 0;
+    padding: 16px 12px;
+    text-align: center;
+  }
+
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-step__body {
+    border-top-color: rgba(255, 255, 255, 0.12);
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-step__body-inner {
+    background: var(--bg-card, #121212);
+    color: var(--text-primary, #ffffff);
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-step + .flows2-step {
+    border-top-color: rgba(255, 255, 255, 0.12);
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-section + .flows2-section {
+    border-top-color: rgba(255, 255, 255, 0.12);
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-summary-list {
+    background: var(--bg-card, #121212);
+    border-color: var(--border-default, rgba(255, 255, 255, 0.14));
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-summary-item + .flows2-summary-item {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-summary-item__title {
+    color: var(--text-primary, #ffffff);
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-summary-item__sub {
+    color: var(--text-secondary, hsl(210, 20%, 92%));
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-chip {
+    color: var(--text-secondary, hsl(210, 15%, 85%));
+    background: rgba(255, 255, 255, 0.08);
+  }
+  html[data-spa-theme="dark"] body.process-flow-spa .process-flow-next-steps .flows2-step[data-expanded="true"] .flows2-step__toggle {
+    background: rgba(246, 208, 76, 0.15);
+    border-color: rgba(246, 208, 76, 0.35);
+    color: var(--spa-yellow, #f6d04c);
+  }
 </style>
 {% endblock %}
 
+{% block wizard_more_information %}
+{% call flow_wizard_more_information('More information about your workflow') %}
+      <p class="process-flow-wizard__intro">
+        Review each step to change its name, inputs, outputs, or prompts. Add another step when your process has distinct stages—just as you define how your product is made.
+      </p>
+      <p class="process-flow-wizard__intro">
+        When you record step completions, inventory updates in real time from the inputs and outputs you defined. Finish the process design when you are ready; you can return here any time to edit the workflow, and changes apply only to future executions.
+      </p>
+{% endcall %}
+{% endblock %}
+
 {% block wizard_card_body %}
-<div class="process-flow-next-steps" role="region" aria-label="Next steps">
+<div class="process-flow-next-steps" role="region" aria-label="Review workflow">
+  <section class="process-flow-next-steps__section" aria-labelledby="next-steps-steps-heading">
+    <h2 id="next-steps-steps-heading" class="sr-only">Workflow steps</h2>
+    <p class="process-flow-next-steps__helper">
+      Review your steps or open one to edit. New steps are added after the last step.
+    </p>
+    <div class="next-steps-steps-shell">
+      <div id="next-steps-steps-container" class="steps-container" role="list" aria-busy="true"></div>
+      <p id="next-steps-drag-hint" class="next-steps-drag-hint" aria-live="polite">Drag steps to reorder them</p>
+    </div>
+  </section>
   <section class="process-flow-next-steps__section" aria-labelledby="next-steps-add-heading">
     <h2 id="next-steps-add-heading" class="sr-only">Add another step</h2>
-    <p class="process-flow-next-steps__helper">
-      Build out your workflow the same way you already define how your product is made. Add more steps when your process has distinct stages, and use inputs from earlier steps—such as intermediate outputs—when your product transforms at each step so each stage stays traceable.
-    </p>
     <div class="process-flow-next-steps__btn-row">
       <button type="button" class="btn btn-primary process-flow-next-steps__btn" onclick="window.addAnotherStep()">
         Add another step
@@ -91,18 +413,17 @@
     </div>
   </section>
   <section class="process-flow-next-steps__section" aria-labelledby="next-steps-finish-heading">
-    <h2 id="next-steps-finish-heading" class="sr-only">Finish process</h2>
-    <p class="process-flow-next-steps__helper">
-      As you record completions of this process’s steps, your inventory will automatically update in real time, giving you a live view of where all your inventory is at any moment. Each step completion will consume inputs, produce outputs, and associate all recorded information with the completed batch according to the requirements you’ve defined for each step.
-    </p>
-    <p class="process-flow-next-steps__helper" style="margin-top: -4px;">
-      You can edit this process workflow at any time. All changes will apply to future executions.
-    </p>
+    <h2 id="next-steps-finish-heading" class="sr-only">Finish workflow</h2>
     <div class="process-flow-next-steps__btn-row">
       <button type="button" class="btn btn-secondary process-flow-next-steps__btn" onclick="window.finishProcess()">
-        Finish process
+        Finish workflow
       </button>
     </div>
   </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('core.serve_core_js', filename='process-flow-next-steps-steps.js') }}"></script>
 {% endblock %}

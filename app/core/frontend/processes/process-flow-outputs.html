@@ -1,5 +1,18 @@
 {% extends "processes/process-flow-spa.html" %}
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
 {% block wizard_html_title %}Outputs | Create process | SupplyChain V2{% endblock %}
+
+{% block wizard_more_information %}
+{% call flow_wizard_more_information('More information about step outputs') %}
+      <p class="process-flow-wizard__intro">
+        Outputs are what this step produces—inventory you can consume in a later step, ship, or hold. Clear names and units keep downstream steps and reporting accurate.
+      </p>
+      <p class="process-flow-wizard__intro">
+        Where it matters, set rules such as expiry or ready dates so operators know how long stock is good for and when it becomes available for the next stage.
+      </p>
+{% endcall %}
+{% endblock %}
+
 {% block wizard_card_body %}
               {% include 'processes/process-wizard-fragment-shared-top.html' %}
               {% include 'processes/process-wizard-carried-step-fields.html' %}

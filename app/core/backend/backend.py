@@ -514,16 +514,6 @@ def flows():
     return render_template("processes/flows2.html", active_page="core", process_id=process_id)
 
 
-@core_bp.route("/core/flows2/edit", methods=["GET"])
-@requires_auth
-def flows2_edit():
-    """Serve the workflow edit hub page (processes/flows2_edit.html)."""
-    process_id = _flow_process_id_from_request()
-    if process_id is not None:
-        _assert_flow_process_access(process_id)
-    return render_template("processes/flows2_edit.html", active_page="core", process_id=process_id)
-
-
 @core_bp.route("/core/flows/create", methods=["GET"])
 @requires_auth
 def flows_create():

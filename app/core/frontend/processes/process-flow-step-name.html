@@ -1,5 +1,18 @@
 {% extends "processes/process-flow-spa.html" %}
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
 {% block wizard_html_title %}Step name | Create process | SupplyChain V2{% endblock %}
+
+{% block wizard_more_information %}
+{% call flow_wizard_more_information('More information about naming a step') %}
+      <p class="process-flow-wizard__intro">
+        Give this step the same name people already use on the floor—for example Mixing, Fermentation, or Packaging. It appears in step lists, executions, and traceability views.
+      </p>
+      <p class="process-flow-wizard__intro">
+        Use the description to summarise what happens in plain language. That helps teammates, training, and anyone reviewing the workflow later without opening every field.
+      </p>
+{% endcall %}
+{% endblock %}
+
 {% block wizard_card_body %}
               {% include 'processes/process-wizard-fragment-shared-top.html' %}
               {% include 'processes/process-wizard-fragment-indicators.html' %}

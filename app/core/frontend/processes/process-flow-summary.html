@@ -1,8 +1,21 @@
 {% extends "processes/process-flow-spa.html" %}
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
 {% block wizard_html_title %}Step summary | SupplyChain V2{% endblock %}
 {% block wizard_title %}Step summary{% endblock %}
 {%- block wizard_tagline -%}
 {%- endblock %}
+
+{% block wizard_more_information %}
+{% call flow_wizard_more_information('More information about the step summary') %}
+      <p class="process-flow-wizard__intro">
+        This screen pulls together what you configured for this step—inputs, outputs, traceability, prompts, and documentation—so you can sanity-check before saving.
+      </p>
+      <p class="process-flow-wizard__intro">
+        The summary reflects the current draft. After you save, those settings apply to future runs; they do not rewrite history for batches already completed.
+      </p>
+{% endcall %}
+{% endblock %}
+
 {% block wizard_card_body %}
               <div class="create-process-step" id="process-flow-summary-wizard-shell" style="display: block;">
                 <div class="create-process-step-body">

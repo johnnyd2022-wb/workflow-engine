@@ -298,12 +298,24 @@
         padding-right: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-right)));
       }
     }
+    /*
+     * Main column is flex:1 + overflow-y; without min-height:0 the flex item won’t shrink, so on
+     * iOS/mobile the inner scroller never gets a bounded height and content below the fold (audit log)
+     * can become unreachable.
+     */
+    body.flows2-page .main-content {
+      min-height: 0;
+    }
+    body.flows2-page #page-content.page-content {
+      min-height: 0;
+    }
+    /* Override base_spa padding-bottom !important; height matches fixed action rail + mobile tab (styles2 .spa-fixed-action-bar__inner). */
     .flows2-page #page-content.page-content {
-      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
     }
     @media (max-width: 767px) {
       .flows2-page #page-content.page-content {
-        padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 72px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 69px + env(safe-area-inset-bottom, 0px)) !important;
       }
     }
 
@@ -810,6 +822,67 @@
     html[data-spa-theme="dark"] .flows2-page #page-content.page-content .searchable-dropdown-list .dropdown-item.selected {
       background: rgba(255, 255, 255, 0.1);
     }
+
+    .flows2-audit-log {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .flows2-audit-log__details {
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.55);
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    html[data-spa-theme="dark"] .flows2-audit-log__details {
+      background: var(--bg-card, #121212);
+      border-color: var(--border-default, rgba(255, 255, 255, 0.14));
+    }
+    html[data-spa-theme="dark"] .flows2-audit-log__summary {
+      color: var(--text-primary, #ffffff);
+    }
+    html[data-spa-theme="dark"] .flows2-audit-log__placeholder {
+      color: var(--text-secondary, hsl(210, 20%, 92%));
+    }
+    .flows2-audit-log__summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary, #111827);
+      user-select: none;
+    }
+    .flows2-audit-log__summary::-webkit-details-marker {
+      display: none;
+    }
+    .flows2-audit-log__summary::after {
+      content: "";
+      width: 0.5em;
+      height: 0.5em;
+      border-right: 2px solid var(--text-tertiary, #9ca3af);
+      border-bottom: 2px solid var(--text-tertiary, #9ca3af);
+      transform: rotate(45deg);
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .flows2-audit-log__details[open] .flows2-audit-log__summary::after {
+      transform: rotate(225deg);
+    }
+    .flows2-audit-log__body {
+      padding: 0 16px 16px 16px;
+    }
+    .flows2-audit-log__placeholder {
+      margin: 0;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: var(--text-secondary, #6b7280);
+    }
   </style>
 {% endblock %}
 
@@ -929,6 +1002,15 @@
               </svg>
               Drag steps to reorder them
             </p>
+
+            <section class="flows2-audit-log" aria-labelledby="flows2-audit-log-heading">
+              <details class="flows2-audit-log__details">
+                <summary class="flows2-audit-log__summary" id="flows2-audit-log-heading">Audit log</summary>
+                <div class="flows2-audit-log__body">
+                  <p class="flows2-audit-log__placeholder">Coming soon - all operations for this process will be recorded here</p>
+                </div>
+              </details>
+            </section>
           </div>
 
           <!-- Batches (was Executions) -->
@@ -1122,7 +1204,7 @@
           e.preventDefault();
           closeMenu();
           if (!processId) return;
-          window.location.href = '/core/flows2/edit?id=' + encodeURIComponent(processId);
+          window.location.href = '/core/flows/create/next-steps?id=' + encodeURIComponent(processId);
         });
       }
       if (els.draft) {
@@ -1550,11 +1632,19 @@
       }
 
       function promptFlag(labelLower) {
-        const p = (executionPrompts || []).find(x => (x && (x.label || '')).toString().toLowerCase() === labelLower);
+        const p = (executionPrompts || []).find(function (x) {
+          if (!x) return false;
+          const l = (x.label || '').toString().toLowerCase();
+          if (labelLower === 'evidence') {
+            const t = (x.type || '').toString().toLowerCase();
+            return t === 'evidence' || l === 'evidence';
+          }
+          return l === labelLower;
+        });
         if (!p) return null;
-        if (p.required === true) return 'Required';
+        // Match create-process-modal.js deriveTraceabilityModes: only explicit false is optional.
         if (p.required === false) return 'Optional';
-        return null;
+        return 'Required';
       }
 
       const batchFlag = promptFlag('batch number');
@@ -1695,18 +1785,16 @@
                 <div class="flows2-summary-item__main">
                   <div class="flows2-summary-item__row">
                     <div class="flows2-summary-item__title">Batch number</div>
-                    <div class="flows2-chip">Required</div>
+                    <div class="flows2-chip">${escapeHtml(batchFlag || 'Off')}</div>
                   </div>
-                  <div class="flows2-summary-item__sub">${escapeHtml(batchFlag || 'Off')}</div>
                 </div>
               </div>
               <div class="flows2-summary-item">
                 <div class="flows2-summary-item__main">
                   <div class="flows2-summary-item__row">
                     <div class="flows2-summary-item__title">Evidence</div>
-                    <div class="flows2-chip">Required</div>
+                    <div class="flows2-chip">${escapeHtml(evidenceFlag || 'Off')}</div>
                   </div>
-                  <div class="flows2-summary-item__sub">${escapeHtml(evidenceFlag || 'Off')}</div>
                 </div>
               </div>
             </div>

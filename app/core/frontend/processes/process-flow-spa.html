@@ -9,6 +9,7 @@
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Create process steps">
   {% include 'processes/create-process-step-content-styles.html' %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <style>
     /* Hero — same pattern as notifications.html */
     .process-flow-hero__header {
@@ -446,19 +447,58 @@
       margin-left: 0 !important;
       margin-right: 0 !important;
     }
+
+    /* Hub illustration strip + card seam (same as process-overview / Integrations): all flow wizard routes */
+    body.process-flow-spa #page-content .max-content > .spa-hub-yellow-sleeve + section.process-flow-card {
+      margin-top: 0 !important;
+    }
+    html[data-spa-theme="dark"] body.process-flow-spa #page-content .max-content > .spa-hub-yellow-sleeve + section.process-flow-card {
+      margin-top: calc(-1 * var(--spa-hub-sheet-radius)) !important;
+    }
+    /* More information sits above the step body; hairline separates it from fields below (not above the disclosure). */
+    .process-flow-card__content > .process-flow-wizard__more.flow-wizard-example-disclosure {
+      border-top: none;
+      border-bottom: 1px solid var(--border-default, #e5e7eb);
+      width: 100%;
+      margin: 0 0 1rem 0;
+      padding-bottom: 2px;
+      box-sizing: border-box;
+    }
+    html[data-spa-theme="dark"] body.process-flow-spa .process-flow-card__content > .process-flow-wizard__more.flow-wizard-example-disclosure {
+      border-bottom-color: var(--border-default, rgba(148, 163, 184, 0.35));
+    }
+    .process-flow-wizard__more {
+      width: 100%;
+    }
+    .process-flow-wizard__intro {
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: var(--text-secondary, #6b7280);
+      margin: 0 0 0.75rem 0;
+    }
+    .process-flow-wizard__intro:last-child {
+      margin-bottom: 0;
+    }
   </style>
 {% endblock %}
 
 {% block content %}
         <div class="max-content">
+          {# Hub illustration strip before title — matches Core / Integrations / Settings (svg, then card header) #}
+          {% block wizard_pre_card %}
+          <div class="spa-hub-yellow-sleeve">
+            {% include 'processes/process_flow_overview_banner.html' %}
+          </div>
+          {% endblock %}
           <section class="card spa-primary-flat process-flow-card notifications-card" style="margin-top: 24px;" aria-labelledby="modal-title">
             <div class="card-header process-flow-hero__header">
               <h1 id="modal-title" class="card-title">{% block wizard_title %}Create Process Step{% endblock %}</h1>
               <p id="modal-description" class="process-flow-hero__tagline">
-                {% block wizard_tagline %}You can expand existing steps to edit them, or use this interactive editor to add additional steps.{% endblock %}
+                {% block wizard_tagline %}{% endblock %}
               </p>
             </div>
             <div class="card-content process-flow-card__content notifications-card__content">
+              {% block wizard_more_information %}{% endblock %}
               {% block wizard_card_body %}{% endblock %}
             </div>
           </section>

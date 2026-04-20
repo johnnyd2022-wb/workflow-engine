@@ -94,7 +94,7 @@
   box-sizing: border-box;
 }
 #create-process-step-4 .step4-section--attached {
-  border-top: 1px solid var(--border-default, #e5e7eb);
+  border-top: none;
 }
 #create-process-step-4 .step4-section-title {
   font-size: 1rem;
@@ -213,12 +213,6 @@
     <div id="create-process-step-1" class="create-process-step" style="display: block;">
       <div class="create-process-step-body">
         <div class="flow-spa-stack flow-spa-stack--step" style="margin-bottom: 24px;">
-          <div class="flow-spa-stack__item">
-            <h3 class="flow-spa-stack__title">What are process steps?</h3>
-            <p class="flow-spa-stack__text">
-              Process steps allow you to define step-by-step workflows that automate your inventory management and provide complete source-to-sale traceability. Each process step represents a physical operation in your manufacturing workflow.
-            </p>
-          </div>
           <div class="flow-spa-stack__item">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               Step Name <span style="color: var(--error, #ef4444);">*</span>
@@ -375,9 +369,9 @@
             </div>
           </div>
 
-          <!-- Attached documentation (when editing a step) -->
+          <!-- Attached step documentation (when editing a step) -->
           <div id="guided-step-attached-docs-section" class="step4-section step4-section--attached step4-attached-docs" style="display: none;">
-            <h3 class="step4-section-title">Attached documentation</h3>
+            <h3 class="step4-section-title">Attached step documentation</h3>
             <p class="step4-microcopy">Remove any files that are outdated.</p>
             <div id="guided-step-docs-list" class="step4-docs-list"></div>
           </div>
