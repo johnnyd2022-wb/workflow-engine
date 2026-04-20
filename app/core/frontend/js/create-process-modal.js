@@ -4793,10 +4793,16 @@
 
     let stepCount = 1;
     // Match modal draft save: only update an existing row when explicitly editing it (in-memory id).
-    // Do not use session.editingStepId here — stale session + reconcile() could point at the wrong step
-    // and turn an "add another step" save into updateStep(step1).
-    const eid =
+    // If in-memory id was lost (e.g. id type mismatch), session.editingStepId is safe only when it
+    // matches a step that exists in createdSteps — never for a blank "new step" draft.
+    let eid =
       editingStepId != null && editingStepId !== '' ? editingStepId : null;
+    if (!eid && session && session.editingStepId != null && session.editingStepId !== '') {
+      const cand = session.editingStepId;
+      if (createdSteps.some(s => String(s.id) === String(cand))) {
+        eid = cand;
+      }
+    }
     const stepBeingEdited = eid ? createdSteps.find(s => String(s.id) === String(eid)) : null;
 
     if (stepBeingEdited) {
@@ -5056,6 +5062,12 @@
     if (!session || !step) return false;
     if (String(step.id) === '__pending__') return true;
     if (!step.id) return false;
+    // Wizard draft lives in session.inputs / session.outputs for ONE step. When editing step 1..N−1,
+    // only session.editingStepId / editingStepId identifies it — the old "last step only" fallback was
+    // wrong and caused enrichStepForSummaryFromSession to skip merging I/O for non-final steps.
+    if (editingStepId != null && editingStepId !== '') {
+      if (String(editingStepId) === String(step.id)) return true;
+    }
     if (session.editingStepId != null && session.editingStepId !== '') {
       return String(session.editingStepId) === String(step.id);
     }
@@ -5168,42 +5180,34 @@
       return next;
     }
 
-    const sin = mapSessionInputsToSummaryRows(session.inputs || []);
-    inputsNamed = (next.inputs || []).filter(function (i) {
-      return i && summaryInputDisplayName(i);
-    });
-    if (inputsNamed.length === 0 && sin.length > 0) {
-      next.inputs = sin;
-    }
+    // When editing a DB-backed step, the wizard session is the source of truth for ALL editable fields
+    // on the current step (including deletions), not a "fill if empty" helper.
+    if (wizardSessionHasDraftStepData(session)) {
+      if (Object.prototype.hasOwnProperty.call(session, 'stepName')) {
+        const sn = (session.stepName || '').toString();
+        if (sn.trim() !== '' && sn !== (next.name || '')) {
+          next.name = sn;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(session, 'stepDescription')) {
+        next.description = (session.stepDescription || '').toString();
+      }
 
-    const sout = (session.outputs || []).filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    });
-    outputsNamed = (next.outputs || []).filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    });
-    if (outputsNamed.length === 0 && sout.length > 0) {
-      next.outputs = JSON.parse(JSON.stringify(sout));
-    }
+      next.inputs = mapSessionInputsToSummaryRows(session.inputs || []);
+      next.outputs = JSON.parse(
+        JSON.stringify(
+          (session.outputs || []).filter(function (o) {
+            return o && summaryOutputDisplayName(o);
+          })
+        )
+      );
+      next.execution_prompts = JSON.parse(
+        JSON.stringify(buildExecutionPromptsForApiFromSession(session))
+      );
+      if (session.batchNumberMode != null) next.batch_number_mode = session.batchNumberMode;
+      if (session.evidenceMode != null) next.evidence_mode = session.evidenceMode;
 
-    promptsLabeled = (next.execution_prompts || []).filter(function (p) {
-      return p && (p.label || '').trim();
-    });
-    const sp = (session.prompts || []).filter(function (p) {
-      return p && (p.label || '').trim();
-    });
-    if (promptsLabeled.length === 0 && sp.length > 0) {
-      next.execution_prompts = JSON.parse(JSON.stringify(sp));
-    }
-
-    if (next.batch_number_mode == null && session.batchNumberMode != null) {
-      next.batch_number_mode = session.batchNumberMode;
-    }
-    if (next.evidence_mode == null && session.evidenceMode != null) {
-      next.evidence_mode = session.evidenceMode;
-    }
-
-    if (!(next.documentation_summary || '').trim()) {
+      // Docs are edited on step 4; reflect pending attachments/inline edits on summary during edit.
       const du = session.docFileUpload;
       if (du && du.base64) {
         next.documentation_summary = 'SOP file attached (pending upload)';
@@ -5212,6 +5216,8 @@
         const dc = (session.docInlineContent || '').trim();
         if (dt && dc) {
           next.documentation_summary = 'Instructions: ' + dt;
+        } else if ((next.documentation_summary || '').trim() === '') {
+          next.documentation_summary = next.documentation_summary;
         }
       }
     }
@@ -5461,7 +5467,7 @@
       editingStepId = null;
       return;
     }
-    if (editingStepId && createdSteps.some(s => s.id === editingStepId)) {
+    if (editingStepId != null && editingStepId !== '' && createdSteps.some(s => String(s.id) === String(editingStepId))) {
       return;
     }
     const session = loadWizardSessionMergeBase();
@@ -5469,6 +5475,16 @@
     // Do not default to "last saved step" — that made Save on summary call updateStep on step N−1.
     // When editing an existing step, editingStepId is already set from restoreSpaWizardState above.
     if (wizardSessionHasDraftStepData(session)) {
+      // Editing an existing step fills the session with I/O rows too — must not clear editingStepId or
+      // commitGuidedStepToProcessApiFromSessionSnapshot would create a new step instead of updateStep.
+      const sid =
+        session && session.editingStepId != null && session.editingStepId !== ''
+          ? session.editingStepId
+          : null;
+      if (sid != null && createdSteps.some(s => String(s.id) === String(sid))) {
+        editingStepId = sid;
+        return;
+      }
       editingStepId = null;
       return;
     }
@@ -6114,7 +6130,7 @@
   
   // Start editing an existing step (from the "existing steps" view when editing a non-draft process)
   window.startEditingStep = async function(stepId) {
-    const step = createdSteps.find(s => s.id === stepId);
+    const step = createdSteps.find(s => String(s.id) === String(stepId));
     if (!step) return;
     editingStepId = step.id;
     resetForm(true);
@@ -6128,8 +6144,8 @@
   };
 
   /**
-   * Deep-link from workflow hub (/core/flows/create/next-steps) etc.: ?edit=<stepId> on step-name (after mergeProcessStepsFromApiForCurrentProcess).
-   * SPA routes mount only part of the form; seed session + restore so inputs/outputs survive navigation.
+   * Deep-link / resume: ?edit=<stepId> on step wizard SPA pages (after mergeProcessStepsFromApiForCurrentProcess).
+   * Each route mounts partial DOM; seed session from the API step then restore so inputs/outputs/evidence load correctly.
    */
   async function applyEditStepFromUrl(stepId) {
     const step = createdSteps.find(function (s) {
@@ -6400,11 +6416,26 @@
       const qsInit = new URLSearchParams(window.location.search || '');
       const pid = qsInit.get('id');
       const urlEditStepId = qsInit.get('edit');
-      const shouldApplyEditFromUrl = !!(urlEditStepId && slug === 'step-name');
+      const slugAllowsEditFromUrl = ['step-name', 'inputs', 'outputs', 'evidence-and-prompts'].indexOf(slug) !== -1;
+      const existingSession = loadWizardSessionMergeBase();
+      const sessionHasSameEdit =
+        !!(
+          existingSession &&
+          existingSession.v === 1 &&
+          urlEditStepId &&
+          existingSession.editingStepId != null &&
+          String(existingSession.editingStepId) === String(urlEditStepId) &&
+          // Only treat the session as "already seeded" if it has real wizard data.
+          // A stale/empty session would otherwise block loading the DB step into the form.
+          wizardSessionHasDraftStepData(existingSession)
+        );
+      // Only seed from API when starting an edit, not on every wizard page navigation.
+      // Otherwise we'd wipe unsaved edits each time (the URL keeps ?edit=... across pages).
+      const shouldApplyEditFromUrl = !!(urlEditStepId && slugAllowsEditFromUrl && !sessionHasSameEdit);
       if (shouldApplyEditFromUrl && typeof sessionStorage !== 'undefined' && pid) {
         sessionStorage.removeItem('process-flow-spa-wizard-v1-' + pid);
       }
-      if (!shouldApplyEditFromUrl && typeof window.restoreSpaWizardState === 'function') {
+      if (typeof window.restoreSpaWizardState === 'function') {
         await window.restoreSpaWizardState();
       }
       if (pid) {
@@ -6539,7 +6570,7 @@
       let hasPreviousSteps = false;
       if (editingStepId) {
         const sorted = sortStepsForDisplay(createdSteps);
-        const idx = sorted.findIndex(function(s) { return s.id === editingStepId; });
+        const idx = sorted.findIndex(function(s) { return String(s.id) === String(editingStepId); });
         hasPreviousSteps = idx > 0;
       } else {
         hasPreviousSteps = createdSteps.length >= 1;

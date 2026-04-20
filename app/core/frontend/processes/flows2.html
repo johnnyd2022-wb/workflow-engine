@@ -298,12 +298,24 @@
         padding-right: calc(clamp(6px, 1.5vw, 11px) + max(0px, env(safe-area-inset-right)));
       }
     }
+    /*
+     * Main column is flex:1 + overflow-y; without min-height:0 the flex item won’t shrink, so on
+     * iOS/mobile the inner scroller never gets a bounded height and content below the fold (audit log)
+     * can become unreachable.
+     */
+    body.flows2-page .main-content {
+      min-height: 0;
+    }
+    body.flows2-page #page-content.page-content {
+      min-height: 0;
+    }
+    /* Override base_spa padding-bottom !important; height matches fixed action rail + mobile tab (styles2 .spa-fixed-action-bar__inner). */
     .flows2-page #page-content.page-content {
-      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
     }
     @media (max-width: 767px) {
       .flows2-page #page-content.page-content {
-        padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 72px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 69px + env(safe-area-inset-bottom, 0px)) !important;
       }
     }
 
