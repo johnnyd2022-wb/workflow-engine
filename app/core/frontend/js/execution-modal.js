@@ -23,6 +23,28 @@
 
 (function() {
   'use strict';
+  function ensureExecutionPickerStyles() {
+    if (document.getElementById('execution-modal-picker-styles')) return;
+    var style = document.createElement('style');
+    style.id = 'execution-modal-picker-styles';
+    style.textContent = `
+      .exec-picker-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-lg, 12px); background: var(--bg-secondary, #f9fafb); }
+      .exec-picker-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px 0; }
+      .exec-picker-tab { appearance: none; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff); color: var(--text-primary, #111827); border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+      .exec-picker-tab[aria-selected="true"] { border-color: rgba(59,130,246,0.5); background: rgba(59,130,246,0.08); }
+      .exec-picker-search { margin: 0 0 10px 0; }
+      .exec-picker-cards { display: flex; flex-direction: column; gap: 10px; }
+      .exec-picker-card { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 12px 14px; border-radius: var(--radius-md, 10px); border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff); color: var(--text-primary, #111827); cursor: pointer; }
+      .exec-picker-card:hover { border-color: rgba(59,130,246,0.6); }
+      .exec-picker-card__title { font-size: 14px; font-weight: 700; margin: 0; }
+      .exec-picker-card__sub { font-size: 12px; color: var(--text-tertiary, #9ca3af); margin: 0; line-height: 1.4; }
+      .exec-picker-card__meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+      .exec-picker-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-secondary, #f3f4f6); font-size: 12px; color: var(--text-secondary, #6b7280); }
+      .exec-picker-chip--warn { background: hsl(42, 93%, 96%); border-color: var(--warning, #f59e0b); color: #92400e; }
+      .exec-picker-chip--danger { background: hsl(0, 93%, 94%); border-color: var(--error, #ef4444); color: #b91c1c; }
+    `;
+    document.head.appendChild(style);
+  }
   
   // Get configuration or use defaults
   const config = window.ExecutionModalConfig || {
@@ -65,6 +87,7 @@
   // OPEN EXECUTION MODAL
   // ============================================================
   window.openExecutionModal = async function(executionId, executionStep, stepDefinition, options) {
+    ensureExecutionPickerStyles();
     const modal = document.getElementById('execute-step-modal');
     if (!modal) {
       console.error('Execution modal not found');
@@ -352,10 +375,17 @@
             </label>
           </div>
           <div class="execute-input-rows-container" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}"></div>
-          <div class="execute-inventory-picker-dropdown-section" style="display: none;">
-            <div class="execute-inventory-picker-dropdown" style="display: none; position: absolute; top: 0; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
-              <div class="execute-inventory-picker-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
+          <div class="exec-picker-panel" data-exec-picker-panel="true" style="display:none;">
+            <div class="exec-picker-tabs" role="tablist" aria-label="Inventory categories">
+              <button type="button" class="exec-picker-tab" role="tab" data-exec-type="raw_material" aria-selected="true">Raw materials</button>
+              <button type="button" class="exec-picker-tab" role="tab" data-exec-type="work_in_progress" aria-selected="false">Work in progress</button>
+              <button type="button" class="exec-picker-tab" role="tab" data-exec-type="final_product" aria-selected="false">Final product</button>
+              <button type="button" class="exec-picker-tab" role="tab" data-exec-type="all" aria-selected="false">All</button>
             </div>
+            <div class="exec-picker-search">
+              <input type="search" class="spa-inp" data-exec-picker-search="true" placeholder="Search inventory…" autocomplete="off">
+            </div>
+            <div class="exec-picker-cards" data-exec-picker-cards="true"></div>
           </div>
           <div class="execute-add-input-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Add another input</label>
@@ -369,12 +399,95 @@
         `;
 
         const rowsContainer = inputSection.querySelector('.execute-input-rows-container');
-        const dropdownSection = inputSection.querySelector('.execute-inventory-picker-dropdown-section');
-        const dropdown = inputSection.querySelector('.execute-inventory-picker-dropdown');
-        const cardsContainer = inputSection.querySelector('.execute-inventory-picker-cards');
-        if (dropdownSection) dropdownSection._executeInputSectionRef = inputSection;
+        const pickerPanel = inputSection.querySelector('[data-exec-picker-panel="true"]');
+        const pickerCards = inputSection.querySelector('[data-exec-picker-cards="true"]');
+        const pickerSearch = inputSection.querySelector('[data-exec-picker-search="true"]');
+        const pickerTabs = Array.prototype.slice.call(inputSection.querySelectorAll('.exec-picker-tab'));
         let rowIndex = 0;
         if (!modal._inputStateByKey) modal._inputStateByKey = new Map();
+
+        function getInvType(inv) {
+          return inv && (inv.inventory_type || inv.type || inv.category || inv.item_type || '');
+        }
+        function invMatchesType(inv, selected) {
+          if (!selected || selected === 'all') return true;
+          var t = String(getInvType(inv) || '').toLowerCase();
+          return t === selected;
+        }
+        function invMatchesSearch(inv, q) {
+          q = (q || '').trim().toLowerCase();
+          if (!q) return true;
+          var hay = [
+            inv && inv.name,
+            inv && inv.unit,
+            inv && inv.supplier,
+            inv && inv.supplier_batch_number,
+            inv && inv.process_name,
+          ].filter(Boolean).join(' ').toLowerCase();
+          return hay.indexOf(q) !== -1;
+        }
+        function fmtQty(inv) {
+          if (!inv) return '';
+          var q = (inv.quantity != null) ? String(inv.quantity) : '';
+          var u = inv.unit || '';
+          return (q && u) ? (q + ' ' + u) : (q || u || '');
+        }
+        function renderPickerCards(activeType, q) {
+          if (!pickerCards) return;
+          var list = sortedInventory
+            .filter(function(inv) { return invMatchesType(inv, activeType); })
+            .filter(function(inv) { return invMatchesSearch(inv, q); });
+          if (!list.length) {
+            pickerCards.innerHTML = '<p style="margin: 0; font-size: 13px; color: var(--text-secondary); padding: 6px 2px;">No inventory matches.</p>';
+            return;
+          }
+          pickerCards.innerHTML = list.map(function(inv) {
+            var id = escapeHtml(String(inv.id));
+            var name = escapeHtml(inv.name || 'Unnamed');
+            var sub = escapeHtml(fmtQty(inv));
+            var chips = '';
+            if (inv.supplier) chips += '<span class="exec-picker-chip">' + escapeHtml(inv.supplier) + '</span>';
+            if (inv.supplier_batch_number) chips += '<span class="exec-picker-chip">Batch ' + escapeHtml(inv.supplier_batch_number) + '</span>';
+            var reason = getExpiredReason(inv.id);
+            if (reason) {
+              var cls = reason.toLowerCase().indexOf('untracked') !== -1 ? 'exec-picker-chip--danger'
+                : (reason.toLowerCase().indexOf('expired') !== -1 ? 'exec-picker-chip--danger' : 'exec-picker-chip--warn');
+              chips += '<span class="exec-picker-chip ' + cls + '">' + escapeHtml(reason) + '</span>';
+            }
+            return (
+              '<button type="button" class="exec-picker-card" data-inv-id="' + id + '">' +
+                '<p class="exec-picker-card__title">' + name + '</p>' +
+                '<p class="exec-picker-card__sub">' + sub + '</p>' +
+                (chips ? '<div class="exec-picker-card__meta">' + chips + '</div>' : '') +
+              '</button>'
+            );
+          }).join('');
+        }
+
+        var pickerState = { activeType: 'raw_material', q: '' };
+        function syncTabState(next) {
+          pickerState.activeType = next;
+          pickerTabs.forEach(function(t) {
+            var isOn = t.getAttribute('data-exec-type') === next;
+            t.setAttribute('aria-selected', isOn ? 'true' : 'false');
+          });
+          renderPickerCards(pickerState.activeType, pickerState.q);
+        }
+        pickerTabs.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            syncTabState(btn.getAttribute('data-exec-type') || 'all');
+          });
+        });
+        if (pickerSearch) {
+          pickerSearch.addEventListener('input', function() {
+            pickerState.q = pickerSearch.value || '';
+            renderPickerCards(pickerState.activeType, pickerState.q);
+          });
+        }
+        if (pickerPanel) {
+          // initial render
+          renderPickerCards(pickerState.activeType, pickerState.q);
+        }
 
         function createInputRow(isFirst) {
           const rowId = 'execute-input-row-' + safeInputName + '-' + rowIndex++;
@@ -410,7 +523,7 @@
             <div>
               <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume</label>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="number" class="form-input execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="flex: 1; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                <input type="number" class="spa-inp execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="flex: 1;">
                 <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
               </div>
             </div>
@@ -635,15 +748,7 @@
         }
 
         function closeInventoryDropdown() {
-          if (dropdown) dropdown.style.display = 'none';
-          if (dropdownSection) {
-            dropdownSection.style.display = 'none';
-            var ref = dropdownSection._executeInputSectionRef;
-            var addPane = ref ? ref.querySelector('.execute-add-input-pane') : null;
-            if (ref && addPane && dropdownSection.parentNode !== ref) {
-              ref.insertBefore(dropdownSection, addPane);
-            }
-          }
+          if (pickerPanel) pickerPanel.style.display = 'none';
           if (modal._editingInputRow) {
             var arrow = modal._editingInputRow.querySelector('.execute-inventory-picker-arrow');
             if (arrow) arrow.style.transform = 'rotate(0deg)';
@@ -864,30 +969,26 @@
         function openDropdownForRow(rowEl) {
           modal._closeInventoryDropdown = closeInventoryDropdown;
           modal._editingInputRow = rowEl;
-          var isFirstRow = rowsContainer && rowsContainer.firstElementChild === rowEl;
-          populateDropdownContent(rowEl);
-          ensureAddAnotherSearchRow(!isFirstRow);
-          var pickerWrapper = rowEl ? rowEl.querySelector('.execute-inventory-picker-wrapper') : null;
-          if (dropdownSection && pickerWrapper) {
-            if (dropdownSection.parentNode !== pickerWrapper) {
-              if (dropdownSection.parentNode) dropdownSection.parentNode.removeChild(dropdownSection);
-              pickerWrapper.appendChild(dropdownSection);
-            }
-            dropdownSection.style.position = 'absolute';
-            dropdownSection.style.top = '100%';
-            dropdownSection.style.left = '0';
-            dropdownSection.style.width = '100%';
-            dropdownSection.style.minWidth = '280px';
-            dropdownSection.style.display = 'block';
-          }
-          var selectedElsewhere = getSelectedInventoryIdsExcludingRow(rowEl);
-          if (cardsContainer && isFirstRow) {
-            cardsContainer.querySelectorAll('.execute-inventory-input-card').forEach(function(card) {
-              var id = card.dataset.inventoryId || '';
-              card.style.display = id && selectedElsewhere.has(id) ? 'none' : '';
+          if (pickerPanel) pickerPanel.style.display = 'block';
+          // Reset tab/search UI for each open, keep it predictable.
+          if (pickerSearch) pickerSearch.value = '';
+          pickerState.q = '';
+          syncTabState('raw_material');
+
+          // Clicking a card selects for the currently edited row.
+          if (pickerCards && !pickerCards._boundClick) {
+            pickerCards._boundClick = true;
+            pickerCards.addEventListener('click', function(ev) {
+              var btn = ev.target && ev.target.closest ? ev.target.closest('.exec-picker-card') : null;
+              if (!btn) return;
+              ev.preventDefault();
+              ev.stopPropagation();
+              var invId = btn.getAttribute('data-inv-id') || '';
+              setRowSelection(modal._editingInputRow, invId);
+              closeInventoryDropdown();
             });
           }
-          if (dropdown) dropdown.style.display = (!isFirstRow && dropdown.querySelector('.execute-addanother-search-wrap')) ? 'flex' : 'block';
+
           inputSection.querySelectorAll('.execute-input-row .execute-inventory-picker-arrow').forEach(function(a) { a.style.transform = 'rotate(0deg)'; });
           var rowArrow = rowEl && rowEl.querySelector('.execute-inventory-picker-arrow');
           if (rowArrow) rowArrow.style.transform = 'rotate(180deg)';
@@ -908,19 +1009,19 @@
           if (!t) return;
           t.addEventListener('click', function(e) {
             e.stopPropagation();
-            if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
+            if (pickerPanel && pickerPanel.style.display === 'block') closeInventoryDropdown();
             else openDropdownForRow(rowEl);
           });
           t.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
+              if (pickerPanel && pickerPanel.style.display === 'block') closeInventoryDropdown();
               else openDropdownForRow(rowEl);
             }
           });
         }
         bindTriggerForRow(firstRow);
-        if (dropdown) dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
+        if (pickerPanel) pickerPanel.addEventListener('click', function(e) { e.stopPropagation(); });
 
         if (quantityInput) {
           if (!quantityInput.dataset.originalQuantity || quantityInput.dataset.originalQuantity === '' || quantityInput.dataset.originalQuantity === 'undefined') {
@@ -1005,11 +1106,11 @@
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity <span style="color: var(--error, #ef4444);">*</span></label>
-            <input type="number" class="form-input execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <input type="number" class="spa-inp execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0">
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit <span style="color: var(--error, #ef4444);">*</span></label>
-            <select class="form-select execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <select class="spa-inp execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required>
               <option value="">Select unit...</option>
               ${['kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in', 'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers'].map(unit => `
                 <option value="${unit}" ${input.unit === unit ? 'selected' : ''}>${unit}</option>
@@ -1101,13 +1202,13 @@
             </div>
           `;
         } else if (prompt.type === 'text') {
-          inputHtml = `<input type="text" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          inputHtml = `<input type="text" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}>`;
         } else if (prompt.type === 'number') {
-          inputHtml = `<input type="number" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} step="0.01" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          inputHtml = `<input type="number" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} step="0.01">`;
         } else if (prompt.type === 'date') {
-          inputHtml = `<input type="date" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          inputHtml = `<input type="date" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}>`;
         } else if (prompt.type === 'select') {
-          inputHtml = `<select class="form-select execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;"><option value="">Select...</option></select>`;
+          inputHtml = `<select class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}><option value="">Select...</option></select>`;
         }
 
         promptSection.innerHTML = `
@@ -1304,7 +1405,7 @@
               ${escapeHtml(output.name)}
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${output.quantity || '0'} ${output.unit || ''})</span>
             </label>
-            <input type="number" class="form-input execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <input type="number" class="spa-inp execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
             <div class="execute-reconcile-untracked-wrapper" data-output-id="${escapeHtml(outputId)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
               <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">

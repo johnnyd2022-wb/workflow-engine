@@ -514,6 +514,16 @@ def flows():
     return render_template("processes/flows2.html", active_page="core", process_id=process_id)
 
 
+@core_bp.route("/core/flows/batches/start", methods=["GET"])
+@requires_auth
+def flows_batches_start():
+    """Start a new batch via dedicated SPA pages (replacement for the execution modal)."""
+    process_id = _flow_process_id_from_request()
+    if process_id is not None:
+        _assert_flow_process_access(process_id)
+    return render_template("processes/batch-start.html", active_page="core", process_id=process_id)
+
+
 @core_bp.route("/core/flows/create", methods=["GET"])
 @requires_auth
 def flows_create():
