@@ -28,17 +28,17 @@
     var style = document.createElement('style');
     style.id = 'execution-modal-picker-styles';
     style.textContent = `
-      .exec-picker-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-lg, 12px); background: var(--bg-secondary, #f9fafb); }
-      .exec-picker-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px 0; }
-      .exec-picker-tab { appearance: none; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff); color: var(--text-primary, #111827); border-radius: 999px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
-      .exec-picker-tab[aria-selected="true"] { border-color: rgba(59,130,246,0.5); background: rgba(59,130,246,0.08); }
+      .exec-picker-panel { margin-top: 10px; padding: 12px; border-top: 1px solid var(--border-default, #e5e7eb); }
       .exec-picker-search { margin: 0 0 10px 0; }
       .exec-picker-cards { display: flex; flex-direction: column; gap: 10px; }
       .exec-picker-card { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 12px 14px; border-radius: var(--radius-md, 10px); border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff); color: var(--text-primary, #111827); cursor: pointer; }
       .exec-picker-card:hover { border-color: rgba(59,130,246,0.6); }
+      .exec-picker-card[aria-pressed="true"] { border-color: rgba(217, 56, 75, 0.55); box-shadow: 0 0 0 2px rgba(217, 56, 75, 0.10); }
       .exec-picker-card__title { font-size: 14px; font-weight: 700; margin: 0; }
       .exec-picker-card__sub { font-size: 12px; color: var(--text-tertiary, #9ca3af); margin: 0; line-height: 1.4; }
       .exec-picker-card__meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+      .exec-picker-card__actions { margin-top: 10px; display: flex; justify-content: flex-end; }
+      /* Confirm button uses existing .btn styles (btn-sm), no custom red border. */
       .exec-picker-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-secondary, #f3f4f6); font-size: 12px; color: var(--text-secondary, #6b7280); }
       .exec-picker-chip--warn { background: hsl(42, 93%, 96%); border-color: var(--warning, #f59e0b); color: #92400e; }
       .exec-picker-chip--danger { background: hsl(0, 93%, 94%); border-color: var(--error, #ef4444); color: #b91c1c; }
@@ -93,11 +93,28 @@
       console.error('Execution modal not found');
       return;
     }
+    options = options || {};
+    var renderMode = (options && options.renderMode) ? String(options.renderMode) : 'modal';
+    if (window.ExecutionUI && typeof window.ExecutionUI.setRenderMode === 'function') {
+      window.ExecutionUI.setRenderMode(modal, renderMode);
+    } else {
+      modal.dataset.renderMode = renderMode;
+    }
     function showModal() {
+      if (window.ExecutionUI && typeof window.ExecutionUI.isPageMode === 'function') {
+        if (window.ExecutionUI.isPageMode(modal)) return;
+      } else if (renderMode === 'page') {
+        return;
+      }
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
     }
     function hideModal() {
+      if (window.ExecutionUI && typeof window.ExecutionUI.isPageMode === 'function') {
+        if (window.ExecutionUI.isPageMode(modal)) return;
+      } else if (renderMode === 'page') {
+        return;
+      }
       modal.style.display = 'none';
       document.body.style.overflow = 'auto';
     }
@@ -114,7 +131,6 @@
       if (docsSection) docsSection.style.display = 'none';
       return { inputsContainer, promptsContainer, outputsContainer, docsContainer, docsSection };
     }
-    options = options || {};
     var isDraft = executionId == null || executionStep == null;
     if (isDraft && options.processId) {
       modal.dataset.draftProcessId = options.processId;
@@ -327,10 +343,11 @@
     });
     
     if (variableInputs.length > 0 && inputsContainer) {
-      variableInputs.forEach(input => {
+      variableInputs.forEach((input, inputIdx) => {
         const inputSection = document.createElement('div');
         inputSection.className = 'execute-input-section';
-        inputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
+        // Page-style sections (no card chrome). CSS can further refine.
+        inputSection.style.cssText = 'margin: 0; padding: 18px 0;' + (inputIdx === 0 ? '' : ' border-top: 1px solid var(--border-default, #e5e7eb);');
         
         // Filter inventory by material name (shows all matching items)
         const matchingInventory = allInventory.filter(inv => 
@@ -375,17 +392,17 @@
             </label>
           </div>
           <div class="execute-input-rows-container" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}"></div>
-          <div class="exec-picker-panel" data-exec-picker-panel="true" style="display:none;">
-            <div class="exec-picker-tabs" role="tablist" aria-label="Inventory categories">
-              <button type="button" class="exec-picker-tab" role="tab" data-exec-type="raw_material" aria-selected="true">Raw materials</button>
-              <button type="button" class="exec-picker-tab" role="tab" data-exec-type="work_in_progress" aria-selected="false">Work in progress</button>
-              <button type="button" class="exec-picker-tab" role="tab" data-exec-type="final_product" aria-selected="false">Final product</button>
-              <button type="button" class="exec-picker-tab" role="tab" data-exec-type="all" aria-selected="false">All</button>
+          <div class="exec-picker-panel" data-exec-picker-panel="true" style="display:block; margin-top: 10px;">
+            <div class="flow-mode-segmented" role="group" aria-label="Inventory category" style="margin-bottom: 10px;">
+              <button type="button" class="flow-mode-segment flow-mode-segment--active" data-exec-type="raw_material" aria-pressed="true">Raw materials</button>
+              <button type="button" class="flow-mode-segment" data-exec-type="work_in_progress" aria-pressed="false">Intermediate</button>
+              <button type="button" class="flow-mode-segment" data-exec-type="final_product" aria-pressed="false">Final products</button>
+              <button type="button" class="flow-mode-segment" data-exec-type="all" aria-pressed="false">All</button>
             </div>
             <div class="exec-picker-search">
               <input type="search" class="spa-inp" data-exec-picker-search="true" placeholder="Search inventory…" autocomplete="off">
             </div>
-            <div class="exec-picker-cards" data-exec-picker-cards="true"></div>
+            <div class="exec-picker-cards" data-exec-picker-cards="true" style="max-height: 360px; overflow-y: auto;"></div>
           </div>
           <div class="execute-add-input-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Add another input</label>
@@ -402,7 +419,14 @@
         const pickerPanel = inputSection.querySelector('[data-exec-picker-panel="true"]');
         const pickerCards = inputSection.querySelector('[data-exec-picker-cards="true"]');
         const pickerSearch = inputSection.querySelector('[data-exec-picker-search="true"]');
-        const pickerTabs = Array.prototype.slice.call(inputSection.querySelectorAll('.exec-picker-tab'));
+
+        // Ensure rows stack cleanly when adding additional inputs.
+        if (rowsContainer) {
+          rowsContainer.style.display = 'flex';
+          rowsContainer.style.flexDirection = 'column';
+          rowsContainer.style.gap = '12px';
+        }
+        const pickerTabs = Array.prototype.slice.call(inputSection.querySelectorAll('.flow-mode-segment'));
         let rowIndex = 0;
         if (!modal._inputStateByKey) modal._inputStateByKey = new Map();
 
@@ -434,15 +458,43 @@
         }
         function renderPickerCards(activeType, q) {
           if (!pickerCards) return;
+          var activeRow = modal._editingInputRow;
+          var selectedId = '';
+          try {
+            var sel = activeRow ? activeRow.querySelector('.execute-inventory-select') : null;
+            selectedId = sel && sel.value ? String(sel.value) : '';
+          } catch (e) {}
+          var pendingId = '';
+          try {
+            var pSel = activeRow ? activeRow.getAttribute('data-pending-inv-id') : '';
+            pendingId = pSel ? String(pSel) : '';
+          } catch (e) {}
+          // Hide items that are already selected in any input row (operator workflow).
+          var selectedIds = new Set();
+          try {
+            inputSection.querySelectorAll('.execute-input-row').forEach(function(r) {
+              var s = r.querySelector('.execute-inventory-select');
+              if (s && s.value) selectedIds.add(String(s.value));
+            });
+          } catch (e) {}
+
           var list = sortedInventory
             .filter(function(inv) { return invMatchesType(inv, activeType); })
             .filter(function(inv) { return invMatchesSearch(inv, q); });
+          list = list.filter(function(inv) {
+            var id = String(inv.id);
+            if (pendingId && id === pendingId) return true;
+            return !selectedIds.has(id);
+          });
+
+          // Keep list stable during preview (no reordering).
           if (!list.length) {
             pickerCards.innerHTML = '<p style="margin: 0; font-size: 13px; color: var(--text-secondary); padding: 6px 2px;">No inventory matches.</p>';
             return;
           }
           pickerCards.innerHTML = list.map(function(inv) {
-            var id = escapeHtml(String(inv.id));
+            var rawId = String(inv.id);
+            var id = escapeHtml(rawId);
             var name = escapeHtml(inv.name || 'Unnamed');
             var sub = escapeHtml(fmtQty(inv));
             var chips = '';
@@ -454,12 +506,21 @@
                 : (reason.toLowerCase().indexOf('expired') !== -1 ? 'exec-picker-chip--danger' : 'exec-picker-chip--warn');
               chips += '<span class="exec-picker-chip ' + cls + '">' + escapeHtml(reason) + '</span>';
             }
+            var isPending = pendingId && pendingId === rawId;
+            var actions = '';
+            if (isPending) {
+              actions =
+                '<div class="exec-picker-card__actions" style="justify-content:flex-start;">' +
+                  '<button type="button" class="btn btn-secondary btn-sm exec-picker-confirm-btn" data-action="confirm-input" data-inv-id="' + id + '">Confirm input</button>' +
+                '</div>';
+            }
             return (
-              '<button type="button" class="exec-picker-card" data-inv-id="' + id + '">' +
+              '<div class="exec-picker-card" role="button" tabindex="0" data-inv-id="' + id + '" aria-pressed="' + (isPending ? 'true' : 'false') + '">' +
                 '<p class="exec-picker-card__title">' + name + '</p>' +
                 '<p class="exec-picker-card__sub">' + sub + '</p>' +
                 (chips ? '<div class="exec-picker-card__meta">' + chips + '</div>' : '') +
-              '</button>'
+                actions +
+              '</div>'
             );
           }).join('');
         }
@@ -469,7 +530,8 @@
           pickerState.activeType = next;
           pickerTabs.forEach(function(t) {
             var isOn = t.getAttribute('data-exec-type') === next;
-            t.setAttribute('aria-selected', isOn ? 'true' : 'false');
+            t.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+            t.classList.toggle('flow-mode-segment--active', isOn);
           });
           renderPickerCards(pickerState.activeType, pickerState.q);
         }
@@ -489,6 +551,44 @@
           renderPickerCards(pickerState.activeType, pickerState.q);
         }
 
+        // Card clicks: preview for active row; confirm happens on the picker card.
+        if (pickerCards && !pickerCards._boundPickerClick) {
+          pickerCards._boundPickerClick = true;
+          pickerCards.addEventListener('click', function(ev) {
+            var confirmBtn = ev.target && ev.target.closest ? ev.target.closest('[data-action="confirm-input"]') : null;
+            if (confirmBtn) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              var invId = confirmBtn.getAttribute('data-inv-id') || '';
+              var targetRow = modal._editingInputRow || (rowsContainer && rowsContainer.firstElementChild);
+              if (!targetRow) return;
+              var locked = targetRow.getAttribute('data-selection-locked') === 'true';
+              var selNow = targetRow.querySelector('.execute-inventory-select');
+              if (locked && selNow && selNow.value) return;
+              setRowSelection(targetRow, invId);
+              targetRow.setAttribute('data-pending-inv-id', '');
+              targetRow.setAttribute('data-selection-locked', 'true');
+              // Once confirmed, hide picker for this row to reduce noise.
+              try { if (pickerPanel) pickerPanel.style.display = 'none'; } catch (e) {}
+              renderPickerCards(pickerState.activeType, pickerState.q);
+              return;
+            }
+            var btn = ev.target && ev.target.closest ? ev.target.closest('.exec-picker-card') : null;
+            if (!btn) return;
+            ev.preventDefault();
+            var invId = btn.getAttribute('data-inv-id') || '';
+            var targetRow = modal._editingInputRow || (rowsContainer && rowsContainer.firstElementChild);
+            if (!targetRow) return;
+            // If already confirmed for this row, don't allow changing unless they add another input row.
+            var locked = targetRow.getAttribute('data-selection-locked') === 'true';
+            var selNow = targetRow.querySelector('.execute-inventory-select');
+            if (locked && selNow && selNow.value) return;
+            // Preview selection first; require explicit confirmation.
+            targetRow.setAttribute('data-pending-inv-id', invId);
+            renderPickerCards(pickerState.activeType, pickerState.q);
+          });
+        }
+
         function createInputRow(isFirst) {
           const rowId = 'execute-input-row-' + safeInputName + '-' + rowIndex++;
           const stateKey = safeInputName + '::' + rowId;
@@ -497,6 +597,10 @@
           row.id = rowId;
           row.dataset.inputName = input.name;
           row.dataset.stateKey = stateKey;
+          // Ensure rows naturally stack in the document flow.
+          row.style.display = 'block';
+          row.style.width = '100%';
+          row.style.position = 'relative';
           if (!modal._inputStateByKey.has(stateKey)) {
             modal._inputStateByKey.set(stateKey, {
               input_name: input.name,
@@ -507,35 +611,58 @@
             });
           }
           row.innerHTML = `
-            <div style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
-              <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-quantity="" data-unit="" data-expired-reason="" value="">
-              <div class="execute-inventory-picker-wrapper" style="position: relative;" data-input-name="${escapeHtml(input.name)}">
-                <div class="execute-inventory-picker-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); ${isFirst ? errorStyle : ''} background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
-                  <span class="execute-inventory-picker-label" style="flex: 1; text-align: left; min-width: 0;">Select inventory item...</span>
-                  <span class="execute-inventory-picker-arrow-box" style="flex-shrink: 0; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-md, 6px); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); color: var(--text-secondary);">
-                    <svg class="execute-inventory-picker-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
-                  </span>
-                </div>
-              </div>
-              <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
-              <div class="execute-input-unexpected-row-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
+            <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-quantity="" data-unit="" data-expired-reason="" value="">
+
+            <div style="display:flex; justify-content:flex-end; margin-bottom: 10px;">
+              <button type="button" class="execute-remove-input-row-btn btn btn-secondary btn-sm" style="font-size: 12px;">Remove input</button>
             </div>
-            <div>
-              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume</label>
+
+            <div class="execute-selected-inv-card" style="display:none; padding: 12px 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); background: var(--bg-card, #fff);"></div>
+
+            <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
+            <div class="execute-input-unexpected-row-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
+
+            <div class="execute-qty-pane" style="display:none; margin-top: 12px;">
+              <label class="spa-field-label">Quantity to consume</label>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <input type="number" class="spa-inp execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="flex: 1;">
                 <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
               </div>
             </div>
-            ${!isFirst ? '<button type="button" class="execute-remove-input-row-btn btn btn-secondary btn-sm" style="margin-top: 8px; font-size: 12px;">Remove this input</button>' : ''}
           `;
           var qtyInput = row.querySelector('.execute-quantity-input');
           if (qtyInput) {
+            // Ensure we start from a neutral border (avoid stale inline styles / bfcache).
+            qtyInput.style.border = '1px solid var(--border-default, #e5e7eb)';
             qtyInput.addEventListener('input', function() {
               var st = modal._inputStateByKey.get(stateKey);
               if (!st) return;
               var q = parseFloat(qtyInput.value);
               st.quantity = isNaN(q) ? 0 : q;
+            });
+          }
+
+          // Remove input: if it's the only row, clear selection + unlock; otherwise remove the row.
+          var removeBtn = row.querySelector('.execute-remove-input-row-btn');
+          if (removeBtn) {
+            removeBtn.addEventListener('click', function(e) {
+              if (e) { e.preventDefault(); e.stopPropagation(); }
+              row.setAttribute('data-pending-inv-id', '');
+              row.setAttribute('data-selection-locked', 'false');
+              if (!rowsContainer) return;
+              var rowCount = rowsContainer.querySelectorAll('.execute-input-row').length;
+              if (rowCount <= 1) {
+                setRowSelection(row, '');
+                setActiveRow(row);
+              } else {
+                var stateKey = row.dataset.stateKey || '';
+                if (stateKey && modal._inputStateByKey) modal._inputStateByKey.delete(stateKey);
+                row.remove();
+                // Ensure active row points to a remaining row.
+                var next = rowsContainer.querySelector('.execute-input-row');
+                if (next) setActiveRow(next);
+              }
+              renderPickerCards(pickerState.activeType, pickerState.q);
             });
           }
           return row;
@@ -613,7 +740,9 @@
           inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
             var sel = row.querySelector('.execute-inventory-select');
             var qtyInput = row.querySelector('.execute-quantity-input');
-            if (sel && sel.value && qtyInput && isExpectedItem(sel.value)) {
+            // Compare against total selected quantity for this input (regardless of "expected vs unexpected" inventory),
+            // since "unexpected selection" is already handled by a separate warning.
+            if (sel && sel.value && qtyInput) {
               var v = parseFloat(qtyInput.value);
               if (!isNaN(v) && v > 0) totalExpectedQty += v;
             }
@@ -659,10 +788,11 @@
         function setRowSelection(rowEl, invId) {
           if (!rowEl) return;
           const hiddenInput = rowEl.querySelector('.execute-inventory-select');
-          const triggerLabel = rowEl.querySelector('.execute-inventory-picker-label');
           const quantityInput = rowEl.querySelector('.execute-quantity-input');
           const unitDisplay = rowEl.querySelector('.execute-quantity-unit-display');
           const expiredWarningEl = rowEl.querySelector('.execute-input-expired-warning');
+          const selectedCardEl = rowEl.querySelector('.execute-selected-inv-card');
+          const qtyPane = rowEl.querySelector('.execute-qty-pane');
           if (!hiddenInput) return;
           var stateKey = rowEl.dataset.stateKey || '';
           var st = stateKey ? modal._inputStateByKey.get(stateKey) : null;
@@ -670,8 +800,13 @@
           hiddenInput.dataset.quantity = '';
           hiddenInput.dataset.unit = '';
           hiddenInput.dataset.expiredReason = '';
-          if (triggerLabel) triggerLabel.textContent = getInventorySelectionLabel(invId);
+
+          // Always clear warning when changing selection; only show if the selected item needs it.
+          if (expiredWarningEl) { expiredWarningEl.style.display = 'none'; expiredWarningEl.textContent = ''; }
+
           if (!invId) {
+            if (selectedCardEl) { selectedCardEl.style.display = 'none'; selectedCardEl.innerHTML = ''; }
+            if (qtyPane) qtyPane.style.display = 'none';
             if (unitDisplay && quantityInput) {
               unitDisplay.textContent = quantityInput.dataset.stepUnit || input.unit || '';
               quantityInput.value = input.quantity || '';
@@ -685,18 +820,22 @@
               var qv = quantityInput ? parseFloat(quantityInput.value) : NaN;
               st.quantity = isNaN(qv) ? 0 : qv;
             }
-            if (expiredWarningEl) { expiredWarningEl.style.display = 'none'; expiredWarningEl.textContent = ''; }
             updateSectionQtyExpectedWarning();
             updateUnexpectedMaterialWarning();
             return;
           }
           const inv = invId ? inventoryById.get(String(invId)) : null;
           if (inv && unitDisplay && quantityInput) {
-            var expectedQty = parseFloat(input.quantity) || 0;
-            var invQty = inv.quantity != null && inv.quantity !== '' ? parseFloat(inv.quantity) : 0;
-            quantityInput.value = (expectedQty > 0 && invQty > 0) ? Math.min(expectedQty, invQty) : (inv.quantity != null && inv.quantity !== '' ? inv.quantity : quantityInput.value);
-            quantityInput.dataset.originalQuantity = inv.quantity != null ? String(inv.quantity) : '';
-            unitDisplay.textContent = inv.unit || '';
+            // Prefill should follow the step definition expected quantity (operator-friendly),
+            // not "available inventory quantity".
+            var expectedQty = parseFloat(input.quantity);
+            if (!isNaN(expectedQty) && expectedQty > 0) {
+              quantityInput.value = String(expectedQty);
+            } else if (!quantityInput.value) {
+              quantityInput.value = input.quantity || '';
+            }
+            // Keep display unit as the step unit if available; inventory unit remains for validation.
+            unitDisplay.textContent = (quantityInput.dataset.stepUnit || input.unit || inv.unit || '');
             quantityInput.dataset.inventoryUnit = inv.unit || '';
           }
           if (inv) {
@@ -706,7 +845,7 @@
             hiddenInput.dataset.expiredReason = reason || '';
             if (st) {
               st.inventory_item_id = String(inv.id);
-              st.unit = inv.unit || '';
+              st.unit = (quantityInput && (quantityInput.dataset.stepUnit || input.unit)) || (input.unit || inv.unit || '');
               st.expired_reason = reason || '';
               var q = quantityInput ? parseFloat(quantityInput.value) : NaN;
               st.quantity = isNaN(q) ? 0 : q;
@@ -715,14 +854,31 @@
               expiredWarningEl.textContent = 'Check: ' + reason;
               expiredWarningEl.style.display = 'block';
             }
-            const wrapper = rowEl.querySelector('.execute-inventory-picker-wrapper');
-            const trigger = rowEl.querySelector('.execute-inventory-picker-trigger');
-            if (trigger) {
-              trigger.style.border = reason ? '2px solid var(--error, #ef4444)' : '';
-              trigger.style.boxShadow = reason ? '0 0 0 1px var(--error, #ef4444)' : '';
+            if (selectedCardEl) {
+              function fmtDate(raw) {
+                if (!raw) return '';
+                try { return new Date(raw).toLocaleDateString(); } catch (e) { return String(raw); }
+              }
+              var meta = [];
+              if (inv.supplier) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Supplier</span><div style="font-weight:600;">' + escapeHtml(inv.supplier) + '</div></div>');
+              if (inv.supplier_batch_number) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Batch</span><div style="font-weight:600;">' + escapeHtml(inv.supplier_batch_number) + '</div></div>');
+              if (inv.purchase_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Purchase date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.purchase_date)) + '</div></div>');
+              if (inv.expiry_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Expiry date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.expiry_date)) + '</div></div>');
+              if (inv.created_at) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.created_at)) + '</div></div>');
+              selectedCardEl.innerHTML =
+                '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">' +
+                  '<div style="min-width:0;">' +
+                    '<div style="font-size:14px; font-weight:700; color:var(--text-primary,#111827);">' + escapeHtml(inv.name || 'Selected item') + '</div>' +
+                    '<div style="font-size:12px; color:var(--text-secondary,#6b7280); margin-top:4px;">' + escapeHtml((inv.process_name ? (inv.process_name + ' · ') : '') + fmtQty(inv)) + '</div>' +
+                  '</div>' +
+                  (reason ? ('<div class="exec-picker-chip exec-picker-chip--warn" style="flex-shrink:0;">' + escapeHtml(reason) + '</div>') : '') +
+                '</div>' +
+                (meta.length ? ('<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:12px;">' + meta.join('') + '</div>') : '');
+              selectedCardEl.style.display = 'block';
             }
+            if (qtyPane) qtyPane.style.display = 'block';
           }
-          if (quantityInput) quantityInput.style.border = '';
+          if (quantityInput) quantityInput.style.border = '1px solid var(--border-default, #e5e7eb)';
           updateSectionQtyExpectedWarning();
           updateUnexpectedMaterialWarning();
         }
@@ -733,10 +889,7 @@
         const hiddenInput = firstRow.querySelector('.execute-inventory-select');
         const quantityInput = firstRow.querySelector('.execute-quantity-input');
         const unitDisplay = firstRow.querySelector('.execute-quantity-unit-display');
-        const wrapper = firstRow.querySelector('.execute-inventory-picker-wrapper');
-        const trigger = firstRow.querySelector('.execute-inventory-picker-trigger');
         const triggerLabel = firstRow.querySelector('.execute-inventory-picker-label');
-        const triggerArrow = firstRow.querySelector('.execute-inventory-picker-arrow');
         const expiredWarningEl = firstRow.querySelector('.execute-input-expired-warning');
 
         function getInventorySelectionLabel(invId) {
@@ -747,18 +900,21 @@
           return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
         }
 
-        function closeInventoryDropdown() {
-          if (pickerPanel) pickerPanel.style.display = 'none';
-          if (modal._editingInputRow) {
-            var arrow = modal._editingInputRow.querySelector('.execute-inventory-picker-arrow');
-            if (arrow) arrow.style.transform = 'rotate(0deg)';
-            modal._editingInputRow = null;
-          }
-          document.removeEventListener('click', closeInventoryDropdownOutside);
-          if (modal._closeInventoryDropdown === closeInventoryDropdown) modal._closeInventoryDropdown = null;
-        }
-        function closeInventoryDropdownOutside(e) {
-          if (inputSection && !inputSection.contains(e.target)) closeInventoryDropdown();
+        // Always-on card picker: clicking a row makes it active; clicking a card assigns selection to the active row.
+        function setActiveRow(rowEl) {
+          if (!rowEl) return;
+          modal._editingInputRow = rowEl;
+          inputSection.querySelectorAll('.execute-input-row').forEach(function(r) {
+            r.classList.toggle('execute-input-row--active', r === rowEl);
+          });
+
+          // If the active row is already confirmed, keep picker hidden to reduce noise.
+          try {
+            var locked = rowEl.getAttribute('data-selection-locked') === 'true';
+            var sel = rowEl.querySelector('.execute-inventory-select');
+            var hasSel = Boolean(sel && sel.value);
+            if (pickerPanel) pickerPanel.style.display = (locked && hasSel) ? 'none' : 'block';
+          } catch (e) {}
         }
         function getSelectedInventoryIdsExcludingRow(excludeRowEl) {
           var ids = new Set();
@@ -820,8 +976,7 @@
               toggleInventoryCardDetails(id);
               return;
             }
-            setRowSelection(modal._editingInputRow, id);
-            closeInventoryDropdown();
+            setRowSelection(modal._editingInputRow || firstRow, id);
           };
           return card;
         }
@@ -932,7 +1087,7 @@
           noneCard.dataset.inventoryId = '';
           noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
           noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
-          noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(modal._editingInputRow, ''); closeInventoryDropdown(); };
+          noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(modal._editingInputRow || rowEl, ''); };
           cardsContainer.appendChild(noneCard);
           if (isFirstRow) {
             sortedInventory.forEach(function(inv) {
@@ -966,34 +1121,10 @@
           }
         }
 
-        function openDropdownForRow(rowEl) {
-          modal._closeInventoryDropdown = closeInventoryDropdown;
-          modal._editingInputRow = rowEl;
-          if (pickerPanel) pickerPanel.style.display = 'block';
-          // Reset tab/search UI for each open, keep it predictable.
-          if (pickerSearch) pickerSearch.value = '';
-          pickerState.q = '';
-          syncTabState('raw_material');
-
-          // Clicking a card selects for the currently edited row.
-          if (pickerCards && !pickerCards._boundClick) {
-            pickerCards._boundClick = true;
-            pickerCards.addEventListener('click', function(ev) {
-              var btn = ev.target && ev.target.closest ? ev.target.closest('.exec-picker-card') : null;
-              if (!btn) return;
-              ev.preventDefault();
-              ev.stopPropagation();
-              var invId = btn.getAttribute('data-inv-id') || '';
-              setRowSelection(modal._editingInputRow, invId);
-              closeInventoryDropdown();
-            });
-          }
-
-          inputSection.querySelectorAll('.execute-input-row .execute-inventory-picker-arrow').forEach(function(a) { a.style.transform = 'rotate(0deg)'; });
-          var rowArrow = rowEl && rowEl.querySelector('.execute-inventory-picker-arrow');
-          if (rowArrow) rowArrow.style.transform = 'rotate(180deg)';
-          setTimeout(function() { document.addEventListener('click', closeInventoryDropdownOutside); }, 0);
-        }
+        // Picker is always visible; keep tab/search predictable once on init.
+        if (pickerSearch) pickerSearch.value = '';
+        pickerState.q = '';
+        syncTabState('raw_material');
 
         function toggleInventoryCardDetails(cardId) {
           var details = inputSection.querySelector('#execute-inv-details-' + safeInputName + '-' + cardId);
@@ -1004,31 +1135,21 @@
           arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
         }
 
-        function bindTriggerForRow(rowEl) {
-          var t = rowEl.querySelector('.execute-inventory-picker-trigger');
-          if (!t) return;
-          t.addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (pickerPanel && pickerPanel.style.display === 'block') closeInventoryDropdown();
-            else openDropdownForRow(rowEl);
-          });
-          t.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              if (pickerPanel && pickerPanel.style.display === 'block') closeInventoryDropdown();
-              else openDropdownForRow(rowEl);
-            }
-          });
-        }
-        bindTriggerForRow(firstRow);
-        if (pickerPanel) pickerPanel.addEventListener('click', function(e) { e.stopPropagation(); });
+        // Row activation
+        firstRow.addEventListener('click', function() { setActiveRow(firstRow); });
+        setActiveRow(firstRow);
+
+        // Always start with neutral borders (avoid stale validation styles).
+        inputSection.querySelectorAll('.execute-quantity-input').forEach(function(inp) {
+          if (inp) inp.style.border = '1px solid var(--border-default, #e5e7eb)';
+        });
 
         if (quantityInput) {
           if (!quantityInput.dataset.originalQuantity || quantityInput.dataset.originalQuantity === '' || quantityInput.dataset.originalQuantity === 'undefined') {
             quantityInput.dataset.originalQuantity = input.quantity || quantityInput.value || '0';
           }
           quantityInput.addEventListener('input', function() {
-            if (parseFloat(this.value) > 0) this.style.border = '';
+            if (parseFloat(this.value) > 0) this.style.border = '1px solid var(--border-default, #e5e7eb)';
             updateSectionQtyExpectedWarning();
             updateUnexpectedMaterialWarning();
           });
@@ -1039,25 +1160,19 @@
           addAnotherBtn.addEventListener('click', function() {
             var newRow = createInputRow(false);
             rowsContainer.appendChild(newRow);
-            bindTriggerForRow(newRow);
+            newRow.addEventListener('click', function() { setActiveRow(newRow); });
+            // Immediately activate the new row, otherwise selection remains locked to previous row.
+            setActiveRow(newRow);
             var qInput = newRow.querySelector('.execute-quantity-input');
             if (qInput) {
               qInput.addEventListener('input', function() {
-                if (parseFloat(this.value) > 0) this.style.border = '';
+                if (parseFloat(this.value) > 0) this.style.border = '1px solid var(--border-default, #e5e7eb)';
                 updateSectionQtyExpectedWarning();
                 updateUnexpectedMaterialWarning();
               });
             }
-            var removeBtn = newRow.querySelector('.execute-remove-input-row-btn');
-            if (removeBtn) {
-              removeBtn.addEventListener('click', function() {
-                var stateKey = newRow.dataset.stateKey || '';
-                if (stateKey && modal._inputStateByKey) modal._inputStateByKey.delete(stateKey);
-                newRow.remove();
-                updateSectionQtyExpectedWarning();
-                updateUnexpectedMaterialWarning();
-              });
-            }
+            // remove handler already attached in createInputRow
+            renderPickerCards(pickerState.activeType, pickerState.q);
           });
         }
         
@@ -1712,6 +1827,10 @@
   window.submitExecution = async function() {
     const modal = document.getElementById('execute-step-modal');
     if (!modal) return;
+    const renderMode =
+      (window.ExecutionUI && typeof window.ExecutionUI.getRenderMode === 'function')
+        ? window.ExecutionUI.getRenderMode(modal)
+        : ((modal.dataset && modal.dataset.renderMode) ? String(modal.dataset.renderMode) : 'modal');
     
     var executionId = modal.dataset.executionId;
     var executionStepId = modal.dataset.executionStepId;
@@ -2126,8 +2245,10 @@
       if (modal._closeInventoryDropdown) {
         try { modal._closeInventoryDropdown(); } finally { modal._closeInventoryDropdown = null; }
       }
-      modal.style.display = 'none';
-      document.body.style.overflow = 'auto';
+      if (renderMode !== 'page') {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
       
       var warnings = completeResult && completeResult.execution_warnings;
       if (warnings && warnings.length > 0) {

@@ -1,0 +1,87 @@
+{# Dedicated execution step screen (SPA shell). #}
+{% extends "shared/base_spa.html" %}
+
+{% block body_class %}execution-step-spa{% endblock %}
+{% block body_extra_attrs %}data-page="execution-step"{% endblock %}
+
+{% block title %}Execute step | Workflow Engine{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Execute a workflow step">
+  <style>
+    .execution-step-spa .exec-step-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .execution-step-spa .exec-step-header__meta {
+      font-size: 0.875rem;
+      color: var(--text-secondary, #6b7280);
+      margin-top: 6px;
+    }
+    .execution-step-spa .exec-step-card {
+      margin-top: 18px;
+    }
+
+    /* Page-mode: ensure the legacy modal container behaves like normal content. */
+    .execution-step-spa #execute-step-modal {
+      display: block;
+      position: static;
+      inset: auto;
+      background: transparent;
+      backdrop-filter: none;
+      z-index: auto;
+      overflow: visible;
+    }
+    .execution-step-spa #execute-step-modal > .card {
+      width: 100%;
+      max-width: 100%;
+      max-height: none;
+      overflow: visible;
+      margin: 0;
+    }
+
+    /* Page owns navigation + CTAs; hide modal chrome. */
+    .execution-step-spa #execute-step-modal > .card > div:first-child button { display: none !important; }
+    .execution-step-spa #execute-step-modal > .card > div:last-child { display: none !important; }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {% include "processes/execution-step-fragment.html" %}
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    // Page-level controller needs these IDs at runtime.
+    window.ExecutionStepPageContext = {
+      processId: {{ process_id|tojson }},
+      executionId: {{ execution_id|tojson }},
+      stepId: {{ step_id|tojson }},
+      draft: {{ draft|tojson }},
+      returnTo: {{ return_to|tojson }},
+    };
+
+    // Configure callbacks before loading execution modal script.
+    window.ExecutionModalConfig = {
+      onStepCompleted: async function () {
+        try {
+          var dest = (window.ExecutionStepPageContext && window.ExecutionStepPageContext.returnTo) || '/core/flows?id=' + encodeURIComponent(String({{ process_id|tojson }}));
+          window.location.href = dest;
+        } catch (e) {
+          window.location.href = '/core';
+        }
+      }
+    };
+  </script>
+
+  {# Provides escapeHtml(), showNotification(), showError/showSuccess helpers used by shared execution code. #}
+  <script src="{{ url_for('core.serve_core_js', filename='core.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-ui-utils.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-modal.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-step-page.js') }}"></script>
+{% endblock %}
+

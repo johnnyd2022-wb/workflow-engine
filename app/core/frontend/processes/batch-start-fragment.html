@@ -1,0 +1,122 @@
+{# Canonical execute-step fragment (Option B), rendered inside base_spa shell via HTMX #}
+
+<div class="max-content">
+  <style>
+    /* These must live in-fragment so they also apply after HTMX boosted navigation. */
+    .batch-start-spa .execute-input-rows-container {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 14px !important;
+      width: 100% !important;
+    }
+    .batch-start-spa .execute-input-rows-container > .execute-input-row {
+      position: static !important;
+      display: block !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 14px 14px 12px 14px;
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: var(--radius-md, 10px);
+      background: var(--bg-card, #fff);
+    }
+    /* Before an input is confirmed, don't show an empty "card container". */
+    .batch-start-spa .execute-input-rows-container > .execute-input-row:not([data-selection-locked="true"]) {
+      padding: 0 !important;
+      border: none !important;
+      background: transparent !important;
+    }
+    /* Also remove the "active row" outline until confirmed (it looks like a floating border). */
+    .batch-start-spa .execute-input-rows-container > .execute-input-row.execute-input-row--active:not([data-selection-locked="true"]) {
+      outline: none !important;
+      outline-offset: 0 !important;
+      border-radius: 0 !important;
+    }
+    .batch-start-spa .execute-input-rows-container > .execute-input-row:not([data-selection-locked="true"]) .execute-remove-input-row-btn {
+      display: none !important;
+    }
+
+    /* Quantity field should be neutral until submit validation paints it red. */
+    .batch-start-spa .execute-quantity-input {
+      border: 1px solid var(--border-default, #e5e7eb) !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+    .batch-start-spa .execute-quantity-input:invalid,
+    .batch-start-spa .execute-quantity-input:user-invalid {
+      border: 1px solid var(--border-default, #e5e7eb) !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+
+    /* Confirm input selection button: match "Add as input" (btn-sm, no red border). */
+    .batch-start-spa .exec-picker-confirm-btn.btn.btn-primary.btn-sm {
+      width: auto !important;
+      margin: 10px 0 0 0 !important;
+      border-color: var(--primary, hsl(210, 100%, 50%)) !important;
+      background: var(--primary, hsl(210, 100%, 50%)) !important;
+      color: #fff !important;
+    }
+
+    /* Confirm input button (row-level): small, left-aligned. */
+    .batch-start-spa .execute-confirm-selection-wrap {
+      display: flex;
+      justify-content: flex-start;
+    }
+  </style>
+
+  <!-- Banner: same structure as flows2 -->
+  <div class="spa-hub-yellow-sleeve">
+    <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
+      <div class="inventory-spa-header__banner" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
+          <defs>
+            <linearGradient id="batchstart-line" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#D9384B"/>
+              <stop offset="100%" stop-color="#1e3a5f"/>
+            </linearGradient>
+            <linearGradient id="batchstart-node-a" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#e85468"/>
+              <stop offset="100%" stop-color="#D9384B"/>
+            </linearGradient>
+            <linearGradient id="batchstart-node-b" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1e3a5f"/>
+              <stop offset="100%" stop-color="#0f2240"/>
+            </linearGradient>
+            <linearGradient id="batchstart-node-c" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#2a4f7a"/>
+              <stop offset="100%" stop-color="#1a3560"/>
+            </linearGradient>
+            <filter id="batchstart-soft" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.14"/>
+            </filter>
+          </defs>
+          <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
+          <path d="M28 52 C 55 38, 75 38, 100 48 C 125 58, 145 38, 172 52"
+                stroke="url(#batchstart-line)" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.85"/>
+          <g filter="url(#batchstart-soft)">
+            <polygon points="42,52 35,64.124 21,64.124 14,52 21,39.876 35,39.876" fill="url(#batchstart-node-a)"/>
+            <polygon points="116,48 108,61.856 92,61.856 84,48 92,34.144 108,34.144" fill="url(#batchstart-node-b)"/>
+            <polygon points="186,52 179,64.124 165,64.124 158,52 165,39.876 179,39.876" fill="url(#batchstart-node-c)"/>
+          </g>
+          <circle cx="28" cy="52" r="4" fill="#fff" opacity="0.9"/>
+          <circle cx="100" cy="48" r="5" fill="#fff" opacity="0.9"/>
+          <circle cx="172" cy="52" r="4" fill="#fff" opacity="0.9"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page hero: centred title + back link -->
+  <section class="spa-form-section batch-start-hero spa-page-hero" aria-labelledby="batch-start-title">
+    <h1 class="batch-start-hero__title" id="batch-start-title">Execute step</h1>
+    <p class="batch-start-hero__desc" id="exec-step-subtitle">Loading step details…</p>
+    <div class="batch-start-hero__nav">
+      <a class="btn btn-secondary" href="{{ return_to }}" style="text-decoration:none;">Back to workflow</a>
+      <button type="button" class="btn btn-primary" style="margin-left: 10px;" onclick="submitExecution();">Record step</button>
+    </div>
+  </section>
+
+  {# Inline execution UI (no bordered container) #}
+  {% include "shared/execution-modal.html" %}
+</div>
+
