@@ -23,6 +23,20 @@
 
 (function() {
   'use strict';
+  // Safety: this file is used in multiple shells; ensure notifications never crash execution.
+  // Prefer the app's global showNotification (from core.js) when available.
+  if (typeof window.showNotification !== 'function') {
+    window.showNotification = function(type, title, message) {
+      try {
+        var t = (title || '').toString();
+        var m = (message || '').toString();
+        var line = (t ? (t + (m ? ': ' : '')) : '') + (m || '');
+        if (typeof console !== 'undefined' && console.warn) console.warn('Notification:', type, line);
+        // Keep it non-blocking where possible; fall back to alert for visibility.
+        if (type === 'error') alert(line || 'An error occurred.');
+      } catch (e) {}
+    };
+  }
   async function loadOrgUsersMap() {
     if (window.__OrgUsersMap) return window.__OrgUsersMap;
     try {
@@ -1536,6 +1550,7 @@
             <div class="execute-evidence-upload" data-step-id="${currentStepId || ''}" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 16px; background: var(--bg-secondary, #f9fafb);">
               <p style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-secondary);">Photos or PDFs (JPEG, PNG, PDF, max 10MB)</p>
               <input type="file" class="execute-evidence-file-input" accept="image/jpeg,image/png,application/pdf" multiple style="display: block; margin-bottom: 8px;">
+              <div class="execute-evidence-error" style="display:none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
               <div class="execute-evidence-list" style="margin-top: 12px;"></div>
             </div>
           `;
@@ -1560,6 +1575,7 @@
           const uploadZone = promptSection.querySelector('.execute-evidence-upload');
           const listEl = promptSection.querySelector('.execute-evidence-list');
           const fileInput = promptSection.querySelector('.execute-evidence-file-input');
+          const errEl = promptSection.querySelector('.execute-evidence-error');
           function renderEvidenceList(items) {
             if (!listEl) return;
             listEl.innerHTML = items.length === 0 ? '' : items.map(function(item) {
@@ -1591,6 +1607,7 @@
           uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
           if (fileInput) {
             fileInput.addEventListener('change', async function() {
+              if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
               var files = this.files;
               if (!files || !files.length || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
 
@@ -1665,10 +1682,22 @@
               if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
               uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
               renderEvidenceList(evidenceListForStep);
-              if (failed > 0 && typeof showNotification === 'function') {
+              if (failed > 0) {
                 var uniq = Array.from(new Set(failMsgs)).slice(0, 3);
                 var detail = (uniq.length ? (' ' + uniq.join(' | ')) : '');
-                showNotification('error', 'Evidence upload failed', failed + ' of ' + toUpload.length + ' file(s) failed to upload.' + detail);
+                if (typeof console !== 'undefined' && console.error) {
+                  console.error('Evidence upload failed', uniq);
+                }
+                if (errEl) {
+                  errEl.textContent = (uniq.length ? uniq[0] : 'Evidence upload failed.');
+                  errEl.style.display = 'block';
+                }
+                if (uploadZone) uploadZone.style.borderColor = 'var(--error, #ef4444)';
+                if (typeof showNotification === 'function') {
+                  showNotification('error', 'Evidence upload failed', failed + ' of ' + toUpload.length + ' file(s) failed to upload.' + detail);
+                } else {
+                  try { alert('Evidence upload failed.' + detail); } catch (e) {}
+                }
               }
               this.value = '';
             });
