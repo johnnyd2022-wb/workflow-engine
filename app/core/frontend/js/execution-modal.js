@@ -1510,6 +1510,8 @@
     if (executionPrompts.length > 0 && promptsContainer) {
       var executionIdForEvidence = modal.dataset.executionId || '';
       let evidenceListForStep = [];
+      // Client-staged files (draft mode): do NOT create execution until Record step.
+      if (!modal.pendingEvidenceFilesByStepId) modal.pendingEvidenceFilesByStepId = new Map();
       if (typeof CoreAPI.listEvidence === 'function' && executionIdForEvidence && currentStepId) {
         try {
           const res = await CoreAPI.listEvidence(executionIdForEvidence);
@@ -1599,7 +1601,42 @@
               );
             }).join('');
           }
+
+          function renderPendingFiles() {
+            if (!listEl) return;
+            var pending = (modal.pendingEvidenceFilesByStepId && modal.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
+            if (!pending.length) return;
+            var html = pending.map(function(f, idx) {
+              var nm = escapeHtml(f && f.name ? f.name : ('File ' + (idx + 1)));
+              var sz = (f && f.size != null) ? (' · ' + Math.round(f.size / 1024) + ' KB') : '';
+              return (
+                '<div class="execute-evidence-row" data-pending-idx="' + idx + '" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px; border: 1px dashed var(--border-default, #e5e7eb);">' +
+                  '<span>' + nm + '<span style="color: var(--text-tertiary,#9ca3af); font-size:12px;">' + sz + '</span></span>' +
+                  '<div style="display:flex; gap:8px; align-items:center;">' +
+                    '<span style="color: var(--text-secondary,#6b7280); font-size:12px;">Pending upload</span>' +
+                    '<button type="button" class="btn btn-secondary btn-sm execute-evidence-pending-remove-btn" data-pending-idx="' + idx + '">Remove</button>' +
+                  '</div>' +
+                '</div>'
+              );
+            }).join('');
+            listEl.insertAdjacentHTML('beforeend', html);
+          }
           listEl.addEventListener('click', async function(ev) {
+            var pbtn = ev.target && ev.target.closest && ev.target.closest('.execute-evidence-pending-remove-btn');
+            if (pbtn && pbtn.dataset && pbtn.dataset.pendingIdx != null) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              var idx = parseInt(pbtn.dataset.pendingIdx, 10);
+              var pending = (modal.pendingEvidenceFilesByStepId && modal.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
+              if (!isNaN(idx)) {
+                pending.splice(idx, 1);
+                if (modal.pendingEvidenceFilesByStepId) modal.pendingEvidenceFilesByStepId.set(currentStepId, pending);
+              }
+              renderEvidenceList(evidenceListForStep);
+              renderPendingFiles();
+              if (uploadZone) uploadZone.dataset.evidenceCount = String((evidenceListForStep.length || 0) + (pending.length || 0));
+              return;
+            }
             var btn = ev.target && ev.target.closest && ev.target.closest('.execute-evidence-remove-btn');
             if (!btn || !btn.dataset || !btn.dataset.evidenceId) return;
             var evidenceId = btn.dataset.evidenceId;
@@ -1618,101 +1655,27 @@
             btn.disabled = false;
           });
           renderEvidenceList(evidenceListForStep);
-          uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+          renderPendingFiles();
+          var pending0 = (modal.pendingEvidenceFilesByStepId && modal.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
+          uploadZone.dataset.evidenceCount = String((evidenceListForStep.length || 0) + (pending0.length || 0));
           if (fileInput) {
             fileInput.addEventListener('change', async function() {
               if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
               var files = this.files;
-              if (!files || !files.length || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
-
-              // Draft mode: evidence upload needs a real execution_id. Create execution on first upload.
-              if (!executionIdForEvidence) {
-                var draftProcessId = modal.dataset.draftProcessId || '';
-                if (draftProcessId && typeof CoreAPI.createExecution === 'function' && typeof CoreAPI.getExecution === 'function') {
-                  try {
-                    var createResult = await CoreAPI.createExecution(draftProcessId);
-                    var newExecId = createResult.id || createResult.execution_id || (createResult.execution && createResult.execution.id);
-                    if (newExecId) {
-                      executionIdForEvidence = String(newExecId);
-                      modal.dataset.executionId = executionIdForEvidence;
-                      // Also set executionStepId if possible (used later by submitExecution)
-                      try {
-                        var executionData = await CoreAPI.getExecution(executionIdForEvidence);
-                        var steps = executionData.execution_steps || [];
-                        var readyStep = steps.find(function(es) { return es.status === 'ready' || es.status === 'READY'; });
-                        if (readyStep && readyStep.id) {
-                          modal.dataset.executionStepId = String(readyStep.id);
-                        }
-                        modal.dataset.draftProcessId = '';
-                      } catch (e) {}
-                    }
-                  } catch (e) {
-                    if (typeof showNotification === 'function') showNotification('error', 'Evidence upload', 'Could not start execution to upload evidence.');
-                    this.value = '';
-                    return;
-                  }
-                } else {
-                  if (typeof showNotification === 'function') showNotification('error', 'Evidence upload', 'Execution context missing.');
-                  this.value = '';
-                  return;
-                }
-              }
-
-              var toUpload = [];
+              if (!files || !files.length || !currentStepId) return;
+              var pending = (modal.pendingEvidenceFilesByStepId && modal.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
               for (var i = 0; i < files.length; i++) {
                 var file = files[i];
                 if (file.size > maxEvidenceBytes) {
                   if (typeof showNotification === 'function') showNotification('error', 'File too large', 'Max ' + Math.round(maxEvidenceBytes / (1024 * 1024)) + 'MB. Choose a smaller file.');
                   continue;
                 }
-                var fd = new FormData();
-                fd.append('file', file);
-                fd.append('execution_id', executionIdForEvidence);
-                fd.append('step_id', currentStepId);
-                toUpload.push(CoreAPI.uploadEvidence(fd));
+                pending.push(file);
               }
-              if (toUpload.length === 0) { this.value = ''; return; }
-              var settled = await Promise.allSettled(toUpload);
-              var added = [];
-              var failed = 0;
-              var failMsgs = [];
-              settled.forEach(function(s, idx) {
-                if (s.status === 'fulfilled' && s.value && s.value.id) added.push(s.value);
-                else {
-                  failed++;
-                  try {
-                    var msg = (s && s.reason && (s.reason.message || String(s.reason))) || 'Upload failed';
-                    if (msg) failMsgs.push(msg);
-                  } catch (e) {}
-                }
-              });
-              evidenceListForStep = evidenceListForStep.concat(added);
-              var seenIds = new Set();
-              evidenceListForStep = evidenceListForStep.filter(function(e) {
-                if (!e.id || seenIds.has(e.id)) return false;
-                seenIds.add(e.id);
-                return true;
-              });
-              if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
-              uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+              if (modal.pendingEvidenceFilesByStepId) modal.pendingEvidenceFilesByStepId.set(currentStepId, pending);
               renderEvidenceList(evidenceListForStep);
-              if (failed > 0) {
-                var uniq = Array.from(new Set(failMsgs)).slice(0, 3);
-                var detail = (uniq.length ? (' ' + uniq.join(' | ')) : '');
-                if (typeof console !== 'undefined' && console.error) {
-                  console.error('Evidence upload failed', uniq);
-                }
-                if (errEl) {
-                  errEl.textContent = (uniq.length ? uniq[0] : 'Evidence upload failed.');
-                  errEl.style.display = 'block';
-                }
-                if (uploadZone) uploadZone.style.borderColor = 'var(--error, #ef4444)';
-                if (typeof showNotification === 'function') {
-                  showNotification('error', 'Evidence upload failed', failed + ' of ' + toUpload.length + ' file(s) failed to upload.' + detail);
-                } else {
-                  try { alert('Evidence upload failed.' + detail); } catch (e) {}
-                }
-              }
+              renderPendingFiles();
+              if (uploadZone) uploadZone.dataset.evidenceCount = String((evidenceListForStep.length || 0) + (pending.length || 0));
               this.value = '';
             });
           }
@@ -2234,14 +2197,74 @@
       }
     });
 
-    // VALIDATION: Check required evidence (source of truth: modal.evidenceByStepId, not only dataset)
+    // Upload staged evidence (draft flow uploads happen only on Record step).
+    try {
+      if (!modal.pendingEvidenceFilesByStepId) modal.pendingEvidenceFilesByStepId = new Map();
+      var stepIdForEvidence = modal.dataset.executionStepId || modal.dataset.executionStepDefinitionId || '';
+      // We keyed pending by step definition id earlier (currentStepId).
+      var pendingStepKeys = Array.from(modal.pendingEvidenceFilesByStepId.keys());
+      var anyPending = pendingStepKeys.some(function(k) {
+        var arr = modal.pendingEvidenceFilesByStepId.get(k) || [];
+        return arr && arr.length;
+      });
+      if (anyPending) {
+        // Ensure we have a real execution (draft).
+        if (draftProcessId && (!executionId || !executionStepId)) {
+          var createResult = await CoreAPI.createExecution(draftProcessId);
+          executionId = createResult.id || createResult.execution_id || (createResult.execution && createResult.execution.id);
+          if (!executionId) throw new Error('Could not create execution for evidence upload.');
+          var executionData2 = await CoreAPI.getExecution(executionId);
+          var steps2 = executionData2.execution_steps || [];
+          var readyStep2 = steps2.find(function(es) { return es.status === 'ready' || es.status === 'READY'; });
+          if (readyStep2 && readyStep2.id) executionStepId = readyStep2.id;
+          modal.dataset.executionId = String(executionId);
+          modal.dataset.executionStepId = String(executionStepId || '');
+          modal.dataset.draftProcessId = '';
+          draftProcessId = '';
+        }
+        // Upload pending files per step definition id.
+        for (var pk = 0; pk < pendingStepKeys.length; pk++) {
+          var stepDefId = pendingStepKeys[pk];
+          var files = modal.pendingEvidenceFilesByStepId.get(stepDefId) || [];
+          if (!files.length) continue;
+          var added = [];
+          for (var fi = 0; fi < files.length; fi++) {
+            var fd = new FormData();
+            fd.append('file', files[fi]);
+            fd.append('execution_id', String(executionId));
+            fd.append('step_id', String(stepDefId));
+            var res = await CoreAPI.uploadEvidence(fd);
+            if (res && res.id) added.push(res);
+          }
+          // Merge into evidence list cache
+          if (!modal.evidenceByStepId) modal.evidenceByStepId = new Map();
+          var existing = (modal.evidenceByStepId.get(stepDefId) || []);
+          var merged = existing.concat(added);
+          var seen = new Set();
+          merged = merged.filter(function(e) {
+            if (!e || !e.id) return false;
+            if (seen.has(e.id)) return false;
+            seen.add(e.id);
+            return true;
+          });
+          modal.evidenceByStepId.set(stepDefId, merged);
+          modal.pendingEvidenceFilesByStepId.set(stepDefId, []);
+        }
+      }
+    } catch (e) {
+      showNotification('error', 'Evidence upload failed', e && e.message ? e.message : String(e));
+      return;
+    }
+
+    // VALIDATION: Check required evidence (counts uploaded + staged)
     const evidenceSections = modal.querySelectorAll('.execute-prompt-section[data-prompt-type="evidence"][data-prompt-required="true"]');
     evidenceSections.forEach(section => {
       const uploadZone = section.querySelector('.execute-evidence-upload');
       const label = section.dataset.promptLabel || 'Evidence';
       const stepId = uploadZone && uploadZone.dataset.stepId;
       const list = (modal.evidenceByStepId && stepId && modal.evidenceByStepId.get(stepId)) || [];
-      const count = list.length;
+      const pending = (modal.pendingEvidenceFilesByStepId && stepId && modal.pendingEvidenceFilesByStepId.get(stepId)) || [];
+      const count = (list.length || 0) + (pending.length || 0);
       if (count < 1) {
         validationErrors.push(`Please upload at least one file for "${label}"`);
         if (uploadZone) uploadZone.style.borderColor = 'var(--error, #ef4444)';
