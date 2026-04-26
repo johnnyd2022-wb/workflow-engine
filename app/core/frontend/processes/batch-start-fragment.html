@@ -48,6 +48,27 @@
       outline: none !important;
     }
 
+    /* Evidence file input: make "Choose files" look like other buttons. */
+    .batch-start-spa .execute-evidence-file-input {
+      font-size: 13px;
+      color: var(--text-secondary, #6b7280);
+    }
+    .batch-start-spa .execute-evidence-file-input::file-selector-button,
+    .batch-start-spa .execute-evidence-file-input::-webkit-file-upload-button {
+      padding: 6px 12px;
+      margin-right: 10px;
+      font-size: 0.875rem;
+      border-radius: var(--radius-md, 10px);
+      border: 1px solid var(--border-default, #e5e7eb);
+      background: var(--bg-secondary, #f3f4f6);
+      color: var(--text-primary, #111827);
+      cursor: pointer;
+    }
+    .batch-start-spa .execute-evidence-file-input::file-selector-button:hover,
+    .batch-start-spa .execute-evidence-file-input::-webkit-file-upload-button:hover {
+      border-color: rgba(59,130,246,0.45);
+    }
+
     /* Confirm input selection button: match "Add as input" (btn-sm, no red border). */
     .batch-start-spa .exec-picker-confirm-btn.btn.btn-primary.btn-sm {
       width: auto !important;

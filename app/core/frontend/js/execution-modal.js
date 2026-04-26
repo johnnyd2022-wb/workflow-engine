@@ -37,6 +37,18 @@
       } catch (e) {}
     };
   }
+
+  // Safety: execution submit uses getCurrentUser() for audit fields.
+  if (typeof window.getCurrentUser !== 'function') {
+    window.getCurrentUser = async function() {
+      const resp = await fetch('/auth/me', { credentials: 'same-origin', cache: 'no-store' });
+      const data = await resp.json();
+      const u = data && data.user ? data.user : null;
+      if (!u) return { username: '', email: '' };
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+      return { username: name || u.email || '', email: u.email || '' };
+    };
+  }
   async function loadOrgUsersMap() {
     if (window.__OrgUsersMap) return window.__OrgUsersMap;
     try {
@@ -70,6 +82,63 @@
       .replace(/\s+/g, ' ')
       .trim()
       .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
+
+  // Shared unit conversion helper (used by both render + submit validation).
+  function convertUnit(quantity, fromUnit, toUnit) {
+    if (!fromUnit || !toUnit || String(fromUnit).toLowerCase() === String(toUnit).toLowerCase()) {
+      return quantity;
+    }
+
+    const from = String(fromUnit).toLowerCase();
+    const to = String(toUnit).toLowerCase();
+
+    // Mass conversions (to kg)
+    const massFactors = {
+      kg: 1.0,
+      g: 0.001,
+      mg: 0.000001,
+      lb: 0.453592,
+      oz: 0.0283495,
+      ton: 1000.0,
+      tonne: 1000.0,
+    };
+
+    // Volume conversions (to L)
+    const volumeFactors = {
+      l: 1.0,
+      ml: 0.001,
+      gal: 3.78541,
+      m3: 1000.0,
+      ft3: 28.3168,
+    };
+
+    // Length conversions (to m)
+    const lengthFactors = {
+      m: 1.0,
+      cm: 0.01,
+      mm: 0.001,
+      ft: 0.3048,
+      in: 0.0254,
+    };
+
+    const fromMass = from in massFactors;
+    const toMass = to in massFactors;
+    const fromVolume = from in volumeFactors;
+    const toVolume = to in volumeFactors;
+    const fromLength = from in lengthFactors;
+    const toLength = to in lengthFactors;
+
+    if (fromMass && toMass) {
+      return (quantity * massFactors[from]) / massFactors[to];
+    }
+    if (fromVolume && toVolume) {
+      return (quantity * volumeFactors[from]) / volumeFactors[to];
+    }
+    if (fromLength && toLength) {
+      return (quantity * lengthFactors[from]) / lengthFactors[to];
+    }
+    return quantity;
   }
   function ensureExecutionPickerStyles() {
     if (document.getElementById('execution-modal-picker-styles')) return;
@@ -324,71 +393,7 @@
       return null;
     }
     
-    // Simple unit conversion function for frontend
-    function convertUnit(quantity, fromUnit, toUnit) {
-      if (!fromUnit || !toUnit || fromUnit.toLowerCase() === toUnit.toLowerCase()) {
-        return quantity;
-      }
-      
-      const from = fromUnit.toLowerCase();
-      const to = toUnit.toLowerCase();
-      
-      // Mass conversions (to kg)
-      const massFactors = {
-        'kg': 1.0,
-        'g': 0.001,
-        'mg': 0.000001,
-        'lb': 0.453592,
-        'oz': 0.0283495,
-        'ton': 1000.0,
-        'tonne': 1000.0
-      };
-      
-      // Volume conversions (to L)
-      const volumeFactors = {
-        'l': 1.0,
-        'ml': 0.001,
-        'gal': 3.78541,
-        'm3': 1000.0,
-        'ft3': 28.3168
-      };
-      
-      // Length conversions (to m)
-      const lengthFactors = {
-        'm': 1.0,
-        'cm': 0.01,
-        'mm': 0.001,
-        'ft': 0.3048,
-        'in': 0.0254
-      };
-      
-      // Check if both units are in the same category
-      const fromMass = from in massFactors;
-      const toMass = to in massFactors;
-      const fromVolume = from in volumeFactors;
-      const toVolume = to in volumeFactors;
-      const fromLength = from in lengthFactors;
-      const toLength = to in lengthFactors;
-      
-      if (fromMass && toMass) {
-        const fromFactor = massFactors[from];
-        const toFactor = massFactors[to];
-        return (quantity * fromFactor) / toFactor;
-      }
-      if (fromVolume && toVolume) {
-        const fromFactor = volumeFactors[from];
-        const toFactor = volumeFactors[to];
-        return (quantity * fromFactor) / toFactor;
-      }
-      if (fromLength && toLength) {
-        const fromFactor = lengthFactors[from];
-        const toFactor = lengthFactors[to];
-        return (quantity * fromFactor) / toFactor;
-      }
-      
-      // If units don't match or are incompatible, return original quantity
-      return quantity;
-    }
+    // convertUnit is defined at module scope (used by submit validation too).
     
     // Render variable inputs (inventory selection)
     const variableInputs = (stepDefinition.inputs || []).filter(input => 
@@ -1582,7 +1587,16 @@
               var viewUrl = typeof CoreAPI.getEvidenceViewUrl === 'function' ? CoreAPI.getEvidenceViewUrl(item.id) : '#';
               var downloadUrl = typeof CoreAPI.getEvidenceDownloadUrl === 'function' ? CoreAPI.getEvidenceDownloadUrl(item.id) : '#';
               var id = (item.id && escapeHtml(item.id)) || '';
-              return '<div class="execute-evidence-row" data-evidence-id="' + id + '" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;"><span>' + escapeHtml(item.file_name || 'File') + '</span><div style="display: flex; gap: 8px; align-items: center;"><a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="margin-left: 8px;">View</a><a href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" style="margin-left: 4px;">Download</a><button type="button" class="execute-evidence-remove-btn" data-evidence-id="' + id + '" style="margin-left: 8px; padding: 2px 8px; font-size: 12px;">Remove</button></div></div>';
+              return (
+                '<div class="execute-evidence-row" data-evidence-id="' + id + '" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;">' +
+                  '<span>' + escapeHtml(item.file_name || 'File') + '</span>' +
+                  '<div style="display: flex; gap: 8px; align-items: center;">' +
+                    '<a class="btn btn-secondary btn-sm" href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="text-decoration:none;">View</a>' +
+                    '<a class="btn btn-secondary btn-sm" href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" style="text-decoration:none;">Download</a>' +
+                    '<button type="button" class="btn btn-secondary btn-sm execute-evidence-remove-btn" data-evidence-id="' + id + '">Remove</button>' +
+                  '</div>' +
+                '</div>'
+              );
             }).join('');
           }
           listEl.addEventListener('click', async function(ev) {
@@ -2182,9 +2196,26 @@
         const availableQty = parseFloat(select.dataset.quantity);
         if (!isNaN(availableQty) && quantity > availableQty) {
           const inventoryUnit = select.dataset.unit || '';
-          const quantityUnit = quantityInput.dataset.inventoryUnit || inventoryUnit;
-          validationErrors.push(`Quantity for "${inputName}" (${quantity} ${quantityUnit}) exceeds available inventory (${availableQty} ${inventoryUnit})`);
-          quantityInput.style.border = '2px solid var(--error, #ef4444)';
+          const stepUnit = (quantityInput.dataset.stepUnit || '').trim();
+          // Compare in inventory units (convert from step unit when needed).
+          let qtyInInvUnit = quantity;
+          if (stepUnit && inventoryUnit && stepUnit.toLowerCase() !== inventoryUnit.toLowerCase()) {
+            const conv = convertUnit(quantity, stepUnit, inventoryUnit);
+            // If conversion didn't change but units differ, treat as incompatible: skip max check.
+            if (conv !== quantity || stepUnit.toLowerCase() === inventoryUnit.toLowerCase()) {
+              qtyInInvUnit = conv;
+            } else {
+              qtyInInvUnit = NaN;
+            }
+          }
+          if (!isNaN(qtyInInvUnit) && qtyInInvUnit > availableQty) {
+            const qtyLabel = stepUnit ? `${quantity} ${stepUnit}` : `${quantity}`;
+            const availLabel = stepUnit
+              ? `${Number(convertUnit(availableQty, inventoryUnit, stepUnit).toFixed(3))} ${stepUnit}`
+              : `${availableQty} ${inventoryUnit}`;
+            validationErrors.push(`Quantity for "${inputName}" (${qtyLabel}) exceeds available inventory (${availLabel})`);
+            quantityInput.style.border = '2px solid var(--error, #ef4444)';
+          }
         }
       }
     });
