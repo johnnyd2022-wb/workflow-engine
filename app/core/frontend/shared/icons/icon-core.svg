@@ -1,24 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="72" height="72" fill="none">
-  <!-- Core — gear -->
-  <!-- Cardinal teeth -->
-  <rect x="31" y="0"  width="10" height="10" rx="2" fill="#D9384B"/>
-  <rect x="31" y="62" width="10" height="10" rx="2" fill="#D9384B"/>
-  <rect x="0"  y="31" width="10" height="10" rx="2" fill="#D9384B"/>
-  <rect x="62" y="31" width="10" height="10" rx="2" fill="#D9384B"/>
-  <!-- Diagonal teeth -->
-  <rect x="6"  y="6"  width="10" height="10" rx="2" fill="#D9384B" transform="rotate(-45 11 11)"/>
-  <rect x="56" y="6"  width="10" height="10" rx="2" fill="#D9384B" transform="rotate(45 61 11)"/>
-  <rect x="6"  y="56" width="10" height="10" rx="2" fill="#D9384B" transform="rotate(45 11 61)"/>
-  <rect x="56" y="56" width="10" height="10" rx="2" fill="#D9384B" transform="rotate(-45 61 61)"/>
-  <!-- Outer ring -->
-  <circle cx="36" cy="36" r="28" fill="none" stroke="#D9384B" stroke-width="2"/>
-  <!-- Inner cutout ring -->
-  <circle cx="36" cy="36" r="18" fill="#0F1F3D" stroke="#D9384B" stroke-width="1.5"/>
-  <!-- Hub -->
-  <circle cx="36" cy="36" r="8" fill="#D9384B"/>
-  <!-- Spokes -->
-  <line x1="36" y1="18" x2="36" y2="27" stroke="#D9384B" stroke-width="2" stroke-linecap="round"/>
-  <line x1="36" y1="45" x2="36" y2="54" stroke="#D9384B" stroke-width="2" stroke-linecap="round"/>
-  <line x1="18" y1="36" x2="27" y2="36" stroke="#D9384B" stroke-width="2" stroke-linecap="round"/>
-  <line x1="45" y1="36" x2="54" y2="36" stroke="#D9384B" stroke-width="2" stroke-linecap="round"/>
+  <!-- Core icon — inactive colour: #94A3B8, active colour: #2DD4BF -->
+  <rect x="30" y="0"  width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7"/>
+  <rect x="30" y="60" width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7"/>
+  <rect x="0"  y="30" width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7"/>
+  <rect x="60" y="30" width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7"/>
+  <rect x="6"  y="6"  width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7" transform="rotate(-45 12 12)"/>
+  <rect x="54" y="6"  width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7" transform="rotate(45 60 12)"/>
+  <rect x="6"  y="54" width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7" transform="rotate(45 12 60)"/>
+  <rect x="54" y="54" width="12" height="12" rx="2.5" fill="currentColor" fill-opacity="0.7" transform="rotate(-45 60 60)"/>
+  <circle cx="36" cy="36" r="32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-opacity="0.8"/>
+  <circle cx="36" cy="36" r="20" fill="none" stroke="currentColor" stroke-width="2"   stroke-opacity="0.5"/>
+  <circle cx="36" cy="36" r="9"  fill="currentColor" fill-opacity="0.9"/>
+  <line x1="36" y1="16" x2="36" y2="26" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.7"/>
+  <line x1="36" y1="46" x2="36" y2="56" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.7"/>
+  <line x1="16" y1="36" x2="26" y2="36" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.7"/>
+  <line x1="46" y1="36" x2="56" y2="36" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.7"/>
 </svg>

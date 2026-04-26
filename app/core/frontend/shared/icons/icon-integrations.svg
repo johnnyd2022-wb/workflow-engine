@@ -1,11 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="72" height="72" fill="none">
-  <!-- Integrations — sync arrows -->
-  <!-- Top arc: red, left to right -->
-  <path d="M 6 22 A 34 34 0 0 1 66 22" fill="none" stroke="#D9384B" stroke-width="5.5" stroke-linecap="round"/>
-  <!-- Top arrowhead (right) -->
-  <polygon points="62,15 73,23 57,27" fill="#D9384B"/>
-  <!-- Bottom arc: white, right to left -->
-  <path d="M 66 50 A 34 34 0 0 1 6 50" fill="none" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-opacity="0.85"/>
-  <!-- Bottom arrowhead (left) -->
-  <polygon points="10,57 -1,49 15,45" fill="white" fill-opacity="0.85"/>
+  <!-- Integrations icon — inactive colour: #94A3B8, active colour: #2DD4BF -->
+  <!-- Top arc uses icon colour, bottom arc uses white at reduced opacity for depth -->
+  <path d="M 6 22 A 34 34 0 0 1 66 22" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/>
+  <polygon points="62,13 74,23 56,27" fill="currentColor"/>
+  <path d="M 66 50 A 34 34 0 0 1 6 50" fill="none" stroke="white" stroke-width="6.5" stroke-linecap="round" stroke-opacity="0.45"/>
+  <polygon points="10,59 -2,49 16,45" fill="white" fill-opacity="0.45"/>
 </svg>

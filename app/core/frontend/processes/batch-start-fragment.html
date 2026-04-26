@@ -106,17 +106,24 @@
     </div>
   </div>
 
-  <!-- Page hero: centred title + back link -->
+  <!-- Page hero: centred title -->
   <section class="spa-form-section batch-start-hero spa-page-hero" aria-labelledby="batch-start-title">
     <h1 class="batch-start-hero__title" id="batch-start-title">Execute step</h1>
     <p class="batch-start-hero__desc" id="exec-step-subtitle">Loading step details…</p>
-    <div class="batch-start-hero__nav">
-      <a class="btn btn-secondary" href="{{ return_to }}" style="text-decoration:none;">Back to workflow</a>
-      <button type="button" class="btn btn-primary" style="margin-left: 10px;" onclick="submitExecution();">Record step</button>
-    </div>
   </section>
 
   {# Inline execution UI (no bordered container) #}
   {% include "shared/execution-modal.html" %}
+
+  <!-- Bottom CTA: record step -->
+  <div style="position: sticky; bottom: 0; margin-top: 18px; padding: 14px 0; background: linear-gradient(to top, var(--bg-primary, #fff) 70%, rgba(255,255,255,0));">
+    <div style="display:flex; justify-content:flex-end;">
+      <button
+        type="button"
+        class="btn btn-primary"
+        onclick="(function(){ try { if (typeof window.submitExecution === 'function') return window.submitExecution(); if (window.showNotification) return window.showNotification('error','Record step','submitExecution() is not available yet.'); alert('submitExecution() is not available yet.'); } catch(e){ if (window.showNotification) window.showNotification('error','Record step failed', e && e.message ? e.message : String(e)); else alert(e && e.message ? e.message : String(e)); } })();"
+      >Record step</button>
+    </div>
+  </div>
 </div>
 

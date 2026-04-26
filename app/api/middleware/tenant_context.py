@@ -33,6 +33,7 @@ def setup_tenant_context(app):
         # Safe defaults
         g.current_user = None
         g.current_org = None
+        g.current_org_id = None
         g.user_id = None
         g.org_id = None
         g.user_email = None
@@ -79,6 +80,8 @@ def setup_tenant_context(app):
             # Populate g: lightweight primitives + ORM objects
             g.current_user = user
             g.current_org = org
+            # Backwards-compatible alias used by org routes / decorators.
+            g.current_org_id = org.id
 
             g.user_id = str(user.id)
             g.user_email = getattr(user, "email", None)

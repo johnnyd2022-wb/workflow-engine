@@ -106,6 +106,12 @@ def list_users():
             {
                 "id": str(user.id),
                 "email": user.email,
+                "first_name": getattr(user, "first_name", None),
+                "last_name": getattr(user, "last_name", None),
+                "display_name": (
+                    (" ".join([x for x in [getattr(user, "first_name", None), getattr(user, "last_name", None)] if x]).strip())
+                    or user.email
+                ),
                 "role": user.role.value,
                 "is_active": user.is_active,
                 "created_at": user.created_at.isoformat(),

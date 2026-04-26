@@ -2979,8 +2979,15 @@ def create_inventory_item():
                 source_method = (data.get("source_method") or "barcode_scan").strip()
                 if source_method not in ("manual", "csv_upload", "barcode_scan"):
                     source_method = "barcode_scan"
+                # Human-friendly operator fields for audit (self-contained, append-only).
+                operator_email = getattr(getattr(g, "current_user", None), "email", None)
+                operator_first = getattr(getattr(g, "current_user", None), "first_name", None)
+                operator_last = getattr(getattr(g, "current_user", None), "last_name", None)
+                operator_name = " ".join([x for x in [operator_first, operator_last] if x]) or operator_email
                 audit_entry = {
                     "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
+                    "operator_email": operator_email,
+                    "operator_name": operator_name,
                     "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "source_method": source_method,
                     "quantity_added": str(quantity),
@@ -3045,8 +3052,15 @@ def create_inventory_item():
         source_method = (data.get("source_method") or "manual").strip()
         if source_method not in ("manual", "csv_upload", "barcode_scan"):
             source_method = "manual"
+        # Human-friendly operator fields for audit (self-contained, append-only).
+        operator_email = getattr(getattr(g, "current_user", None), "email", None)
+        operator_first = getattr(getattr(g, "current_user", None), "first_name", None)
+        operator_last = getattr(getattr(g, "current_user", None), "last_name", None)
+        operator_name = " ".join([x for x in [operator_first, operator_last] if x]) or operator_email
         audit_entry = {
             "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
+            "operator_email": operator_email,
+            "operator_name": operator_name,
             "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "source_method": source_method,
         }

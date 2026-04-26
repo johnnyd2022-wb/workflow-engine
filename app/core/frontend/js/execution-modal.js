@@ -23,6 +23,40 @@
 
 (function() {
   'use strict';
+  async function loadOrgUsersMap() {
+    if (window.__OrgUsersMap) return window.__OrgUsersMap;
+    try {
+      async function tryFetchUsers(url) {
+        const resp = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return await resp.json();
+      }
+      // Org users route is served at /org/users (see org_routes.py).
+      const data = await tryFetchUsers('/org/users');
+      const m = new Map();
+      (data.users || []).forEach(function(u) {
+        if (!u || !u.id) return;
+        const label =
+          (u.display_name)
+          || ([u.first_name, u.last_name].filter(Boolean).join(' ').trim())
+          || (u.email || u.name || u.username || u.id);
+        m.set(String(u.id), String(label));
+      });
+      window.__OrgUsersMap = m;
+      return m;
+    } catch (e) {
+      window.__OrgUsersMap = new Map();
+      return window.__OrgUsersMap;
+    }
+  }
+  function prettyLabel(s) {
+    if (!s) return '';
+    return String(s)
+      .replace(/_/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
   function ensureExecutionPickerStyles() {
     if (document.getElementById('execution-modal-picker-styles')) return;
     var style = document.createElement('style');
@@ -30,14 +64,27 @@
     style.textContent = `
       .exec-picker-panel { margin-top: 10px; padding: 12px; border-top: 1px solid var(--border-default, #e5e7eb); }
       .exec-picker-search { margin: 0 0 10px 0; }
-      .exec-picker-cards { display: flex; flex-direction: column; gap: 10px; }
+      /* Page-feel picker: no internal scroll; let the page scroll. */
+      .exec-picker-cards { display: flex; flex-direction: column; gap: 10px; max-height: none; overflow: visible; }
       .exec-picker-card { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 12px 14px; border-radius: var(--radius-md, 10px); border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff); color: var(--text-primary, #111827); cursor: pointer; }
       .exec-picker-card:hover { border-color: rgba(59,130,246,0.6); }
       .exec-picker-card[aria-pressed="true"] { border-color: rgba(217, 56, 75, 0.55); box-shadow: 0 0 0 2px rgba(217, 56, 75, 0.10); }
+      /* Keep cards consistent height in collapsed state. */
+      .exec-picker-card[data-expanded="false"] { min-height: 176px; }
+      .exec-picker-card__top { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
+      .exec-picker-card__toggle { flex-shrink:0; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary, #6b7280); border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+      .exec-picker-card__toggle:hover { border-color: rgba(59,130,246,0.5); color: var(--text-primary, #111827); }
       .exec-picker-card__title { font-size: 14px; font-weight: 700; margin: 0; }
       .exec-picker-card__sub { font-size: 12px; color: var(--text-tertiary, #9ca3af); margin: 0; line-height: 1.4; }
       .exec-picker-card__meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
       .exec-picker-card__actions { margin-top: 10px; display: flex; justify-content: flex-end; }
+      .exec-picker-card__spacer { flex: 1; }
+      .exec-picker-card__details { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-default, #e5e7eb); display:none; }
+      .exec-picker-card[data-expanded="true"] .exec-picker-card__details { display:block; }
+      .exec-picker-kv { display:grid; grid-template-columns: 160px 1fr; gap: 6px 12px; font-size: 12px; line-height: 1.35; }
+      .exec-picker-kv__k { color: var(--text-tertiary, #9ca3af); font-weight: 600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .exec-picker-kv__v { color: var(--text-primary, #111827); overflow:hidden; text-overflow:ellipsis; }
+      .exec-picker-kv__pre { grid-column: 1 / -1; margin: 8px 0 0 0; padding: 10px 12px; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 10px; overflow:auto; max-height: 320px; white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--text-primary, #111827); }
       /* Confirm button uses existing .btn styles (btn-sm), no custom red border. */
       .exec-picker-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-secondary, #f3f4f6); font-size: 12px; color: var(--text-secondary, #6b7280); }
       .exec-picker-chip--warn { background: hsl(42, 93%, 96%); border-color: var(--warning, #f59e0b); color: #92400e; }
@@ -170,11 +217,12 @@
       ? CoreAPI.getStepDocumentation(stepId).catch(function() { return { documents: [] }; })
       : Promise.resolve({ documents: [] });
     
-    const [inventoryData, expiredData, untrackedData, docsData] = await Promise.all([
+    const [inventoryData, expiredData, untrackedData, docsData, orgUsersMap] = await Promise.all([
       CoreAPI.getInventory(),
       CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; }),
       CoreAPI.getUntrackedItems().catch(function() { return { untracked_items: [] }; }),
-      docsPromise
+      docsPromise,
+      loadOrgUsersMap()
     ]);
     
     // Render step documentation (SOP) – read-only
@@ -402,7 +450,7 @@
             <div class="exec-picker-search">
               <input type="search" class="spa-inp" data-exec-picker-search="true" placeholder="Search inventory…" autocomplete="off">
             </div>
-            <div class="exec-picker-cards" data-exec-picker-cards="true" style="max-height: 360px; overflow-y: auto;"></div>
+            <div class="exec-picker-cards" data-exec-picker-cards="true"></div>
           </div>
           <div class="execute-add-input-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Add another input</label>
@@ -507,6 +555,156 @@
               chips += '<span class="exec-picker-chip ' + cls + '">' + escapeHtml(reason) + '</span>';
             }
             var isPending = pendingId && pendingId === rawId;
+            function fmtDate(raw) {
+              if (!raw) return '';
+              try { return new Date(raw).toLocaleDateString(); } catch (e) { return String(raw); }
+            }
+            function addMeta(label, value) {
+              if (value == null) return '';
+              var s = String(value);
+              if (!s.trim()) return '';
+              return (
+                '<div style="min-width:0;">' +
+                  '<div style="font-size:11px; color: var(--text-tertiary, #9ca3af); line-height:1.2;">' + escapeHtml(label) + '</div>' +
+                  '<div style="font-size:12px; color: var(--text-primary, #111827); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(s) + '</div>' +
+                '</div>'
+              );
+            }
+            var metaBits = '';
+            // Core production identifiers
+            metaBits += addMeta('Process', inv.process_name || '');
+            metaBits += addMeta('Supplier', inv.supplier || '');
+            metaBits += addMeta('Batch', inv.supplier_batch_number || inv.batch_number || inv.lot_number || '');
+            metaBits += addMeta('Barcode', inv.barcode || '');
+            metaBits += addMeta('Source step', inv.source_step_name || '');
+            // Dates (if present)
+            metaBits += addMeta('Purchase', inv.purchase_date ? fmtDate(inv.purchase_date) : '');
+            metaBits += addMeta('Expiry', inv.expiry_date ? fmtDate(inv.expiry_date) : '');
+            metaBits += addMeta('Ready', inv.ready_date ? fmtDate(inv.ready_date) : '');
+            metaBits += addMeta('Created', inv.created_at ? fmtDate(inv.created_at) : '');
+            // Provenance (if present)
+            metaBits += addMeta('Operator', inv.operator_name || inv.operator || '');
+            metaBits += addMeta('Created by', inv.created_by_name || inv.created_by || '');
+
+            // Extra metadata (bounded): show up to 8 keys, include small objects with "name"/"email".
+            var extraBits = '';
+            try {
+              var extra = inv.extra_data;
+              if (extra && typeof extra === 'object') {
+                var keys = Object.keys(extra);
+                var shown = 0;
+                for (var k = 0; k < keys.length; k++) {
+                  if (shown >= 8) break;
+                  var key = keys[k];
+                  if (key === 'execution_prompts') continue; // handled elsewhere / too verbose
+                  var val = extra[key];
+                  if (val == null) continue;
+                  var vv = '';
+                  if (typeof val === 'object') {
+                    if (val && (val.name || val.email)) vv = String(val.name || val.email);
+                    else continue;
+                  } else {
+                    vv = String(val);
+                  }
+                  if (!vv.trim()) continue;
+                  // Prefer showing common production keys early.
+                  var label = key;
+                  if (/batch|lot/i.test(key)) label = 'Batch';
+                  if (/operator/i.test(key)) label = 'Operator';
+                  if (/created_by|creator|made_by/i.test(key)) label = 'Created by';
+                  extraBits += addMeta(label, vv);
+                  shown++;
+                }
+              }
+            } catch (e) {}
+
+            var metaBlock = '';
+            var combined = (metaBits || '') + (extraBits || '');
+            if (combined) {
+              metaBlock =
+                '<div class="exec-picker-card__meta-grid" style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">' +
+                  combined +
+                '</div>';
+            }
+
+            // Full metadata (expand/collapse): show every scalar key on inv + full JSON for extra_data.
+            function safeString(v) {
+              if (v == null) return '';
+              if (typeof v === 'string') return v;
+              if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+              return '';
+            }
+            var kv = [];
+            try {
+              Object.keys(inv || {}).forEach(function(k) {
+                if (k === 'extra_data') return;
+                var v = inv[k];
+                if (v == null) return;
+                if (typeof v === 'object') return;
+                var s = safeString(v);
+                if (!s || !String(s).trim()) return;
+                kv.push([k, s]);
+              });
+            } catch (e) {}
+            kv.sort(function(a, b) { return a[0].localeCompare(b[0]); });
+            var kvHtml = kv.map(function(p) {
+              return '<div class="exec-picker-kv__k">' + escapeHtml(p[0]) + '</div><div class="exec-picker-kv__v">' + escapeHtml(p[1]) + '</div>';
+            }).join('');
+            var extraJson = '';
+            try {
+              if (inv.extra_data && typeof inv.extra_data === 'object') {
+                extraJson = JSON.stringify(inv.extra_data, null, 2);
+              }
+            } catch (e) {}
+            // Audit history (extra_data.inventory_audit_history): show human-friendly operator + cleaned labels.
+            var auditHtml = '';
+            try {
+              var hist = (inv.extra_data && inv.extra_data.inventory_audit_history) ? inv.extra_data.inventory_audit_history : [];
+              if (Array.isArray(hist) && hist.length) {
+                var rows = hist.slice().reverse().map(function(h) {
+                  var when = h.timestamp_utc || h.timestamp || h.created_at || '';
+                  var src = h.source_method || h.source || '';
+                  var opLabel = h.operator_name || h.operator_email || '';
+                  if (!opLabel) {
+                    var opId = h.user_id || h.operator_id || h.user || '';
+                    opLabel = opId && orgUsersMap && typeof orgUsersMap.get === 'function'
+                      ? (orgUsersMap.get(String(opId)) || String(opId))
+                      : String(opId || '');
+                  }
+                  // Never leak raw UUIDs in the UI; show a friendly fallback.
+                  try {
+                    var uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    if (!opLabel || uuidLike.test(String(opLabel).trim())) opLabel = 'Unknown operator';
+                  } catch (e) {
+                    if (!opLabel) opLabel = 'Unknown operator';
+                  }
+                  // Action isn't logged yet for raw materials; use a sensible default for now.
+                  var action = h.action || h.event || '';
+                  if (!action) action = 'inventory item added';
+                  return (
+                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('action')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(prettyLabel(action)) + '</div>' +
+                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('timestamp_utc')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(when || '—')) + '</div>' +
+                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('operator')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(opLabel || '—')) + '</div>' +
+                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('source_method')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(prettyLabel(src) || '—') + '</div>'
+                  );
+                }).join('');
+                auditHtml =
+                  '<div style="margin-top: 12px;">' +
+                    '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">Audit history</div>' +
+                    '<div class="exec-picker-kv">' + rows + '</div>' +
+                  '</div>';
+              }
+            } catch (e) {}
+
+            var isRawMaterial = String(inv.inventory_type || 'raw_material') === 'raw_material';
+
+            var detailsHtml =
+              '<div class="exec-picker-card__details">' +
+                // Raw materials already surface field-level info in the card; don't dump everything again.
+                (isRawMaterial ? '' : (kvHtml ? ('<div class="exec-picker-kv">' + kvHtml + '</div>') : '<p style="margin:0; font-size:12px; color: var(--text-secondary);">No additional fields.</p>')) +
+                (isRawMaterial ? '' : (extraJson ? ('<pre class="exec-picker-kv__pre">' + escapeHtml(extraJson) + '</pre>') : '')) +
+                auditHtml +
+              '</div>';
             var actions = '';
             if (isPending) {
               actions =
@@ -515,11 +713,19 @@
                 '</div>';
             }
             return (
-              '<div class="exec-picker-card" role="button" tabindex="0" data-inv-id="' + id + '" aria-pressed="' + (isPending ? 'true' : 'false') + '">' +
-                '<p class="exec-picker-card__title">' + name + '</p>' +
-                '<p class="exec-picker-card__sub">' + sub + '</p>' +
+              '<div class="exec-picker-card" role="button" tabindex="0" data-inv-id="' + id + '" aria-pressed="' + (isPending ? 'true' : 'false') + '" data-expanded="false">' +
+                '<div class="exec-picker-card__top">' +
+                  '<div style="min-width:0;">' +
+                    '<p class="exec-picker-card__title">' + name + '</p>' +
+                    '<p class="exec-picker-card__sub">' + sub + '</p>' +
+                  '</div>' +
+                  '<button type="button" class="exec-picker-card__toggle" data-action="toggle-details" data-inv-id="' + id + '">Details</button>' +
+                '</div>' +
                 (chips ? '<div class="exec-picker-card__meta">' + chips + '</div>' : '') +
+                metaBlock +
+                '<div class="exec-picker-card__spacer"></div>' +
                 actions +
+                detailsHtml +
               '</div>'
             );
           }).join('');
@@ -555,6 +761,17 @@
         if (pickerCards && !pickerCards._boundPickerClick) {
           pickerCards._boundPickerClick = true;
           pickerCards.addEventListener('click', function(ev) {
+            var toggleBtn = ev.target && ev.target.closest ? ev.target.closest('[data-action="toggle-details"]') : null;
+            if (toggleBtn) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              var card = toggleBtn.closest('.exec-picker-card');
+              if (!card) return;
+              var isOn = String(card.getAttribute('data-expanded') || 'false') === 'true';
+              card.setAttribute('data-expanded', isOn ? 'false' : 'true');
+              toggleBtn.textContent = isOn ? 'Details' : 'Hide details';
+              return;
+            }
             var confirmBtn = ev.target && ev.target.closest ? ev.target.closest('[data-action="confirm-input"]') : null;
             if (confirmBtn) {
               ev.preventDefault();
@@ -861,9 +1078,15 @@
               }
               var meta = [];
               if (inv.supplier) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Supplier</span><div style="font-weight:600;">' + escapeHtml(inv.supplier) + '</div></div>');
-              if (inv.supplier_batch_number) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Batch</span><div style="font-weight:600;">' + escapeHtml(inv.supplier_batch_number) + '</div></div>');
+              var batchAny = inv.supplier_batch_number || inv.batch_number || inv.lot_number || '';
+              if (batchAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Batch</span><div style="font-weight:600;">' + escapeHtml(batchAny) + '</div></div>');
+              var operatorAny = inv.operator_name || inv.operator || '';
+              if (operatorAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Operator</span><div style="font-weight:600;">' + escapeHtml(operatorAny) + '</div></div>');
+              var createdByAny = inv.created_by_name || inv.created_by || '';
+              if (createdByAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created by</span><div style="font-weight:600;">' + escapeHtml(createdByAny) + '</div></div>');
               if (inv.purchase_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Purchase date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.purchase_date)) + '</div></div>');
               if (inv.expiry_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Expiry date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.expiry_date)) + '</div></div>');
+              if (inv.ready_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Ready date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.ready_date)) + '</div></div>');
               if (inv.created_at) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.created_at)) + '</div></div>');
               selectedCardEl.innerHTML =
                 '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">' +
@@ -1369,7 +1592,41 @@
           if (fileInput) {
             fileInput.addEventListener('change', async function() {
               var files = this.files;
-              if (!files || !files.length || !executionIdForEvidence || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
+              if (!files || !files.length || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
+
+              // Draft mode: evidence upload needs a real execution_id. Create execution on first upload.
+              if (!executionIdForEvidence) {
+                var draftProcessId = modal.dataset.draftProcessId || '';
+                if (draftProcessId && typeof CoreAPI.createExecution === 'function' && typeof CoreAPI.getExecution === 'function') {
+                  try {
+                    var createResult = await CoreAPI.createExecution(draftProcessId);
+                    var newExecId = createResult.id || createResult.execution_id || (createResult.execution && createResult.execution.id);
+                    if (newExecId) {
+                      executionIdForEvidence = String(newExecId);
+                      modal.dataset.executionId = executionIdForEvidence;
+                      // Also set executionStepId if possible (used later by submitExecution)
+                      try {
+                        var executionData = await CoreAPI.getExecution(executionIdForEvidence);
+                        var steps = executionData.execution_steps || [];
+                        var readyStep = steps.find(function(es) { return es.status === 'ready' || es.status === 'READY'; });
+                        if (readyStep && readyStep.id) {
+                          modal.dataset.executionStepId = String(readyStep.id);
+                        }
+                        modal.dataset.draftProcessId = '';
+                      } catch (e) {}
+                    }
+                  } catch (e) {
+                    if (typeof showNotification === 'function') showNotification('error', 'Evidence upload', 'Could not start execution to upload evidence.');
+                    this.value = '';
+                    return;
+                  }
+                } else {
+                  if (typeof showNotification === 'function') showNotification('error', 'Evidence upload', 'Execution context missing.');
+                  this.value = '';
+                  return;
+                }
+              }
+
               var toUpload = [];
               for (var i = 0; i < files.length; i++) {
                 var file = files[i];
@@ -1387,9 +1644,16 @@
               var settled = await Promise.allSettled(toUpload);
               var added = [];
               var failed = 0;
+              var failMsgs = [];
               settled.forEach(function(s, idx) {
                 if (s.status === 'fulfilled' && s.value && s.value.id) added.push(s.value);
-                else failed++;
+                else {
+                  failed++;
+                  try {
+                    var msg = (s && s.reason && (s.reason.message || String(s.reason))) || 'Upload failed';
+                    if (msg) failMsgs.push(msg);
+                  } catch (e) {}
+                }
               });
               evidenceListForStep = evidenceListForStep.concat(added);
               var seenIds = new Set();
@@ -1401,7 +1665,11 @@
               if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
               uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
               renderEvidenceList(evidenceListForStep);
-              if (failed > 0 && typeof showNotification === 'function') showNotification('warning', 'Partial upload', failed + ' of ' + toUpload.length + ' file(s) failed to upload.');
+              if (failed > 0 && typeof showNotification === 'function') {
+                var uniq = Array.from(new Set(failMsgs)).slice(0, 3);
+                var detail = (uniq.length ? (' ' + uniq.join(' | ')) : '');
+                showNotification('error', 'Evidence upload failed', failed + ' of ' + toUpload.length + ' file(s) failed to upload.' + detail);
+              }
               this.value = '';
             });
           }
