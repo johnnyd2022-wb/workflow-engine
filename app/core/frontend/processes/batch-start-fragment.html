@@ -1,5 +1,7 @@
 {# Canonical execute-step fragment (Option B), rendered inside base_spa shell via HTMX #}
 
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
+
 <div class="max-content">
   <style>
     /* These must live in-fragment so they also apply after HTMX boosted navigation. */
@@ -83,6 +85,44 @@
       display: flex;
       justify-content: flex-start;
     }
+
+    /* More information disclosure: match create inputs/outputs (sits ABOVE Inputs). */
+    .batch-start-spa .process-flow-wizard__more.flow-wizard-example-disclosure {
+      width: 100%;
+      margin: 0 0 1rem 0;
+      padding-bottom: 2px;
+      border-top: none !important; /* remove the extra divider above (create pages override this too) */
+      border-bottom: 1px solid var(--border-default, #e5e7eb);
+      box-sizing: border-box;
+      text-align: left;
+    }
+    html[data-spa-theme="dark"] .batch-start-spa .process-flow-wizard__more.flow-wizard-example-disclosure {
+      border-bottom-color: var(--border-default, rgba(148, 163, 184, 0.35));
+    }
+    .batch-start-spa .process-flow-wizard__intro {
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: var(--text-secondary, #6b7280);
+      margin: 0 0 0.75rem 0;
+      font-weight: 400;
+    }
+    .batch-start-spa .process-flow-wizard__intro:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Prevent margin-collapsing oddities between hero and disclosure. */
+    .batch-start-spa .spa-page-hero {
+      padding-bottom: 8px;
+    }
+
+    /* Documentation disclosure: same styling rules as create pages (no top divider). */
+    .batch-start-spa .execute-docs-disclosure.flow-wizard-example-disclosure {
+      border-top: none !important;
+      margin: 0 !important;
+    }
+    .batch-start-spa .execute-docs-disclosure .flow-wizard-example-disclosure__summary {
+      padding-top: 0;
+    }
   </style>
 
   <!-- Banner: same structure as flows2 -->
@@ -129,9 +169,18 @@
 
   <!-- Page hero: centred title -->
   <section class="spa-form-section batch-start-hero spa-page-hero" aria-labelledby="batch-start-title">
-    <h1 class="batch-start-hero__title" id="batch-start-title">Execute step</h1>
+    <h1 class="batch-start-hero__title" id="batch-start-title">Record step</h1>
     <p class="batch-start-hero__desc" id="exec-step-subtitle">Loading step details…</p>
   </section>
+
+  {% call flow_wizard_more_information('More information about recording this step') %}
+    <p class="process-flow-wizard__intro">
+      Confirm the inputs you consumed, record the outputs you produced, and complete any compliance prompts or evidence uploads.
+    </p>
+    <p class="process-flow-wizard__intro">
+      Nothing is saved until you press <strong>Record step</strong> at the bottom of the page.
+    </p>
+  {% endcall %}
 
   {# Inline execution UI (no bordered container) #}
   {% include "shared/execution-modal.html" %}

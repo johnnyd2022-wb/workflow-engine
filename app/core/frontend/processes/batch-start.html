@@ -56,8 +56,8 @@
       box-shadow: none;
       background: transparent;
     }
-    /* Page hero provides heading + actions, so hide modal chrome. */
-    .batch-start-spa #execute-step-modal > .card > div:first-child button { display: none !important; }
+    /* Page hero provides heading + actions, so hide modal chrome (title + close). */
+    .batch-start-spa #execute-step-modal > .card > div:first-child { display: none !important; }
     .batch-start-spa #execute-step-modal > .card > div:last-child { display: none !important; }
 
     /* Section headings: match SPA create/edit pages (small uppercase titles + hairline dividers). */
@@ -82,9 +82,13 @@
     }
     .batch-start-spa #execute-docs-section { padding-top: 0 !important; }
     .batch-start-spa #exec-section-compliance,
-    .batch-start-spa #exec-section-outputs,
-    .batch-start-spa #exec-section-inputs {
+    .batch-start-spa #exec-section-outputs {
       border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+
+    /* First divider should be owned by the "More information" disclosure (like create inputs/outputs). */
+    .batch-start-spa #exec-section-inputs {
+      border-top: none !important;
     }
 
     /* Remove the modal section extra spacing; use consistent stack spacing. */

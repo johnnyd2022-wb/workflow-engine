@@ -44,9 +44,9 @@
       const resp = await fetch('/auth/me', { credentials: 'same-origin', cache: 'no-store' });
       const data = await resp.json();
       const u = data && data.user ? data.user : null;
-      if (!u) return { username: '', email: '' };
+      if (!u) return { id: '', username: '', email: '' };
       const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
-      return { username: name || u.email || '', email: u.email || '' };
+      return { id: u.id || '', username: name || u.email || '', email: u.email || '' };
     };
   }
   async function loadOrgUsersMap() {
@@ -320,34 +320,83 @@
         titleEl.textContent = doc.title || 'Documentation';
         block.appendChild(titleEl);
         if (doc.content_markdown) {
+          // Inline markdown instructions: expanded by default, but collapsible (mobile-friendly).
+          const details = document.createElement('details');
+          details.className = 'flow-wizard-example-disclosure';
+          details.open = true;
+          details.style.cssText = 'margin-top: 12px; border-top: none;';
+
+          const summary = document.createElement('summary');
+          summary.className = 'flow-wizard-example-disclosure__summary';
+          summary.innerHTML = 'View inline<span class="flow-wizard-example-disclosure__hint" aria-hidden="true">(click to collapse)</span>';
+          details.appendChild(summary);
+
+          const body = document.createElement('div');
+          body.className = 'flow-wizard-example-disclosure__body';
+
           const content = document.createElement('div');
           content.style.cssText = 'font-size: 13px; color: var(--text-primary); white-space: pre-wrap; line-height: 1.5;';
           content.innerHTML = (doc.content_markdown || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-          block.appendChild(content);
+          body.appendChild(content);
+          details.appendChild(body);
+          block.appendChild(details);
         } else if (doc.storage_path && doc.id) {
           const viewUrl = typeof CoreAPI.getProcessDocViewUrl === 'function' ? CoreAPI.getProcessDocViewUrl(doc.id) : '#';
           const downloadUrl = typeof CoreAPI.getProcessDocDownloadUrl === 'function' ? CoreAPI.getProcessDocDownloadUrl(doc.id) : viewUrl;
           const mime = (doc.mime_type || '').toLowerCase();
           const isPdf = mime.indexOf('pdf') !== -1;
-          // Narrow viewport only: full-screen in-app overlay with "Back to step". Wide (e.g. touchscreen laptops) opens new tab.
           const isNarrowOrTouch = (typeof window !== 'undefined' && window.innerWidth <= 768);
-          const openLabel = isPdf
-            ? (isNarrowOrTouch ? 'Open instructions (full screen)' : 'Open PDF in new tab to read')
-            : (isNarrowOrTouch ? 'View document' : 'View in new tab');
+          // Inline preview: avoids forcing tab switch/download (mobile-friendly).
+          const preview = document.createElement('details');
+          preview.className = 'flow-wizard-example-disclosure';
+          preview.setAttribute('aria-label', (doc.title || 'Documentation') + ' preview');
+          preview.style.cssText = 'margin-top: 12px; border-top: none;';
+          const sum = document.createElement('summary');
+          sum.className = 'flow-wizard-example-disclosure__summary';
+          sum.innerHTML = 'View inline<span class="flow-wizard-example-disclosure__hint" aria-hidden="true">(click to expand)</span>';
+          preview.appendChild(sum);
+          const body = document.createElement('div');
+          body.className = 'flow-wizard-example-disclosure__body';
+          body.style.cssText = 'padding-bottom: 0;';
+
+          const frameWrap = document.createElement('div');
+          frameWrap.style.cssText = 'width: 100%; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); overflow: hidden; background: var(--bg-card, #fff);';
+
+          if (mime.indexOf('image/') === 0) {
+            const img = document.createElement('img');
+            img.src = viewUrl;
+            img.alt = doc.title || 'Documentation image';
+            img.style.cssText = 'display: block; width: 100%; height: auto;';
+            frameWrap.appendChild(img);
+          } else {
+            const iframe = document.createElement('iframe');
+            iframe.src = viewUrl;
+            iframe.title = doc.title || 'Documentation';
+            iframe.style.cssText = 'display: block; width: 100%; height: min(70vh, 820px); min-height: 420px; border: none;';
+            frameWrap.appendChild(iframe);
+          }
+
+          body.appendChild(frameWrap);
+          preview.appendChild(body);
+          block.appendChild(preview);
+
           const actionsDiv = document.createElement('div');
-          actionsDiv.style.cssText = 'margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;';
-          const openBtn = document.createElement('a');
-          openBtn.href = viewUrl;
-          openBtn.rel = 'noopener';
-          openBtn.target = isNarrowOrTouch ? '_self' : '_blank';
-          openBtn.textContent = openLabel;
-          openBtn.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 12px 18px; background: var(--primary, #2563eb); color: #fff; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; text-decoration: none; box-sizing: border-box;';
-          if (isNarrowOrTouch && typeof window.openDocFullScreenOverlay === 'function') {
-            openBtn.addEventListener('click', function(e) {
+          actionsDiv.style.cssText = 'margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;';
+
+          const openLink = document.createElement('a');
+          openLink.href = viewUrl;
+          openLink.rel = 'noopener';
+          openLink.target = '_blank';
+          openLink.textContent = isPdf ? 'Open full screen' : 'Open in new tab';
+          openLink.style.cssText = 'display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; color: var(--text-secondary); font-size: 14px; text-decoration: none;';
+          if (isNarrowOrTouch && isPdf && typeof window.openDocFullScreenOverlay === 'function') {
+            openLink.target = '_self';
+            openLink.addEventListener('click', function(e) {
               e.preventDefault();
               window.openDocFullScreenOverlay(viewUrl, doc.title || 'Step instructions');
             });
           }
+
           const downloadLink = document.createElement('a');
           downloadLink.href = downloadUrl;
           downloadLink.target = '_blank';
@@ -355,17 +404,10 @@
           downloadLink.download = true;
           downloadLink.textContent = 'Download';
           downloadLink.style.cssText = 'display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; color: var(--text-secondary); font-size: 14px; text-decoration: none;';
-          actionsDiv.appendChild(openBtn);
+
+          actionsDiv.appendChild(openLink);
           actionsDiv.appendChild(downloadLink);
           block.appendChild(actionsDiv);
-          if (isPdf) {
-            const hint = document.createElement('p');
-            hint.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin: 10px 0 0 0; line-height: 1.4;';
-            hint.textContent = isNarrowOrTouch
-              ? 'Opens full screen in the app. Tap "Back to step" to return.'
-              : 'Opens in a new tab so you can read the instructions at full size.';
-            block.appendChild(hint);
-          }
         }
         docsContainer.appendChild(block);
       });
@@ -717,12 +759,142 @@
 
             var isRawMaterial = String(inv.inventory_type || 'raw_material') === 'raw_material';
 
+            function section(title, innerHtml) {
+              if (!innerHtml || !String(innerHtml).trim()) return '';
+              return (
+                '<div style="margin-top: 12px;">' +
+                  '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">' +
+                    escapeHtml(title) +
+                  '</div>' +
+                  innerHtml +
+                '</div>'
+              );
+            }
+            function li(text) {
+              return '<li style="margin: 0 0 6px 0; font-size: 13px; color: var(--text-primary, #111827); line-height: 1.35;">' + text + '</li>';
+            }
+            function fmtIso(iso) {
+              if (!iso) return '';
+              try { return new Date(iso).toISOString().replace('.000Z','Z'); } catch (e) { return String(iso); }
+            }
+            function fmtCustomExpiry(obj) {
+              if (!obj || typeof obj !== 'object') return '';
+              var mode = (obj.mode || '').toString();
+              if (mode === 'duration') {
+                var dv = obj.duration_value != null ? String(obj.duration_value) : '';
+                var du = obj.duration_unit != null ? String(obj.duration_unit).replace(/_/g, ' ') : '';
+                var wv = obj.warning_value != null ? String(obj.warning_value) : '';
+                var wu = obj.warning_unit != null ? String(obj.warning_unit).replace(/_/g, ' ') : '';
+                var base = (dv && du) ? ('Expiry: ' + escapeHtml(dv + ' ' + du)) : '';
+                var warn = (wv && wu) ? ('Warning: ' + escapeHtml(wv + ' ' + wu)) : '';
+                return [base, warn].filter(Boolean).join(' · ');
+              }
+              if (mode === 'datetime') {
+                var exp = obj.expiry_at || obj.expiryAt || '';
+                var warnAt = obj.warning_at || obj.warn_at || obj.warningAt || '';
+                var base2 = exp ? ('Expiry at (UTC): ' + escapeHtml(fmtIso(exp))) : '';
+                var warn2 = warnAt ? ('Warning at (UTC): ' + escapeHtml(fmtIso(warnAt))) : '';
+                return [base2, warn2].filter(Boolean).join(' · ');
+              }
+              // Unknown schema
+              try { return escapeHtml(JSON.stringify(obj)); } catch (e) { return ''; }
+            }
+
+            var humanDetails = '';
+            if (!isRawMaterial) {
+              // Traceability summary for intermediate/final products.
+              var trace = (inv.extra_data && inv.extra_data.execution_trace) ? inv.extra_data.execution_trace : {};
+              var prompts = (inv.extra_data && inv.extra_data.execution_prompts) ? inv.extra_data.execution_prompts : null;
+              var vInputs = (inv.extra_data && inv.extra_data.variable_inputs) ? inv.extra_data.variable_inputs : null;
+              var vOut = (inv.extra_data && inv.extra_data.variable_output) ? inv.extra_data.variable_output : null;
+
+              var top = '';
+              var topRows = '';
+              if (inv.process_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Process name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.process_name)) + '</div>';
+              if (inv.source_step_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Source step name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.source_step_name)) + '</div>';
+              if (topRows) top = '<div class="exec-picker-kv">' + topRows + '</div>';
+              humanDetails += section('Production', top);
+
+              // Custom expiry (differentiate inputs)
+              var ceActual = (inv.extra_data && inv.extra_data.custom_expiry_actual) ? inv.extra_data.custom_expiry_actual : null;
+              var ceInput = vOut && vOut.custom_expiry_input ? vOut.custom_expiry_input : (inv.extra_data && inv.extra_data.custom_expiry_input ? inv.extra_data.custom_expiry_input : null);
+              var ceBits = '';
+              if (ceActual) ceBits += '<div class="exec-picker-kv">' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Custom expiry (applied)') + '</div><div class="exec-picker-kv__v">' + fmtCustomExpiry(ceActual) + '</div>' +
+              '</div>';
+              if (ceInput) ceBits += '<div class="exec-picker-kv" style="margin-top:6px;">' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Custom expiry (entered)') + '</div><div class="exec-picker-kv__v">' + fmtCustomExpiry(ceInput) + '</div>' +
+              '</div>';
+              humanDetails += section('Custom expiry', ceBits);
+
+              // Execution prompts
+              if (prompts && typeof prompts === 'object') {
+                var entries = Object.entries(prompts);
+                if (entries.length) {
+                  var ul = '<ul style="margin: 0; padding-left: 18px;">' +
+                    entries.map(function(e, idx) {
+                      var k = e[0];
+                      var v = e[1];
+                      return li('<span style="font-weight:600;">Prompt ' + (idx + 1) + '</span>' +
+                        ' <span style="color: var(--text-secondary,#6b7280); font-weight:500;">(' + escapeHtml(prettyLabel(k)) + ')</span>' +
+                        ': <span style="font-weight:400;">' + escapeHtml(String(v)) + '</span>');
+                    }).join('') +
+                  '</ul>';
+                  humanDetails += section('Custom prompts', ul);
+                }
+              }
+
+              // Inputs (variable_inputs)
+              if (Array.isArray(vInputs) && vInputs.length) {
+                var ul2 = '<ul style="margin: 0; padding-left: 18px;">' +
+                  vInputs.map(function(x) {
+                    var nm = (x && (x.name || x.input_name || x.inputName)) ? String(x.name || x.input_name || x.inputName) : 'Input';
+                    var q = (x && (x.quantity != null ? x.quantity : x.input_quantity)) != null ? String(x.quantity != null ? x.quantity : x.input_quantity) : '';
+                    var u = (x && (x.unit || x.input_unit)) ? String(x.unit || x.input_unit) : '';
+                    return li('<span style="font-weight:400;">' + escapeHtml(nm) + '</span>' +
+                      (q ? (' <span style="color: var(--text-secondary,#6b7280); font-weight:400;">— ' + escapeHtml(String(q)) + (u ? (' ' + escapeHtml(u)) : '') + '</span>') : ''));
+                  }).join('') +
+                '</ul>';
+                humanDetails += section('Inputs', ul2);
+              }
+
+              // Variable output (human-readable)
+              if (vOut && typeof vOut === 'object') {
+                var outNm = vOut.name || inv.name || '';
+                var outQ = vOut.quantity != null ? vOut.quantity : '';
+                var outU = vOut.unit || inv.unit || '';
+                var outRows = '';
+                if (outNm) outRows += '<div class="exec-picker-kv__k">' + escapeHtml('Output name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(outNm)) + '</div>';
+                if (outQ !== '' && outQ != null) outRows += '<div class="exec-picker-kv__k">' + escapeHtml('Output quantity') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(outQ)) + (outU ? (' ' + escapeHtml(String(outU))) : '') + '</div>';
+                humanDetails += section('Output', outRows ? ('<div class="exec-picker-kv">' + outRows + '</div>') : '');
+              }
+
+              // Execution trace (audit-like, human labels)
+              var auditBits = '';
+              var ts = inv.created_at || (trace && trace.completed_at) || '';
+              // Operator: prefer completed_by label; else map completed_by_user_id to org user display; else email.
+              var op = (trace && (trace.completed_by || trace.completed_by_email)) || inv.operator_name || inv.created_by_name || '';
+              if (!op) {
+                var uid = trace && (trace.completed_by_user_id || trace.completed_by_user || trace.user_id);
+                if (uid && orgUsersMap && typeof orgUsersMap.get === 'function') {
+                  op = orgUsersMap.get(String(uid)) || '';
+                }
+              }
+              var srcMethod = (trace && trace.source_method) || '';
+              if (!srcMethod && inv.source_execution_step_id) srcMethod = 'completed step';
+              auditBits += '<div class="exec-picker-kv">' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Action') + '</div><div class="exec-picker-kv__v">' + escapeHtml('Inventory item created') + '</div>' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Timestamp UTC') + '</div><div class="exec-picker-kv__v">' + escapeHtml(ts ? fmtIso(ts) : '—') + '</div>' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Operator') + '</div><div class="exec-picker-kv__v">' + escapeHtml(op || '—') + '</div>' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Source method') + '</div><div class="exec-picker-kv__v">' + escapeHtml(srcMethod ? prettyLabel(srcMethod) : '—') + '</div>' +
+              '</div>';
+              humanDetails += section('Audit history', auditBits);
+            }
+
             var detailsHtml =
               '<div class="exec-picker-card__details">' +
-                // Raw materials already surface field-level info in the card; don't dump everything again.
-                (isRawMaterial ? '' : (kvHtml ? ('<div class="exec-picker-kv">' + kvHtml + '</div>') : '<p style="margin:0; font-size:12px; color: var(--text-secondary);">No additional fields.</p>')) +
-                (isRawMaterial ? '' : (extraJson ? ('<pre class="exec-picker-kv__pre">' + escapeHtml(extraJson) + '</pre>') : '')) +
-                auditHtml +
+                (isRawMaterial ? '' : humanDetails) +
+                (isRawMaterial ? auditHtml : '') +
               '</div>';
             var actions = '';
             if (isPending) {
@@ -750,7 +922,30 @@
           }).join('');
         }
 
-        var pickerState = { activeType: 'raw_material', q: '' };
+        function pickDefaultPickerType() {
+          var counts = { raw_material: 0, work_in_progress: 0, final_product: 0 };
+          try {
+            (sortedInventory || []).forEach(function(inv) {
+              var t = String((inv && inv.inventory_type) || 'raw_material');
+              if (counts[t] != null) counts[t] += 1;
+            });
+          } catch (e) {}
+          var hasWip = counts.work_in_progress > 0;
+          var hasFinal = counts.final_product > 0;
+          var hasRaw = counts.raw_material > 0;
+
+          // If this input references a previous output, default to intermediate/final if present.
+          if (input && input.source_output_id) {
+            if (hasWip || hasFinal) return (counts.final_product > counts.work_in_progress) ? 'final_product' : 'work_in_progress';
+          }
+          // Otherwise: prefer non-raw types if any exist; else raw.
+          if (hasWip || hasFinal) return (counts.work_in_progress >= counts.final_product) ? 'work_in_progress' : 'final_product';
+          if (hasRaw) return 'raw_material';
+          return 'raw_material';
+        }
+
+        var defaultPickerType = pickDefaultPickerType();
+        var pickerState = { activeType: defaultPickerType, q: '' };
         function syncTabState(next) {
           pickerState.activeType = next;
           pickerTabs.forEach(function(t) {
@@ -772,8 +967,8 @@
           });
         }
         if (pickerPanel) {
-          // initial render
-          renderPickerCards(pickerState.activeType, pickerState.q);
+          // initial render (ensure correct default tab is active)
+          syncTabState(defaultPickerType);
         }
 
         // Card clicks: preview for active row; confirm happens on the picker card.
@@ -1366,7 +1561,7 @@
         // Picker is always visible; keep tab/search predictable once on init.
         if (pickerSearch) pickerSearch.value = '';
         pickerState.q = '';
-        syncTabState('raw_material');
+        syncTabState(defaultPickerType);
 
         function toggleInventoryCardDetails(cardId) {
           var details = inputSection.querySelector('#execute-inv-details-' + safeInputName + '-' + cardId);
@@ -2582,6 +2777,7 @@
       const user = await getCurrentUser();
       executionData.completed_by = user.username;
       executionData.completed_by_email = user.email;
+      executionData.completed_by_user_id = user.id || '';
       executionData.completed_at = new Date().toISOString();
 
       // Complete the step (send allow_consumption_override when user confirmed "Use anyway" for not-ready items)
