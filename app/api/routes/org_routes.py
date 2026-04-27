@@ -109,7 +109,11 @@ def list_users():
                 "first_name": getattr(user, "first_name", None),
                 "last_name": getattr(user, "last_name", None),
                 "display_name": (
-                    (" ".join([x for x in [getattr(user, "first_name", None), getattr(user, "last_name", None)] if x]).strip())
+                    (
+                        " ".join(
+                            [x for x in [getattr(user, "first_name", None), getattr(user, "last_name", None)] if x]
+                        ).strip()
+                    )
                     or user.email
                 ),
                 "role": user.role.value,
