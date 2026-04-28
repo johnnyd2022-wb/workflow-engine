@@ -76,14 +76,20 @@ _FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
 
 def _safe_flow_return_to(value, process_id) -> str:
     """
-    Only allow same-origin relative paths. Blocks open redirects (e.g. ?return_to=https://evil.com).
+    Only allow same-app paths under /core/flows.
+    Blocks open redirects, protocol-relative URLs, encoded bypasses, and path traversal.
     """
-    from urllib.parse import urlparse
+    from posixpath import normpath
+    from urllib.parse import unquote, urlparse, urlunparse
 
     default = f"/core/flows?id={process_id}"
     if value is None or not str(value).strip():
         return default
-    s = str(value).strip()
+    s0 = str(value).strip()
+    # Decode percent-encoding (may reveal // or schemes hidden as %2F%2F…)
+    s = unquote(s0)
+    if s != s0:
+        s = unquote(s)
     low = s.lower()
     if low.startswith(("javascript:", "data:", "vbscript:")):
         return default
@@ -96,7 +102,17 @@ def _safe_flow_return_to(value, process_id) -> str:
     parsed = urlparse(s)
     if parsed.netloc:
         return default
-    return s
+    raw_path = parsed.path or "/"
+    norm_path = normpath(raw_path)
+    if norm_path in ("", "."):
+        return default
+    # Stay within process workspace routes (blocks /core/flows/../../admin → /admin)
+    if norm_path != "/core/flows" and not norm_path.startswith("/core/flows/"):
+        return default
+    if parsed.fragment and ("://" in parsed.fragment or parsed.fragment.lstrip().startswith("//")):
+        return default
+    safe = urlunparse(("", "", norm_path, "", parsed.query, parsed.fragment))
+    return safe
 
 
 _FLOW_WIZARD_PAGE_TO_STEP = {

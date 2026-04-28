@@ -13,6 +13,10 @@
     el.textContent = text || '';
   }
 
+  function ctxBool(v) {
+    return v === true || v === 'true' || v === 1 || v === '1';
+  }
+
   function isOnExecutionStepScreen() {
     // Option B: canonical route is /core/flows/batches/start
     // (Option A alias /core/flows/executions/step redirects here).
@@ -36,13 +40,13 @@
       renderQueued = true;
       return;
     }
-    renderInFlight = true;
     try {
+      renderInFlight = true;
       var ctx = window.ExecutionStepPageContext || {};
       var executionId = ctx.executionId;
       var processId = ctx.processId;
       var stepId = ctx.stepId;
-      var isDraft = ctx.draft === true || ctx.draft === 'true' || ctx.draft === 1 || ctx.draft === '1';
+      var isDraft = ctxBool(ctx.draft);
 
       if (!processId) {
         setSubtitle('Missing process context.');
@@ -69,8 +73,11 @@
         if (executionId && typeof window.CoreAPI.getExecutionWithProcess === 'function') {
           var bundle = await window.CoreAPI.getExecutionWithProcess(executionId);
           if (myToken !== renderToken) return;
-          executionData = bundle && bundle.execution;
-          processData = bundle && bundle.process;
+          if (!bundle || !bundle.execution || !bundle.process) {
+            throw new Error('Invalid execution bundle response');
+          }
+          executionData = bundle.execution;
+          processData = bundle.process;
         } else {
           executionData = await window.CoreAPI.getExecution(executionId);
           if (myToken !== renderToken) return;
@@ -99,13 +106,9 @@
 
       var stepDefinition = null;
       if (isDraft) {
-        stepDefinition = stepMap.get(String(stepId)) || procSteps.find(function (s) {
-          return s && String(s.id) === String(stepId);
-        });
+        stepDefinition = stepMap.get(String(stepId));
       } else {
-        stepDefinition = stepMap.get(String(readyStep.step_id)) || procSteps.find(function (s) {
-          return s && String(s.id) === String(readyStep.step_id);
-        });
+        stepDefinition = stepMap.get(String(readyStep.step_id));
       }
 
       if (!stepDefinition) {

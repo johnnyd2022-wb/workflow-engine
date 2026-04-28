@@ -154,7 +154,11 @@
     window.ExecutionModalConfig = {
       onStepCompleted: async function () {
         try {
-          var dest = (window.ExecutionStepPageContext && window.ExecutionStepPageContext.returnTo) || ('/core/flows?id=' + encodeURIComponent(String({{ process_id|tojson }})));
+          var fallback = '/core/flows?id=' + encodeURIComponent(String({{ process_id|tojson }}));
+          var dest = (window.ExecutionStepPageContext && window.ExecutionStepPageContext.returnTo) || fallback;
+          if (typeof dest !== 'string' || !dest.startsWith('/') || dest.indexOf('://') !== -1) {
+            dest = fallback;
+          }
           window.location.href = dest;
         } catch (e) {
           window.location.href = '/core';
