@@ -101,9 +101,7 @@ class ExecutionRepository:
 
     def get_execution_with_steps(self, execution_id: UUID, org_id: UUID) -> Execution | None:
         """Get execution with execution steps and related Step rows loaded (no N+1)."""
-        q = self.db.query(Execution).options(
-            joinedload(Execution.execution_steps).joinedload(ExecutionStep.step)
-        )
+        q = self.db.query(Execution).options(joinedload(Execution.execution_steps).joinedload(ExecutionStep.step))
         q = q.filter(Execution.id == execution_id, Execution.org_id == org_id)
         return q.first()
 

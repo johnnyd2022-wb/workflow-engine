@@ -1651,8 +1651,7 @@ def get_execution_with_process(execution_id: str):
         **(
             {}
             if minimal
-            else
-            {
+            else {
                 "description": process.description,
                 "category": process.category.value if process.category else None,
                 "is_draft": process.is_draft,
