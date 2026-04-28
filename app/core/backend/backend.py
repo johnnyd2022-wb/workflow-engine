@@ -98,6 +98,7 @@ def _safe_flow_return_to(value, process_id) -> str:
         return default
     return s
 
+
 _FLOW_WIZARD_PAGE_TO_STEP = {
     "process-overview": 1,
     "step-name": 2,
