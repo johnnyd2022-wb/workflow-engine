@@ -88,6 +88,9 @@ def _safe_flow_return_to(value, process_id) -> str:
     if value is None or not str(value).strip():
         return default
     s0 = str(value).strip()
+    # Encoded backslash (%5c) can normalize to "/" or "\" in clients — reject early.
+    if "%5c" in s0.lower():
+        return default
     # Decode percent-encoding (may reveal // or schemes hidden as %2F%2F…).
     # Tradeoff: decoding may transform inputs; we cap normalization at 2 passes on purpose.
     s = unquote(s0)
@@ -105,6 +108,9 @@ def _safe_flow_return_to(value, process_id) -> str:
     if not s.startswith("/"):
         return default
     parsed = urlparse(s)
+    # Only allow path-only relative URLs (no scheme like http:foo or file:).
+    if parsed.scheme:
+        return default
     if parsed.netloc:
         return default
     raw_path = parsed.path or "/"
@@ -113,6 +119,8 @@ def _safe_flow_return_to(value, process_id) -> str:
         return default
     if not norm_path.startswith("/"):
         norm_path = "/" + norm_path
+    if "\\" in norm_path:
+        return default
     # Stay within process workspace routes (blocks /core/flows/../../admin → /admin)
     if norm_path != _ALLOWED_RETURN_PREFIX and not norm_path.startswith(_ALLOWED_RETURN_PREFIX + "/"):
         return default
@@ -1657,27 +1665,30 @@ def get_execution_with_process(execution_id: str):
                 "inputs": step.inputs or [],
                 "outputs": step.outputs or [],
                 "execution_prompts": step.execution_prompts or [],
-                **({} if minimal else {"description": step.description}),
+                "description": None if minimal else step.description,
             }
         )
 
     process_payload = {
         "id": str(process.id),
         "name": process.name,
+        "description": None if minimal else process.description,
+        "category": None if minimal else (process.category.value if process.category else None),
+        "is_draft": None if minimal else process.is_draft,
+        "created_at": None if minimal else (process.created_at.isoformat() if process.created_at else None),
         "steps": steps,
-        **(
-            {}
-            if minimal
-            else {
-                "description": process.description,
-                "category": process.category.value if process.category else None,
-                "is_draft": process.is_draft,
-                "created_at": process.created_at.isoformat() if process.created_at else None,
-            }
-        ),
     }
 
-    return jsonify({"execution": execution_payload, "process": process_payload}), 200
+    return jsonify(
+        {
+            "meta": {
+                "bundle": "execution_with_process",
+                "minimal": minimal,
+            },
+            "execution": execution_payload,
+            "process": process_payload,
+        }
+    ), 200
 
 
 @core_bp.route("/api/core/executions/<execution_id>/steps/<execution_step_id>/complete", methods=["POST"])

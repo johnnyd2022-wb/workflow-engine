@@ -80,6 +80,14 @@
           if (!bundle || !bundle.execution || !bundle.process) {
             throw new Error('Invalid execution bundle response');
           }
+          var bm = bundle.meta;
+          if (
+            !bm ||
+            bm.bundle !== 'execution_with_process' ||
+            typeof bm.minimal !== 'boolean'
+          ) {
+            throw new Error('Invalid execution bundle meta');
+          }
           executionData = bundle.execution;
           processData = bundle.process;
         } else {
@@ -162,14 +170,14 @@
   function scheduleInit() {
     if (initScheduled) return;
     initScheduled = true;
-    // Cheap dedupe across DOMContentLoaded/pageshow/htmx:afterSettle bursts.
-    setTimeout(function () {
+    // Dedupe bursts from DOMContentLoaded / pageshow / htmx:afterSettle (microtask vs timer fragility).
+    queueMicrotask(function () {
       initScheduled = false;
       var now = Date.now();
       if (now - lastInitMs < 50) return;
       lastInitMs = now;
       loadAndRender();
-    }, 0);
+    });
   }
 
   document.addEventListener('DOMContentLoaded', function () { window.initExecutionStepScreen(); });

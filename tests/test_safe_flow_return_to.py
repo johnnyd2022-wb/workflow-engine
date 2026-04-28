@@ -42,6 +42,12 @@ EXPECTED_DEFAULT = f"/core/flows?id={PROCESS_ID}"
         "/core/flows#%2F%2Fevil.com",
         "/core/flows#\\evil.com",
         "/core/flows#javascript:alert(1)",
+        # Encoded backslash in path (before / after decode)
+        "/core/flows%5Cevil",
+        "/core/flows%5cevil",
+        # Malformed scheme: netloc empty but path is not a safe relative path
+        "http:evil.com/path",
+        "https:evil.com",
     ],
 )
 def test_unsafe_or_empty_returns_process_workspace_default(value):
