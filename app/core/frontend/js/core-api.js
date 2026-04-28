@@ -134,7 +134,7 @@ window.CoreAPI = window.CoreAPI || {
 
     /** Single round-trip: execution + process (execute-step SPA). */
     async getExecutionWithProcess(executionId) {
-        return this.request(`/executions/${encodeURIComponent(executionId)}/with-process`);
+        return this.request(`/executions/${encodeURIComponent(executionId)}/with-process?minimal=1`);
     },
     
     async createExecution(processId) {

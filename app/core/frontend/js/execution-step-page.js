@@ -28,20 +28,21 @@
     }
   }
 
-  // Prevent overlapping renders (can cause duplicated sections / remembered unsaved UI).
+  // Single-flight runner to avoid overlapping renders.
   var renderToken = 0;
-  var renderInFlight = false;
-  var renderQueued = false;
+  var inFlightPromise = null;
+  var rerunRequested = false;
+  var initScheduled = false;
+  var lastInitMs = 0;
 
   async function loadAndRender() {
     if (!isOnExecutionStepScreen()) return;
     var myToken = ++renderToken;
-    if (renderInFlight) {
-      renderQueued = true;
-      return;
+    if (inFlightPromise) {
+      rerunRequested = true;
+      return inFlightPromise;
     }
-    try {
-      renderInFlight = true;
+    inFlightPromise = (async function () {
       var ctx = window.ExecutionStepPageContext || {};
       var executionId = ctx.executionId;
       var processId = ctx.processId;
@@ -129,29 +130,41 @@
       } else {
         await window.openExecutionModal(executionId, readyStep, stepDefinition, { renderMode: 'page' });
       }
-    } catch (e) {
+    })().catch(function (e) {
       console.error('Failed to load execution step page:', e);
       setSubtitle('Failed to load.');
       if (window.showNotification) window.showNotification('error', 'Failed to load', e && e.message ? e.message : 'Please try again.');
-    } finally {
-      renderInFlight = false;
-      if (renderQueued) {
-        renderQueued = false;
-        loadAndRender();
+    }).finally(function () {
+      inFlightPromise = null;
+      if (rerunRequested) {
+        rerunRequested = false;
+        scheduleInit();
       }
-    }
+    });
+    return inFlightPromise;
   }
 
   // Expose for HTMX swaps.
   window.initExecutionStepScreen = function () {
     // Only run if the fragment is present.
     if (!qs('execute-step-modal')) return;
-    loadAndRender();
+    scheduleInit();
   };
 
-  document.addEventListener('DOMContentLoaded', function () {
-    window.initExecutionStepScreen();
-  });
+  function scheduleInit() {
+    if (initScheduled) return;
+    initScheduled = true;
+    // Cheap dedupe across DOMContentLoaded/pageshow/htmx:afterSettle bursts.
+    setTimeout(function () {
+      initScheduled = false;
+      var now = Date.now();
+      if (now - lastInitMs < 50) return;
+      lastInitMs = now;
+      loadAndRender();
+    }, 0);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () { window.initExecutionStepScreen(); });
 
   // Back/forward cache: ensure we re-render and do not keep unsaved UI state.
   window.addEventListener('pageshow', function () {

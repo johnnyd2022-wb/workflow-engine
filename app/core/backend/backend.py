@@ -1616,7 +1616,8 @@ def get_execution_with_process(execution_id: str):
             }
         )
 
-    evidence_list = list_evidence_for_execution(execution_uuid, org_id)
+    minimal = str(request.args.get("minimal") or "").strip().lower() in {"1", "true", "yes"}
+    evidence_list = [] if minimal else list_evidence_for_execution(execution_uuid, org_id)
 
     execution_payload = {
         "id": str(execution.id),
@@ -1636,21 +1637,28 @@ def get_execution_with_process(execution_id: str):
                 "step_number": step.step_number,
                 "position": str(step.position) if getattr(step, "position", None) is not None else None,
                 "name": step.name,
-                "description": step.description,
                 "inputs": step.inputs or [],
                 "outputs": step.outputs or [],
                 "execution_prompts": step.execution_prompts or [],
+                **({} if minimal else {"description": step.description}),
             }
         )
 
     process_payload = {
         "id": str(process.id),
         "name": process.name,
-        "description": process.description,
-        "category": process.category.value if process.category else None,
-        "is_draft": process.is_draft,
         "steps": steps,
-        "created_at": process.created_at.isoformat() if process.created_at else None,
+        **(
+            {}
+            if minimal
+            else
+            {
+                "description": process.description,
+                "category": process.category.value if process.category else None,
+                "is_draft": process.is_draft,
+                "created_at": process.created_at.isoformat() if process.created_at else None,
+            }
+        ),
     }
 
     return jsonify({"execution": execution_payload, "process": process_payload}), 200
