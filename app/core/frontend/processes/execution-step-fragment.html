@@ -1,0 +1,34 @@
+{# HTMX fragment for execution step screen. Included by execution-step-page.html #}
+
+<div class="max-content">
+  <div class="exec-step-header">
+    <div style="min-width: 0;">
+      <div class="page-title" style="margin: 0;">Execute step</div>
+      <div class="page-subtitle exec-step-header__meta" id="exec-step-subtitle">
+        Loading step details…
+      </div>
+    </div>
+
+    <div style="display:flex; gap: 10px; align-items:center; flex-wrap: wrap;">
+      <a
+        class="btn btn-secondary btn-sm"
+        href="{{ return_to }}"
+        hx-boost="true"
+      >Back</a>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        id="exec-step-primary-submit"
+        onclick="submitExecution();"
+      >Complete step</button>
+    </div>
+  </div>
+
+  <div class="card exec-step-card">
+    <div class="card-content">
+      {# Reuse the existing modal markup; CSS in page template converts it to inline page content. #}
+      {% include "shared/execution-modal.html" %}
+    </div>
+  </div>
+</div>
+

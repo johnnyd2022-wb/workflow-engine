@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="72" height="72" fill="none">
+  <!-- Settings icon — inactive colour: #94A3B8, active colour: #2DD4BF -->
+  <!-- Track 1 -->
+  <rect x="0" y="15" width="72" height="5.5" rx="2.5" fill="white" fill-opacity="0.1"/>
+  <rect x="0" y="15" width="28" height="5.5" rx="2.5" fill="currentColor" fill-opacity="0.7"/>
+  <circle cx="28" cy="17.5" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-opacity="0.9"/>
+  <circle cx="28" cy="17.5" r="3.5" fill="currentColor" fill-opacity="0.9"/>
+  <!-- Track 2 -->
+  <rect x="0" y="34" width="72" height="5.5" rx="2.5" fill="white" fill-opacity="0.1"/>
+  <rect x="0" y="34" width="46" height="5.5" rx="2.5" fill="currentColor" fill-opacity="0.7"/>
+  <circle cx="46" cy="36.5" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-opacity="0.9"/>
+  <circle cx="46" cy="36.5" r="3.5" fill="currentColor" fill-opacity="0.9"/>
+  <!-- Track 3 -->
+  <rect x="0" y="53" width="72" height="5.5" rx="2.5" fill="white" fill-opacity="0.1"/>
+  <rect x="0" y="53" width="16" height="5.5" rx="2.5" fill="currentColor" fill-opacity="0.5"/>
+  <circle cx="16" cy="55.5" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-opacity="0.5"/>
+  <circle cx="16" cy="55.5" r="3.5" fill="currentColor" fill-opacity="0.5"/>
+</svg>

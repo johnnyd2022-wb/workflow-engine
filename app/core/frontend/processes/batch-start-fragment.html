@@ -1,0 +1,200 @@
+{# Canonical execute-step fragment (Option B), rendered inside base_spa shell via HTMX #}
+
+{% from "processes/process-wizard-more-information-macro.html" import flow_wizard_more_information %}
+
+<div class="max-content">
+  <style>
+    /* These must live in-fragment so they also apply after HTMX boosted navigation. */
+    .batch-start-spa .execute-input-rows-container {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 14px !important;
+      width: 100% !important;
+    }
+    .batch-start-spa .execute-input-rows-container > .execute-input-row {
+      position: static !important;
+      display: block !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 14px 14px 12px 14px;
+      border: 1px solid var(--border-default, #e5e7eb);
+      border-radius: var(--radius-md, 10px);
+      background: var(--bg-card, #fff);
+    }
+    /* Before an input is confirmed, don't show an empty "card container". */
+    .batch-start-spa .execute-input-rows-container > .execute-input-row:not([data-selection-locked="true"]) {
+      padding: 0 !important;
+      border: none !important;
+      background: transparent !important;
+    }
+    /* Also remove the "active row" outline until confirmed (it looks like a floating border). */
+    .batch-start-spa .execute-input-rows-container > .execute-input-row.execute-input-row--active:not([data-selection-locked="true"]) {
+      outline: none !important;
+      outline-offset: 0 !important;
+      border-radius: 0 !important;
+    }
+    .batch-start-spa .execute-input-rows-container > .execute-input-row:not([data-selection-locked="true"]) .execute-remove-input-row-btn {
+      display: none !important;
+    }
+
+    /* Quantity field should be neutral until submit validation paints it red. */
+    .batch-start-spa .execute-quantity-input {
+      border: 1px solid var(--border-default, #e5e7eb) !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+    .batch-start-spa .execute-quantity-input:invalid,
+    .batch-start-spa .execute-quantity-input:user-invalid {
+      border: 1px solid var(--border-default, #e5e7eb) !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+
+    /* Evidence file input: make "Choose files" look like other buttons. */
+    .batch-start-spa .execute-evidence-file-input {
+      font-size: 13px;
+      color: var(--text-secondary, #6b7280);
+    }
+    .batch-start-spa .execute-evidence-file-input::file-selector-button,
+    .batch-start-spa .execute-evidence-file-input::-webkit-file-upload-button {
+      padding: 6px 12px;
+      margin-right: 10px;
+      font-size: 0.875rem;
+      border-radius: var(--radius-md, 10px);
+      border: 1px solid var(--border-default, #e5e7eb);
+      background: var(--bg-secondary, #f3f4f6);
+      color: var(--text-primary, #111827);
+      cursor: pointer;
+    }
+    .batch-start-spa .execute-evidence-file-input::file-selector-button:hover,
+    .batch-start-spa .execute-evidence-file-input::-webkit-file-upload-button:hover {
+      border-color: rgba(59,130,246,0.45);
+    }
+
+    /* Confirm input selection button: match "Add as input" (btn-sm, no red border). */
+    .batch-start-spa .exec-picker-confirm-btn.btn.btn-primary.btn-sm {
+      width: auto !important;
+      margin: 10px 0 0 0 !important;
+      border-color: var(--primary, hsl(210, 100%, 50%)) !important;
+      background: var(--primary, hsl(210, 100%, 50%)) !important;
+      color: #fff !important;
+    }
+
+    /* Confirm input button (row-level): small, left-aligned. */
+    .batch-start-spa .execute-confirm-selection-wrap {
+      display: flex;
+      justify-content: flex-start;
+    }
+
+    /* More information disclosure: match create inputs/outputs (sits ABOVE Inputs). */
+    .batch-start-spa .process-flow-wizard__more.flow-wizard-example-disclosure {
+      width: 100%;
+      margin: 0 0 1rem 0;
+      padding-bottom: 2px;
+      border-top: none !important; /* remove the extra divider above (create pages override this too) */
+      border-bottom: 1px solid var(--border-default, #e5e7eb);
+      box-sizing: border-box;
+      text-align: left;
+    }
+    html[data-spa-theme="dark"] .batch-start-spa .process-flow-wizard__more.flow-wizard-example-disclosure {
+      border-bottom-color: var(--border-default, rgba(148, 163, 184, 0.35));
+    }
+    .batch-start-spa .process-flow-wizard__intro {
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: var(--text-secondary, #6b7280);
+      margin: 0 0 0.75rem 0;
+      font-weight: 400;
+    }
+    .batch-start-spa .process-flow-wizard__intro:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Prevent margin-collapsing oddities between hero and disclosure. */
+    .batch-start-spa .spa-page-hero {
+      padding-bottom: 8px;
+    }
+
+    /* Documentation disclosure: same styling rules as create pages (no top divider). */
+    .batch-start-spa .execute-docs-disclosure.flow-wizard-example-disclosure {
+      border-top: none !important;
+      margin: 0 !important;
+    }
+    .batch-start-spa .execute-docs-disclosure .flow-wizard-example-disclosure__summary {
+      padding-top: 0;
+    }
+  </style>
+
+  <!-- Banner: same structure as flows2 -->
+  <div class="spa-hub-yellow-sleeve">
+    <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
+      <div class="inventory-spa-header__banner" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
+          <defs>
+            <linearGradient id="batchstart-line" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#14B8A6"/>
+              <stop offset="55%" stop-color="#5EEAD4"/>
+              <stop offset="100%" stop-color="#A78BFA"/>
+            </linearGradient>
+            <linearGradient id="batchstart-node-a" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#2DD4BF"/>
+              <stop offset="100%" stop-color="#14B8A6"/>
+            </linearGradient>
+            <linearGradient id="batchstart-node-b" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#C4B5FD"/>
+              <stop offset="100%" stop-color="#8B5CF6"/>
+            </linearGradient>
+            <linearGradient id="batchstart-node-c" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#99F6E4"/>
+              <stop offset="100%" stop-color="#5EEAD4"/>
+            </linearGradient>
+            <filter id="batchstart-soft" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.14"/>
+            </filter>
+          </defs>
+          <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.05"/>
+          <path d="M28 52 C 55 38, 75 38, 100 48 C 125 58, 145 38, 172 52"
+                stroke="url(#batchstart-line)" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.85"/>
+          <g filter="url(#batchstart-soft)">
+            <polygon points="42,52 35,64.124 21,64.124 14,52 21,39.876 35,39.876" fill="url(#batchstart-node-a)"/>
+            <polygon points="116,48 108,61.856 92,61.856 84,48 92,34.144 108,34.144" fill="url(#batchstart-node-b)"/>
+            <polygon points="186,52 179,64.124 165,64.124 158,52 165,39.876 179,39.876" fill="url(#batchstart-node-c)"/>
+          </g>
+          <circle cx="28" cy="52" r="4" fill="#fff" opacity="0.9"/>
+          <circle cx="100" cy="48" r="5" fill="#fff" opacity="0.9"/>
+          <circle cx="172" cy="52" r="4" fill="#fff" opacity="0.9"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page hero: centred title -->
+  <section class="spa-form-section batch-start-hero spa-page-hero" aria-labelledby="batch-start-title">
+    <h1 class="batch-start-hero__title" id="batch-start-title">Record step</h1>
+    <p class="batch-start-hero__desc" id="exec-step-subtitle">Loading step details…</p>
+  </section>
+
+  {% call flow_wizard_more_information('More information about recording this step') %}
+    <p class="process-flow-wizard__intro">
+      Confirm the inputs you consumed, record the outputs you produced, and complete any compliance prompts or evidence uploads.
+    </p>
+    <p class="process-flow-wizard__intro">
+      Nothing is saved until you press <strong>Record step</strong> at the bottom of the page.
+    </p>
+  {% endcall %}
+
+  {# Inline execution UI (no bordered container) #}
+  {% include "shared/execution-modal.html" %}
+
+  <!-- Bottom CTA: record step -->
+  <div style="position: sticky; bottom: 0; margin-top: 18px; padding: 14px 0; background: linear-gradient(to top, var(--bg-primary, #fff) 70%, rgba(255,255,255,0));">
+    <div style="display:flex; justify-content:flex-end;">
+      <button
+        type="button"
+        class="btn btn-primary"
+        onclick="(function(){ try { if (typeof window.submitExecution === 'function') return window.submitExecution(); if (window.showNotification) return window.showNotification('error','Record step','submitExecution() is not available yet.'); alert('submitExecution() is not available yet.'); } catch(e){ if (window.showNotification) window.showNotification('error','Record step failed', e && e.message ? e.message : String(e)); else alert(e && e.message ? e.message : String(e)); } })();"
+      >Record step</button>
+    </div>
+  </div>
+</div>
+

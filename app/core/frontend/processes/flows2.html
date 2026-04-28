@@ -1016,6 +1016,11 @@
           <!-- Batches (was Executions) -->
           <div class="flows2-panel" id="flows2-panel-batches" data-active="false">
             <div style="display:flex; flex-direction:column; gap: 18px;">
+              <div style="display:flex; justify-content:flex-end; gap: 10px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="startExecution(); return false;" title="Start a new batch on a dedicated page (no modal)">
+                  Start new batch
+                </button>
+              </div>
               <section class="spa-form-section" aria-label="In-progress batches">
                 <h2 class="spa-form-section-title" style="margin-bottom: 8px;">IN-PROGRESS BATCHES</h2>
                 <p class="page-subtitle" style="margin-top: 0; margin-bottom: 10px;"><span id="active-count">0</span> in-progress batch<span id="active-count-plural">es</span></p>
@@ -1234,6 +1239,7 @@
       }
     };
   </script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-ui-utils.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='execution-modal.js') }}"></script>
   <script>
     // Global variable for notification timeout
@@ -2369,7 +2375,7 @@
     }
     
     // ============================================================
-    // COMPLETE CURRENT STEP - Opens execution modal
+    // COMPLETE CURRENT STEP - Dedicated SPA screen (replaces modal)
     // ============================================================
     window.completeCurrentStep = async function(executionId) {
       try {
@@ -2394,8 +2400,14 @@
           return;
         }
         
-        // Open execution modal
-        openExecutionModal(executionId, readyStep, stepDefinition);
+        // Navigate to the dedicated execution-step screen.
+        // Keep the legacy modal entrypoint elsewhere during transition.
+        const returnTo = processId ? (`/core/flows?id=${encodeURIComponent(processId)}`) : '/core/flows';
+        const url =
+          `/core/flows/batches/start?execution_id=${encodeURIComponent(executionId)}` +
+          `&id=${encodeURIComponent(processId)}` +
+          `&return_to=${encodeURIComponent(returnTo)}`;
+        window.location.href = url;
         
       } catch (error) {
         console.error('Failed to open execution modal:', error);
@@ -2764,7 +2776,7 @@
       }
     }
     
-    // Start execution: open step 1 modal without creating an execution; execution is created only when user clicks Complete step
+    // Start execution: navigate to step 1 page without creating an execution; execution is created only on Complete step.
     async function startExecution() {
       if (!processId) {
         showNotification('error', 'Error', 'No process ID available');
@@ -2779,12 +2791,20 @@
           showNotification('error', 'Error', 'Process has no steps.');
           return;
         }
-        openExecutionModal(null, null, stepDefinition, { processId: processId });
+        const returnTo = processId ? (`/core/flows?id=${encodeURIComponent(processId)}`) : '/core/flows';
+        const url =
+          `/core/flows/batches/start?draft=1` +
+          `&id=${encodeURIComponent(processId)}` +
+          `&step_id=${encodeURIComponent(stepDefinition.id)}` +
+          `&return_to=${encodeURIComponent(returnTo)}`;
+        window.location.href = url;
       } catch (error) {
         console.error('Failed to open execution modal:', error);
         showNotification('error', 'Failed to Start Execution', error.message || 'Failed to open step. Please try again.');
       }
     }
+
+    // startExecutionSpa removed: startExecution() routes to the dedicated execution-step screen.
     
     // ============================================================
     // MODALS - Make functions global

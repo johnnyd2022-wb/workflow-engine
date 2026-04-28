@@ -514,6 +514,91 @@ def flows():
     return render_template("processes/flows2.html", active_page="core", process_id=process_id)
 
 
+@core_bp.route("/core/flows/executions/step", methods=["GET"])
+@requires_auth
+def execution_step_page():
+    """
+    Dedicated routeable execution step screen (replaces execute-step modal).
+
+    Query params:
+    - execution_id: required (UUID-like string)
+    - process_id: required (UUID-like string)
+    - return_to: optional URL for Back CTA
+    """
+    # Option B: reuse the existing batches/start screen as the canonical execute-step UI.
+    # Keep this route as a compatibility alias.
+    from urllib.parse import urlencode
+
+    args = dict(request.args)
+    args.get("execution_id")
+    process_id = args.get("process_id")
+    args.get("step_id")
+    args.get("draft")
+
+    # Map to the batches/start contract:
+    # - process_id -> id
+    # - keep execution_id, step_id, draft, return_to as-is
+    if process_id and "id" not in args:
+        args["id"] = process_id
+    args.pop("process_id", None)
+
+    dest = "/core/flows/batches/start"
+    q = urlencode([(k, v) for k, v in args.items() if v is not None and v != ""])
+    return redirect(dest + (("?" + q) if q else ""))
+
+
+@core_bp.route("/core/flows/batches/start", methods=["GET"])
+@requires_auth
+def flows_batches_start():
+    """
+    Canonical execute-step screen (Option B).
+
+    Supports:
+    - Draft start: ?draft=1&id=<process_id>&step_id=<step_id>
+    - Existing execution: ?execution_id=<id>&id=<process_id>
+    - Optional: return_to=<url>
+    """
+    process_id = _flow_process_id_from_request()
+    if process_id is None:
+        abort(400)
+    _assert_flow_process_access(process_id)
+
+    execution_id = request.args.get("execution_id")
+    step_id = request.args.get("step_id")
+    draft = request.args.get("draft")
+    is_draft = str(draft or "").strip() in {"1", "true", "True"}
+    if not execution_id and not is_draft:
+        abort(400)
+    if is_draft and not step_id:
+        abort(400)
+
+    return_to = request.args.get("return_to")
+    if not return_to:
+        return_to = "/core/flows?id=" + str(process_id)
+
+    # HTMX fragment support (boosted navigation swaps #page-content).
+    if request.headers.get("HX-Request") == "true":
+        return render_template(
+            "processes/batch-start-hx.html",
+            active_page="core",
+            process_id=str(process_id),
+            execution_id=str(execution_id) if execution_id else None,
+            step_id=str(step_id) if step_id else None,
+            draft=is_draft,
+            return_to=return_to,
+        )
+
+    return render_template(
+        "processes/batch-start.html",
+        active_page="core",
+        process_id=str(process_id),
+        execution_id=str(execution_id) if execution_id else None,
+        step_id=str(step_id) if step_id else None,
+        draft=is_draft,
+        return_to=return_to,
+    )
+
+
 @core_bp.route("/core/flows/create", methods=["GET"])
 @requires_auth
 def flows_create():
@@ -2894,8 +2979,15 @@ def create_inventory_item():
                 source_method = (data.get("source_method") or "barcode_scan").strip()
                 if source_method not in ("manual", "csv_upload", "barcode_scan"):
                     source_method = "barcode_scan"
+                # Human-friendly operator fields for audit (self-contained, append-only).
+                operator_email = getattr(getattr(g, "current_user", None), "email", None)
+                operator_first = getattr(getattr(g, "current_user", None), "first_name", None)
+                operator_last = getattr(getattr(g, "current_user", None), "last_name", None)
+                operator_name = " ".join([x for x in [operator_first, operator_last] if x]) or operator_email
                 audit_entry = {
                     "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
+                    "operator_email": operator_email,
+                    "operator_name": operator_name,
                     "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "source_method": source_method,
                     "quantity_added": str(quantity),
@@ -2960,8 +3052,15 @@ def create_inventory_item():
         source_method = (data.get("source_method") or "manual").strip()
         if source_method not in ("manual", "csv_upload", "barcode_scan"):
             source_method = "manual"
+        # Human-friendly operator fields for audit (self-contained, append-only).
+        operator_email = getattr(getattr(g, "current_user", None), "email", None)
+        operator_first = getattr(getattr(g, "current_user", None), "first_name", None)
+        operator_last = getattr(getattr(g, "current_user", None), "last_name", None)
+        operator_name = " ".join([x for x in [operator_first, operator_last] if x]) or operator_email
         audit_entry = {
             "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
+            "operator_email": operator_email,
+            "operator_name": operator_name,
             "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "source_method": source_method,
         }

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="72" height="72" fill="none">
+  <!-- Dashboard icon — inactive colour: #94A3B8, active colour: #2DD4BF -->
+  <!-- Usage: swap all colour values between inactive/active states -->
+  <rect x="0" y="0" width="72" height="72" rx="10" fill="none" stroke="currentColor" stroke-width="2" stroke-opacity="0.4"/>
+  <rect x="3" y="3" width="31" height="28" rx="6" fill="currentColor" fill-opacity="0.1" stroke="currentColor" stroke-width="1.8" stroke-opacity="0.6"/>
+  <polyline points="7,20 13,12 19,17 25,9 31,14 36,8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.7"/>
+  <rect x="38" y="3" width="31" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-opacity="0.4"/>
+  <rect x="43" y="11" width="18" height="3.5" rx="1.5" fill="currentColor" fill-opacity="0.45"/>
+  <rect x="43" y="17" width="12" height="2.5" rx="1" fill="currentColor" fill-opacity="0.28"/>
+  <rect x="43" y="22" width="15" height="2.5" rx="1" fill="currentColor" fill-opacity="0.2"/>
+  <rect x="3" y="35" width="31" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-opacity="0.3"/>
+  <circle cx="14" cy="49" r="5" fill="currentColor" fill-opacity="0.5"/>
+  <rect x="38" y="35" width="31" height="28" rx="6" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.8" stroke-opacity="0.4"/>
+  <rect x="43" y="54" width="5" height="7"  rx="1.5" fill="currentColor" fill-opacity="0.35"/>
+  <rect x="50" y="50" width="5" height="11" rx="1.5" fill="currentColor" fill-opacity="0.55"/>
+  <rect x="57" y="46" width="5" height="15" rx="1.5" fill="currentColor" fill-opacity="0.7"/>
+  <rect x="64" y="51" width="5" height="10" rx="1.5" fill="currentColor" fill-opacity="0.45"/>
+</svg>

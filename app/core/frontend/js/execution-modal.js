@@ -23,6 +23,158 @@
 
 (function() {
   'use strict';
+  // Safety: this file is used in multiple shells; ensure notifications never crash execution.
+  // Prefer the app's global showNotification (from core.js) when available.
+  if (typeof window.showNotification !== 'function') {
+    window.showNotification = function(type, title, message) {
+      try {
+        var t = (title || '').toString();
+        var m = (message || '').toString();
+        var line = (t ? (t + (m ? ': ' : '')) : '') + (m || '');
+        if (typeof console !== 'undefined' && console.warn) console.warn('Notification:', type, line);
+        // Keep it non-blocking where possible; fall back to alert for visibility.
+        if (type === 'error') alert(line || 'An error occurred.');
+      } catch (e) {}
+    };
+  }
+
+  // Safety: execution submit uses getCurrentUser() for audit fields.
+  if (typeof window.getCurrentUser !== 'function') {
+    window.getCurrentUser = async function() {
+      const resp = await fetch('/auth/me', { credentials: 'same-origin', cache: 'no-store' });
+      const data = await resp.json();
+      const u = data && data.user ? data.user : null;
+      if (!u) return { id: '', username: '', email: '' };
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+      return { id: u.id || '', username: name || u.email || '', email: u.email || '' };
+    };
+  }
+  async function loadOrgUsersMap() {
+    if (window.__OrgUsersMap) return window.__OrgUsersMap;
+    try {
+      async function tryFetchUsers(url) {
+        const resp = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return await resp.json();
+      }
+      // Org users route is served at /org/users (see org_routes.py).
+      const data = await tryFetchUsers('/org/users');
+      const m = new Map();
+      (data.users || []).forEach(function(u) {
+        if (!u || !u.id) return;
+        const label =
+          (u.display_name)
+          || ([u.first_name, u.last_name].filter(Boolean).join(' ').trim())
+          || (u.email || u.name || u.username || u.id);
+        m.set(String(u.id), String(label));
+      });
+      window.__OrgUsersMap = m;
+      return m;
+    } catch (e) {
+      window.__OrgUsersMap = new Map();
+      return window.__OrgUsersMap;
+    }
+  }
+  function prettyLabel(s) {
+    if (!s) return '';
+    return String(s)
+      .replace(/_/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
+
+  // Shared unit conversion helper (used by both render + submit validation).
+  function convertUnit(quantity, fromUnit, toUnit) {
+    if (!fromUnit || !toUnit || String(fromUnit).toLowerCase() === String(toUnit).toLowerCase()) {
+      return quantity;
+    }
+
+    const from = String(fromUnit).toLowerCase();
+    const to = String(toUnit).toLowerCase();
+
+    // Mass conversions (to kg)
+    const massFactors = {
+      kg: 1.0,
+      g: 0.001,
+      mg: 0.000001,
+      lb: 0.453592,
+      oz: 0.0283495,
+      ton: 1000.0,
+      tonne: 1000.0,
+    };
+
+    // Volume conversions (to L)
+    const volumeFactors = {
+      l: 1.0,
+      ml: 0.001,
+      gal: 3.78541,
+      m3: 1000.0,
+      ft3: 28.3168,
+    };
+
+    // Length conversions (to m)
+    const lengthFactors = {
+      m: 1.0,
+      cm: 0.01,
+      mm: 0.001,
+      ft: 0.3048,
+      in: 0.0254,
+    };
+
+    const fromMass = from in massFactors;
+    const toMass = to in massFactors;
+    const fromVolume = from in volumeFactors;
+    const toVolume = to in volumeFactors;
+    const fromLength = from in lengthFactors;
+    const toLength = to in lengthFactors;
+
+    if (fromMass && toMass) {
+      return (quantity * massFactors[from]) / massFactors[to];
+    }
+    if (fromVolume && toVolume) {
+      return (quantity * volumeFactors[from]) / volumeFactors[to];
+    }
+    if (fromLength && toLength) {
+      return (quantity * lengthFactors[from]) / lengthFactors[to];
+    }
+    return quantity;
+  }
+  function ensureExecutionPickerStyles() {
+    if (document.getElementById('execution-modal-picker-styles')) return;
+    var style = document.createElement('style');
+    style.id = 'execution-modal-picker-styles';
+    style.textContent = `
+      .exec-picker-panel { margin-top: 10px; padding: 12px; border-top: 1px solid var(--border-default, #e5e7eb); }
+      .exec-picker-search { margin: 0 0 10px 0; }
+      /* Page-feel picker: no internal scroll; let the page scroll. */
+      .exec-picker-cards { display: flex; flex-direction: column; gap: 10px; max-height: none; overflow: visible; }
+      .exec-picker-card { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 12px 14px; border-radius: var(--radius-md, 10px); border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff); color: var(--text-primary, #111827); cursor: pointer; }
+      .exec-picker-card:hover { border-color: rgba(59,130,246,0.6); }
+      .exec-picker-card[aria-pressed="true"] { border-color: rgba(217, 56, 75, 0.55); box-shadow: 0 0 0 2px rgba(217, 56, 75, 0.10); }
+      /* Keep cards consistent height in collapsed state. */
+      .exec-picker-card[data-expanded="false"] { min-height: 176px; }
+      .exec-picker-card__top { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
+      .exec-picker-card__toggle { flex-shrink:0; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary, #6b7280); border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+      .exec-picker-card__toggle:hover { border-color: rgba(59,130,246,0.5); color: var(--text-primary, #111827); }
+      .exec-picker-card__title { font-size: 14px; font-weight: 700; margin: 0; }
+      .exec-picker-card__sub { font-size: 12px; color: var(--text-tertiary, #9ca3af); margin: 0; line-height: 1.4; }
+      .exec-picker-card__meta { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+      .exec-picker-card__actions { margin-top: 10px; display: flex; justify-content: flex-end; }
+      .exec-picker-card__spacer { flex: 1; }
+      .exec-picker-card__details { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-default, #e5e7eb); display:none; }
+      .exec-picker-card[data-expanded="true"] .exec-picker-card__details { display:block; }
+      .exec-picker-kv { display:grid; grid-template-columns: 160px 1fr; gap: 6px 12px; font-size: 12px; line-height: 1.35; }
+      .exec-picker-kv__k { color: var(--text-tertiary, #9ca3af); font-weight: 600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .exec-picker-kv__v { color: var(--text-primary, #111827); overflow:hidden; text-overflow:ellipsis; }
+      .exec-picker-kv__pre { grid-column: 1 / -1; margin: 8px 0 0 0; padding: 10px 12px; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 10px; overflow:auto; max-height: 320px; white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--text-primary, #111827); }
+      /* Confirm button uses existing .btn styles (btn-sm), no custom red border. */
+      .exec-picker-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-secondary, #f3f4f6); font-size: 12px; color: var(--text-secondary, #6b7280); }
+      .exec-picker-chip--warn { background: hsl(42, 93%, 96%); border-color: var(--warning, #f59e0b); color: #92400e; }
+      .exec-picker-chip--danger { background: hsl(0, 93%, 94%); border-color: var(--error, #ef4444); color: #b91c1c; }
+    `;
+    document.head.appendChild(style);
+  }
   
   // Get configuration or use defaults
   const config = window.ExecutionModalConfig || {
@@ -65,16 +217,34 @@
   // OPEN EXECUTION MODAL
   // ============================================================
   window.openExecutionModal = async function(executionId, executionStep, stepDefinition, options) {
+    ensureExecutionPickerStyles();
     const modal = document.getElementById('execute-step-modal');
     if (!modal) {
       console.error('Execution modal not found');
       return;
     }
+    options = options || {};
+    var renderMode = (options && options.renderMode) ? String(options.renderMode) : 'modal';
+    if (window.ExecutionUI && typeof window.ExecutionUI.setRenderMode === 'function') {
+      window.ExecutionUI.setRenderMode(modal, renderMode);
+    } else {
+      modal.dataset.renderMode = renderMode;
+    }
     function showModal() {
+      if (window.ExecutionUI && typeof window.ExecutionUI.isPageMode === 'function') {
+        if (window.ExecutionUI.isPageMode(modal)) return;
+      } else if (renderMode === 'page') {
+        return;
+      }
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
     }
     function hideModal() {
+      if (window.ExecutionUI && typeof window.ExecutionUI.isPageMode === 'function') {
+        if (window.ExecutionUI.isPageMode(modal)) return;
+      } else if (renderMode === 'page') {
+        return;
+      }
       modal.style.display = 'none';
       document.body.style.overflow = 'auto';
     }
@@ -91,7 +261,6 @@
       if (docsSection) docsSection.style.display = 'none';
       return { inputsContainer, promptsContainer, outputsContainer, docsContainer, docsSection };
     }
-    options = options || {};
     var isDraft = executionId == null || executionStep == null;
     if (isDraft && options.processId) {
       modal.dataset.draftProcessId = options.processId;
@@ -131,11 +300,12 @@
       ? CoreAPI.getStepDocumentation(stepId).catch(function() { return { documents: [] }; })
       : Promise.resolve({ documents: [] });
     
-    const [inventoryData, expiredData, untrackedData, docsData] = await Promise.all([
+    const [inventoryData, expiredData, untrackedData, docsData, orgUsersMap] = await Promise.all([
       CoreAPI.getInventory(),
       CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; }),
       CoreAPI.getUntrackedItems().catch(function() { return { untracked_items: [] }; }),
-      docsPromise
+      docsPromise,
+      loadOrgUsersMap()
     ]);
     
     // Render step documentation (SOP) – read-only
@@ -150,34 +320,83 @@
         titleEl.textContent = doc.title || 'Documentation';
         block.appendChild(titleEl);
         if (doc.content_markdown) {
+          // Inline markdown instructions: expanded by default, but collapsible (mobile-friendly).
+          const details = document.createElement('details');
+          details.className = 'flow-wizard-example-disclosure';
+          details.open = true;
+          details.style.cssText = 'margin-top: 12px; border-top: none;';
+
+          const summary = document.createElement('summary');
+          summary.className = 'flow-wizard-example-disclosure__summary';
+          summary.innerHTML = 'View inline<span class="flow-wizard-example-disclosure__hint" aria-hidden="true">(click to collapse)</span>';
+          details.appendChild(summary);
+
+          const body = document.createElement('div');
+          body.className = 'flow-wizard-example-disclosure__body';
+
           const content = document.createElement('div');
           content.style.cssText = 'font-size: 13px; color: var(--text-primary); white-space: pre-wrap; line-height: 1.5;';
           content.innerHTML = (doc.content_markdown || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-          block.appendChild(content);
+          body.appendChild(content);
+          details.appendChild(body);
+          block.appendChild(details);
         } else if (doc.storage_path && doc.id) {
           const viewUrl = typeof CoreAPI.getProcessDocViewUrl === 'function' ? CoreAPI.getProcessDocViewUrl(doc.id) : '#';
           const downloadUrl = typeof CoreAPI.getProcessDocDownloadUrl === 'function' ? CoreAPI.getProcessDocDownloadUrl(doc.id) : viewUrl;
           const mime = (doc.mime_type || '').toLowerCase();
           const isPdf = mime.indexOf('pdf') !== -1;
-          // Narrow viewport only: full-screen in-app overlay with "Back to step". Wide (e.g. touchscreen laptops) opens new tab.
           const isNarrowOrTouch = (typeof window !== 'undefined' && window.innerWidth <= 768);
-          const openLabel = isPdf
-            ? (isNarrowOrTouch ? 'Open instructions (full screen)' : 'Open PDF in new tab to read')
-            : (isNarrowOrTouch ? 'View document' : 'View in new tab');
+          // Inline preview: avoids forcing tab switch/download (mobile-friendly).
+          const preview = document.createElement('details');
+          preview.className = 'flow-wizard-example-disclosure';
+          preview.setAttribute('aria-label', (doc.title || 'Documentation') + ' preview');
+          preview.style.cssText = 'margin-top: 12px; border-top: none;';
+          const sum = document.createElement('summary');
+          sum.className = 'flow-wizard-example-disclosure__summary';
+          sum.innerHTML = 'View inline<span class="flow-wizard-example-disclosure__hint" aria-hidden="true">(click to expand)</span>';
+          preview.appendChild(sum);
+          const body = document.createElement('div');
+          body.className = 'flow-wizard-example-disclosure__body';
+          body.style.cssText = 'padding-bottom: 0;';
+
+          const frameWrap = document.createElement('div');
+          frameWrap.style.cssText = 'width: 100%; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); overflow: hidden; background: var(--bg-card, #fff);';
+
+          if (mime.indexOf('image/') === 0) {
+            const img = document.createElement('img');
+            img.src = viewUrl;
+            img.alt = doc.title || 'Documentation image';
+            img.style.cssText = 'display: block; width: 100%; height: auto;';
+            frameWrap.appendChild(img);
+          } else {
+            const iframe = document.createElement('iframe');
+            iframe.src = viewUrl;
+            iframe.title = doc.title || 'Documentation';
+            iframe.style.cssText = 'display: block; width: 100%; height: min(70vh, 820px); min-height: 420px; border: none;';
+            frameWrap.appendChild(iframe);
+          }
+
+          body.appendChild(frameWrap);
+          preview.appendChild(body);
+          block.appendChild(preview);
+
           const actionsDiv = document.createElement('div');
-          actionsDiv.style.cssText = 'margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;';
-          const openBtn = document.createElement('a');
-          openBtn.href = viewUrl;
-          openBtn.rel = 'noopener';
-          openBtn.target = isNarrowOrTouch ? '_self' : '_blank';
-          openBtn.textContent = openLabel;
-          openBtn.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 12px 18px; background: var(--primary, #2563eb); color: #fff; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; text-decoration: none; box-sizing: border-box;';
-          if (isNarrowOrTouch && typeof window.openDocFullScreenOverlay === 'function') {
-            openBtn.addEventListener('click', function(e) {
+          actionsDiv.style.cssText = 'margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;';
+
+          const openLink = document.createElement('a');
+          openLink.href = viewUrl;
+          openLink.rel = 'noopener';
+          openLink.target = '_blank';
+          openLink.textContent = isPdf ? 'Open full screen' : 'Open in new tab';
+          openLink.style.cssText = 'display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; color: var(--text-secondary); font-size: 14px; text-decoration: none;';
+          if (isNarrowOrTouch && isPdf && typeof window.openDocFullScreenOverlay === 'function') {
+            openLink.target = '_self';
+            openLink.addEventListener('click', function(e) {
               e.preventDefault();
               window.openDocFullScreenOverlay(viewUrl, doc.title || 'Step instructions');
             });
           }
+
           const downloadLink = document.createElement('a');
           downloadLink.href = downloadUrl;
           downloadLink.target = '_blank';
@@ -185,17 +404,10 @@
           downloadLink.download = true;
           downloadLink.textContent = 'Download';
           downloadLink.style.cssText = 'display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; color: var(--text-secondary); font-size: 14px; text-decoration: none;';
-          actionsDiv.appendChild(openBtn);
+
+          actionsDiv.appendChild(openLink);
           actionsDiv.appendChild(downloadLink);
           block.appendChild(actionsDiv);
-          if (isPdf) {
-            const hint = document.createElement('p');
-            hint.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin: 10px 0 0 0; line-height: 1.4;';
-            hint.textContent = isNarrowOrTouch
-              ? 'Opens full screen in the app. Tap "Back to step" to return.'
-              : 'Opens in a new tab so you can read the instructions at full size.';
-            block.appendChild(hint);
-          }
         }
         docsContainer.appendChild(block);
       });
@@ -223,71 +435,7 @@
       return null;
     }
     
-    // Simple unit conversion function for frontend
-    function convertUnit(quantity, fromUnit, toUnit) {
-      if (!fromUnit || !toUnit || fromUnit.toLowerCase() === toUnit.toLowerCase()) {
-        return quantity;
-      }
-      
-      const from = fromUnit.toLowerCase();
-      const to = toUnit.toLowerCase();
-      
-      // Mass conversions (to kg)
-      const massFactors = {
-        'kg': 1.0,
-        'g': 0.001,
-        'mg': 0.000001,
-        'lb': 0.453592,
-        'oz': 0.0283495,
-        'ton': 1000.0,
-        'tonne': 1000.0
-      };
-      
-      // Volume conversions (to L)
-      const volumeFactors = {
-        'l': 1.0,
-        'ml': 0.001,
-        'gal': 3.78541,
-        'm3': 1000.0,
-        'ft3': 28.3168
-      };
-      
-      // Length conversions (to m)
-      const lengthFactors = {
-        'm': 1.0,
-        'cm': 0.01,
-        'mm': 0.001,
-        'ft': 0.3048,
-        'in': 0.0254
-      };
-      
-      // Check if both units are in the same category
-      const fromMass = from in massFactors;
-      const toMass = to in massFactors;
-      const fromVolume = from in volumeFactors;
-      const toVolume = to in volumeFactors;
-      const fromLength = from in lengthFactors;
-      const toLength = to in lengthFactors;
-      
-      if (fromMass && toMass) {
-        const fromFactor = massFactors[from];
-        const toFactor = massFactors[to];
-        return (quantity * fromFactor) / toFactor;
-      }
-      if (fromVolume && toVolume) {
-        const fromFactor = volumeFactors[from];
-        const toFactor = volumeFactors[to];
-        return (quantity * fromFactor) / toFactor;
-      }
-      if (fromLength && toLength) {
-        const fromFactor = lengthFactors[from];
-        const toFactor = lengthFactors[to];
-        return (quantity * fromFactor) / toFactor;
-      }
-      
-      // If units don't match or are incompatible, return original quantity
-      return quantity;
-    }
+    // convertUnit is defined at module scope (used by submit validation too).
     
     // Render variable inputs (inventory selection)
     const variableInputs = (stepDefinition.inputs || []).filter(input => 
@@ -304,10 +452,11 @@
     });
     
     if (variableInputs.length > 0 && inputsContainer) {
-      variableInputs.forEach(input => {
+      variableInputs.forEach((input, inputIdx) => {
         const inputSection = document.createElement('div');
         inputSection.className = 'execute-input-section';
-        inputSection.style.cssText = 'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
+        // Page-style sections (no card chrome). CSS can further refine.
+        inputSection.style.cssText = 'margin: 0; padding: 18px 0;' + (inputIdx === 0 ? '' : ' border-top: 1px solid var(--border-default, #e5e7eb);');
         
         // Filter inventory by material name (shows all matching items)
         const matchingInventory = allInventory.filter(inv => 
@@ -352,10 +501,17 @@
             </label>
           </div>
           <div class="execute-input-rows-container" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}"></div>
-          <div class="execute-inventory-picker-dropdown-section" style="display: none;">
-            <div class="execute-inventory-picker-dropdown" style="display: none; position: absolute; top: 0; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
-              <div class="execute-inventory-picker-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
+          <div class="exec-picker-panel" data-exec-picker-panel="true" style="display:block; margin-top: 10px;">
+            <div class="flow-mode-segmented" role="group" aria-label="Inventory category" style="margin-bottom: 10px;">
+              <button type="button" class="flow-mode-segment flow-mode-segment--active" data-exec-type="raw_material" aria-pressed="true">Raw materials</button>
+              <button type="button" class="flow-mode-segment" data-exec-type="work_in_progress" aria-pressed="false">Intermediate</button>
+              <button type="button" class="flow-mode-segment" data-exec-type="final_product" aria-pressed="false">Final products</button>
+              <button type="button" class="flow-mode-segment" data-exec-type="all" aria-pressed="false">All</button>
             </div>
+            <div class="exec-picker-search">
+              <input type="search" class="spa-inp" data-exec-picker-search="true" placeholder="Search inventory…" autocomplete="off">
+            </div>
+            <div class="exec-picker-cards" data-exec-picker-cards="true"></div>
           </div>
           <div class="execute-add-input-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Add another input</label>
@@ -369,12 +525,500 @@
         `;
 
         const rowsContainer = inputSection.querySelector('.execute-input-rows-container');
-        const dropdownSection = inputSection.querySelector('.execute-inventory-picker-dropdown-section');
-        const dropdown = inputSection.querySelector('.execute-inventory-picker-dropdown');
-        const cardsContainer = inputSection.querySelector('.execute-inventory-picker-cards');
-        if (dropdownSection) dropdownSection._executeInputSectionRef = inputSection;
+        const pickerPanel = inputSection.querySelector('[data-exec-picker-panel="true"]');
+        const pickerCards = inputSection.querySelector('[data-exec-picker-cards="true"]');
+        const pickerSearch = inputSection.querySelector('[data-exec-picker-search="true"]');
+
+        // Ensure rows stack cleanly when adding additional inputs.
+        if (rowsContainer) {
+          rowsContainer.style.display = 'flex';
+          rowsContainer.style.flexDirection = 'column';
+          rowsContainer.style.gap = '12px';
+        }
+        const pickerTabs = Array.prototype.slice.call(inputSection.querySelectorAll('.flow-mode-segment'));
         let rowIndex = 0;
         if (!modal._inputStateByKey) modal._inputStateByKey = new Map();
+
+        function getInvType(inv) {
+          return inv && (inv.inventory_type || inv.type || inv.category || inv.item_type || '');
+        }
+        function invMatchesType(inv, selected) {
+          if (!selected || selected === 'all') return true;
+          var t = String(getInvType(inv) || '').toLowerCase();
+          return t === selected;
+        }
+        function invMatchesSearch(inv, q) {
+          q = (q || '').trim().toLowerCase();
+          if (!q) return true;
+          var hay = [
+            inv && inv.name,
+            inv && inv.unit,
+            inv && inv.supplier,
+            inv && inv.supplier_batch_number,
+            inv && inv.process_name,
+          ].filter(Boolean).join(' ').toLowerCase();
+          return hay.indexOf(q) !== -1;
+        }
+        function fmtQty(inv) {
+          if (!inv) return '';
+          var q = (inv.quantity != null) ? String(inv.quantity) : '';
+          var u = inv.unit || '';
+          return (q && u) ? (q + ' ' + u) : (q || u || '');
+        }
+        function renderPickerCards(activeType, q) {
+          if (!pickerCards) return;
+          var activeRow = modal._editingInputRow;
+          var selectedId = '';
+          try {
+            var sel = activeRow ? activeRow.querySelector('.execute-inventory-select') : null;
+            selectedId = sel && sel.value ? String(sel.value) : '';
+          } catch (e) {}
+          var pendingId = '';
+          try {
+            var pSel = activeRow ? activeRow.getAttribute('data-pending-inv-id') : '';
+            pendingId = pSel ? String(pSel) : '';
+          } catch (e) {}
+          // Hide items that are already selected in any input row (operator workflow).
+          var selectedIds = new Set();
+          try {
+            inputSection.querySelectorAll('.execute-input-row').forEach(function(r) {
+              var s = r.querySelector('.execute-inventory-select');
+              if (s && s.value) selectedIds.add(String(s.value));
+            });
+          } catch (e) {}
+
+          var list = sortedInventory
+            .filter(function(inv) { return invMatchesType(inv, activeType); })
+            .filter(function(inv) { return invMatchesSearch(inv, q); });
+          list = list.filter(function(inv) {
+            var id = String(inv.id);
+            if (pendingId && id === pendingId) return true;
+            return !selectedIds.has(id);
+          });
+
+          // Keep list stable during preview (no reordering).
+          if (!list.length) {
+            pickerCards.innerHTML = '<p style="margin: 0; font-size: 13px; color: var(--text-secondary); padding: 6px 2px;">No inventory matches.</p>';
+            return;
+          }
+          pickerCards.innerHTML = list.map(function(inv) {
+            var rawId = String(inv.id);
+            var id = escapeHtml(rawId);
+            var name = escapeHtml(inv.name || 'Unnamed');
+            var sub = escapeHtml(fmtQty(inv));
+            var chips = '';
+            if (inv.supplier) chips += '<span class="exec-picker-chip">' + escapeHtml(inv.supplier) + '</span>';
+            if (inv.supplier_batch_number) chips += '<span class="exec-picker-chip">Batch ' + escapeHtml(inv.supplier_batch_number) + '</span>';
+            var reason = getExpiredReason(inv.id);
+            if (reason) {
+              var cls = reason.toLowerCase().indexOf('untracked') !== -1 ? 'exec-picker-chip--danger'
+                : (reason.toLowerCase().indexOf('expired') !== -1 ? 'exec-picker-chip--danger' : 'exec-picker-chip--warn');
+              chips += '<span class="exec-picker-chip ' + cls + '">' + escapeHtml(reason) + '</span>';
+            }
+            var isPending = pendingId && pendingId === rawId;
+            function fmtDate(raw) {
+              if (!raw) return '';
+              try { return new Date(raw).toLocaleDateString(); } catch (e) { return String(raw); }
+            }
+            function addMeta(label, value) {
+              if (value == null) return '';
+              var s = String(value);
+              if (!s.trim()) return '';
+              return (
+                '<div style="min-width:0;">' +
+                  '<div style="font-size:11px; color: var(--text-tertiary, #9ca3af); line-height:1.2;">' + escapeHtml(label) + '</div>' +
+                  '<div style="font-size:12px; color: var(--text-primary, #111827); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(s) + '</div>' +
+                '</div>'
+              );
+            }
+            var metaBits = '';
+            // Core production identifiers
+            metaBits += addMeta('Process', inv.process_name || '');
+            metaBits += addMeta('Supplier', inv.supplier || '');
+            metaBits += addMeta('Batch', inv.supplier_batch_number || inv.batch_number || inv.lot_number || '');
+            metaBits += addMeta('Barcode', inv.barcode || '');
+            metaBits += addMeta('Source step', inv.source_step_name || '');
+            // Dates (if present)
+            metaBits += addMeta('Purchase', inv.purchase_date ? fmtDate(inv.purchase_date) : '');
+            metaBits += addMeta('Expiry', inv.expiry_date ? fmtDate(inv.expiry_date) : '');
+            metaBits += addMeta('Ready', inv.ready_date ? fmtDate(inv.ready_date) : '');
+            metaBits += addMeta('Created', inv.created_at ? fmtDate(inv.created_at) : '');
+            // Provenance (if present)
+            metaBits += addMeta('Operator', inv.operator_name || inv.operator || '');
+            metaBits += addMeta('Created by', inv.created_by_name || inv.created_by || '');
+
+            // Extra metadata (bounded): show up to 8 keys, include small objects with "name"/"email".
+            var extraBits = '';
+            try {
+              var extra = inv.extra_data;
+              if (extra && typeof extra === 'object') {
+                var keys = Object.keys(extra);
+                var shown = 0;
+                for (var k = 0; k < keys.length; k++) {
+                  if (shown >= 8) break;
+                  var key = keys[k];
+                  if (key === 'execution_prompts') continue; // handled elsewhere / too verbose
+                  var val = extra[key];
+                  if (val == null) continue;
+                  var vv = '';
+                  if (typeof val === 'object') {
+                    if (val && (val.name || val.email)) vv = String(val.name || val.email);
+                    else continue;
+                  } else {
+                    vv = String(val);
+                  }
+                  if (!vv.trim()) continue;
+                  // Prefer showing common production keys early.
+                  var label = key;
+                  if (/batch|lot/i.test(key)) label = 'Batch';
+                  if (/operator/i.test(key)) label = 'Operator';
+                  if (/created_by|creator|made_by/i.test(key)) label = 'Created by';
+                  extraBits += addMeta(label, vv);
+                  shown++;
+                }
+              }
+            } catch (e) {}
+
+            var metaBlock = '';
+            var combined = (metaBits || '') + (extraBits || '');
+            if (combined) {
+              metaBlock =
+                '<div class="exec-picker-card__meta-grid" style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">' +
+                  combined +
+                '</div>';
+            }
+
+            // Full metadata (expand/collapse): show every scalar key on inv + full JSON for extra_data.
+            function safeString(v) {
+              if (v == null) return '';
+              if (typeof v === 'string') return v;
+              if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+              return '';
+            }
+            var kv = [];
+            try {
+              Object.keys(inv || {}).forEach(function(k) {
+                if (k === 'extra_data') return;
+                var v = inv[k];
+                if (v == null) return;
+                if (typeof v === 'object') return;
+                var s = safeString(v);
+                if (!s || !String(s).trim()) return;
+                kv.push([k, s]);
+              });
+            } catch (e) {}
+            kv.sort(function(a, b) { return a[0].localeCompare(b[0]); });
+            var kvHtml = kv.map(function(p) {
+              return '<div class="exec-picker-kv__k">' + escapeHtml(p[0]) + '</div><div class="exec-picker-kv__v">' + escapeHtml(p[1]) + '</div>';
+            }).join('');
+            var extraJson = '';
+            try {
+              if (inv.extra_data && typeof inv.extra_data === 'object') {
+                extraJson = JSON.stringify(inv.extra_data, null, 2);
+              }
+            } catch (e) {}
+            // Audit history (extra_data.inventory_audit_history): show human-friendly operator + cleaned labels.
+            var auditHtml = '';
+            try {
+              var hist = (inv.extra_data && inv.extra_data.inventory_audit_history) ? inv.extra_data.inventory_audit_history : [];
+              if (Array.isArray(hist) && hist.length) {
+                var rows = hist.slice().reverse().map(function(h) {
+                  var when = h.timestamp_utc || h.timestamp || h.created_at || '';
+                  var src = h.source_method || h.source || '';
+                  var opLabel = h.operator_name || h.operator_email || '';
+                  if (!opLabel) {
+                    var opId = h.user_id || h.operator_id || h.user || '';
+                    opLabel = opId && orgUsersMap && typeof orgUsersMap.get === 'function'
+                      ? (orgUsersMap.get(String(opId)) || String(opId))
+                      : String(opId || '');
+                  }
+                  // Never leak raw UUIDs in the UI; show a friendly fallback.
+                  try {
+                    var uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    if (!opLabel || uuidLike.test(String(opLabel).trim())) opLabel = 'Unknown operator';
+                  } catch (e) {
+                    if (!opLabel) opLabel = 'Unknown operator';
+                  }
+                  // Action isn't logged yet for raw materials; use a sensible default for now.
+                  var action = h.action || h.event || '';
+                  if (!action) action = 'inventory item added';
+                  return (
+                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('action')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(prettyLabel(action)) + '</div>' +
+                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('timestamp_utc')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(when || '—')) + '</div>' +
+                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('operator')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(opLabel || '—')) + '</div>' +
+                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('source_method')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(prettyLabel(src) || '—') + '</div>'
+                  );
+                }).join('');
+                auditHtml =
+                  '<div style="margin-top: 12px;">' +
+                    '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">Audit history</div>' +
+                    '<div class="exec-picker-kv">' + rows + '</div>' +
+                  '</div>';
+              }
+            } catch (e) {}
+
+            var isRawMaterial = String(inv.inventory_type || 'raw_material') === 'raw_material';
+
+            function section(title, innerHtml) {
+              if (!innerHtml || !String(innerHtml).trim()) return '';
+              return (
+                '<div style="margin-top: 12px;">' +
+                  '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">' +
+                    escapeHtml(title) +
+                  '</div>' +
+                  innerHtml +
+                '</div>'
+              );
+            }
+            function li(text) {
+              return '<li style="margin: 0 0 6px 0; font-size: 13px; color: var(--text-primary, #111827); line-height: 1.35;">' + text + '</li>';
+            }
+            function fmtIso(iso) {
+              if (!iso) return '';
+              try { return new Date(iso).toISOString().replace('.000Z','Z'); } catch (e) { return String(iso); }
+            }
+            function fmtCustomExpiry(obj) {
+              if (!obj || typeof obj !== 'object') return '';
+              var mode = (obj.mode || '').toString();
+              if (mode === 'duration') {
+                var dv = obj.duration_value != null ? String(obj.duration_value) : '';
+                var du = obj.duration_unit != null ? String(obj.duration_unit).replace(/_/g, ' ') : '';
+                var wv = obj.warning_value != null ? String(obj.warning_value) : '';
+                var wu = obj.warning_unit != null ? String(obj.warning_unit).replace(/_/g, ' ') : '';
+                var base = (dv && du) ? ('Expiry: ' + escapeHtml(dv + ' ' + du)) : '';
+                var warn = (wv && wu) ? ('Warning: ' + escapeHtml(wv + ' ' + wu)) : '';
+                return [base, warn].filter(Boolean).join(' · ');
+              }
+              if (mode === 'datetime') {
+                var exp = obj.expiry_at || obj.expiryAt || '';
+                var warnAt = obj.warning_at || obj.warn_at || obj.warningAt || '';
+                var base2 = exp ? ('Expiry at (UTC): ' + escapeHtml(fmtIso(exp))) : '';
+                var warn2 = warnAt ? ('Warning at (UTC): ' + escapeHtml(fmtIso(warnAt))) : '';
+                return [base2, warn2].filter(Boolean).join(' · ');
+              }
+              // Unknown schema
+              try { return escapeHtml(JSON.stringify(obj)); } catch (e) { return ''; }
+            }
+
+            var humanDetails = '';
+            if (!isRawMaterial) {
+              // Traceability summary for intermediate/final products.
+              var trace = (inv.extra_data && inv.extra_data.execution_trace) ? inv.extra_data.execution_trace : {};
+              var prompts = (inv.extra_data && inv.extra_data.execution_prompts) ? inv.extra_data.execution_prompts : null;
+              var vInputs = (inv.extra_data && inv.extra_data.variable_inputs) ? inv.extra_data.variable_inputs : null;
+              var vOut = (inv.extra_data && inv.extra_data.variable_output) ? inv.extra_data.variable_output : null;
+
+              var top = '';
+              var topRows = '';
+              if (inv.process_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Process name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.process_name)) + '</div>';
+              if (inv.source_step_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Source step name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.source_step_name)) + '</div>';
+              if (topRows) top = '<div class="exec-picker-kv">' + topRows + '</div>';
+              humanDetails += section('Production', top);
+
+              // Custom expiry (differentiate inputs)
+              var ceActual = (inv.extra_data && inv.extra_data.custom_expiry_actual) ? inv.extra_data.custom_expiry_actual : null;
+              var ceInput = vOut && vOut.custom_expiry_input ? vOut.custom_expiry_input : (inv.extra_data && inv.extra_data.custom_expiry_input ? inv.extra_data.custom_expiry_input : null);
+              var ceBits = '';
+              if (ceActual) ceBits += '<div class="exec-picker-kv">' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Custom expiry (applied)') + '</div><div class="exec-picker-kv__v">' + fmtCustomExpiry(ceActual) + '</div>' +
+              '</div>';
+              if (ceInput) ceBits += '<div class="exec-picker-kv" style="margin-top:6px;">' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Custom expiry (entered)') + '</div><div class="exec-picker-kv__v">' + fmtCustomExpiry(ceInput) + '</div>' +
+              '</div>';
+              humanDetails += section('Custom expiry', ceBits);
+
+              // Execution prompts
+              if (prompts && typeof prompts === 'object') {
+                var entries = Object.entries(prompts);
+                if (entries.length) {
+                  var ul = '<ul style="margin: 0; padding-left: 18px;">' +
+                    entries.map(function(e, idx) {
+                      var k = e[0];
+                      var v = e[1];
+                      return li('<span style="font-weight:600;">Prompt ' + (idx + 1) + '</span>' +
+                        ' <span style="color: var(--text-secondary,#6b7280); font-weight:500;">(' + escapeHtml(prettyLabel(k)) + ')</span>' +
+                        ': <span style="font-weight:400;">' + escapeHtml(String(v)) + '</span>');
+                    }).join('') +
+                  '</ul>';
+                  humanDetails += section('Custom prompts', ul);
+                }
+              }
+
+              // Inputs (variable_inputs)
+              if (Array.isArray(vInputs) && vInputs.length) {
+                var ul2 = '<ul style="margin: 0; padding-left: 18px;">' +
+                  vInputs.map(function(x) {
+                    var nm = (x && (x.name || x.input_name || x.inputName)) ? String(x.name || x.input_name || x.inputName) : 'Input';
+                    var q = (x && (x.quantity != null ? x.quantity : x.input_quantity)) != null ? String(x.quantity != null ? x.quantity : x.input_quantity) : '';
+                    var u = (x && (x.unit || x.input_unit)) ? String(x.unit || x.input_unit) : '';
+                    return li('<span style="font-weight:400;">' + escapeHtml(nm) + '</span>' +
+                      (q ? (' <span style="color: var(--text-secondary,#6b7280); font-weight:400;">— ' + escapeHtml(String(q)) + (u ? (' ' + escapeHtml(u)) : '') + '</span>') : ''));
+                  }).join('') +
+                '</ul>';
+                humanDetails += section('Inputs', ul2);
+              }
+
+              // Variable output (human-readable)
+              if (vOut && typeof vOut === 'object') {
+                var outNm = vOut.name || inv.name || '';
+                var outQ = vOut.quantity != null ? vOut.quantity : '';
+                var outU = vOut.unit || inv.unit || '';
+                var outRows = '';
+                if (outNm) outRows += '<div class="exec-picker-kv__k">' + escapeHtml('Output name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(outNm)) + '</div>';
+                if (outQ !== '' && outQ != null) outRows += '<div class="exec-picker-kv__k">' + escapeHtml('Output quantity') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(outQ)) + (outU ? (' ' + escapeHtml(String(outU))) : '') + '</div>';
+                humanDetails += section('Output', outRows ? ('<div class="exec-picker-kv">' + outRows + '</div>') : '');
+              }
+
+              // Execution trace (audit-like, human labels)
+              var auditBits = '';
+              var ts = inv.created_at || (trace && trace.completed_at) || '';
+              // Operator: prefer completed_by label; else map completed_by_user_id to org user display; else email.
+              var op = (trace && (trace.completed_by || trace.completed_by_email)) || inv.operator_name || inv.created_by_name || '';
+              if (!op) {
+                var uid = trace && (trace.completed_by_user_id || trace.completed_by_user || trace.user_id);
+                if (uid && orgUsersMap && typeof orgUsersMap.get === 'function') {
+                  op = orgUsersMap.get(String(uid)) || '';
+                }
+              }
+              var srcMethod = (trace && trace.source_method) || '';
+              if (!srcMethod && inv.source_execution_step_id) srcMethod = 'completed step';
+              auditBits += '<div class="exec-picker-kv">' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Action') + '</div><div class="exec-picker-kv__v">' + escapeHtml('Inventory item created') + '</div>' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Timestamp UTC') + '</div><div class="exec-picker-kv__v">' + escapeHtml(ts ? fmtIso(ts) : '—') + '</div>' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Operator') + '</div><div class="exec-picker-kv__v">' + escapeHtml(op || '—') + '</div>' +
+                '<div class="exec-picker-kv__k">' + escapeHtml('Source method') + '</div><div class="exec-picker-kv__v">' + escapeHtml(srcMethod ? prettyLabel(srcMethod) : '—') + '</div>' +
+              '</div>';
+              humanDetails += section('Audit history', auditBits);
+            }
+
+            var detailsHtml =
+              '<div class="exec-picker-card__details">' +
+                (isRawMaterial ? '' : humanDetails) +
+                (isRawMaterial ? auditHtml : '') +
+              '</div>';
+            var actions = '';
+            if (isPending) {
+              actions =
+                '<div class="exec-picker-card__actions" style="justify-content:flex-start;">' +
+                  '<button type="button" class="btn btn-secondary btn-sm exec-picker-confirm-btn" data-action="confirm-input" data-inv-id="' + id + '">Confirm input</button>' +
+                '</div>';
+            }
+            return (
+              '<div class="exec-picker-card" role="button" tabindex="0" data-inv-id="' + id + '" aria-pressed="' + (isPending ? 'true' : 'false') + '" data-expanded="false">' +
+                '<div class="exec-picker-card__top">' +
+                  '<div style="min-width:0;">' +
+                    '<p class="exec-picker-card__title">' + name + '</p>' +
+                    '<p class="exec-picker-card__sub">' + sub + '</p>' +
+                  '</div>' +
+                  '<button type="button" class="exec-picker-card__toggle" data-action="toggle-details" data-inv-id="' + id + '">Details</button>' +
+                '</div>' +
+                (chips ? '<div class="exec-picker-card__meta">' + chips + '</div>' : '') +
+                metaBlock +
+                '<div class="exec-picker-card__spacer"></div>' +
+                actions +
+                detailsHtml +
+              '</div>'
+            );
+          }).join('');
+        }
+
+        function pickDefaultPickerType() {
+          var counts = { raw_material: 0, work_in_progress: 0, final_product: 0 };
+          try {
+            (sortedInventory || []).forEach(function(inv) {
+              var t = String((inv && inv.inventory_type) || 'raw_material');
+              if (counts[t] != null) counts[t] += 1;
+            });
+          } catch (e) {}
+          var hasWip = counts.work_in_progress > 0;
+          var hasFinal = counts.final_product > 0;
+          var hasRaw = counts.raw_material > 0;
+
+          // If this input references a previous output, default to intermediate/final if present.
+          if (input && input.source_output_id) {
+            if (hasWip || hasFinal) return (counts.final_product > counts.work_in_progress) ? 'final_product' : 'work_in_progress';
+          }
+          // Otherwise: prefer non-raw types if any exist; else raw.
+          if (hasWip || hasFinal) return (counts.work_in_progress >= counts.final_product) ? 'work_in_progress' : 'final_product';
+          if (hasRaw) return 'raw_material';
+          return 'raw_material';
+        }
+
+        var defaultPickerType = pickDefaultPickerType();
+        var pickerState = { activeType: defaultPickerType, q: '' };
+        function syncTabState(next) {
+          pickerState.activeType = next;
+          pickerTabs.forEach(function(t) {
+            var isOn = t.getAttribute('data-exec-type') === next;
+            t.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+            t.classList.toggle('flow-mode-segment--active', isOn);
+          });
+          renderPickerCards(pickerState.activeType, pickerState.q);
+        }
+        pickerTabs.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            syncTabState(btn.getAttribute('data-exec-type') || 'all');
+          });
+        });
+        if (pickerSearch) {
+          pickerSearch.addEventListener('input', function() {
+            pickerState.q = pickerSearch.value || '';
+            renderPickerCards(pickerState.activeType, pickerState.q);
+          });
+        }
+        if (pickerPanel) {
+          // initial render (ensure correct default tab is active)
+          syncTabState(defaultPickerType);
+        }
+
+        // Card clicks: preview for active row; confirm happens on the picker card.
+        if (pickerCards && !pickerCards._boundPickerClick) {
+          pickerCards._boundPickerClick = true;
+          pickerCards.addEventListener('click', function(ev) {
+            var toggleBtn = ev.target && ev.target.closest ? ev.target.closest('[data-action="toggle-details"]') : null;
+            if (toggleBtn) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              var card = toggleBtn.closest('.exec-picker-card');
+              if (!card) return;
+              var isOn = String(card.getAttribute('data-expanded') || 'false') === 'true';
+              card.setAttribute('data-expanded', isOn ? 'false' : 'true');
+              toggleBtn.textContent = isOn ? 'Details' : 'Hide details';
+              return;
+            }
+            var confirmBtn = ev.target && ev.target.closest ? ev.target.closest('[data-action="confirm-input"]') : null;
+            if (confirmBtn) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              var invId = confirmBtn.getAttribute('data-inv-id') || '';
+              var targetRow = modal._editingInputRow || (rowsContainer && rowsContainer.firstElementChild);
+              if (!targetRow) return;
+              var locked = targetRow.getAttribute('data-selection-locked') === 'true';
+              var selNow = targetRow.querySelector('.execute-inventory-select');
+              if (locked && selNow && selNow.value) return;
+              setRowSelection(targetRow, invId);
+              targetRow.setAttribute('data-pending-inv-id', '');
+              targetRow.setAttribute('data-selection-locked', 'true');
+              // Once confirmed, hide picker for this row to reduce noise.
+              try { if (pickerPanel) pickerPanel.style.display = 'none'; } catch (e) {}
+              renderPickerCards(pickerState.activeType, pickerState.q);
+              return;
+            }
+            var btn = ev.target && ev.target.closest ? ev.target.closest('.exec-picker-card') : null;
+            if (!btn) return;
+            ev.preventDefault();
+            var invId = btn.getAttribute('data-inv-id') || '';
+            var targetRow = modal._editingInputRow || (rowsContainer && rowsContainer.firstElementChild);
+            if (!targetRow) return;
+            // If already confirmed for this row, don't allow changing unless they add another input row.
+            var locked = targetRow.getAttribute('data-selection-locked') === 'true';
+            var selNow = targetRow.querySelector('.execute-inventory-select');
+            if (locked && selNow && selNow.value) return;
+            // Preview selection first; require explicit confirmation.
+            targetRow.setAttribute('data-pending-inv-id', invId);
+            renderPickerCards(pickerState.activeType, pickerState.q);
+          });
+        }
 
         function createInputRow(isFirst) {
           const rowId = 'execute-input-row-' + safeInputName + '-' + rowIndex++;
@@ -384,6 +1028,10 @@
           row.id = rowId;
           row.dataset.inputName = input.name;
           row.dataset.stateKey = stateKey;
+          // Ensure rows naturally stack in the document flow.
+          row.style.display = 'block';
+          row.style.width = '100%';
+          row.style.position = 'relative';
           if (!modal._inputStateByKey.has(stateKey)) {
             modal._inputStateByKey.set(stateKey, {
               input_name: input.name,
@@ -394,35 +1042,58 @@
             });
           }
           row.innerHTML = `
-            <div style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
-              <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-quantity="" data-unit="" data-expired-reason="" value="">
-              <div class="execute-inventory-picker-wrapper" style="position: relative;" data-input-name="${escapeHtml(input.name)}">
-                <div class="execute-inventory-picker-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); ${isFirst ? errorStyle : ''} background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
-                  <span class="execute-inventory-picker-label" style="flex: 1; text-align: left; min-width: 0;">Select inventory item...</span>
-                  <span class="execute-inventory-picker-arrow-box" style="flex-shrink: 0; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-md, 6px); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); color: var(--text-secondary);">
-                    <svg class="execute-inventory-picker-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
-                  </span>
-                </div>
-              </div>
-              <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
-              <div class="execute-input-unexpected-row-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
+            <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-quantity="" data-unit="" data-expired-reason="" value="">
+
+            <div style="display:flex; justify-content:flex-end; margin-bottom: 10px;">
+              <button type="button" class="execute-remove-input-row-btn btn btn-secondary btn-sm" style="font-size: 12px;">Remove input</button>
             </div>
-            <div>
-              <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity to Consume</label>
+
+            <div class="execute-selected-inv-card" style="display:none; padding: 12px 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); background: var(--bg-card, #fff);"></div>
+
+            <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
+            <div class="execute-input-unexpected-row-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
+
+            <div class="execute-qty-pane" style="display:none; margin-top: 12px;">
+              <label class="spa-field-label">Quantity to consume</label>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="number" class="form-input execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="flex: 1; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+                <input type="number" class="spa-inp execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="flex: 1;">
                 <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
               </div>
             </div>
-            ${!isFirst ? '<button type="button" class="execute-remove-input-row-btn btn btn-secondary btn-sm" style="margin-top: 8px; font-size: 12px;">Remove this input</button>' : ''}
           `;
           var qtyInput = row.querySelector('.execute-quantity-input');
           if (qtyInput) {
+            // Ensure we start from a neutral border (avoid stale inline styles / bfcache).
+            qtyInput.style.border = '1px solid var(--border-default, #e5e7eb)';
             qtyInput.addEventListener('input', function() {
               var st = modal._inputStateByKey.get(stateKey);
               if (!st) return;
               var q = parseFloat(qtyInput.value);
               st.quantity = isNaN(q) ? 0 : q;
+            });
+          }
+
+          // Remove input: if it's the only row, clear selection + unlock; otherwise remove the row.
+          var removeBtn = row.querySelector('.execute-remove-input-row-btn');
+          if (removeBtn) {
+            removeBtn.addEventListener('click', function(e) {
+              if (e) { e.preventDefault(); e.stopPropagation(); }
+              row.setAttribute('data-pending-inv-id', '');
+              row.setAttribute('data-selection-locked', 'false');
+              if (!rowsContainer) return;
+              var rowCount = rowsContainer.querySelectorAll('.execute-input-row').length;
+              if (rowCount <= 1) {
+                setRowSelection(row, '');
+                setActiveRow(row);
+              } else {
+                var stateKey = row.dataset.stateKey || '';
+                if (stateKey && modal._inputStateByKey) modal._inputStateByKey.delete(stateKey);
+                row.remove();
+                // Ensure active row points to a remaining row.
+                var next = rowsContainer.querySelector('.execute-input-row');
+                if (next) setActiveRow(next);
+              }
+              renderPickerCards(pickerState.activeType, pickerState.q);
             });
           }
           return row;
@@ -500,7 +1171,9 @@
           inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
             var sel = row.querySelector('.execute-inventory-select');
             var qtyInput = row.querySelector('.execute-quantity-input');
-            if (sel && sel.value && qtyInput && isExpectedItem(sel.value)) {
+            // Compare against total selected quantity for this input (regardless of "expected vs unexpected" inventory),
+            // since "unexpected selection" is already handled by a separate warning.
+            if (sel && sel.value && qtyInput) {
               var v = parseFloat(qtyInput.value);
               if (!isNaN(v) && v > 0) totalExpectedQty += v;
             }
@@ -546,10 +1219,11 @@
         function setRowSelection(rowEl, invId) {
           if (!rowEl) return;
           const hiddenInput = rowEl.querySelector('.execute-inventory-select');
-          const triggerLabel = rowEl.querySelector('.execute-inventory-picker-label');
           const quantityInput = rowEl.querySelector('.execute-quantity-input');
           const unitDisplay = rowEl.querySelector('.execute-quantity-unit-display');
           const expiredWarningEl = rowEl.querySelector('.execute-input-expired-warning');
+          const selectedCardEl = rowEl.querySelector('.execute-selected-inv-card');
+          const qtyPane = rowEl.querySelector('.execute-qty-pane');
           if (!hiddenInput) return;
           var stateKey = rowEl.dataset.stateKey || '';
           var st = stateKey ? modal._inputStateByKey.get(stateKey) : null;
@@ -557,8 +1231,13 @@
           hiddenInput.dataset.quantity = '';
           hiddenInput.dataset.unit = '';
           hiddenInput.dataset.expiredReason = '';
-          if (triggerLabel) triggerLabel.textContent = getInventorySelectionLabel(invId);
+
+          // Always clear warning when changing selection; only show if the selected item needs it.
+          if (expiredWarningEl) { expiredWarningEl.style.display = 'none'; expiredWarningEl.textContent = ''; }
+
           if (!invId) {
+            if (selectedCardEl) { selectedCardEl.style.display = 'none'; selectedCardEl.innerHTML = ''; }
+            if (qtyPane) qtyPane.style.display = 'none';
             if (unitDisplay && quantityInput) {
               unitDisplay.textContent = quantityInput.dataset.stepUnit || input.unit || '';
               quantityInput.value = input.quantity || '';
@@ -572,18 +1251,22 @@
               var qv = quantityInput ? parseFloat(quantityInput.value) : NaN;
               st.quantity = isNaN(qv) ? 0 : qv;
             }
-            if (expiredWarningEl) { expiredWarningEl.style.display = 'none'; expiredWarningEl.textContent = ''; }
             updateSectionQtyExpectedWarning();
             updateUnexpectedMaterialWarning();
             return;
           }
           const inv = invId ? inventoryById.get(String(invId)) : null;
           if (inv && unitDisplay && quantityInput) {
-            var expectedQty = parseFloat(input.quantity) || 0;
-            var invQty = inv.quantity != null && inv.quantity !== '' ? parseFloat(inv.quantity) : 0;
-            quantityInput.value = (expectedQty > 0 && invQty > 0) ? Math.min(expectedQty, invQty) : (inv.quantity != null && inv.quantity !== '' ? inv.quantity : quantityInput.value);
-            quantityInput.dataset.originalQuantity = inv.quantity != null ? String(inv.quantity) : '';
-            unitDisplay.textContent = inv.unit || '';
+            // Prefill should follow the step definition expected quantity (operator-friendly),
+            // not "available inventory quantity".
+            var expectedQty = parseFloat(input.quantity);
+            if (!isNaN(expectedQty) && expectedQty > 0) {
+              quantityInput.value = String(expectedQty);
+            } else if (!quantityInput.value) {
+              quantityInput.value = input.quantity || '';
+            }
+            // Keep display unit as the step unit if available; inventory unit remains for validation.
+            unitDisplay.textContent = (quantityInput.dataset.stepUnit || input.unit || inv.unit || '');
             quantityInput.dataset.inventoryUnit = inv.unit || '';
           }
           if (inv) {
@@ -593,7 +1276,7 @@
             hiddenInput.dataset.expiredReason = reason || '';
             if (st) {
               st.inventory_item_id = String(inv.id);
-              st.unit = inv.unit || '';
+              st.unit = (quantityInput && (quantityInput.dataset.stepUnit || input.unit)) || (input.unit || inv.unit || '');
               st.expired_reason = reason || '';
               var q = quantityInput ? parseFloat(quantityInput.value) : NaN;
               st.quantity = isNaN(q) ? 0 : q;
@@ -602,14 +1285,37 @@
               expiredWarningEl.textContent = 'Check: ' + reason;
               expiredWarningEl.style.display = 'block';
             }
-            const wrapper = rowEl.querySelector('.execute-inventory-picker-wrapper');
-            const trigger = rowEl.querySelector('.execute-inventory-picker-trigger');
-            if (trigger) {
-              trigger.style.border = reason ? '2px solid var(--error, #ef4444)' : '';
-              trigger.style.boxShadow = reason ? '0 0 0 1px var(--error, #ef4444)' : '';
+            if (selectedCardEl) {
+              function fmtDate(raw) {
+                if (!raw) return '';
+                try { return new Date(raw).toLocaleDateString(); } catch (e) { return String(raw); }
+              }
+              var meta = [];
+              if (inv.supplier) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Supplier</span><div style="font-weight:600;">' + escapeHtml(inv.supplier) + '</div></div>');
+              var batchAny = inv.supplier_batch_number || inv.batch_number || inv.lot_number || '';
+              if (batchAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Batch</span><div style="font-weight:600;">' + escapeHtml(batchAny) + '</div></div>');
+              var operatorAny = inv.operator_name || inv.operator || '';
+              if (operatorAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Operator</span><div style="font-weight:600;">' + escapeHtml(operatorAny) + '</div></div>');
+              var createdByAny = inv.created_by_name || inv.created_by || '';
+              if (createdByAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created by</span><div style="font-weight:600;">' + escapeHtml(createdByAny) + '</div></div>');
+              if (inv.purchase_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Purchase date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.purchase_date)) + '</div></div>');
+              if (inv.expiry_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Expiry date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.expiry_date)) + '</div></div>');
+              if (inv.ready_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Ready date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.ready_date)) + '</div></div>');
+              if (inv.created_at) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.created_at)) + '</div></div>');
+              selectedCardEl.innerHTML =
+                '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">' +
+                  '<div style="min-width:0;">' +
+                    '<div style="font-size:14px; font-weight:700; color:var(--text-primary,#111827);">' + escapeHtml(inv.name || 'Selected item') + '</div>' +
+                    '<div style="font-size:12px; color:var(--text-secondary,#6b7280); margin-top:4px;">' + escapeHtml((inv.process_name ? (inv.process_name + ' · ') : '') + fmtQty(inv)) + '</div>' +
+                  '</div>' +
+                  (reason ? ('<div class="exec-picker-chip exec-picker-chip--warn" style="flex-shrink:0;">' + escapeHtml(reason) + '</div>') : '') +
+                '</div>' +
+                (meta.length ? ('<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:12px;">' + meta.join('') + '</div>') : '');
+              selectedCardEl.style.display = 'block';
             }
+            if (qtyPane) qtyPane.style.display = 'block';
           }
-          if (quantityInput) quantityInput.style.border = '';
+          if (quantityInput) quantityInput.style.border = '1px solid var(--border-default, #e5e7eb)';
           updateSectionQtyExpectedWarning();
           updateUnexpectedMaterialWarning();
         }
@@ -620,10 +1326,7 @@
         const hiddenInput = firstRow.querySelector('.execute-inventory-select');
         const quantityInput = firstRow.querySelector('.execute-quantity-input');
         const unitDisplay = firstRow.querySelector('.execute-quantity-unit-display');
-        const wrapper = firstRow.querySelector('.execute-inventory-picker-wrapper');
-        const trigger = firstRow.querySelector('.execute-inventory-picker-trigger');
         const triggerLabel = firstRow.querySelector('.execute-inventory-picker-label');
-        const triggerArrow = firstRow.querySelector('.execute-inventory-picker-arrow');
         const expiredWarningEl = firstRow.querySelector('.execute-input-expired-warning');
 
         function getInventorySelectionLabel(invId) {
@@ -634,26 +1337,21 @@
           return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
         }
 
-        function closeInventoryDropdown() {
-          if (dropdown) dropdown.style.display = 'none';
-          if (dropdownSection) {
-            dropdownSection.style.display = 'none';
-            var ref = dropdownSection._executeInputSectionRef;
-            var addPane = ref ? ref.querySelector('.execute-add-input-pane') : null;
-            if (ref && addPane && dropdownSection.parentNode !== ref) {
-              ref.insertBefore(dropdownSection, addPane);
-            }
-          }
-          if (modal._editingInputRow) {
-            var arrow = modal._editingInputRow.querySelector('.execute-inventory-picker-arrow');
-            if (arrow) arrow.style.transform = 'rotate(0deg)';
-            modal._editingInputRow = null;
-          }
-          document.removeEventListener('click', closeInventoryDropdownOutside);
-          if (modal._closeInventoryDropdown === closeInventoryDropdown) modal._closeInventoryDropdown = null;
-        }
-        function closeInventoryDropdownOutside(e) {
-          if (inputSection && !inputSection.contains(e.target)) closeInventoryDropdown();
+        // Always-on card picker: clicking a row makes it active; clicking a card assigns selection to the active row.
+        function setActiveRow(rowEl) {
+          if (!rowEl) return;
+          modal._editingInputRow = rowEl;
+          inputSection.querySelectorAll('.execute-input-row').forEach(function(r) {
+            r.classList.toggle('execute-input-row--active', r === rowEl);
+          });
+
+          // If the active row is already confirmed, keep picker hidden to reduce noise.
+          try {
+            var locked = rowEl.getAttribute('data-selection-locked') === 'true';
+            var sel = rowEl.querySelector('.execute-inventory-select');
+            var hasSel = Boolean(sel && sel.value);
+            if (pickerPanel) pickerPanel.style.display = (locked && hasSel) ? 'none' : 'block';
+          } catch (e) {}
         }
         function getSelectedInventoryIdsExcludingRow(excludeRowEl) {
           var ids = new Set();
@@ -715,8 +1413,7 @@
               toggleInventoryCardDetails(id);
               return;
             }
-            setRowSelection(modal._editingInputRow, id);
-            closeInventoryDropdown();
+            setRowSelection(modal._editingInputRow || firstRow, id);
           };
           return card;
         }
@@ -827,7 +1524,7 @@
           noneCard.dataset.inventoryId = '';
           noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
           noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
-          noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(modal._editingInputRow, ''); closeInventoryDropdown(); };
+          noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(modal._editingInputRow || rowEl, ''); };
           cardsContainer.appendChild(noneCard);
           if (isFirstRow) {
             sortedInventory.forEach(function(inv) {
@@ -861,38 +1558,10 @@
           }
         }
 
-        function openDropdownForRow(rowEl) {
-          modal._closeInventoryDropdown = closeInventoryDropdown;
-          modal._editingInputRow = rowEl;
-          var isFirstRow = rowsContainer && rowsContainer.firstElementChild === rowEl;
-          populateDropdownContent(rowEl);
-          ensureAddAnotherSearchRow(!isFirstRow);
-          var pickerWrapper = rowEl ? rowEl.querySelector('.execute-inventory-picker-wrapper') : null;
-          if (dropdownSection && pickerWrapper) {
-            if (dropdownSection.parentNode !== pickerWrapper) {
-              if (dropdownSection.parentNode) dropdownSection.parentNode.removeChild(dropdownSection);
-              pickerWrapper.appendChild(dropdownSection);
-            }
-            dropdownSection.style.position = 'absolute';
-            dropdownSection.style.top = '100%';
-            dropdownSection.style.left = '0';
-            dropdownSection.style.width = '100%';
-            dropdownSection.style.minWidth = '280px';
-            dropdownSection.style.display = 'block';
-          }
-          var selectedElsewhere = getSelectedInventoryIdsExcludingRow(rowEl);
-          if (cardsContainer && isFirstRow) {
-            cardsContainer.querySelectorAll('.execute-inventory-input-card').forEach(function(card) {
-              var id = card.dataset.inventoryId || '';
-              card.style.display = id && selectedElsewhere.has(id) ? 'none' : '';
-            });
-          }
-          if (dropdown) dropdown.style.display = (!isFirstRow && dropdown.querySelector('.execute-addanother-search-wrap')) ? 'flex' : 'block';
-          inputSection.querySelectorAll('.execute-input-row .execute-inventory-picker-arrow').forEach(function(a) { a.style.transform = 'rotate(0deg)'; });
-          var rowArrow = rowEl && rowEl.querySelector('.execute-inventory-picker-arrow');
-          if (rowArrow) rowArrow.style.transform = 'rotate(180deg)';
-          setTimeout(function() { document.addEventListener('click', closeInventoryDropdownOutside); }, 0);
-        }
+        // Picker is always visible; keep tab/search predictable once on init.
+        if (pickerSearch) pickerSearch.value = '';
+        pickerState.q = '';
+        syncTabState(defaultPickerType);
 
         function toggleInventoryCardDetails(cardId) {
           var details = inputSection.querySelector('#execute-inv-details-' + safeInputName + '-' + cardId);
@@ -903,31 +1572,21 @@
           arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
         }
 
-        function bindTriggerForRow(rowEl) {
-          var t = rowEl.querySelector('.execute-inventory-picker-trigger');
-          if (!t) return;
-          t.addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
-            else openDropdownForRow(rowEl);
-          });
-          t.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              if (dropdown && dropdown.style.display === 'block') closeInventoryDropdown();
-              else openDropdownForRow(rowEl);
-            }
-          });
-        }
-        bindTriggerForRow(firstRow);
-        if (dropdown) dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
+        // Row activation
+        firstRow.addEventListener('click', function() { setActiveRow(firstRow); });
+        setActiveRow(firstRow);
+
+        // Always start with neutral borders (avoid stale validation styles).
+        inputSection.querySelectorAll('.execute-quantity-input').forEach(function(inp) {
+          if (inp) inp.style.border = '1px solid var(--border-default, #e5e7eb)';
+        });
 
         if (quantityInput) {
           if (!quantityInput.dataset.originalQuantity || quantityInput.dataset.originalQuantity === '' || quantityInput.dataset.originalQuantity === 'undefined') {
             quantityInput.dataset.originalQuantity = input.quantity || quantityInput.value || '0';
           }
           quantityInput.addEventListener('input', function() {
-            if (parseFloat(this.value) > 0) this.style.border = '';
+            if (parseFloat(this.value) > 0) this.style.border = '1px solid var(--border-default, #e5e7eb)';
             updateSectionQtyExpectedWarning();
             updateUnexpectedMaterialWarning();
           });
@@ -938,25 +1597,19 @@
           addAnotherBtn.addEventListener('click', function() {
             var newRow = createInputRow(false);
             rowsContainer.appendChild(newRow);
-            bindTriggerForRow(newRow);
+            newRow.addEventListener('click', function() { setActiveRow(newRow); });
+            // Immediately activate the new row, otherwise selection remains locked to previous row.
+            setActiveRow(newRow);
             var qInput = newRow.querySelector('.execute-quantity-input');
             if (qInput) {
               qInput.addEventListener('input', function() {
-                if (parseFloat(this.value) > 0) this.style.border = '';
+                if (parseFloat(this.value) > 0) this.style.border = '1px solid var(--border-default, #e5e7eb)';
                 updateSectionQtyExpectedWarning();
                 updateUnexpectedMaterialWarning();
               });
             }
-            var removeBtn = newRow.querySelector('.execute-remove-input-row-btn');
-            if (removeBtn) {
-              removeBtn.addEventListener('click', function() {
-                var stateKey = newRow.dataset.stateKey || '';
-                if (stateKey && modal._inputStateByKey) modal._inputStateByKey.delete(stateKey);
-                newRow.remove();
-                updateSectionQtyExpectedWarning();
-                updateUnexpectedMaterialWarning();
-              });
-            }
+            // remove handler already attached in createInputRow
+            renderPickerCards(pickerState.activeType, pickerState.q);
           });
         }
         
@@ -1005,11 +1658,11 @@
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity <span style="color: var(--error, #ef4444);">*</span></label>
-            <input type="number" class="form-input execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <input type="number" class="spa-inp execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0">
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit <span style="color: var(--error, #ef4444);">*</span></label>
-            <select class="form-select execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <select class="spa-inp execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required>
               <option value="">Select unit...</option>
               ${['kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in', 'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers'].map(unit => `
                 <option value="${unit}" ${input.unit === unit ? 'selected' : ''}>${unit}</option>
@@ -1052,6 +1705,8 @@
     if (executionPrompts.length > 0 && promptsContainer) {
       var executionIdForEvidence = modal.dataset.executionId || '';
       let evidenceListForStep = [];
+      // Client-staged files (draft mode): do NOT create execution until Record step.
+      if (!modal.pendingEvidenceFilesByStepId) modal.pendingEvidenceFilesByStepId = new Map();
       if (typeof CoreAPI.listEvidence === 'function' && executionIdForEvidence && currentStepId) {
         try {
           const res = await CoreAPI.listEvidence(executionIdForEvidence);
@@ -1097,17 +1752,18 @@
             <div class="execute-evidence-upload" data-step-id="${currentStepId || ''}" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 16px; background: var(--bg-secondary, #f9fafb);">
               <p style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-secondary);">Photos or PDFs (JPEG, PNG, PDF, max 10MB)</p>
               <input type="file" class="execute-evidence-file-input" accept="image/jpeg,image/png,application/pdf" multiple style="display: block; margin-bottom: 8px;">
+              <div class="execute-evidence-error" style="display:none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
               <div class="execute-evidence-list" style="margin-top: 12px;"></div>
             </div>
           `;
         } else if (prompt.type === 'text') {
-          inputHtml = `<input type="text" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          inputHtml = `<input type="text" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}>`;
         } else if (prompt.type === 'number') {
-          inputHtml = `<input type="number" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} step="0.01" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          inputHtml = `<input type="number" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} step="0.01">`;
         } else if (prompt.type === 'date') {
-          inputHtml = `<input type="date" class="form-input execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">`;
+          inputHtml = `<input type="date" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}>`;
         } else if (prompt.type === 'select') {
-          inputHtml = `<select class="form-select execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;"><option value="">Select...</option></select>`;
+          inputHtml = `<select class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}><option value="">Select...</option></select>`;
         }
 
         promptSection.innerHTML = `
@@ -1121,16 +1777,61 @@
           const uploadZone = promptSection.querySelector('.execute-evidence-upload');
           const listEl = promptSection.querySelector('.execute-evidence-list');
           const fileInput = promptSection.querySelector('.execute-evidence-file-input');
+          const errEl = promptSection.querySelector('.execute-evidence-error');
           function renderEvidenceList(items) {
             if (!listEl) return;
             listEl.innerHTML = items.length === 0 ? '' : items.map(function(item) {
               var viewUrl = typeof CoreAPI.getEvidenceViewUrl === 'function' ? CoreAPI.getEvidenceViewUrl(item.id) : '#';
               var downloadUrl = typeof CoreAPI.getEvidenceDownloadUrl === 'function' ? CoreAPI.getEvidenceDownloadUrl(item.id) : '#';
               var id = (item.id && escapeHtml(item.id)) || '';
-              return '<div class="execute-evidence-row" data-evidence-id="' + id + '" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;"><span>' + escapeHtml(item.file_name || 'File') + '</span><div style="display: flex; gap: 8px; align-items: center;"><a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="margin-left: 8px;">View</a><a href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" style="margin-left: 4px;">Download</a><button type="button" class="execute-evidence-remove-btn" data-evidence-id="' + id + '" style="margin-left: 8px; padding: 2px 8px; font-size: 12px;">Remove</button></div></div>';
+              return (
+                '<div class="execute-evidence-row" data-evidence-id="' + id + '" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px;">' +
+                  '<span>' + escapeHtml(item.file_name || 'File') + '</span>' +
+                  '<div style="display: flex; gap: 8px; align-items: center;">' +
+                    '<a class="btn btn-secondary btn-sm" href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" style="text-decoration:none;">View</a>' +
+                    '<a class="btn btn-secondary btn-sm" href="' + escapeHtml(downloadUrl) + '" target="_blank" rel="noopener" style="text-decoration:none;">Download</a>' +
+                    '<button type="button" class="btn btn-secondary btn-sm execute-evidence-remove-btn" data-evidence-id="' + id + '">Remove</button>' +
+                  '</div>' +
+                '</div>'
+              );
             }).join('');
           }
+
+          function renderPendingFiles() {
+            if (!listEl) return;
+            var pending = (modal.pendingEvidenceFilesByStepId && modal.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
+            if (!pending.length) return;
+            var html = pending.map(function(f, idx) {
+              var nm = escapeHtml(f && f.name ? f.name : ('File ' + (idx + 1)));
+              var sz = (f && f.size != null) ? (' · ' + Math.round(f.size / 1024) + ' KB') : '';
+              return (
+                '<div class="execute-evidence-row" data-pending-idx="' + idx + '" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px; border: 1px dashed var(--border-default, #e5e7eb);">' +
+                  '<span>' + nm + '<span style="color: var(--text-tertiary,#9ca3af); font-size:12px;">' + sz + '</span></span>' +
+                  '<div style="display:flex; gap:8px; align-items:center;">' +
+                    '<span style="color: var(--text-secondary,#6b7280); font-size:12px;">Pending upload</span>' +
+                    '<button type="button" class="btn btn-secondary btn-sm execute-evidence-pending-remove-btn" data-pending-idx="' + idx + '">Remove</button>' +
+                  '</div>' +
+                '</div>'
+              );
+            }).join('');
+            listEl.insertAdjacentHTML('beforeend', html);
+          }
           listEl.addEventListener('click', async function(ev) {
+            var pbtn = ev.target && ev.target.closest && ev.target.closest('.execute-evidence-pending-remove-btn');
+            if (pbtn && pbtn.dataset && pbtn.dataset.pendingIdx != null) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              var idx = parseInt(pbtn.dataset.pendingIdx, 10);
+              var pending = (modal.pendingEvidenceFilesByStepId && modal.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
+              if (!isNaN(idx)) {
+                pending.splice(idx, 1);
+                if (modal.pendingEvidenceFilesByStepId) modal.pendingEvidenceFilesByStepId.set(currentStepId, pending);
+              }
+              renderEvidenceList(evidenceListForStep);
+              renderPendingFiles();
+              if (uploadZone) uploadZone.dataset.evidenceCount = String((evidenceListForStep.length || 0) + (pending.length || 0));
+              return;
+            }
             var btn = ev.target && ev.target.closest && ev.target.closest('.execute-evidence-remove-btn');
             if (!btn || !btn.dataset || !btn.dataset.evidenceId) return;
             var evidenceId = btn.dataset.evidenceId;
@@ -1149,43 +1850,27 @@
             btn.disabled = false;
           });
           renderEvidenceList(evidenceListForStep);
-          uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+          renderPendingFiles();
+          var pending0 = (modal.pendingEvidenceFilesByStepId && modal.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
+          uploadZone.dataset.evidenceCount = String((evidenceListForStep.length || 0) + (pending0.length || 0));
           if (fileInput) {
             fileInput.addEventListener('change', async function() {
+              if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
               var files = this.files;
-              if (!files || !files.length || !executionIdForEvidence || !currentStepId || typeof CoreAPI.uploadEvidence !== 'function') return;
-              var toUpload = [];
+              if (!files || !files.length || !currentStepId) return;
+              var pending = (modal.pendingEvidenceFilesByStepId && modal.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
               for (var i = 0; i < files.length; i++) {
                 var file = files[i];
                 if (file.size > maxEvidenceBytes) {
                   if (typeof showNotification === 'function') showNotification('error', 'File too large', 'Max ' + Math.round(maxEvidenceBytes / (1024 * 1024)) + 'MB. Choose a smaller file.');
                   continue;
                 }
-                var fd = new FormData();
-                fd.append('file', file);
-                fd.append('execution_id', executionIdForEvidence);
-                fd.append('step_id', currentStepId);
-                toUpload.push(CoreAPI.uploadEvidence(fd));
+                pending.push(file);
               }
-              if (toUpload.length === 0) { this.value = ''; return; }
-              var settled = await Promise.allSettled(toUpload);
-              var added = [];
-              var failed = 0;
-              settled.forEach(function(s, idx) {
-                if (s.status === 'fulfilled' && s.value && s.value.id) added.push(s.value);
-                else failed++;
-              });
-              evidenceListForStep = evidenceListForStep.concat(added);
-              var seenIds = new Set();
-              evidenceListForStep = evidenceListForStep.filter(function(e) {
-                if (!e.id || seenIds.has(e.id)) return false;
-                seenIds.add(e.id);
-                return true;
-              });
-              if (modal.evidenceByStepId) modal.evidenceByStepId.set(currentStepId, evidenceListForStep);
-              uploadZone.dataset.evidenceCount = String(evidenceListForStep.length);
+              if (modal.pendingEvidenceFilesByStepId) modal.pendingEvidenceFilesByStepId.set(currentStepId, pending);
               renderEvidenceList(evidenceListForStep);
-              if (failed > 0 && typeof showNotification === 'function') showNotification('warning', 'Partial upload', failed + ' of ' + toUpload.length + ' file(s) failed to upload.');
+              renderPendingFiles();
+              if (uploadZone) uploadZone.dataset.evidenceCount = String((evidenceListForStep.length || 0) + (pending.length || 0));
               this.value = '';
             });
           }
@@ -1304,7 +1989,7 @@
               ${escapeHtml(output.name)}
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${output.quantity || '0'} ${output.unit || ''})</span>
             </label>
-            <input type="number" class="form-input execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0" style="width: 100%; padding: 10px 16px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
+            <input type="number" class="spa-inp execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
             <div class="execute-reconcile-untracked-wrapper" data-output-id="${escapeHtml(outputId)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
               <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
@@ -1611,6 +2296,10 @@
   window.submitExecution = async function() {
     const modal = document.getElementById('execute-step-modal');
     if (!modal) return;
+    const renderMode =
+      (window.ExecutionUI && typeof window.ExecutionUI.getRenderMode === 'function')
+        ? window.ExecutionUI.getRenderMode(modal)
+        : ((modal.dataset && modal.dataset.renderMode) ? String(modal.dataset.renderMode) : 'modal');
     
     var executionId = modal.dataset.executionId;
     var executionStepId = modal.dataset.executionStepId;
@@ -1665,9 +2354,26 @@
         const availableQty = parseFloat(select.dataset.quantity);
         if (!isNaN(availableQty) && quantity > availableQty) {
           const inventoryUnit = select.dataset.unit || '';
-          const quantityUnit = quantityInput.dataset.inventoryUnit || inventoryUnit;
-          validationErrors.push(`Quantity for "${inputName}" (${quantity} ${quantityUnit}) exceeds available inventory (${availableQty} ${inventoryUnit})`);
-          quantityInput.style.border = '2px solid var(--error, #ef4444)';
+          const stepUnit = (quantityInput.dataset.stepUnit || '').trim();
+          // Compare in inventory units (convert from step unit when needed).
+          let qtyInInvUnit = quantity;
+          if (stepUnit && inventoryUnit && stepUnit.toLowerCase() !== inventoryUnit.toLowerCase()) {
+            const conv = convertUnit(quantity, stepUnit, inventoryUnit);
+            // If conversion didn't change but units differ, treat as incompatible: skip max check.
+            if (conv !== quantity || stepUnit.toLowerCase() === inventoryUnit.toLowerCase()) {
+              qtyInInvUnit = conv;
+            } else {
+              qtyInInvUnit = NaN;
+            }
+          }
+          if (!isNaN(qtyInInvUnit) && qtyInInvUnit > availableQty) {
+            const qtyLabel = stepUnit ? `${quantity} ${stepUnit}` : `${quantity}`;
+            const availLabel = stepUnit
+              ? `${Number(convertUnit(availableQty, inventoryUnit, stepUnit).toFixed(3))} ${stepUnit}`
+              : `${availableQty} ${inventoryUnit}`;
+            validationErrors.push(`Quantity for "${inputName}" (${qtyLabel}) exceeds available inventory (${availLabel})`);
+            quantityInput.style.border = '2px solid var(--error, #ef4444)';
+          }
         }
       }
     });
@@ -1686,14 +2392,74 @@
       }
     });
 
-    // VALIDATION: Check required evidence (source of truth: modal.evidenceByStepId, not only dataset)
+    // Upload staged evidence (draft flow uploads happen only on Record step).
+    try {
+      if (!modal.pendingEvidenceFilesByStepId) modal.pendingEvidenceFilesByStepId = new Map();
+      var stepIdForEvidence = modal.dataset.executionStepId || modal.dataset.executionStepDefinitionId || '';
+      // We keyed pending by step definition id earlier (currentStepId).
+      var pendingStepKeys = Array.from(modal.pendingEvidenceFilesByStepId.keys());
+      var anyPending = pendingStepKeys.some(function(k) {
+        var arr = modal.pendingEvidenceFilesByStepId.get(k) || [];
+        return arr && arr.length;
+      });
+      if (anyPending) {
+        // Ensure we have a real execution (draft).
+        if (draftProcessId && (!executionId || !executionStepId)) {
+          var createResult = await CoreAPI.createExecution(draftProcessId);
+          executionId = createResult.id || createResult.execution_id || (createResult.execution && createResult.execution.id);
+          if (!executionId) throw new Error('Could not create execution for evidence upload.');
+          var executionData2 = await CoreAPI.getExecution(executionId);
+          var steps2 = executionData2.execution_steps || [];
+          var readyStep2 = steps2.find(function(es) { return es.status === 'ready' || es.status === 'READY'; });
+          if (readyStep2 && readyStep2.id) executionStepId = readyStep2.id;
+          modal.dataset.executionId = String(executionId);
+          modal.dataset.executionStepId = String(executionStepId || '');
+          modal.dataset.draftProcessId = '';
+          draftProcessId = '';
+        }
+        // Upload pending files per step definition id.
+        for (var pk = 0; pk < pendingStepKeys.length; pk++) {
+          var stepDefId = pendingStepKeys[pk];
+          var files = modal.pendingEvidenceFilesByStepId.get(stepDefId) || [];
+          if (!files.length) continue;
+          var added = [];
+          for (var fi = 0; fi < files.length; fi++) {
+            var fd = new FormData();
+            fd.append('file', files[fi]);
+            fd.append('execution_id', String(executionId));
+            fd.append('step_id', String(stepDefId));
+            var res = await CoreAPI.uploadEvidence(fd);
+            if (res && res.id) added.push(res);
+          }
+          // Merge into evidence list cache
+          if (!modal.evidenceByStepId) modal.evidenceByStepId = new Map();
+          var existing = (modal.evidenceByStepId.get(stepDefId) || []);
+          var merged = existing.concat(added);
+          var seen = new Set();
+          merged = merged.filter(function(e) {
+            if (!e || !e.id) return false;
+            if (seen.has(e.id)) return false;
+            seen.add(e.id);
+            return true;
+          });
+          modal.evidenceByStepId.set(stepDefId, merged);
+          modal.pendingEvidenceFilesByStepId.set(stepDefId, []);
+        }
+      }
+    } catch (e) {
+      showNotification('error', 'Evidence upload failed', e && e.message ? e.message : String(e));
+      return;
+    }
+
+    // VALIDATION: Check required evidence (counts uploaded + staged)
     const evidenceSections = modal.querySelectorAll('.execute-prompt-section[data-prompt-type="evidence"][data-prompt-required="true"]');
     evidenceSections.forEach(section => {
       const uploadZone = section.querySelector('.execute-evidence-upload');
       const label = section.dataset.promptLabel || 'Evidence';
       const stepId = uploadZone && uploadZone.dataset.stepId;
       const list = (modal.evidenceByStepId && stepId && modal.evidenceByStepId.get(stepId)) || [];
-      const count = list.length;
+      const pending = (modal.pendingEvidenceFilesByStepId && stepId && modal.pendingEvidenceFilesByStepId.get(stepId)) || [];
+      const count = (list.length || 0) + (pending.length || 0);
       if (count < 1) {
         validationErrors.push(`Please upload at least one file for "${label}"`);
         if (uploadZone) uploadZone.style.borderColor = 'var(--error, #ef4444)';
@@ -2011,6 +2777,7 @@
       const user = await getCurrentUser();
       executionData.completed_by = user.username;
       executionData.completed_by_email = user.email;
+      executionData.completed_by_user_id = user.id || '';
       executionData.completed_at = new Date().toISOString();
 
       // Complete the step (send allow_consumption_override when user confirmed "Use anyway" for not-ready items)
@@ -2025,8 +2792,10 @@
       if (modal._closeInventoryDropdown) {
         try { modal._closeInventoryDropdown(); } finally { modal._closeInventoryDropdown = null; }
       }
-      modal.style.display = 'none';
-      document.body.style.overflow = 'auto';
+      if (renderMode !== 'page') {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+      }
       
       var warnings = completeResult && completeResult.execution_warnings;
       if (warnings && warnings.length > 0) {

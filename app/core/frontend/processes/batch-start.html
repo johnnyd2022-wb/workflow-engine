@@ -1,0 +1,170 @@
+{% extends "shared/base_spa.html" %}
+
+{% block body_class %}batch-start-spa{% endblock %}
+{% block title %}Start new batch | SupplyChain V2{% endblock %}
+
+{% block head_extras %}
+  {{ super() }}
+  {# Reuse wizard segmented control styling (flow-mode-segmented). #}
+  {% include 'processes/create-process-step-content-styles.html' %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  <style>
+    /* Centered hero — matches process-flow-hero pattern */
+    .batch-start-hero {
+      text-align: center;
+      padding: 0 0 4px 0;
+    }
+    .batch-start-hero__title {
+      margin: 0;
+      font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--text-primary, #111827);
+    }
+    .batch-start-hero__desc {
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      color: var(--text-secondary, #6b7280);
+      margin: 8px auto 0;
+    }
+    .batch-start-hero__nav {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+
+    /* Render the legacy modal markup as inline page content. */
+    .batch-start-spa #execute-step-modal {
+      display: block !important;
+      position: static !important;
+      inset: auto !important;
+      background: transparent !important;
+      backdrop-filter: none !important;
+      z-index: auto !important;
+      overflow: visible !important;
+      padding: 0 !important;
+    }
+    .batch-start-spa #execute-step-modal > .card {
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: none !important;
+      overflow: visible !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none;
+      box-shadow: none;
+      background: transparent;
+    }
+    /* Page hero provides heading + actions, so hide modal chrome (title + close). */
+    .batch-start-spa #execute-step-modal > .card > div:first-child { display: none !important; }
+    .batch-start-spa #execute-step-modal > .card > div:last-child { display: none !important; }
+
+    /* Section headings: match SPA create/edit pages (small uppercase titles + hairline dividers). */
+    .batch-start-spa #execute-step-modal h3 {
+      border-bottom: none !important;
+      padding-bottom: 0 !important;
+      margin-bottom: 10px !important;
+      font-size: 0.875rem !important;
+      font-weight: 600 !important;
+      letter-spacing: 0.04em !important;
+      text-transform: uppercase !important;
+      color: var(--text-secondary, #6b7280) !important;
+    }
+
+    /* Major section spacing + dividers (match flow wizard stack feel). */
+    .batch-start-spa #execute-docs-section,
+    .batch-start-spa #exec-section-inputs,
+    .batch-start-spa #exec-section-compliance,
+    .batch-start-spa #exec-section-outputs {
+      margin: 0 !important;
+      padding: 18px 0 !important;
+    }
+    .batch-start-spa #execute-docs-section { padding-top: 0 !important; }
+    .batch-start-spa #exec-section-compliance,
+    .batch-start-spa #exec-section-outputs {
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+
+    /* First divider should be owned by the "More information" disclosure (like create inputs/outputs). */
+    .batch-start-spa #exec-section-inputs {
+      border-top: none !important;
+    }
+
+    /* Remove the modal section extra spacing; use consistent stack spacing. */
+    .batch-start-spa #execute-step-modal #execute-docs-section,
+    .batch-start-spa #execute-step-modal #execute-inputs-container,
+    .batch-start-spa #execute-step-modal #execute-prompts-container,
+    .batch-start-spa #execute-step-modal #execute-outputs-container {
+      margin: 0 !important;
+    }
+
+    /* Active input row affordance (click row, then pick cards). */
+    .batch-start-spa .execute-input-row--active {
+      outline: 2px solid rgba(217, 56, 75, 0.25);
+      outline-offset: 2px;
+      border-radius: var(--radius-md, 10px);
+    }
+
+    /* Fix: stacked input rows (avoid overlap from any inherited layout quirks). */
+    .batch-start-spa .execute-input-rows-container {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 12px !important;
+      width: 100% !important;
+    }
+    .batch-start-spa .execute-input-rows-container > .execute-input-row {
+      position: static !important;
+      display: block !important;
+      width: 100% !important;
+      margin: 0 !important;
+    }
+
+    /* Fix: quantity input should NOT show red until submit validation runs. */
+    .batch-start-spa .execute-quantity-input {
+      border: 1px solid var(--border-default, #e5e7eb) !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {% include "processes/batch-start-fragment.html" %}
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    // Troubleshooting: disable HTMX boosted navigation on this page.
+    // This forces normal full-page loads so we can isolate HTMX swap/select issues.
+    try {
+      document.body.setAttribute('hx-boost', 'false');
+    } catch (e) {}
+  </script>
+  <script>
+    window.ExecutionStepPageContext = {
+      processId: {{ process_id|tojson }},
+      executionId: {{ execution_id|tojson }},
+      stepId: {{ step_id|tojson }},
+      draft: {{ draft|tojson }},
+      returnTo: {{ return_to|tojson }},
+    };
+
+    window.ExecutionModalConfig = {
+      onStepCompleted: async function () {
+        try {
+          var dest = (window.ExecutionStepPageContext && window.ExecutionStepPageContext.returnTo) || ('/core/flows?id=' + encodeURIComponent(String({{ process_id|tojson }})));
+          window.location.href = dest;
+        } catch (e) {
+          window.location.href = '/core';
+        }
+      }
+    };
+  </script>
+
+  <script src="{{ url_for('core.serve_core_js', filename='core.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-ui-utils.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-modal.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='execution-step-page.js') }}"></script>
+{% endblock %}

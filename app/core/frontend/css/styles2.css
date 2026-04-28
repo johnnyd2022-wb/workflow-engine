@@ -31,11 +31,10 @@
     --color-text-secondary: hsl(222, 20%, 81%);
     
     /* Sidebar Text */
-    --sidebar-text: hsl(215, 15%, 55%);
+    --sidebar-text: #94A3B8;
     --sidebar-text-hover: hsl(210, 20%, 85%);
-    /* Match top-pane backlink/account badge yellow */
-    --sidebar-text-active: #F6D04C;
-    --sidebar-label: hsl(215, 15%, 40%);
+    --sidebar-text-active: #2DD4BF;
+    --sidebar-label: rgba(148, 163, 184, 0.6);
 
     /* Mustard accent (shared with base_spa.html gradients) */
     --accent-mustard: #F6D04C;
@@ -310,7 +309,7 @@
     border-radius: var(--radius-lg);
     text-decoration: none;
     color: var(--sidebar-text);
-    transition: all var(--transition-normal);
+    transition: color 150ms ease, background 150ms ease;
   }
   
   .nav-link:hover:not(.active) {
@@ -318,14 +317,15 @@
     color: var(--sidebar-text-hover);
   }
   
-  /* Selected default (mobile bottom tab + fallback): mustard text + icon glow. Desktop left nav overrides ≥768px below. */
+  /* Selected default (mobile bottom tab + fallback): teal text. Desktop left nav overrides ≥768px below. */
   .nav-link.active {
-    background: transparent;
+    background: rgba(45, 212, 191, 0.1);
     color: var(--sidebar-text-active);
   }
-  
+
   .nav-link.active .nav-link-text {
     color: var(--sidebar-text-active);
+    font-weight: 500;
   }
   
   .nav-link-icon-wrapper {
@@ -341,12 +341,12 @@
   
   .nav-link.active .nav-link-icon-wrapper {
     background: transparent;
-    box-shadow: 0 0 16px rgba(246, 208, 76, 0.55);
+    box-shadow: none;
   }
   
   .nav-link-icon {
-    width: 16px;
-    height: 16px;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
   }
   
@@ -556,6 +556,11 @@
       padding: 6px;
     }
 
+    .sidebar .nav-link-icon {
+      width: 24px;
+      height: 24px;
+    }
+
     /* Bottom tab: subtler hover than full desktop row tint */
     .sidebar .nav-link:hover:not(.active) {
       background: transparent;
@@ -572,37 +577,36 @@
     }
   }
 
-  /* Left sidebar (laptop + desktop): active tab = flows2 Manage–style mustard fill; squarer than default nav pill. */
+  /* Left sidebar (laptop + desktop): active tab = teal pill. */
   @media (min-width: 768px) {
     .sidebar .nav-link {
       border-radius: 8px;
     }
     .sidebar .nav-link.active {
-      background: linear-gradient(145deg, #F6D04C 0%, #F1C40F 45%, #D49A00 100%);
-      color: rgba(17, 24, 39, 0.96);
-      font-weight: 700;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 225, 120, 0.2);
+      background: rgba(45, 212, 191, 0.1);
+      color: #2DD4BF;
+      font-weight: 500;
+      box-shadow: none;
     }
     .sidebar .nav-link.active .nav-link-text,
     .sidebar .nav-link.active .nav-link-icon {
-      color: rgba(17, 24, 39, 0.96);
+      color: #2DD4BF;
     }
     .sidebar .nav-link.active .nav-link-icon-wrapper {
       background: transparent;
       box-shadow: none;
     }
     .sidebar .nav-link.active .nav-link-arrow {
-      color: rgba(17, 24, 39, 0.72);
-      opacity: 0.85;
+      color: #2DD4BF;
+      opacity: 0.6;
     }
     .sidebar .nav-link.active:hover {
-      background: linear-gradient(145deg, #FFE680 0%, #F1C40F 45%, #C47F00 100%);
-      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 225, 120, 0.28);
-      color: rgba(17, 24, 39, 0.96);
+      background: rgba(45, 212, 191, 0.14);
+      color: #2DD4BF;
     }
     .sidebar .nav-link.active:hover .nav-link-text,
     .sidebar .nav-link.active:hover .nav-link-icon {
-      color: rgba(17, 24, 39, 0.96);
+      color: #2DD4BF;
     }
   }
   

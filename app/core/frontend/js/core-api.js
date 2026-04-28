@@ -305,11 +305,27 @@ window.CoreAPI = window.CoreAPI || {
     // Evidence (execution attachments: images, PDFs)
     async uploadEvidence(formData) {
         const url = `${this.baseURL}/evidence/upload`;
-        const config = { method: 'POST', body: formData };
+        // Include CSRF token for mutating multipart uploads.
+        const csrfMeta = typeof document !== 'undefined' && document.querySelector
+            ? document.querySelector('meta[name="csrf-token"]')
+            : null;
+        const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
+        const headers = {};
+        if (csrfTok) {
+            headers['X-CSRFToken'] = csrfTok;
+            headers['X-CSRF-Token'] = csrfTok;
+        }
+        const config = { method: 'POST', body: formData, headers };
         if (typeof window !== 'undefined' && window.fetch) {
             const response = await fetch(url, { ...config, credentials: 'same-origin' });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+            const raw = await response.text();
+            let data;
+            try {
+                data = raw ? JSON.parse(raw) : {};
+            } catch (e) {
+                data = { error: raw || `HTTP ${response.status}` };
+            }
+            if (!response.ok) throw new Error((data && data.error) || `HTTP ${response.status}`);
             return data;
         }
         return this.request('/evidence/upload', { method: 'POST', body: formData });
