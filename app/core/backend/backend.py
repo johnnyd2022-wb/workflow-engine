@@ -530,10 +530,10 @@ def execution_step_page():
     from urllib.parse import urlencode
 
     args = dict(request.args)
-    execution_id = args.get("execution_id")
+    args.get("execution_id")
     process_id = args.get("process_id")
-    step_id = args.get("step_id")
-    draft = args.get("draft")
+    args.get("step_id")
+    args.get("draft")
 
     # Map to the batches/start contract:
     # - process_id -> id
