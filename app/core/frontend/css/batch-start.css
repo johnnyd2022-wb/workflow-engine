@@ -17,38 +17,11 @@
   margin: 8px auto 0;
 }
 
-/* Render the legacy modal markup as inline page content. */
-.batch-start-spa #execute-step-modal {
-  display: block !important;
-  position: static !important;
-  inset: auto !important;
-  background: transparent !important;
-  backdrop-filter: none !important;
-  z-index: auto !important;
-  overflow: visible !important;
-  padding: 0 !important;
-}
-.batch-start-spa #execute-step-modal > .card {
-  width: 100% !important;
-  max-width: 100% !important;
-  max-height: none !important;
-  overflow: visible !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: none;
-  box-shadow: none;
-  background: transparent;
-}
-/* Page hero provides heading + actions, so hide modal chrome (title + close, footer). */
-.batch-start-spa #execute-step-modal > .card > div:first-child {
-  display: none !important;
-}
-.batch-start-spa #execute-step-modal > .card > div:last-child {
-  display: none !important;
-}
+/* Page shell for execute-step lives in execution-modal.css (.batch-start-spa + .exec-modal).
+   Below: record-step page typography + section rhythm only. */
 
 /* Section headings: match SPA create/edit pages (small uppercase titles). */
-.batch-start-spa #execute-step-modal h3 {
+.batch-start-spa #execute-step-modal .exec-modal__section h3 {
   border-bottom: none !important;
   padding-bottom: 0 !important;
   margin-bottom: 10px !important;
@@ -60,22 +33,19 @@
 }
 
 /* Major section spacing + dividers (match flow wizard stack feel). */
-.batch-start-spa #execute-docs-section,
-.batch-start-spa #exec-section-inputs,
-.batch-start-spa #exec-section-compliance,
-.batch-start-spa #exec-section-outputs {
+.batch-start-spa #execute-step-modal .exec-modal__section {
   margin: 0 !important;
   padding: 18px 0 !important;
 }
-.batch-start-spa #execute-docs-section {
+.batch-start-spa #execute-step-modal #execute-docs-section {
   padding-top: 0 !important;
 }
-.batch-start-spa #exec-section-compliance,
-.batch-start-spa #exec-section-outputs {
+.batch-start-spa #execute-step-modal #exec-section-compliance,
+.batch-start-spa #execute-step-modal #exec-section-outputs {
   border-top: 1px solid var(--border-default, #e5e7eb);
 }
-/* First divider should be owned by the "More information" disclosure (like create inputs/outputs). */
-.batch-start-spa #exec-section-inputs {
+/* First divider is owned by the "More information" disclosure (like create inputs/outputs). */
+.batch-start-spa #execute-step-modal #exec-section-inputs {
   border-top: none !important;
 }
 

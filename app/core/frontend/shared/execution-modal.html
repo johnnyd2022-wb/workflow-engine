@@ -1,9 +1,9 @@
 <!-- Execute Step Modal -->
-<div class="modal-overlay" id="execute-step-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; overflow-y: auto;">
-  <div class="card" style="max-width: 700px; width: 90%; padding: 24px; margin: 24px auto; max-height: 90vh; overflow-y: auto;">
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-      <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Execute Step: <span id="execute-step-name">Unknown</span></h2>
-      <button onclick="document.getElementById('execute-step-modal').style.display='none'; document.body.style.overflow='auto';" style="padding: 8px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md);">
+<div class="modal-overlay exec-modal" id="execute-step-modal">
+  <div class="card exec-modal__panel">
+    <div class="exec-modal__header">
+      <h2>Execute Step: <span id="execute-step-name">Unknown</span></h2>
+      <button type="button" class="exec-modal__close" onclick="document.getElementById('execute-step-modal').style.display='none'; document.body.style.overflow='auto';" aria-label="Close">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -12,9 +12,9 @@
     </div>
     
     <!-- Step Documentation (SOP) – read-only reference -->
-    <div id="execute-docs-section" style="margin-bottom: 32px; display: none;">
-      <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-default);">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+    <div id="execute-docs-section" class="exec-modal__section">
+      <h3>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           <line x1="8" y1="7" x2="16" y2="7"></line>
@@ -28,8 +28,8 @@
     </div>
     
     <!-- Inputs Section -->
-    <div id="exec-section-inputs" style="margin-bottom: 32px;">
-      <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-default);">
+    <div id="exec-section-inputs" class="exec-modal__section">
+      <h3>
         Inputs
       </h3>
       <div id="execute-inputs-container">
@@ -38,9 +38,9 @@
     </div>
     
     <!-- Compliance + traceability Section -->
-    <div id="exec-section-compliance" style="margin-bottom: 32px;">
-      <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-default);">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 8px;">
+    <div id="exec-section-compliance" class="exec-modal__section">
+      <h3>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
           <line x1="16" y1="13" x2="8" y2="13"></line>
@@ -55,8 +55,8 @@
     </div>
     
     <!-- Outputs Section -->
-    <div id="exec-section-outputs" style="margin-bottom: 32px;">
-      <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-default);">
+    <div id="exec-section-outputs" class="exec-modal__section">
+      <h3>
         Outputs
       </h3>
       <div id="execute-outputs-container">
@@ -64,7 +64,7 @@
       </div>
     </div>
     
-    <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-light);">
+    <div class="exec-modal__footer">
       <button type="button" class="btn btn-secondary" onclick="document.getElementById('execute-step-modal').style.display='none'; document.body.style.overflow='auto';">Cancel</button>
       <button type="button" id="execute-step-submit-btn" class="btn btn-primary" onclick="submitExecution()">Complete Step</button>
     </div>
