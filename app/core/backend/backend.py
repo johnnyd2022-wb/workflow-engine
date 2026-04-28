@@ -73,6 +73,31 @@ core_bp = Blueprint(
 # --- Flow wizard safety helpers (query filtering + step integrity) ---
 _FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
 
+
+def _safe_flow_return_to(value, process_id) -> str:
+    """
+    Only allow same-origin relative paths. Blocks open redirects (e.g. ?return_to=https://evil.com).
+    """
+    from urllib.parse import urlparse
+
+    default = f"/core/flows?id={process_id}"
+    if value is None or not str(value).strip():
+        return default
+    s = str(value).strip()
+    low = s.lower()
+    if low.startswith(("javascript:", "data:", "vbscript:")):
+        return default
+    if "://" in s:
+        return default
+    if s.startswith("//"):
+        return default
+    if not s.startswith("/"):
+        return default
+    parsed = urlparse(s)
+    if parsed.netloc:
+        return default
+    return s
+
 _FLOW_WIZARD_PAGE_TO_STEP = {
     "process-overview": 1,
     "step-name": 2,
@@ -530,10 +555,7 @@ def execution_step_page():
     from urllib.parse import urlencode
 
     args = dict(request.args)
-    args.get("execution_id")
     process_id = args.get("process_id")
-    args.get("step_id")
-    args.get("draft")
 
     # Map to the batches/start contract:
     # - process_id -> id
@@ -572,9 +594,7 @@ def flows_batches_start():
     if is_draft and not step_id:
         abort(400)
 
-    return_to = request.args.get("return_to")
-    if not return_to:
-        return_to = "/core/flows?id=" + str(process_id)
+    return_to = _safe_flow_return_to(request.args.get("return_to"), process_id)
 
     # HTMX fragment support (boosted navigation swaps #page-content).
     if request.headers.get("HX-Request") == "true":
@@ -1538,6 +1558,85 @@ def get_execution(execution_id: str):
         ),
         200,
     )
+
+
+@core_bp.route("/api/core/executions/<execution_id>/with-process", methods=["GET"])
+@requires_auth
+def get_execution_with_process(execution_id: str):
+    """Single round-trip: execution (with steps + evidence) and full process definition."""
+    org_id = UUID(g.org_id)
+    try:
+        execution_uuid = UUID(execution_id)
+    except ValueError:
+        return jsonify({"error": "Invalid execution ID"}), 400
+
+    exec_repo = ExecutionRepository(db_session)
+    execution = exec_repo.get_execution_with_steps(execution_uuid, org_id)
+    if not execution:
+        return jsonify({"error": "Execution not found"}), 404
+
+    process_repo = ProcessRepository(db_session)
+    process = process_repo.get_process_with_steps(execution.process_id, org_id)
+    if not process:
+        return jsonify({"error": "Process not found"}), 404
+
+    execution_steps = []
+    for es in execution.execution_steps:
+        execution_steps.append(
+            {
+                "id": str(es.id),
+                "step_id": str(es.step_id),
+                "step_number": es.step_number,
+                "status": es.status.value,
+                "actual_inputs": es.actual_inputs or [],
+                "actual_outputs": es.actual_outputs or [],
+                "execution_data": es.execution_data or {},
+                "started_at": es.started_at.isoformat() if es.started_at else None,
+                "completed_at": es.completed_at.isoformat() if es.completed_at else None,
+                "step_name": es.step.name if es.step else None,
+                "step_inputs": es.step.inputs or [] if es.step else [],
+                "step_outputs": es.step.outputs or [] if es.step else [],
+            }
+        )
+
+    evidence_list = list_evidence_for_execution(execution_uuid, org_id)
+
+    execution_payload = {
+        "id": str(execution.id),
+        "process_id": str(execution.process_id),
+        "status": execution.status.value,
+        "started_at": execution.started_at.isoformat() if execution.started_at else None,
+        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+        "execution_steps": execution_steps,
+        "evidence": evidence_list,
+    }
+
+    steps = []
+    for step in process.steps:
+        steps.append(
+            {
+                "id": str(step.id),
+                "step_number": step.step_number,
+                "position": str(step.position) if getattr(step, "position", None) is not None else None,
+                "name": step.name,
+                "description": step.description,
+                "inputs": step.inputs or [],
+                "outputs": step.outputs or [],
+                "execution_prompts": step.execution_prompts or [],
+            }
+        )
+
+    process_payload = {
+        "id": str(process.id),
+        "name": process.name,
+        "description": process.description,
+        "category": process.category.value if process.category else None,
+        "is_draft": process.is_draft,
+        "steps": steps,
+        "created_at": process.created_at.isoformat() if process.created_at else None,
+    }
+
+    return jsonify({"execution": execution_payload, "process": process_payload}), 200
 
 
 @core_bp.route("/api/core/executions/<execution_id>/steps/<execution_step_id>/complete", methods=["POST"])

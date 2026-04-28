@@ -17,7 +17,6 @@ window.CoreAPI = window.CoreAPI || {
         };
         if (mutating && csrfTok) {
             mergedHeaders['X-CSRFToken'] = csrfTok;
-            mergedHeaders['X-CSRF-Token'] = csrfTok;
         }
         const config = {
             ...options,
@@ -131,6 +130,11 @@ window.CoreAPI = window.CoreAPI || {
     
     async getExecution(executionId) {
         return this.request(`/executions/${executionId}`);
+    },
+
+    /** Single round-trip: execution + process (execute-step SPA). */
+    async getExecutionWithProcess(executionId) {
+        return this.request(`/executions/${encodeURIComponent(executionId)}/with-process`);
     },
     
     async createExecution(processId) {
@@ -313,7 +317,6 @@ window.CoreAPI = window.CoreAPI || {
         const headers = {};
         if (csrfTok) {
             headers['X-CSRFToken'] = csrfTok;
-            headers['X-CSRF-Token'] = csrfTok;
         }
         const config = { method: 'POST', body: formData, headers };
         if (typeof window !== 'undefined' && window.fetch) {
@@ -376,7 +379,6 @@ window.CoreAPI = window.CoreAPI || {
         const headers = {};
         if (csrfTok) {
             headers['X-CSRFToken'] = csrfTok;
-            headers['X-CSRF-Token'] = csrfTok;
         }
         const response = await fetch(url, {
             method: 'POST',

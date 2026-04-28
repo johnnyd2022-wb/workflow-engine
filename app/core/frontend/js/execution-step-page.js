@@ -18,7 +18,7 @@
     // (Option A alias /core/flows/executions/step redirects here).
     try {
       var p = (window.location && window.location.pathname) ? String(window.location.pathname) : '';
-      return p.indexOf('/core/flows/batches/start') === 0;
+      return p.startsWith('/core/flows/batches/start');
     } catch (e) {
       return false;
     }
@@ -37,34 +37,46 @@
       return;
     }
     renderInFlight = true;
-    var ctx = window.ExecutionStepPageContext || {};
-    var executionId = ctx.executionId;
-    var processId = ctx.processId;
-    var stepId = ctx.stepId;
-    var isDraft = ctx.draft === true || ctx.draft === 'true' || ctx.draft === 1 || ctx.draft === '1';
-    if (!processId) {
-      setSubtitle('Missing process context.');
-      if (window.showNotification) window.showNotification('error', 'Missing context', 'Process ID is missing.');
-      return;
-    }
-    if (!executionId && !(isDraft && stepId)) {
-      setSubtitle('Missing execution context.');
-      if (window.showNotification) window.showNotification('error', 'Missing context', 'Execution ID is missing.');
-      return;
-    }
-
-    if (!window.CoreAPI || typeof window.CoreAPI.getExecution !== 'function') {
-      setSubtitle('Core API not available.');
-      return;
-    }
-
     try {
+      var ctx = window.ExecutionStepPageContext || {};
+      var executionId = ctx.executionId;
+      var processId = ctx.processId;
+      var stepId = ctx.stepId;
+      var isDraft = ctx.draft === true || ctx.draft === 'true' || ctx.draft === 1 || ctx.draft === '1';
+
+      if (!processId) {
+        setSubtitle('Missing process context.');
+        if (window.showNotification) window.showNotification('error', 'Missing context', 'Process ID is missing.');
+        return;
+      }
+      if (!executionId && !(isDraft && stepId)) {
+        setSubtitle('Missing execution context.');
+        if (window.showNotification) window.showNotification('error', 'Missing context', 'Execution ID is missing.');
+        return;
+      }
+
+      if (!window.CoreAPI || typeof window.CoreAPI.getExecution !== 'function') {
+        setSubtitle('Core API not available.');
+        return;
+      }
+
       setSubtitle('Loading execution…');
       var executionData = null;
+      var processData = null;
       var readyStep = null;
+
       if (!isDraft) {
-        executionData = await window.CoreAPI.getExecution(executionId);
-        if (myToken !== renderToken) return;
+        if (executionId && typeof window.CoreAPI.getExecutionWithProcess === 'function') {
+          var bundle = await window.CoreAPI.getExecutionWithProcess(executionId);
+          if (myToken !== renderToken) return;
+          executionData = bundle && bundle.execution;
+          processData = bundle && bundle.process;
+        } else {
+          executionData = await window.CoreAPI.getExecution(executionId);
+          if (myToken !== renderToken) return;
+          processData = await window.CoreAPI.getProcess((executionData && executionData.process_id) || processId);
+          if (myToken !== renderToken) return;
+        }
         var steps = (executionData && executionData.execution_steps) ? executionData.execution_steps : [];
         readyStep = steps.find(function (es) {
           return es && (es.status === 'ready' || es.status === 'READY');
@@ -74,18 +86,28 @@
           if (window.showNotification) window.showNotification('error', 'No ready step', 'There is no step ready to complete.');
           return;
         }
+      } else {
+        processData = await window.CoreAPI.getProcess(processId);
+        if (myToken !== renderToken) return;
       }
 
-      setSubtitle('Loading step definition…');
-      var processData = await window.CoreAPI.getProcess((executionData && executionData.process_id) || processId);
-      if (myToken !== renderToken) return;
       var procSteps = (processData && processData.steps) ? processData.steps : [];
+      var stepMap = new Map();
+      procSteps.forEach(function (s) {
+        if (s && s.id != null) stepMap.set(String(s.id), s);
+      });
+
       var stepDefinition = null;
       if (isDraft) {
-        stepDefinition = procSteps.find(function (s) { return s && String(s.id) === String(stepId); });
+        stepDefinition = stepMap.get(String(stepId)) || procSteps.find(function (s) {
+          return s && String(s.id) === String(stepId);
+        });
       } else {
-        stepDefinition = procSteps.find(function (s) { return s && String(s.id) === String(readyStep.step_id); });
+        stepDefinition = stepMap.get(String(readyStep.step_id)) || procSteps.find(function (s) {
+          return s && String(s.id) === String(readyStep.step_id);
+        });
       }
+
       if (!stepDefinition) {
         setSubtitle('Step definition not found.');
         if (window.showNotification) window.showNotification('error', 'Step not found', 'Step definition not found.');
@@ -99,7 +121,6 @@
         return;
       }
 
-      // Render into the existing DOM, but suppress overlay/body locking.
       if (isDraft) {
         await window.openExecutionModal(null, null, stepDefinition, { processId: processId, renderMode: 'page' });
       } else {
@@ -113,7 +134,6 @@
       renderInFlight = false;
       if (renderQueued) {
         renderQueued = false;
-        // Re-run once with latest token/context.
         loadAndRender();
       }
     }
@@ -143,4 +163,3 @@
     }
   });
 })();
-
