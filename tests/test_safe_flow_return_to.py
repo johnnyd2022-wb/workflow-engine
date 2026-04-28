@@ -39,6 +39,9 @@ EXPECTED_DEFAULT = f"/core/flows?id={PROCESS_ID}"
         # Dangerous fragment on otherwise-valid path
         "/core/flows#//evil.com",
         "/core/flows#https://evil.com",
+        "/core/flows#%2F%2Fevil.com",
+        "/core/flows#\\evil.com",
+        "/core/flows#javascript:alert(1)",
     ],
 )
 def test_unsafe_or_empty_returns_process_workspace_default(value):

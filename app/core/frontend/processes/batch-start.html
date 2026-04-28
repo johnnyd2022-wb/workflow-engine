@@ -37,7 +37,13 @@
         try {
           var fallback = '/core/flows?id=' + encodeURIComponent(String({{ process_id|tojson }}));
           var dest = (window.ExecutionStepPageContext && window.ExecutionStepPageContext.returnTo) || fallback;
-          if (typeof dest !== 'string' || !dest.startsWith('/') || dest.indexOf('://') !== -1) {
+          if (
+            typeof dest !== 'string' ||
+            !dest.startsWith('/') ||
+            dest.startsWith('//') ||
+            dest.indexOf('://') !== -1 ||
+            dest.indexOf('\\') !== -1
+          ) {
             dest = fallback;
           }
           window.location.href = dest;

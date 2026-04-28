@@ -43,6 +43,9 @@
       return inFlightPromise;
     }
     inFlightPromise = (async function () {
+      function isStale() {
+        return myToken !== renderToken;
+      }
       var ctx = window.ExecutionStepPageContext || {};
       var executionId = ctx.executionId;
       var processId = ctx.processId;
@@ -73,7 +76,7 @@
       if (!isDraft) {
         if (executionId && typeof window.CoreAPI.getExecutionWithProcess === 'function') {
           var bundle = await window.CoreAPI.getExecutionWithProcess(executionId);
-          if (myToken !== renderToken) return;
+          if (isStale()) return;
           if (!bundle || !bundle.execution || !bundle.process) {
             throw new Error('Invalid execution bundle response');
           }
@@ -81,9 +84,9 @@
           processData = bundle.process;
         } else {
           executionData = await window.CoreAPI.getExecution(executionId);
-          if (myToken !== renderToken) return;
+          if (isStale()) return;
           processData = await window.CoreAPI.getProcess((executionData && executionData.process_id) || processId);
-          if (myToken !== renderToken) return;
+          if (isStale()) return;
         }
         var steps = (executionData && executionData.execution_steps) ? executionData.execution_steps : [];
         readyStep = steps.find(function (es) {
@@ -96,7 +99,11 @@
         }
       } else {
         processData = await window.CoreAPI.getProcess(processId);
-        if (myToken !== renderToken) return;
+        if (isStale()) return;
+      }
+
+      if (!processData || !Array.isArray(processData.steps)) {
+        throw new Error('Invalid process payload');
       }
 
       var procSteps = (processData && processData.steps) ? processData.steps : [];
@@ -117,6 +124,7 @@
         if (window.showNotification) window.showNotification('error', 'Step not found', 'Step definition not found.');
         return;
       }
+      if (isStale()) return;
 
       setSubtitle((isDraft ? 'Starting new batch · ' : 'Step: ') + (stepDefinition.name || 'Unknown'));
 

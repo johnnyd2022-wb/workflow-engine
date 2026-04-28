@@ -73,6 +73,8 @@ core_bp = Blueprint(
 # --- Flow wizard safety helpers (query filtering + step integrity) ---
 _FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
 
+_ALLOWED_RETURN_PREFIX = "/core/flows"
+
 
 def _safe_flow_return_to(value, process_id) -> str:
     """
@@ -86,10 +88,13 @@ def _safe_flow_return_to(value, process_id) -> str:
     if value is None or not str(value).strip():
         return default
     s0 = str(value).strip()
-    # Decode percent-encoding (may reveal // or schemes hidden as %2F%2F…)
+    # Decode percent-encoding (may reveal // or schemes hidden as %2F%2F…).
+    # Tradeoff: decoding may transform inputs; we cap normalization at 2 passes on purpose.
     s = unquote(s0)
     if s != s0:
         s = unquote(s)
+    if "\\" in s:
+        return default
     low = s.lower()
     if low.startswith(("javascript:", "data:", "vbscript:")):
         return default
@@ -106,11 +111,23 @@ def _safe_flow_return_to(value, process_id) -> str:
     norm_path = normpath(raw_path)
     if norm_path in ("", "."):
         return default
+    if not norm_path.startswith("/"):
+        norm_path = "/" + norm_path
     # Stay within process workspace routes (blocks /core/flows/../../admin → /admin)
-    if norm_path != "/core/flows" and not norm_path.startswith("/core/flows/"):
+    if norm_path != _ALLOWED_RETURN_PREFIX and not norm_path.startswith(_ALLOWED_RETURN_PREFIX + "/"):
         return default
-    if parsed.fragment and ("://" in parsed.fragment or parsed.fragment.lstrip().startswith("//")):
-        return default
+    if parsed.fragment:
+        frag = unquote(parsed.fragment)
+        if frag != parsed.fragment:
+            frag = unquote(frag)
+        frag_low = frag.lower().lstrip()
+        if (
+            frag_low.startswith("//")
+            or "://" in frag_low
+            or "\\" in frag_low
+            or frag_low.startswith(("javascript:", "data:", "vbscript:"))
+        ):
+            return default
     safe = urlunparse(("", "", norm_path, "", parsed.query, parsed.fragment))
     return safe
 

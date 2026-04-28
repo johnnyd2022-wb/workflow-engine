@@ -1,389 +1,432 @@
-🔴 Remaining critical issues
-1) renderInFlight still leaks on early return before try
+✅ What you significantly improved
+Double-decoding → closes common %2F%2F and encoded scheme bypasses
+Path scoping (/core/flows) → eliminates lateral movement risk
+normpath usage → blocks traversal like /../../admin
+Fragment validation → nice catch, often missed
+Client-side defensive check → good belt-and-suspenders
+SQLAlchemy eager loading → eliminates N+1 risk cleanly
+Test suite → now actually adversarial instead of happy-path
 
-You moved renderInFlight = true outside the try:
+This is now security-aware code, not just defensive code.
 
-renderInFlight = true;
-try {
+🔴 Remaining issues / edge cases
+1) normpath can drop leading slash (edge case)
+norm_path = normpath(raw_path)
+Problem
 
-But this block still exists before entering try:
+posixpath.normpath() can return relative paths:
 
-if (!isOnExecutionStepScreen()) return;
-Scenario
-Call enters
-renderInFlight = true
-Route check fails → return
-No finally → stuck forever
+normpath("core/flows") → "core/flows"
+normpath("/core/flows/..") → "/core"
+normpath("/../core/flows") → "/core/flows"
+You rely on:
+if norm_path != "/core/flows" and not norm_path.startswith("/core/flows/")
+
+If norm_path becomes "core/flows" → fails check → OK (blocked)
+
+So you're safe by accident, but it's brittle.
+
+Safer fix
+
+Force absolute:
+
+if not norm_path.startswith("/"):
+    norm_path = "/" + norm_path
+2) Double unquote() can over-normalize
+s = unquote(s0)
+if s != s0:
+    s = unquote(s)
+Risk
+
+Double decoding can turn safe input into unsafe:
+
+"%252F%252Fevil.com"
+→ first decode: "%2F%2Fevil.com"
+→ second decode: "//evil.com"
+
+You want that for security, but:
+
+Edge case
+
+You are now effectively doing unbounded normalization, which can:
+
+collapse intentionally encoded safe paths
+introduce ambiguity
+Recommendation
+
+Limit to max 2 decodes (which you do) → acceptable
+Just be aware: this is a deliberate tradeoff, not strictly “correct”
+
+3) Fragment check is incomplete
+if parsed.fragment and ("://" in parsed.fragment or parsed.fragment.lstrip().startswith("//")):
+Misses:
+# encoded
+# javascript-style fragments
+# backslash tricks
+
+Examples not caught:
+
+"/core/flows#%2F%2Fevil.com"
+"/core/flows#\\evil.com"
+"/core/flows#javascript:alert(1)"
 Fix
 
-Move assignment inside the try:
+Apply same normalization to fragment:
 
-if (!isOnExecutionStepScreen()) return;
+frag = unquote(parsed.fragment or "").lower().lstrip()
+if frag.startswith("//") or "://" in frag or frag.startswith(("javascript:", "data:", "vbscript:")):
+    return default
+4) Query string is unvalidated (intentional, but note risk)
 
-var myToken = ++renderToken;
-if (renderInFlight) {
-  renderQueued = true;
-  return;
-}
+You allow:
 
+"/core/flows?next=//evil.com"
+This is a known redirect chaining vector:
+Your guard passes it
+Another page may later use next
+Your test explicitly allows it:
+("/core/flows?next=//evil.com", ...)
+Recommendation
+
+At minimum, document:
+
+“Query params are not sanitized here; downstream consumers must validate”
+
+Or optionally strip dangerous params:
+
+# heavy-handed but safe
+parsed = parsed._replace(query="")
+5) urlunparse preserves dangerous encoding combinations
+safe = urlunparse(("", "", norm_path, "", parsed.query, parsed.fragment))
+Subtle issue
+
+You normalize path, but:
+
+query + fragment are passed through unchanged (except earlier checks)
+
+That’s fine if intentional, but:
+
+you are mixing sanitized path with unsanitized tail
+6) Missing explicit block for backslashes in path
+
+You tested:
+
+"/\\evil.com"
+
+But your code does not explicitly block:
+
+if "\\" in s:
+Why this matters
+
+Browsers sometimes treat \ as / → can become:
+
+"/\\evil.com" → "//evil.com"
+Recommendation
+
+Add:
+
+if "\\" in s:
+    return default
+🟠 JS side review
+7) renderInFlight placement is now correct ✅
 try {
   renderInFlight = true;
-  ...
-} finally {
-  renderInFlight = false;
-}
-2) myToken missing in snippet (possible regression)
 
-Your updated code uses:
+Good—this fixes the earlier deadlock.
+
+8) Missing myToken still a risk (verify)
+
+You still rely on:
 
 if (myToken !== renderToken) return;
 
-But I don’t see:
+Ensure this exists earlier:
 
 var myToken = ++renderToken;
 
-in the new snippet.
+If not → race protection is broken.
 
-If actually missing:
-race protection is completely broken
-stale responses can overwrite newer ones
-3) _safe_flow_return_to → path traversal edge case
-
-Your checks block:
-
-schemes
-//
-absolute URLs
-
-But this still passes:
-
-/core/flows/../../admin
-Impact
-internal route hopping
-could bypass UI-level access assumptions
-Fix (optional but safer)
-
-Normalize:
-
-import posixpath
-
-normalized = posixpath.normpath(s)
-if not normalized.startswith("/core/flows"):
-    return default
-4) API endpoint: potential N+1 / lazy-load explosion
-for es in execution.execution_steps:
-    "step_name": es.step.name if es.step else None,
-Risk
-
-If es.step is lazy-loaded:
-
-→ N queries per execution
-
-Same for:
-
-process.steps
-Fix
-
-Ensure repo uses eager loading:
-
-SQLAlchemy: joinedload / selectinload
-
-Otherwise this endpoint becomes O(n) queries
-
-5) Payload size bloat (hidden performance cost)
-
-You return:
-
-{
-  execution: {
-    execution_steps: [...],
-    evidence: [...]
-  },
-  process: {
-    steps: [...]
-  }
+9) Client-side redirect guard is good but incomplete
+if (typeof dest !== 'string' || !dest.startsWith('/') || dest.indexOf('://') !== -1)
+Misses:
+//evil.com
+\evil.com
+Improve:
+if (
+  typeof dest !== 'string' ||
+  !dest.startsWith('/') ||
+  dest.startsWith('//') ||
+  dest.includes('://') ||
+  dest.includes('\\')
+) {
+  dest = fallback;
 }
-Risk
-large processes (20–50 steps)
-evidence arrays
-repeated navigation
+🟢 Test suite review
+This is now very good
 
-→ payloads easily hit 100–300KB
+You added:
+
+traversal
+encoded bypass
+fragment exploits
+namespace escape
+One missing case still:
+"/core/flows#%2F%2Fevil.com"
+
+Add that to match your new fragment logic.
+
+🧠 Architectural observation
+
+You’ve effectively defined a policy:
+
+“Return URLs must stay within /core/flows namespace”
+
+That’s excellent—but it’s now implicit in code + tests.
 
 Suggestion
 
-Not urgent, but consider:
+Make it explicit:
 
-omit unused fields (e.g. description, execution_prompts unless needed)
-or add ?minimal=1
-6) Missing guard: bundle shape
-executionData = bundle && bundle.execution;
-processData = bundle && bundle.process;
+ALLOWED_RETURN_PREFIX = "/core/flows"
+
+So future changes don’t drift.
+
+Architectual review
+
+🔴 Remaining architectural issues
+1) minimal is leaky abstraction
+
+Right now:
+
+minimal = ...
+
+controls:
+
+evidence
+process metadata
+step description
+Problem
+
+“minimal” is doing too many things implicitly
+
+This will drift into:
+
+minimal = "sometimes includes X, sometimes Y"
+Better pattern
+
+Make it explicit:
+
+include = set((request.args.get("include") or "").split(","))
+
+Then:
+
+if "evidence" in include: ...
+if "description" in include: ...
+Why this matters
+prevents hidden coupling
+avoids breaking future consumers
+scales as API grows
+2) Frontend tightly coupled to minimal=1
+getExecutionWithProcess(...?minimal=1)
+Problem
+
+UI is now implicitly dependent on:
+
+fields existing / not existing
 Risk
 
-If backend returns unexpected shape:
-
-→ silent undefined usage downstream
+If someone removes a field under minimal, UI silently breaks.
 
 Fix
 
-Hard guard:
+Validate shape explicitly:
 
-if (!bundle || !bundle.execution || !bundle.process) {
-  throw new Error('Invalid execution bundle response');
+if (!processData.steps) throw new Error("Invalid process payload");
+
+You did this for bundle presence—but not structure.
+
+3) Single-flight still allows stale context execution
+var ctx = window.ExecutionStepPageContext || {};
+Scenario
+User navigates quickly
+Context updates
+In-flight promise completes using old context
+
+You don’t re-check token anymore.
+
+Result
+stale render
+wrong execution step displayed
+Fix (important)
+
+Reintroduce lightweight token guard:
+
+var myToken = ++renderToken;
+
+inFlightPromise = (async function () {
+  ...
+  if (myToken !== renderToken) return;
+})();
+
+👉 Single-flight solves concurrency, not staleness
+
+You need both.
+
+4) rerunRequested can collapse multiple updates incorrectly
+if (rerunRequested) {
+  rerunRequested = false;
+  scheduleInit();
 }
-🟠 Medium-risk issues
-7) Duplicate fallback lookup defeats Map benefit
-stepDefinition = stepMap.get(...) || procSteps.find(...)
-Reality
+Problem
 
-If Map is built correctly, fallback is unnecessary.
+If 3 updates happen quickly:
 
-Impact
-redundant O(n) scan
-hides data integrity issues
+only one rerun occurs
+
+That’s fine for idempotent loads—but:
+
+Risk
+
+If context changes between them:
+→ you might skip intermediate valid states
+
+Acceptable?
+
+Yes, but only if:
+
+“latest state always wins”
+
+Which seems true here—but worth being explicit.
+
+5) scheduleInit timing is fragile
+setTimeout(..., 0)
+
+and:
+
+if (now - lastInitMs < 50)
+Problem
+magic numbers
+frame timing dependent
+can behave differently under load
+Cleaner approach
+
+Use microtask queue:
+
+Promise.resolve().then(loadAndRender);
+
+Or requestAnimationFrame:
+
+requestAnimationFrame(loadAndRender);
+6) API response shape inconsistency
+
+In minimal mode:
+
+process: {
+  id,
+  name,
+  steps
+}
+
+In full mode:
+
+process: {
+  id,
+  name,
+  description,
+  category,
+  is_draft,
+  created_at,
+  steps
+}
+Problem
+
+Same object, different schemas
+
 Better
 
-Fail fast:
+Always include keys, set null:
 
-stepDefinition = stepMap.get(String(stepId));
-if (!stepDefinition) throw new Error(...)
-8) Draft path still does double work
-processData = await window.CoreAPI.getProcess(processId);
-Observation
+"description": null
+Why
+prevents frontend branching
+improves typing (especially if you move to TS later)
+7) CSS still tightly coupled to DOM structure
 
-You could extend your bundle endpoint to support:
+You rely on:
 
-GET /processes/:id/with-steps
+#execute-step-modal > .card > div:first-child
+Risk
+any DOM change breaks layout
+extremely brittle selectors
+Better
 
-Then both paths use single API pattern
+Introduce semantic classes:
 
-9) returnTo still trusted on client
+<div class="exec-modal-header">
 
-Even though backend sanitises it, you still:
+Then target:
 
-window.location.href = dest;
-Subtle issue
+.exec-modal-header { display: none; }
+8) Modal reuse pattern still a long-term liability
 
-If frontend state gets corrupted (or reused elsewhere):
+You’re doing:
 
-→ potential redirect misuse
+“render modal as page via CSS overrides”
 
-Safer
+This works, but:
 
-Optionally enforce:
-
-if (!dest.startsWith('/')) dest = '/core/flows';
-10) isDraft parsing duplicated logic
-ctx.draft === true || ctx.draft === 'true' || ...
-Minor, but brittle
-
-Centralise:
-
-function toBool(v) {
-  return v === true || v === 'true' || v === 1 || v === '1';
-}
-🟡 Minor observations
-_safe_flow_return_to is well thought out 👍
-startsWith change is cleaner
-API naming is good (with-process is explicit)
-consistent ISO timestamps 👍
-🧠 Architectural note (important)
-
-You’re moving toward:
-
-“execution screen = data-driven page with reusable renderer”
-
-That’s the right direction.
-
-But you still have:
-
-modal-driven rendering core
-page adapting around it
-Long-term risk
-
-You’ll accumulate:
-
-CSS overrides
+Cost is increasing:
+CSS hacks
 render mode flags
-behavioural edge cases
-Cleaner direction
+DOM assumptions
+You’re now at the tipping point where:
 
-Split:
+It would be cheaper to extract a shared renderer than keep adapting the modal
 
-ExecutionRenderer (pure UI)
-ExecutionModal (wrapper)
-ExecutionPage (wrapper)
+🟠 Subtle performance note
+minimal=1 + steps still potentially heavy
 
-Right now, ExecutionModal is doing too much.
+Even in minimal mode:
 
-TEST review
+"steps": [...]
 
-1) You’re testing the right threat model
+If a process has:
 
-You covered:
+50 steps
+each with inputs/outputs/prompts
 
-absolute URLs (https://, http://)
-protocol-relative (//evil.com)
-script schemes (javascript:, data:, vbscript:)
-empty / whitespace
-malformed relative (core/flows, ?tab=1)
+→ still large payload
 
-That’s the correct attack surface for open redirects.
+Future optimisation
 
-🔴 Critical gaps
-1) No test for encoded bypasses
+Allow:
 
-Attackers don’t send clean strings. They send encoded payloads.
+?minimal=1&steps=compact
+🟢 Smaller observations
+ctxBool helper → good cleanup
+error handling in promise → solid
+encodeURIComponent usage → correct
+CSS extraction → big win
+🧠 Big-picture architectural direction
 
-Missing cases:
-"%2F%2Fevil.com"              # encoded "//"
-"%68%74%74%70%3A%2F%2F..."   # encoded "http://"
-"/%2F%2Fevil.com"
-"/\\evil.com"                # backslash variant
-Why this matters
+You’re converging toward:
 
-Your function:
+Backend:
+  execution + process bundle (projection-based)
 
-if "://" in s:
+Frontend:
+  single-flight renderer
+  page-based execution UI
 
-→ won’t catch encoded versions
+That’s the right shape.
 
-Add:
-@pytest.mark.parametrize("value", [
-    "%2F%2Fevil.com",
-    "/%2F%2Fevil.com",
-    "%68%74%74%70%3A%2F%2Fexample.com",
-])
-def test_encoded_bypass_attempts_blocked(value):
-    assert _safe_flow_return_to(value, PROCESS_ID) == EXPECTED_DEFAULT
-2) No test for path traversal
+🚨 The one thing I’d fix next
 
-You don’t currently restrict paths to /core/flows.
+If you only do one thing:
 
-So this passes:
+👉 Add token-based staleness protection back into single-flight
 
-"/core/flows/../../admin"
-Add:
-def test_path_traversal_not_allowed():
-    value = "/core/flows/../../admin"
-    assert _safe_flow_return_to(value, PROCESS_ID) == EXPECTED_DEFAULT
+Right now you solved:
 
-Even if you don’t enforce it now, this test will catch future tightening.
-
-3) No test for urlparse quirks
-
-urlparse has edge cases like:
-
-"/\\evil.com"
-"/evil.com:80"
-Add:
-@pytest.mark.parametrize("value", [
-    "/\\evil.com",
-    "/evil.com:80",
-])
-def test_weird_netloc_like_paths(value):
-    assert _safe_flow_return_to(value, PROCESS_ID) == EXPECTED_DEFAULT
-4) Missing query/fragment edge cases
-
-These can sometimes sneak through:
-
-"/core/flows#//evil.com"
-"/core/flows?next=//evil.com"
-Add:
-@pytest.mark.parametrize("value", [
-    "/core/flows#//evil.com",
-    "/core/flows?next=//evil.com",
-])
-def test_embedded_redirect_vectors(value):
-    # depends on your policy — currently these PASS
-    assert _safe_flow_return_to(value, PROCESS_ID) == value
-
-👉 Important: This forces you to decide policy explicitly
-
-🟠 Medium issues
-5) Overly permissive “valid” tests
-("/core/flows?id=abc", ...)
-
-You’re not validating:
-
-id format
-query integrity
-
-That’s fine for this function, but the test name implies stronger guarantees than reality.
-
-6) No test for whitespace normalization inside string
-
-You test:
-
-"  /core/flows  "
-
-But not:
-
-"/core/flows   "
-"/core/flows\n"
-"/core/flows\t"
-Add:
-@pytest.mark.parametrize("value", [
-    "/core/flows   ",
-    "/core/flows\n",
-    "/core/flows\t",
-])
-def test_trailing_whitespace_trimmed(value):
-    assert _safe_flow_return_to(value, PROCESS_ID) == "/core/flows"
-7) Case-insensitive scheme test is incomplete
-
-You test:
-
-"Javascript:alert(1)"
-
-But not:
-
-"JaVaScRiPt:alert(1)"
-Add:
-def test_mixed_case_scheme_blocked():
-    assert _safe_flow_return_to("JaVaScRiPt:alert(1)", PROCESS_ID) == EXPECTED_DEFAULT
-🟡 Minor observations
-Test names are clear and scoped 👍
-Parametrization is clean 👍
-Good use of default constant 👍
-🧠 Subtle design issue the test exposes
-
-Right now your function allows:
-
-"/any/internal/path"
-
-But your app logic really expects:
-
-"/core/flows..."
-Your test currently reinforces permissiveness
-
-If your intent is:
-
-“only allow navigation within flows UI”
-
-Then your test suite should enforce that.
-
-✅ Recommended additions (minimal set)
-
-If you want high confidence without overkill, add just these:
-
-# 1. Encoded bypass
-"%2F%2Fevil.com"
-
-# 2. Path traversal
-"/core/flows/../../admin"
-
-# 3. Mixed case scheme
-"JaVaScRiPt:alert(1)"
-
-# 4. Weird slashes
-"/\\evil.com"
-Final verdict
-
-Your test is:
-
-✅ Correct for obvious attacks
-⚠️ Not robust against real-world bypass techniques
-
-It will catch regressions, but not clever inputs.
+concurrency ✔
+but not staleness ❌
