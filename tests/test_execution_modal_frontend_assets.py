@@ -64,9 +64,12 @@ def test_execution_session_module_exists():
 
 
 def test_batch_start_loads_session_before_execution_modal():
-    """Script order: … doc-overlay → render-docs → … execution-modal."""
+    """batch-start includes shared stack; stack order: … doc-overlay → render-docs → … execution-modal."""
     html_path = _REPO_ROOT / "app" / "core" / "frontend" / "processes" / "batch-start.html"
-    text = html_path.read_text(encoding="utf-8")
+    batch_text = html_path.read_text(encoding="utf-8")
+    assert "execution_modal_stack_scripts.html" in batch_text
+    stack_path = _REPO_ROOT / "app" / "core" / "frontend" / "shared" / "execution_modal_stack_scripts.html"
+    text = stack_path.read_text(encoding="utf-8")
     i_utils = text.find("execution-shared-utils.js")
     i_session = text.find("execution-session.js")
     i_doc_overlay = text.find("execution-doc-overlay.js")

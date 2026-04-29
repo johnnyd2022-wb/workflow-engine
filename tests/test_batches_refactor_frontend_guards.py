@@ -59,7 +59,7 @@ def test_execution_step_spa_picker_event_delegation():
 def test_open_step_generation_guard():
     s = _read("execution-open-step.js")
     assert "openExecutionModalGeneration" in s
-    assert "openGen !== openExecutionModalGeneration" in s
+    assert "staleOpen(openGen)" in s
 
 
 def test_modal_secondary_bind_refresh_and_submit_guards():
