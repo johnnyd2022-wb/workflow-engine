@@ -86,6 +86,9 @@
   if (!window.ExecutionOpenStep || typeof window.ExecutionOpenStep.openExecutionModal !== 'function') {
     throw new Error('execution-open-step.js must be loaded before execution-modal.js');
   }
+  if (!window.ExecutionSecurityUtils || typeof window.ExecutionSecurityUtils.isSameOriginEmbedUrl !== 'function') {
+    throw new Error('execution-security-utils.js must be loaded before execution-modal.js');
+  }
 
   // Get configuration or use defaults
   const config = window.ExecutionModalConfig || {

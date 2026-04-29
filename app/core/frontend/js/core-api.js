@@ -50,8 +50,16 @@ window.CoreAPI = window.CoreAPI || {
                 throw error;
             }
             console.error(`API request failed: ${endpoint}`, error);
-            if (error && error.name === 'TypeError' && (error.message === 'Failed to fetch' || error.message === 'Load failed')) {
-                throw new Error('Network error. Check your connection and that the server is running, then try again.');
+            if (error && error.name === 'TypeError') {
+                const msg = String(error.message || '').toLowerCase();
+                if (
+                    msg.indexOf('failed to fetch') !== -1 ||
+                    msg.indexOf('load failed') !== -1 ||
+                    msg.indexOf('networkerror') !== -1 ||
+                    msg.indexOf('network request failed') !== -1
+                ) {
+                    throw new Error('Network error. Check your connection and that the server is running, then try again.');
+                }
             }
             throw error;
         }

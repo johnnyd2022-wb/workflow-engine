@@ -114,6 +114,7 @@
 
   function renderExecutionStepSpa(root, ctx) {
     if (!root) return;
+    // Full root.innerHTML reset below removes prior picker nodes; listeners on old elements go away with the DOM.
     ensureStyles();
 
     var step = ctx.stepDefinition || {};

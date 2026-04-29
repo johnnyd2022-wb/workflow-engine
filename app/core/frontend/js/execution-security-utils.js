@@ -4,21 +4,12 @@
  *
  * Exposes window.ExecutionSecurityUtils.isSameOriginEmbedUrl — fail-closed if page origin
  * cannot be derived from location.href (never compares resolved.origin to itself).
+ *
+ * This is a client-side guard only. Process-doc and download URLs should still be
+ * validated and restricted on the server (signed URLs, org scoping, MIME allowlists).
  */
 (function (root) {
   'use strict';
-
-  function getPageOrigin() {
-    try {
-      var loc = root && root.location;
-      if (!loc || typeof loc.href !== 'string' || !loc.href) {
-        return null;
-      }
-      return new URL(loc.href).origin;
-    } catch (e) {
-      return null;
-    }
-  }
 
   /**
    * @param {string} url
@@ -35,12 +26,28 @@
     ) {
       return false;
     }
-    var pageOrigin = getPageOrigin();
-    if (!pageOrigin) return false;
     try {
       var loc = root && root.location;
-      if (!loc || typeof loc.href !== 'string' || !loc.href) return false;
-      var resolved = new URL(s, loc.href);
+      if (!loc) return false;
+      var pageOrigin;
+      var baseForResolve;
+      if (
+        (loc.protocol === 'http:' || loc.protocol === 'https:') &&
+        typeof loc.origin === 'string' &&
+        loc.origin &&
+        loc.origin !== 'null'
+      ) {
+        pageOrigin = loc.origin;
+        baseForResolve = typeof loc.href === 'string' && loc.href ? loc.href : loc.origin + '/';
+      } else if (typeof loc.href === 'string' && loc.href) {
+        var pageBase = new URL(loc.href);
+        pageOrigin = pageBase.origin;
+        if (!pageOrigin || pageOrigin === 'null') return false;
+        baseForResolve = loc.href;
+      } else {
+        return false;
+      }
+      var resolved = new URL(s, baseForResolve);
       return resolved.origin === pageOrigin;
     } catch (e) {
       return false;

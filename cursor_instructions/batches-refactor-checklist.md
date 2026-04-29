@@ -89,5 +89,21 @@ These were **not** fully closable in one refactor pass; prioritize by risk.
 | **Globals (`window.*`)** | Open | Partially mitigated by refresh/open generations; true isolation needs architectural change. |
 | **SPA picker (`execution-step-spa.js`)** | **Fixed** | Replaced per-card listeners on every rerender with **one delegated** handler on the card container (performance + avoids listener accumulation). |
 | **Doc embed URLs** | **Hardened** | **`javascript:` / `data:` / cross-origin** blocked for iframe/img embed; links below still allow explicit user navigation to download/open. |
-| **Origin fallback bypass** (code review) | `execution-security-utils.js` | **Fixed** | Central `getPageOrigin()` via `new URL(loc.href).origin`; **fail closed** if `location`/`href` missing — never `resolved.origin === resolved.origin`. |
-| **Duplicated URL policy** (code review) | `execution-security-utils.js` | **Fixed** | Single module `ExecutionSecurityUtils.isSameOriginEmbedUrl`; overlay + render-docs call through `urlAllowedForEmbed`. |
+| **Origin check** | `execution-security-utils.js` | **Fixed** | **`http:`/`https:`**: use **`loc.origin`** + **`loc.href`** as resolve base; **non-http(s)**: derive via **`new URL(loc.href)`** and reject missing or **`'null'`** origins (about/blob fail-closed). |
+| **Embed policy drift / wrappers** | overlay, render-docs, modal | **Fixed** | Removed local `urlAllowedForEmbed`; callers use **`ExecutionSecurityUtils.isSameOriginEmbedUrl`** directly; **`execution-modal.js`** throws if module absent; **once-per-tab `console.warn`** if overlay/docs load without security utils; **one check per doc** via `viewUrlEmbedOk`. |
+| **UI-only enforcement** | docs | **Documented** | Comment in **`execution-security-utils.js`**: server must still validate process-doc routes (org scope, signed URLs, MIME). |
+
+### Architecture review (`batches-refactor.md` § Architecture review findings)
+
+| Finding | Resolution |
+|--------|------------|
+| Weak origin / edge SPA | **`loc.origin`** preferred on **`http:`/`https:`**; non-http(s) still fail-closed when origin is opaque. |
+| about:/blob: contexts | **`pageOrigin === 'null'`** rejected; no embed policy on non-http(s) opaque pages. |
+| Duplicate **`urlAllowedForEmbed`** | Already removed in prior pass; doc may be stale — **direct `isSameOriginEmbedUrl` only**. |
+| Overlay vs render-docs symmetry | **Intentional**: overlay has no inline fallback UI; docs show copy + Open/Download — same policy function. |
+| Abort vs CPU work in prompts | **`throwIfAborted(signal)`** after evidence/config awaits before DOM fan-out. |
+| Refresh abort + generation | **Comment** in **`execution-modal-secondary.js`**: fetch cancel + gen token both intentional. |
+| **`core-api`** fetch errors | **Broader `TypeError` message** matching (`networkerror`, `network request failed`, etc.). |
+| Evidence **O(n²)** dedupe | **`Set`**-based dedupe in **`execution-render-prompts.js`**. |
+| **`Promise.all` fan-out / caching** | **Not implemented** — needs API cache contract; defer. |
+| SPA picker listener lifecycle | **Comment** on **`root.innerHTML`** clearing listeners with removed DOM; full teardown helper deferred. |

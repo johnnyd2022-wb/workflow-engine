@@ -23,7 +23,8 @@ def test_execution_security_utils_embed_policy():
     assert "ExecutionSecurityUtils" in s
     assert "isSameOriginEmbedUrl" in s
     assert "javascript:" in s and "data:" in s
-    assert "getPageOrigin" in s or "new URL(loc.href).origin" in s
+    assert "loc.protocol" in s and ("loc.origin" in s or "http:" in s)
+    assert "client-side" in s.lower() or "server" in s.lower()
 
 
 def test_doc_overlay_sandbox_and_teardown():
@@ -34,7 +35,8 @@ def test_doc_overlay_sandbox_and_teardown():
     assert "popstate" in s
     assert "Escape" in s or "'Escape'" in s
     assert "ExecutionSecurityUtils" in s
-    assert "urlAllowedForEmbed" in s
+    assert "isSameOriginEmbedUrl" in s
+    assert "__executionSecurityUtilsMissingLogged" in s
 
 
 def test_render_docs_iframe_hardening_and_summary_dom():
@@ -44,7 +46,8 @@ def test_render_docs_iframe_hardening_and_summary_dom():
     assert "referrerPolicy" in s
     assert "createTextNode('View inline')" in s
     assert "ExecutionSecurityUtils" in s
-    assert "urlAllowedForEmbed" in s
+    assert "isSameOriginEmbedUrl" in s
+    assert "__executionSecurityUtilsMissingLogged" in s
 
 
 def test_execution_step_spa_picker_event_delegation():
@@ -77,6 +80,7 @@ def test_core_api_abort_error_passthrough():
     s = _read("core-api.js")
     assert "AbortError" in s
     assert "error.name === 'AbortError'" in s or "name === 'AbortError'" in s
+    assert "network request failed" in s.lower() or "networkerror" in s.lower()
 
 
 def test_open_step_abort_and_stale_helper():
@@ -95,6 +99,18 @@ def test_modal_secondary_refresh_abort():
     s = _read("execution-modal-secondary.js")
     assert "refreshInventoryAbort" in s
     assert "getInventory(null, null, { signal" in s or "refreshSignal" in s
+
+
+def test_render_prompts_abort_and_evidence_dedupe():
+    s = _read("execution-render-prompts.js")
+    assert "throwIfAborted" in s
+    assert "seenIds" in s and "Set" in s
+
+
+def test_execution_modal_requires_security_utils():
+    s = _read("execution-modal.js")
+    assert "ExecutionSecurityUtils" in s
+    assert "execution-security-utils.js must be loaded" in s
 
 
 def test_jinja_execution_stack_include_order():

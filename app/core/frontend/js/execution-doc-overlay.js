@@ -12,17 +12,21 @@
     }
   }
 
-  function urlAllowedForEmbed(url) {
-    var sec = root.ExecutionSecurityUtils;
-    if (!sec || typeof sec.isSameOriginEmbedUrl !== 'function') {
-      return false;
-    }
-    return sec.isSameOriginEmbedUrl(url);
-  }
-
   root.openDocFullScreenOverlay = function (docUrl, docTitle) {
     if (!docUrl || docUrl === '#') return;
-    if (!urlAllowedForEmbed(docUrl)) {
+    var sec = root.ExecutionSecurityUtils;
+    if (!sec || typeof sec.isSameOriginEmbedUrl !== 'function') {
+      if (!root.__executionSecurityUtilsMissingLogged) {
+        root.__executionSecurityUtilsMissingLogged = true;
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn(
+            'openDocFullScreenOverlay: ExecutionSecurityUtils missing — load execution-security-utils.js before execution-doc-overlay.js. Full-screen doc embed disabled (fail closed).'
+          );
+        }
+      }
+      return;
+    }
+    if (!sec.isSameOriginEmbedUrl(docUrl)) {
       if (typeof console !== 'undefined' && console.warn) {
         console.warn('openDocFullScreenOverlay: blocked URL', docUrl);
       }

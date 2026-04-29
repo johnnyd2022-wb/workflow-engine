@@ -145,6 +145,7 @@
 
   // Called by core2/flows2 add-inventory success when item was added from execution modal.
   // Refetches inventory and updates execute-step-modal dropdowns; optionally selects the new item.
+  // AbortController cancels in-flight fetch; generation token drops stale DOM work after await (belt + suspenders).
   window.refreshExecutionModalInventory = async function(newItem) {
     var gen = ++refreshInventoryGeneration;
     if (refreshInventoryAbort) {

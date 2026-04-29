@@ -6,6 +6,14 @@
 (function (root) {
   'use strict';
 
+  function throwIfAborted(signal) {
+    if (signal && signal.aborted) {
+      var err = typeof DOMException !== 'undefined' ? new DOMException('Aborted', 'AbortError') : new Error('Aborted');
+      if (!(err instanceof DOMException)) err.name = 'AbortError';
+      throw err;
+    }
+  }
+
   async function renderExecutionPrompts(ctx) {
     var modal = ctx.modal;
     var ses = ctx.ses;
@@ -41,12 +49,21 @@
             }
           });
           var stepList = (byStepDef.get(currentStepId) || []).concat(byExecStep.get(currentStepId) || []);
-          evidenceListForStep = stepList.filter(function(e, i, arr) { return arr.findIndex(function(x) { return x.id === e.id; }) === i; });
+          var seenIds = new Set();
+          evidenceListForStep = [];
+          stepList.forEach(function(e) {
+            if (!e || e.id == null) return;
+            var id = e.id;
+            if (seenIds.has(id)) return;
+            seenIds.add(id);
+            evidenceListForStep.push(e);
+          });
         } catch (e) {
           if (e && e.name === 'AbortError') throw e;
           evidenceListForStep = [];
         }
       }
+      throwIfAborted(signal);
       if (!ses.evidenceByStepId) ses.evidenceByStepId = new Map();
       ses.evidenceByStepId.set(currentStepId, evidenceListForStep);
       var maxEvidenceBytes = 10 * 1024 * 1024;
@@ -58,6 +75,7 @@
           if (e && e.name === 'AbortError') throw e;
         }
       }
+      throwIfAborted(signal);
       executionPrompts.forEach(prompt => {
         const promptSection = document.createElement('div');
         promptSection.className = 'execute-prompt-section';

@@ -8,14 +8,6 @@
 (function (root) {
   'use strict';
 
-  function urlAllowedForEmbed(url) {
-    var sec = root.ExecutionSecurityUtils;
-    if (!sec || typeof sec.isSameOriginEmbedUrl !== 'function') {
-      return false;
-    }
-    return sec.isSameOriginEmbedUrl(url);
-  }
-
   /** Escape plain-text markdown body for safe innerHTML (line breaks preserved). */
   function escapeInlineMarkdownContent(text) {
     return String(text || '')
@@ -92,6 +84,20 @@
         var isPdf = mime.indexOf('pdf') !== -1;
         var isNarrowOrTouch = typeof root.innerWidth === 'number' && root.innerWidth <= 768;
 
+        var sec = root.ExecutionSecurityUtils;
+        if (!sec || typeof sec.isSameOriginEmbedUrl !== 'function') {
+          if (!root.__executionSecurityUtilsMissingLogged) {
+            root.__executionSecurityUtilsMissingLogged = true;
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn(
+                'ExecutionRenderDocs: ExecutionSecurityUtils missing — load execution-security-utils.js before execution-render-docs.js. Inline doc embeds disabled (fail closed).'
+              );
+            }
+          }
+        }
+        var viewUrlEmbedOk =
+          sec && typeof sec.isSameOriginEmbedUrl === 'function' && sec.isSameOriginEmbedUrl(viewUrl);
+
         var preview = document.createElement('details');
         preview.className = 'flow-wizard-example-disclosure';
         preview.setAttribute('aria-label', (doc.title || 'Documentation') + ' preview');
@@ -114,7 +120,7 @@
           'width: 100%; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); overflow: hidden; background: var(--bg-card, #fff);';
 
         if (mime.indexOf('image/') === 0) {
-          if (urlAllowedForEmbed(viewUrl)) {
+          if (viewUrlEmbedOk) {
             var img = document.createElement('img');
             img.src = viewUrl;
             img.alt = doc.title || 'Documentation image';
@@ -129,7 +135,7 @@
             frameWrap.appendChild(imgWarn);
           }
         } else {
-          if (urlAllowedForEmbed(viewUrl)) {
+          if (viewUrlEmbedOk) {
             var iframe = document.createElement('iframe');
             iframe.src = viewUrl;
             iframe.title = doc.title || 'Documentation';
