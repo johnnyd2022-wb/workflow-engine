@@ -36,7 +36,9 @@
         var line = (t ? (t + (m ? ': ' : '')) : '') + (m || '');
         if (typeof console !== 'undefined' && console.warn) console.warn('Notification:', type, line);
         // Keep it non-blocking where possible; fall back to alert for visibility.
-        if (type === 'error') alert(line || 'An error occurred.');
+        if (type === 'error' && typeof console !== 'undefined' && console.warn) {
+          console.warn('Notification:', line || 'An error occurred.');
+        }
       } catch (e) {}
     };
   }
@@ -133,6 +135,24 @@
       CoreAPI: window.CoreAPI,
       showNotification: window.showNotification,
       getCurrentUser: window.getCurrentUser,
+    });
+  };
+
+  /**
+   * Run the same client-side checks as submit (inventory, prompts, evidence, confirm inputs,
+   * set_at_execution output expiry/ready date). Async: fetches step definition outputs when needed.
+   * Returns true if valid; on false, shows the same validation toast/scroll as submit.
+   * Does not create a draft execution — safe to call before the record-step confirmation modal.
+   */
+  window.validateExecutionStepForm = async function() {
+    if (!window.ExecutionSubmit || typeof window.ExecutionSubmit.validateExecutionStepForm !== 'function') {
+      return false;
+    }
+    return await window.ExecutionSubmit.validateExecutionStepForm({
+      SessionAPI: SessionAPI,
+      convertUnit: convertUnit,
+      showNotification: window.showNotification,
+      CoreAPI: window.CoreAPI,
     });
   };
 

@@ -89,6 +89,12 @@
     // Store current execution context
     modal.dataset.executionId = executionId || '';
     modal.dataset.executionStepId = (executionStep && executionStep.id) ? executionStep.id : '';
+    if (stepDefinition && stepDefinition.id != null) {
+      modal.dataset.stepDefinitionId = String(stepDefinition.id);
+    }
+    if (options && options.processId) {
+      modal.dataset.processId = String(options.processId);
+    }
     // Ensure Cancel/close removes document click listener for inventory dropdown (avoids listener leak)
     var cancelBtn = modal.querySelector('button[onclick*="execute-step-modal"]');
     if (cancelBtn && !cancelBtn._closeDropdownBound) {

@@ -144,7 +144,10 @@
       if (isDraft) {
         await window.openExecutionModal(null, null, stepDefinition, { processId: processId, renderMode: 'page' });
       } else {
-        await window.openExecutionModal(executionId, readyStep, stepDefinition, { renderMode: 'page' });
+        await window.openExecutionModal(executionId, readyStep, stepDefinition, {
+          processId: processId,
+          renderMode: 'page',
+        });
       }
     })().catch(function (e) {
       console.error('Failed to load execution step page:', e);

@@ -70,8 +70,7 @@
             <div class="flow-mode-segmented" role="group" aria-label="Inventory category" style="margin-bottom: 10px;">
               <button type="button" class="flow-mode-segment flow-mode-segment--active" data-exec-type="raw_material" aria-pressed="true">Raw materials</button>
               <button type="button" class="flow-mode-segment" data-exec-type="work_in_progress" aria-pressed="false">Intermediate</button>
-              <button type="button" class="flow-mode-segment" data-exec-type="final_product" aria-pressed="false">Final products</button>
-              <button type="button" class="flow-mode-segment" data-exec-type="all" aria-pressed="false">All</button>
+              <button type="button" class="flow-mode-segment" data-exec-type="final_product" aria-pressed="false">Finals products</button>
             </div>
             <div class="exec-picker-search">
               <input type="search" class="spa-inp" data-exec-picker-search="true" placeholder="Search inventory…" autocomplete="off">
@@ -107,10 +106,18 @@
         function getInvType(inv) {
           return inv && (inv.inventory_type || inv.type || inv.category || inv.item_type || '');
         }
+        /** Map API/mock inventory types onto picker tab keys (raw_material | work_in_progress | final_product). */
+        function normalizeInventoryTabType(inv) {
+          var t = String(getInvType(inv) || '').toLowerCase().trim();
+          if (!t) return 'raw_material';
+          if (t === 'intermediate' || t === 'work_in_progress' || t === 'wip') return 'work_in_progress';
+          if (t === 'final' || t === 'final_product') return 'final_product';
+          if (t === 'raw' || t === 'raw_material') return 'raw_material';
+          return t;
+        }
         function invMatchesType(inv, selected) {
           if (!selected || selected === 'all') return true;
-          var t = String(getInvType(inv) || '').toLowerCase();
-          return t === selected;
+          return normalizeInventoryTabType(inv) === selected;
         }
         function invMatchesSearch(inv, q) {
           q = (q || '').trim().toLowerCase();
@@ -487,25 +494,69 @@
           }).join('');
         }
 
-        function pickDefaultPickerType() {
+        function normInputName(s) {
+          return String(s || '').trim().toLowerCase();
+        }
+        function countTabTypes(list) {
           var counts = { raw_material: 0, work_in_progress: 0, final_product: 0 };
-          try {
-            (sortedInventory || []).forEach(function(inv) {
-              var t = String((inv && inv.inventory_type) || 'raw_material');
-              if (counts[t] != null) counts[t] += 1;
-            });
-          } catch (e) {}
+          (list || []).forEach(function(inv) {
+            var tab = normalizeInventoryTabType(inv);
+            if (counts[tab] != null) counts[tab] += 1;
+          });
+          return counts;
+        }
+        /**
+         * Choose initial category tab from name-matched inventory.
+         * Previously any WIP/final in the fuzzy-matched set forced WIP/final over raw — wrong when the step
+         * expects a raw material but loose name matching also pulled in finals.
+         */
+        function pickDefaultPickerType() {
+          var list = sortedInventory || [];
+          var expected = normInputName(input && input.name);
+          var exact =
+            expected
+              ? list.filter(function(inv) {
+                  return normInputName(inv && inv.name) === expected;
+                })
+              : [];
+          if (exact.length) {
+            var ec = countTabTypes(exact);
+            var er = ec.raw_material > 0;
+            var ew = ec.work_in_progress > 0;
+            var ef = ec.final_product > 0;
+            var kinds = (er ? 1 : 0) + (ew ? 1 : 0) + (ef ? 1 : 0);
+            if (kinds === 1) {
+              if (er) return 'raw_material';
+              if (ew) return 'work_in_progress';
+              return 'final_product';
+            }
+            if (er && !ew && !ef) return 'raw_material';
+            if (ew && !er && !ef) return 'work_in_progress';
+            if (ef && !er && !ew) return 'final_product';
+            if (ec.final_product > ec.work_in_progress) return 'final_product';
+            if (ec.work_in_progress > ec.final_product) return 'work_in_progress';
+            if (ec.raw_material >= ec.work_in_progress && ec.raw_material >= ec.final_product) return 'raw_material';
+          }
+
+          var counts = countTabTypes(list);
           var hasWip = counts.work_in_progress > 0;
           var hasFinal = counts.final_product > 0;
           var hasRaw = counts.raw_material > 0;
 
-          // If this input references a previous output, default to intermediate/final if present.
           if (input && input.source_output_id) {
-            if (hasWip || hasFinal) return (counts.final_product > counts.work_in_progress) ? 'final_product' : 'work_in_progress';
+            if (hasWip || hasFinal) {
+              return counts.final_product > counts.work_in_progress ? 'final_product' : 'work_in_progress';
+            }
+            return 'raw_material';
           }
-          // Otherwise: prefer non-raw types if any exist; else raw.
-          if (hasWip || hasFinal) return (counts.work_in_progress >= counts.final_product) ? 'work_in_progress' : 'final_product';
-          if (hasRaw) return 'raw_material';
+
+          if (hasRaw && !hasWip && !hasFinal) return 'raw_material';
+          if (!hasRaw && (hasWip || hasFinal)) {
+            return counts.work_in_progress >= counts.final_product ? 'work_in_progress' : 'final_product';
+          }
+          if (hasRaw && (hasWip || hasFinal)) {
+            return 'raw_material';
+          }
           return 'raw_material';
         }
 
@@ -1232,11 +1283,11 @@
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity <span style="color: var(--error, #ef4444);">*</span></label>
-            <input type="number" class="spa-inp execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0">
+            <input type="number" class="spa-inp execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0">
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit <span style="color: var(--error, #ef4444);">*</span></label>
-            <select class="spa-inp execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true" required>
+            <select class="spa-inp execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true">
               <option value="">Select unit...</option>
               ${['kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in', 'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers'].map((unit) => `
                 <option value="${unit}" ${input.unit === unit ? 'selected' : ''}>${unit}</option>

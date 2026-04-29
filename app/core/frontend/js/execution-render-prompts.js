@@ -95,13 +95,13 @@
             </div>
           `;
         } else if (prompt.type === 'text') {
-          inputHtml = `<input type="text" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}>`;
+          inputHtml = `<input type="text" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}>`;
         } else if (prompt.type === 'number') {
-          inputHtml = `<input type="number" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''} step="0.01">`;
+          inputHtml = `<input type="number" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''} step="0.01">`;
         } else if (prompt.type === 'date') {
-          inputHtml = `<input type="date" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}>`;
+          inputHtml = `<input type="date" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}>`;
         } else if (prompt.type === 'select') {
-          inputHtml = `<select class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'required' : ''}><option value="">Select...</option></select>`;
+          inputHtml = `<select class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}><option value="">Select...</option></select>`;
         }
 
         promptSection.innerHTML = `

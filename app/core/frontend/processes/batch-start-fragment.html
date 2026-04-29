@@ -64,14 +64,35 @@
   {# Inline execution UI (no bordered container) #}
   {% include "shared/execution-modal.html" %}
 
-  <!-- Bottom CTA: record step -->
-  <div style="position: sticky; bottom: 0; margin-top: 18px; padding: 14px 0; background: linear-gradient(to top, var(--bg-primary, #fff) 70%, rgba(255,255,255,0));">
-    <div style="display:flex; justify-content:flex-end;">
-      <button
-        type="button"
-        class="btn btn-primary"
-        onclick="(function(){ try { if (typeof window.submitExecution === 'function') return window.submitExecution(); if (window.showNotification) return window.showNotification('error','Record step','submitExecution() is not available yet.'); alert('submitExecution() is not available yet.'); } catch(e){ if (window.showNotification) window.showNotification('error','Record step failed', e && e.message ? e.message : String(e)); else alert(e && e.message ? e.message : String(e)); } })();"
-      >Record step</button>
+</div>
+
+<!-- Full-width fixed primary action (outside .max-content so it spans the main column) -->
+<div class="batch-start-record-bar" role="region" aria-label="Record step">
+  <div class="batch-start-record-bar__inner">
+    <button
+      type="button"
+      class="btn btn-primary batch-start-record-bar__btn"
+      id="batch-start-record-btn"
+    >Record step</button>
+  </div>
+</div>
+
+<!-- Confirmation sheet (opened by JS; backdrop does not dismiss — Cancel / Confirm only) -->
+<div id="batch-record-confirm-root" class="batch-record-confirm" hidden aria-hidden="true">
+  <div class="batch-record-confirm__backdrop" aria-hidden="true"></div>
+  <div
+    class="batch-record-confirm__sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="batch-record-confirm-title"
+  >
+    <h2 class="batch-record-confirm__title" id="batch-record-confirm-title">Record this step?</h2>
+    <p class="batch-record-confirm__text">
+      Nothing is saved until you confirm. Inputs, outputs, and compliance data will be submitted for this step.
+    </p>
+    <div class="batch-record-confirm__actions">
+      <button type="button" class="btn btn-secondary batch-record-confirm__cancel" id="batch-record-confirm-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary batch-record-confirm__ok" id="batch-record-confirm-ok">Confirm</button>
     </div>
   </div>
 </div>
