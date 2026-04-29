@@ -78,7 +78,20 @@ def test_batch_start_loads_session_before_execution_modal():
     i_secondary = text.find("execution-modal-secondary.js")
     i_open = text.find("execution-open-step.js")
     i_modal = text.find("execution-modal.js")
-    assert 0 < i_utils < i_session < i_doc_overlay < i_docs < i_prompts < i_inputs < i_outputs < i_submit < i_secondary < i_open < i_modal
+    assert (
+        0
+        < i_utils
+        < i_session
+        < i_doc_overlay
+        < i_docs
+        < i_prompts
+        < i_inputs
+        < i_outputs
+        < i_submit
+        < i_secondary
+        < i_open
+        < i_modal
+    )
 
 
 def test_execution_modal_calls_render_docs_api():
