@@ -47,7 +47,7 @@ Work order: top to bottom; `[x]` = implemented or reviewed with resolution.
 | `refreshExecutionModalInventory` race | `execution-modal-secondary.js` | Critical | `refreshInventoryGeneration` token; abort stale DOM pass after `getInventory` |
 | Duplicate submit bind / double submit | `execution-modal-secondary.js` | Critical | `_executionUntrackedFormBound`, `_untrackedSubmitInFlight` + `finally` |
 | Stale open / async chain | `execution-open-step.js` | Critical | `openExecutionModalGeneration` + guards after `Promise.all`, prompts, outputs, before `showModal` |
-| Untrusted embed URLs | `execution-doc-overlay.js`, `execution-render-docs.js` | Critical | `isSameOriginDocumentUrl`; blocks dangerous schemes + cross-origin **embed** (Open/Download unchanged) |
+| Untrusted embed URLs | `execution-doc-overlay.js`, `execution-render-docs.js` | Critical | **`ExecutionSecurityUtils.isSameOriginEmbedUrl`**; blocks dangerous schemes + cross-origin **embed** (Open/Download unchanged) |
 | Picker listener pile-up | `execution-step-spa.js` | High (perf) | Delegated click on `#exec-spa-cards-*` via `_execSpaPickerDelegate` |
 | Silent org users failure | `execution-shared-utils.js` | High | `console.warn` when `/org/users` fails; empty map unchanged |
 | Globals / isolation | Many | Medium | Deferred — see M1 |
@@ -107,3 +107,29 @@ These were **not** fully closable in one refactor pass; prioritize by risk.
 | Evidence **O(n²)** dedupe | **`Set`**-based dedupe in **`execution-render-prompts.js`**. |
 | **`Promise.all` fan-out / caching** | **Not implemented** — needs API cache contract; defer. |
 | SPA picker listener lifecycle | **Comment** on **`root.innerHTML`** clearing listeners with removed DOM; full teardown helper deferred. |
+
+---
+
+## Merge review record
+
+Human review in **`cursor_instructions/batches-refactor.md`** (sections **1–10**, **CROSS-CUTTING SUMMARY**, **FINAL MERGE VERDICT**): **SAFE TO MERGE** — no blocking security or correctness issues called out in that verdict; residuals (retry/backoff, partial downstream `signal` coverage, no inventory fan-out cache) are acknowledged there and remain optional follow-ups.
+
+---
+
+## Recommended next architecture work
+
+Ordered by leverage for **reasoning**, **performance**, or **security** only (not style churn).
+
+| Priority | Change | Why |
+|----------|--------|-----|
+| **1 — Security** | **Server-side guarantees for process docs** (authz on view/download routes, org/step scoping, optional short-lived signed URLs, MIME allowlists). | Client **`ExecutionSecurityUtils`** is defense in depth; authoritative trust belongs on the API. Easier audits and fewer “UI bypass” worries. |
+| **2 — Reasoning** | **One execution “session” object** (open generation + `AbortController` + optional step id) passed into renderers instead of growing **`window.*`** and **`modal.dataset`** alone. Document the contract in one place (even if still plain objects). | Same behavior as today with a clearer mental model and less scattered mutation. |
+| **3 — Performance** | **Bounded cache + invalidation for hot reads** (e.g. inventory list): TTL or “invalidate on successful refresh / step complete”, keyed consistently. | Cuts **`Promise.all`** thundering herd when users flip steps; must be explicit so staleness stays predictable. |
+| **4 — Reasoning + perf** | **`CoreAPI` retry/backoff** only for **idempotent GETs** (with caps) and clear separation from mutations. | Fewer flaky-network failures without hiding real bugs on POST/complete. |
+| **5 — Reasoning** | **Single bundler entry** (or import map) for the execution stack so load order is enforced by the graph, not only **`throw` in `execution-modal.js`**. | Reduces duplicate-script risk and makes “what runs first” obvious. |
+| **6 — Security / reasoning** | **Stricter CSP** over time (nonces/hashes, tighten `script-src`) — pairs with reducing inline script where feasible. | Shrinks XSS blast radius; larger project. |
+| **7 — Performance** | **`batch-start.css` `!important` unwind** only with visual regression checks or scoped tokens. | Easier overrides and fewer specificity wars; defer until you have time for QA. |
+
+**Lower ROI for now:** rewriting every **`innerHTML`** card to **`createElement`** where values are already escaped (security gain is marginal vs regression risk); full teardown APIs for SPA picker unless profiling shows leaks.
+
+**Expanded (ordered) list with file touchpoints:** `cursor_instructions/execution-refactor-opportunities.md`

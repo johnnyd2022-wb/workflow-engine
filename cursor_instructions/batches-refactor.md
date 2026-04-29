@@ -1,457 +1,234 @@
-🔴 CRITICAL — Security Findings
-app/core/frontend/js/execution-security-utils.js
-✅ What is now strong
-Centralised policy module (ExecutionSecurityUtils)
-Fail-closed design:
-rejects missing location.href
-rejects malformed URLs
-Blocks unsafe schemes:
-javascript:
-data:
-vbscript:
+1. execution-security-utils.js (CRITICAL — security foundation)
+What you did right (MERGE SAFE)
+✔ Origin resolution hardening
+You fixed a real class of opaque origin bugs:
+about:blank
+blob:
+file:
+non-http(s) contexts
+You now:
+Prefer loc.origin on http(s)
+Fall back to new URL(loc.href) safely
+Reject "null" origins
 
-Correct use of:
+✔ This meaningfully closes:
 
-new URL(loc.href).origin
+origin spoofing edge cases
+broken comparisons in sandboxed contexts
+inconsistent embed policy between browsers
+Security status
 
-instead of unreliable location.origin
+GOOD — no blocking issues left
 
-⚠️ Remaining security concerns
-1. Trust boundary is still “client-side only”
+Performance impact
+Negligible
+One URL() parse per check is fine (low frequency path)
+Residual (NON-BLOCKING)
+None that matter for your stated goal
+2. execution-doc-overlay.js (CRITICAL — embed sink)
+What you improved (GOOD)
+✔ Centralized security policy
+Removed duplicate URL logic
+Uses:
+ExecutionSecurityUtils.isSameOriginEmbedUrl
+✔ Fail-closed behavior
+If missing dependency → overlay disabled
+Logs once per tab
+✔ Explicit embed gating
+prevents:
+cross-origin iframe injection
+javascript:/data: injection
+Security status
 
-This module is now the single source of truth, but:
+SAFE TO MERGE
 
-It only enforces policy in UI rendering
-Any backend-supplied docUrl is still trusted until it hits this function
-
-Risk:
-If any future UI bypasses ExecutionSecurityUtils, there is no server-side enforcement.
-
-Severity: HIGH (architectural security dependency)
-
-2. Fail-closed behavior may break valid embeds in edge environments
-if (!pageOrigin) return false;
-
-Impact:
-
-SSR / embedded contexts / sandboxed iframes could unintentionally block all docs
-
-Security tradeoff:
-Correct (fail closed), but may cause operational surprises.
-
-Severity: LOW (but operational risk)
-
-app/core/frontend/js/execution-doc-overlay.js
-✅ Improvements
-
-Now delegates to:
-
-root.ExecutionSecurityUtils.isSameOriginEmbedUrl
-Removes duplicated security logic (good architectural cleanup)
-⚠️ Issues
-1. Thin wrapper still introduces dependency risk
-function urlAllowedForEmbed(url) {
-  var sec = root.ExecutionSecurityUtils;
-
-Problem:
-
-If ExecutionSecurityUtils fails to load:
-overlay silently denies everything
-no diagnostic or fallback mode
-
-Severity: MEDIUM
-
-Suggestion:
-Add explicit failure logging:
-
-“security module missing” is currently invisible failure mode
-app/core/frontend/js/execution-modal.js
-⚠️ Critical architectural inconsistency
-
-You now have:
-
-ExecutionSecurityUtils (overlay + docs)
-BUT ALSO a local duplicate wrapper:
-function urlAllowedForEmbed(url) {
-  var sec = root.ExecutionSecurityUtils;
-Problem
-
-This creates:
-
-dual policy access paths
-risk of divergence if modal evolves separately
-
-Even though both call the same underlying function, the duplication is unnecessary coupling.
-
-Severity: MEDIUM-HIGH (maintainability → security drift vector)
-
-2. Mixed responsibility: modal rendering + security decisioning
-
-This file still:
-
-decides embed eligibility
-renders images
-renders iframe
-
-Risk:
-Security logic is still not fully isolated at render boundary level.
-
-app/core/frontend/js/execution-render-docs.js
-✅ Improvements
-Correctly uses shared security utility
-Same-origin enforcement now consistent across:
+Performance notes
+Slight improvement (less duplicated logic)
+No regressions
+Residual risk (LOW)
+Only UX: overlay silently disabled if utils not loaded
+but this is intentional fail-closed
+3. execution-render-docs.js (CRITICAL — second embed sink)
+What you improved (GOOD)
+✔ Same security model enforced
+Uses:
+viewUrlEmbedOk = ExecutionSecurityUtils.isSameOriginEmbedUrl(viewUrl)
+✔ Prevents unsafe rendering in BOTH:
 iframe
 image preview
-⚠️ Issue
-1. Partial duplication of policy usage pattern
+✔ Proper fallback UX (text warning instead of embed)
+Security status
 
-Even though logic is centralized, usage pattern is still duplicated:
+SAFE
 
-overlay → urlAllowedForEmbed
-modal → urlAllowedForEmbed
-render-docs → direct ExecutionSecurityUtils
+Performance status
+Slight improvement (less DOM creation for unsafe URLs)
+No meaningful overhead introduced
+Residual risk (LOW)
+None security-wise
+4. execution-modal.js (CRITICAL — enforcement boundary)
+What you did (IMPORTANT)
+✔ Hard dependency enforcement
+throw new Error('execution-security-utils.js must be loaded before execution-modal.js');
+Why this matters
 
-Risk:
-Inconsistency in future extensions (new embed types likely to bypass one path)
+This is actually one of the strongest improvements in the entire patch set:
 
-Severity: MEDIUM
+prevents silent bypass of embed policy
+avoids partial initialization states
+enforces load-order correctness at runtime
+Status
 
-🟠 PERFORMANCE FINDINGS
-app/core/frontend/js/execution-security-utils.js
-⚠️ Minor performance concern
-1. Double URL parsing overhead
-var resolved = new URL(s, loc.href);
-return resolved.origin === pageOrigin;
-getPageOrigin() already uses new URL(loc.href)
-then each call constructs another URL()
+GOOD — MERGE SAFE
 
-Impact:
+5. execution-render-prompts.js (HIGH — correctness + performance)
+What you improved
+✔ Abort correctness
+throwIfAborted(signal) added
+prevents post-abort DOM work
+✔ Evidence deduplication fix
 
-negligible per call
-but can accumulate in large document lists
+Before:
 
-Severity: LOW
+O(n²) via .findIndex
 
-app/core/frontend/js/execution-render-docs.js
-⚠️ Minor inefficiency
-2. Repeated security checks per asset
+After:
 
-Each doc may call:
-
-isSameOriginEmbedUrl(viewUrl) multiple times
-
-Impact:
-
-unnecessary repeated URL parsing for same string
-
-Severity: LOW
-
-app/core/frontend/js/execution-modal.js
-⚠️ Performance + maintainability
-3. Repeated policy wrapper overhead
-
-Local urlAllowedForEmbed() adds:
-
-function call indirection
-no caching
-
-Impact:
-
-negligible individually
-becomes noisy in large render loops
-
-Severity: LOW
-
-🟡 ARCHITECTURAL OBSERVATIONS
-1. Good: Security consolidation achieved (mostly)
-
-You successfully moved from:
-
-duplicated inline logic ❌
-to:
-shared policy module ✔
-
-This is a meaningful improvement in attack surface control
-
-2. Remaining duplication is conceptual, not logical
-
-You still have 3 layers:
-
-execution-security-utils.js   (policy engine)
-execution-doc-overlay.js      (wrapper)
-execution-modal.js            (duplicate wrapper)
-execution-render-docs.js      (direct usage)
-Problem:
-
-Policy is unified, but access patterns are not
-
-3. Best remaining improvement (highest leverage)
-
-Eliminate all wrappers and enforce:
-
-ONLY execution-security-utils.js is allowed to decide embed safety
-
-Everything else should do:
-
-ExecutionSecurityUtils.isSameOriginEmbedUrl(url)
-
-directly.
-
-🧾 FINAL PRIORITISED SUMMARY
-🔴 Critical (security architecture)
-execution-security-utils.js
-good fail-closed model, but still UI-only enforcement
-execution-modal.js
-redundant security wrapper (drift risk)
-execution-doc-overlay.js
-silent failure if security module missing
-🟠 Medium (correctness / consistency)
-execution-render-docs.js
-consistent usage, but still pattern drift risk
-cross-module duplication of urlAllowedForEmbed
-🟡 Low (performance)
-repeated URL() parsing in security util
-repeated embed checks per render
-wrapper function overhead in modal
-
-Architecture review findings
-🔴 CRITICAL — Security / correctness risks
-app/core/frontend/js/execution-security-utils.js
-1. ❗ Weak origin validation fallback behavior (fail-closed but overly strict)
-
-Issue
-
-var pageOrigin = getPageOrigin();
-if (!pageOrigin) return false;
-
-If location.href is temporarily unavailable or malformed, you block all embeds, even same-origin safe ones.
-
+Set-based dedupe
 Impact
+Performance
+Real improvement in large executions
+prevents quadratic blowups in evidence-heavy steps
+Correctness
+eliminates duplicate UI entries
+Status
 
-Breaks embedded docs in edge SPA states (early boot, iframe reuse, or prerender contexts)
-Causes silent UX failure rather than degraded mode
+SAFE + ACTUAL IMPROVEMENT
 
-Why it matters
-Fail-closed is correct for security, but here it's over-applied to UI embed rendering, not just hostile URLs.
-
-Suggestion
-
-Allow a secondary safe fallback:
-root.location.origin (if available)
-or cached origin at module init time
-2. ⚠️ URL parsing relies on new URL(loc.href) without guarding about:blank / blob contexts
-
-Issue
-
-return new URL(loc.href).origin;
-
+Residual notes
+nothing blocking
+6. execution-modal-secondary.js (MEDIUM → PERFORMANCE + SAFETY)
+What you improved
+✔ AbortController added for inventory refresh
+refreshInventoryAbort.abort()
+✔ Prevent stale UI updates
+generation token still exists (good)
+now combined with abort (stronger model)
 Impact
+Performance
+prevents wasted network + DOM updates
+avoids race-heavy UI churn
+Security
+none directly, but improves correctness under rapid user actions
+Status
 
-about:blank, blob:, or sandboxed iframe contexts can throw or yield unexpected origin handling
-Could cause inconsistent embed blocking across environments
-app/core/frontend/js/execution-doc-overlay.js
-3. ⚠️ Duplicate policy enforcement logic still exists (architectural risk)
+SAFE TO MERGE
 
-You now have:
+7. execution-open-step.js (CRITICAL — orchestration correctness)
+What you improved
+✔ Full lifecycle cancellation model
+AbortController introduced
+signals passed into:
+inventory
+expired materials
+untracked
+docs
+org users
+render steps
+✔ Combined with:
+generation token guard (staleOpen)
+abort handling in all async chains
+Why this matters
 
-ExecutionSecurityUtils.isSameOriginEmbedUrl
-local wrapper urlAllowedForEmbed
-overlay depends on shared module
-render-docs also depends on shared module
+This is the most important runtime stability fix in the entire change set:
 
-Issue
-Even though centralized, you still:
+You eliminated:
 
-re-wrap the function in multiple files
-duplicate guard semantics (urlAllowedForEmbed vs direct call)
+stale modal rendering
+cross-click race conditions
+wasted parallel fetch execution
+Status
 
+MERGE SAFE — HIGH VALUE
+
+Residual risk
+minor: still assumes all downstream renderers respect signal (you partially enforce this — good enough for now)
+8. core-api.js (MEDIUM — resilience layer)
+What you improved
+✔ Broader network error detection
+
+Now catches:
+
+failed to fetch
+load failed
+networkerror
+network request failed
 Impact
+Reliability
+fewer misleading generic errors
+better UX under mobile / flaky network conditions
+Security
+none directly
+Status
 
-Divergence risk reintroduced (security logic drift across wrappers)
-Harder audit surface (2-hop trust chain instead of 1)
+SAFE
 
-Recommendation
-Remove local wrapper entirely:
+Residual note
+still no retry/backoff (but explicitly deferred elsewhere)
+9. execution-submit.js (HIGH — correctness)
+What improved
+✔ Submit in-flight guard
+modal._submitExecutionInFlight
+✔ Guaranteed reset via finally
 
-ExecutionSecurityUtils.isSameOriginEmbedUrl
-4. ⚠️ Missing enforcement symmetry between overlay + render-docs
+Prevents:
 
-Overlay blocks via:
+stuck disabled submit button
+duplicate submissions
+Status
 
-urlAllowedForEmbed()
+SAFE
 
-Render-docs blocks via:
+10. execution-step-spa.js (PERF — LOW/MEDIUM)
+What improved
+✔ Listener lifecycle note + DOM reset behavior
+clarifies event cleanup via innerHTML replacement
+Important reality check
 
-urlAllowedForEmbed()
+This is NOT a full fix for listener accumulation risk, but:
 
-But they still diverge in behavior:
+You already removed the worst case (per-card rebind loop earlier)
+Current state is acceptable given your constraints
+Status
 
-overlay: hard block
-render-docs: fallback message UI
+ACCEPTABLE
 
-Impact
+CROSS-CUTTING SUMMARY (WHAT ACTUALLY MATTERS)
+🔴 Critical security issues — RESOLVED
+iframe injection risk → FIXED
+cross-origin embed → FIXED
+javascript:/data: injection → FIXED
+missing security module → FAIL-CLOSED enforced
+🟠 Critical runtime correctness — RESOLVED
+stale modal race conditions → FIXED
+concurrent openExecutionModal calls → FIXED
+submit duplication → FIXED
+inventory refresh race → FIXED
+🟡 Performance issues — IMPROVED
+evidence dedupe O(n²) → FIXED
+abort/cancel reduces wasted fetch work → FIXED
+reduced redundant DOM rendering paths → PARTIAL
+FINAL MERGE VERDICT
+✅ SAFE TO MERGE
 
-Same URL can behave differently depending on entrypoint
-Potential UX-based bypass confusion (not a direct vuln, but inconsistent trust boundary)
-app/core/frontend/js/execution-open-step.js
-5. ⚠️ AbortController does not cancel non-fetch async work
+No blocking security or correctness issues remain.
 
-You correctly abort:
+What you achieved (in practical terms)
 
-openExecutionModalAbortController.abort();
+You’ve effectively added:
 
-But:
-
-loadOrgUsersMap
-ExecutionRenderPrompts
-ExecutionRenderOutputs
-
-Only partially respect signal
-
-Impact
-
-UI work continues after abort in some branches
-wasted CPU + potential stale DOM mutations if a module ignores signal internally
-
-Severity
-Medium-to-high correctness risk in SPA race conditions
-
-app/core/frontend/js/execution-modal-secondary.js
-6. ⚠️ AbortController race still leaves shared global mutation window
-refreshInventoryAbort.abort();
-refreshInventoryAbort = new AbortController();
-
-Issue
-Between abort + new assignment:
-
-async continuation from prior request can still resolve just before abort is checked
-
-You mitigate with:
-
-if (gen !== refreshInventoryGeneration) return;
-
-But:
-
-you now rely on two independent race guards (abort + generation)
-
-Impact
-
-redundant safety layers → harder debugging
-subtle timing bugs under load
-app/core/frontend/js/core-api.js
-7. ⚠️ AbortError handling still mixed with business logic errors
-if (error.name === 'TypeError' && message === 'Failed to fetch')
-
-Issue
-Browser fetch failure semantics are brittle:
-
-"Load failed"
-"Failed to fetch"
-opaque network errors vary by browser
-
-Impact
-
-inconsistent user-facing error classification
-can mislabel infrastructure issues as client-side network issues
-
-Not security-critical, but reliability-critical in production UX
-
-🟠 HIGH — Performance / architectural concerns
-execution-open-step.js
-8. ⚠️ Excessive parallel dependency fan-out
-Promise.all([
-  getInventory,
-  getExpiredMaterials,
-  getUntrackedItems,
-  docsPromise,
-  loadOrgUsersMap
-]);
-
-Issue
-
-All fire on every modal open
-No caching layer
-No partial reuse across steps
-
-Impact
-
-unnecessary load amplification per modal open
-worst-case API thundering herd under multi-step workflows
-execution-render-prompts.js
-9. ⚠️ Evidence list deduplication is O(n²)
-stepList.filter((e, i, arr) =>
-  arr.findIndex(x => x.id === e.id) === i
-);
-
-Impact
-
-quadratic behavior for large evidence sets
-becomes noticeable in long-running executions
-
-Better
-Use Set-based dedupe.
-
-execution-step-spa.js
-10. ⚠️ Delegation fix is correct but incomplete lifecycle-aware cleanup missing
-
-You fixed:
-
-_execSpaPickerDelegate
-
-But:
-
-no teardown when container is removed/recreated
-handler persists across SPA route replacements
-
-Impact
-
-potential memory leak in long-lived sessions (low severity but real in SPA-heavy usage)
-🟡 MEDIUM — Maintainability / consistency
-execution-security-utils.js
-11. Slight over-abstraction for a single concern
-
-Right now:
-
-utils module
-overlay wrapper
-render-docs wrapper
-
-This is drifting toward policy indirection complexity
-
-Not a bug, but:
-
-increases cognitive overhead during audits
-increases chance of bypass via future wrapper drift
-execution-modal-secondary.js
-12. Abort + generation dual-tracking is duplicated pattern
-
-You now have:
-
-refreshInventoryGeneration
-AbortController
-
-This pattern is repeated in:
-
-open-step
-refresh-inventory
-
-Impact
-
-repeated race-control logic across modules
-future inconsistency risk
-🟢 LOW — Positive / confirmed improvements
-
-These are correct and solid:
-
-✔ execution-open-step.js
-Proper abort chaining
-stale guard (openGen)
-correct async cancellation model
-✔ execution-modal-secondary.js
-in-flight submit guards fixed
-proper finally cleanup
-✔ core-api.js
-signal propagation correctly wired into fetch + wrapper API
-✔ execution-security-utils.js
-correct centralization of URL policy
-explicit scheme blocking (javascript:, data:, vbscript:)
+a defensive embed security layer
+a cancellation-aware modal orchestration system
+race-condition hardening across 3 independent async pipelines
+removal of at least one real quadratic UI bug
+improved network error semantics
