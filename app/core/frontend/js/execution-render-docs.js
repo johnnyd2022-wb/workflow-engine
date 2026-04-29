@@ -1,38 +1,19 @@
 /**
  * Step documentation (SOP) rendering for execute-step UI — no modal/page coupling.
- * Depends on globals: CoreAPI; load execution-doc-overlay.js first for openDocFullScreenOverlay (optional).
+ * Depends on: CoreAPI; execution-security-utils.js (embed URL policy).
+ * Load execution-doc-overlay.js first for openDocFullScreenOverlay (optional).
  *
  * Load before execution-modal.js — exposes window.ExecutionRenderDocs.
  */
 (function (root) {
   'use strict';
 
-  /** Same-origin only for embedded iframe/img (defense in depth vs malicious stored URLs). */
-  function isSameOriginDocumentUrl(url) {
-    if (!url || url === '#') return false;
-    var s = String(url).trim();
-    var lower = s.toLowerCase();
-    if (
-      lower.indexOf('javascript:') === 0 ||
-      lower.indexOf('data:') === 0 ||
-      lower.indexOf('vbscript:') === 0
-    ) {
+  function urlAllowedForEmbed(url) {
+    var sec = root.ExecutionSecurityUtils;
+    if (!sec || typeof sec.isSameOriginEmbedUrl !== 'function') {
       return false;
     }
-    try {
-      var loc =
-        typeof root.location !== 'undefined'
-          ? root.location
-          : typeof window !== 'undefined'
-            ? window.location
-            : null;
-      var base = loc && loc.href ? loc.href : 'http://localhost/';
-      var resolved = new URL(s, base);
-      var origin = loc && loc.origin ? loc.origin : resolved.origin;
-      return resolved.origin === origin;
-    } catch (e) {
-      return false;
-    }
+    return sec.isSameOriginEmbedUrl(url);
   }
 
   /** Escape plain-text markdown body for safe innerHTML (line breaks preserved). */
@@ -133,7 +114,7 @@
           'width: 100%; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); overflow: hidden; background: var(--bg-card, #fff);';
 
         if (mime.indexOf('image/') === 0) {
-          if (isSameOriginDocumentUrl(viewUrl)) {
+          if (urlAllowedForEmbed(viewUrl)) {
             var img = document.createElement('img');
             img.src = viewUrl;
             img.alt = doc.title || 'Documentation image';
@@ -148,7 +129,7 @@
             frameWrap.appendChild(imgWarn);
           }
         } else {
-          if (isSameOriginDocumentUrl(viewUrl)) {
+          if (urlAllowedForEmbed(viewUrl)) {
             var iframe = document.createElement('iframe');
             iframe.src = viewUrl;
             iframe.title = doc.title || 'Documentation';

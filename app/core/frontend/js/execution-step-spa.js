@@ -281,6 +281,7 @@
           renderPickerCards(cardHost, allInventory, getExpiredReason, pickerState.activeType, pickerState.q, pickerState.selectedId);
         }
 
+        // cardHost is the persistent #exec-spa-cards-* container; innerHTML of cards only is replaced.
         if (!cardHost._execSpaPickerDelegate) {
           cardHost._execSpaPickerDelegate = true;
           cardHost.addEventListener('click', function(ev) {

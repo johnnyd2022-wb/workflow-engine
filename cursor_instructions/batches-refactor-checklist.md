@@ -64,7 +64,8 @@ Work order: top to bottom; `[x]` = implemented or reviewed with resolution.
 
 | Test module | Asserts (intent) | Files covered |
 |-------------|------------------|---------------|
-| `tests/test_batches_refactor_frontend_guards.py` :: `test_doc_overlay_sandbox_and_teardown` | Overlay teardown helpers, sandbox, referrer, ESC/popstate, same-origin URL guard | `execution-doc-overlay.js` |
+| `tests/test_batches_refactor_frontend_guards.py` :: `test_execution_security_utils_embed_policy` | Shared embed URL policy, dangerous schemes, origin via `URL(href)` | `execution-security-utils.js` |
+| `tests/test_batches_refactor_frontend_guards.py` :: `test_doc_overlay_sandbox_and_teardown` | Overlay teardown helpers, sandbox, referrer, ESC/popstate, delegates to `ExecutionSecurityUtils` | `execution-doc-overlay.js` |
 | `test_render_docs_iframe_hardening_and_summary_dom` | Iframe sandbox/referrer, DOM-built summaries, embed same-origin guard | `execution-render-docs.js` |
 | `test_execution_step_spa_picker_event_delegation` | Single delegated click handler (no per-rerender listener pile-up) | `execution-step-spa.js` |
 | `test_open_step_generation_guard` | Generation counter and stale guards | `execution-open-step.js` |
@@ -88,3 +89,5 @@ These were **not** fully closable in one refactor pass; prioritize by risk.
 | **Globals (`window.*`)** | Open | Partially mitigated by refresh/open generations; true isolation needs architectural change. |
 | **SPA picker (`execution-step-spa.js`)** | **Fixed** | Replaced per-card listeners on every rerender with **one delegated** handler on the card container (performance + avoids listener accumulation). |
 | **Doc embed URLs** | **Hardened** | **`javascript:` / `data:` / cross-origin** blocked for iframe/img embed; links below still allow explicit user navigation to download/open. |
+| **Origin fallback bypass** (code review) | `execution-security-utils.js` | **Fixed** | Central `getPageOrigin()` via `new URL(loc.href).origin`; **fail closed** if `location`/`href` missing — never `resolved.origin === resolved.origin`. |
+| **Duplicated URL policy** (code review) | `execution-security-utils.js` | **Fixed** | Single module `ExecutionSecurityUtils.isSameOriginEmbedUrl`; overlay + render-docs call through `urlAllowedForEmbed`. |

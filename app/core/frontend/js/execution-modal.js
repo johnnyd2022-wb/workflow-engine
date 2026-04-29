@@ -15,7 +15,7 @@
 //   };
 //
 // Dependencies:
-// - execution-shared-utils.js, execution-session.js, execution-doc-overlay.js, execution-render-docs.js,
+// - execution-shared-utils.js, execution-session.js, execution-security-utils.js, execution-doc-overlay.js, execution-render-docs.js,
 //   execution-render-prompts.js, execution-render-inputs.js, execution-render-outputs.js,
 //   execution-submit.js, execution-modal-secondary.js, execution-open-step.js (must be loaded before this script)
 // - CoreAPI (must be loaded before this script)

@@ -1,6 +1,6 @@
 /**
  * Full-screen iframe overlay for step documentation during execute-step.
- * Sets window.openDocFullScreenOverlay — load before execution-render-docs.js.
+ * Depends on execution-security-utils.js — load before execution-render-docs.js.
  */
 (function (root) {
   'use strict';
@@ -12,32 +12,17 @@
     }
   }
 
-  /** Block javascript:/data: and cross-origin URLs from loading in a credentialed iframe context. */
-  function isSameOriginDocumentUrl(url) {
-    if (!url || url === '#') return false;
-    var s = String(url).trim();
-    var lower = s.toLowerCase();
-    if (
-      lower.indexOf('javascript:') === 0 ||
-      lower.indexOf('data:') === 0 ||
-      lower.indexOf('vbscript:') === 0
-    ) {
+  function urlAllowedForEmbed(url) {
+    var sec = root.ExecutionSecurityUtils;
+    if (!sec || typeof sec.isSameOriginEmbedUrl !== 'function') {
       return false;
     }
-    try {
-      var loc = typeof root.location !== 'undefined' ? root.location : null;
-      var base = loc && loc.href ? loc.href : 'http://localhost/';
-      var resolved = new URL(s, base);
-      var origin = loc && loc.origin ? loc.origin : resolved.origin;
-      return resolved.origin === origin;
-    } catch (e) {
-      return false;
-    }
+    return sec.isSameOriginEmbedUrl(url);
   }
 
   root.openDocFullScreenOverlay = function (docUrl, docTitle) {
     if (!docUrl || docUrl === '#') return;
-    if (!isSameOriginDocumentUrl(docUrl)) {
+    if (!urlAllowedForEmbed(docUrl)) {
       if (typeof console !== 'undefined' && console.warn) {
         console.warn('openDocFullScreenOverlay: blocked URL', docUrl);
       }

@@ -18,6 +18,14 @@ def _read(name: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
+def test_execution_security_utils_embed_policy():
+    s = _read("execution-security-utils.js")
+    assert "ExecutionSecurityUtils" in s
+    assert "isSameOriginEmbedUrl" in s
+    assert "javascript:" in s and "data:" in s
+    assert "getPageOrigin" in s or "new URL(loc.href).origin" in s
+
+
 def test_doc_overlay_sandbox_and_teardown():
     s = _read("execution-doc-overlay.js")
     assert "removeDocFullscreenOverlay" in s
@@ -25,8 +33,8 @@ def test_doc_overlay_sandbox_and_teardown():
     assert "referrerPolicy" in s
     assert "popstate" in s
     assert "Escape" in s or "'Escape'" in s
-    assert "isSameOriginDocumentUrl" in s
-    assert "javascript:" in s and "data:" in s
+    assert "ExecutionSecurityUtils" in s
+    assert "urlAllowedForEmbed" in s
 
 
 def test_render_docs_iframe_hardening_and_summary_dom():
@@ -35,7 +43,8 @@ def test_render_docs_iframe_hardening_and_summary_dom():
     assert "allow-same-origin" in s
     assert "referrerPolicy" in s
     assert "createTextNode('View inline')" in s
-    assert "isSameOriginDocumentUrl" in s
+    assert "ExecutionSecurityUtils" in s
+    assert "urlAllowedForEmbed" in s
 
 
 def test_execution_step_spa_picker_event_delegation():
