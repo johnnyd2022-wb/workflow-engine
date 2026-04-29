@@ -25,6 +25,8 @@ def test_doc_overlay_sandbox_and_teardown():
     assert "referrerPolicy" in s
     assert "popstate" in s
     assert "Escape" in s or "'Escape'" in s
+    assert "isSameOriginDocumentUrl" in s
+    assert "javascript:" in s and "data:" in s
 
 
 def test_render_docs_iframe_hardening_and_summary_dom():
@@ -33,6 +35,13 @@ def test_render_docs_iframe_hardening_and_summary_dom():
     assert "allow-same-origin" in s
     assert "referrerPolicy" in s
     assert "createTextNode('View inline')" in s
+    assert "isSameOriginDocumentUrl" in s
+
+
+def test_execution_step_spa_picker_event_delegation():
+    s = _read("execution-step-spa.js")
+    assert "_execSpaPickerDelegate" in s
+    assert ".closest('.exec-picker-card')" in s
 
 
 def test_open_step_generation_guard():

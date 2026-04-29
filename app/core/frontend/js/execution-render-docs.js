@@ -7,6 +7,34 @@
 (function (root) {
   'use strict';
 
+  /** Same-origin only for embedded iframe/img (defense in depth vs malicious stored URLs). */
+  function isSameOriginDocumentUrl(url) {
+    if (!url || url === '#') return false;
+    var s = String(url).trim();
+    var lower = s.toLowerCase();
+    if (
+      lower.indexOf('javascript:') === 0 ||
+      lower.indexOf('data:') === 0 ||
+      lower.indexOf('vbscript:') === 0
+    ) {
+      return false;
+    }
+    try {
+      var loc =
+        typeof root.location !== 'undefined'
+          ? root.location
+          : typeof window !== 'undefined'
+            ? window.location
+            : null;
+      var base = loc && loc.href ? loc.href : 'http://localhost/';
+      var resolved = new URL(s, base);
+      var origin = loc && loc.origin ? loc.origin : resolved.origin;
+      return resolved.origin === origin;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** Escape plain-text markdown body for safe innerHTML (line breaks preserved). */
   function escapeInlineMarkdownContent(text) {
     return String(text || '')
@@ -105,23 +133,41 @@
           'width: 100%; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); overflow: hidden; background: var(--bg-card, #fff);';
 
         if (mime.indexOf('image/') === 0) {
-          var img = document.createElement('img');
-          img.src = viewUrl;
-          img.alt = doc.title || 'Documentation image';
-          img.style.cssText = 'display: block; width: 100%; height: auto;';
-          frameWrap.appendChild(img);
+          if (isSameOriginDocumentUrl(viewUrl)) {
+            var img = document.createElement('img');
+            img.src = viewUrl;
+            img.alt = doc.title || 'Documentation image';
+            img.style.cssText = 'display: block; width: 100%; height: auto;';
+            frameWrap.appendChild(img);
+          } else {
+            var imgWarn = document.createElement('p');
+            imgWarn.style.cssText =
+              'margin: 0; padding: 12px; font-size: 13px; color: var(--text-secondary);';
+            imgWarn.textContent =
+              'Inline image preview is only shown for same-origin documents. Use Open or Download below.';
+            frameWrap.appendChild(imgWarn);
+          }
         } else {
-          var iframe = document.createElement('iframe');
-          iframe.src = viewUrl;
-          iframe.title = doc.title || 'Documentation';
-          iframe.setAttribute(
-            'sandbox',
-            'allow-same-origin allow-scripts allow-popups allow-downloads'
-          );
-          iframe.referrerPolicy = 'strict-origin-when-cross-origin';
-          iframe.style.cssText =
-            'display: block; width: 100%; height: min(70vh, 820px); min-height: 420px; border: none;';
-          frameWrap.appendChild(iframe);
+          if (isSameOriginDocumentUrl(viewUrl)) {
+            var iframe = document.createElement('iframe');
+            iframe.src = viewUrl;
+            iframe.title = doc.title || 'Documentation';
+            iframe.setAttribute(
+              'sandbox',
+              'allow-same-origin allow-scripts allow-popups allow-downloads'
+            );
+            iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+            iframe.style.cssText =
+              'display: block; width: 100%; height: min(70vh, 820px); min-height: 420px; border: none;';
+            frameWrap.appendChild(iframe);
+          } else {
+            var frameWarn = document.createElement('p');
+            frameWarn.style.cssText =
+              'margin: 0; padding: 12px; font-size: 13px; color: var(--text-secondary);';
+            frameWarn.textContent =
+              'Inline preview is only shown for same-origin documents. Use Open or Download below.';
+            frameWrap.appendChild(frameWarn);
+          }
         }
 
         body.appendChild(frameWrap);

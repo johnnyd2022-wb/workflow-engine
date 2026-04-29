@@ -279,13 +279,18 @@
 
         function rerender() {
           renderPickerCards(cardHost, allInventory, getExpiredReason, pickerState.activeType, pickerState.q, pickerState.selectedId);
-          cardHost.querySelectorAll('.exec-picker-card').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-              pickerState.selectedId = btn.getAttribute('data-inv-id') || '';
-              if (!state.variableInputRows[inp.name]) state.variableInputRows[inp.name] = {};
-              state.variableInputRows[inp.name].inventory_item_id = pickerState.selectedId;
-              rerender();
-            });
+        }
+
+        if (!cardHost._execSpaPickerDelegate) {
+          cardHost._execSpaPickerDelegate = true;
+          cardHost.addEventListener('click', function(ev) {
+            var t = ev.target;
+            var btn = t && t.closest ? t.closest('.exec-picker-card') : null;
+            if (!btn || !cardHost.contains(btn)) return;
+            pickerState.selectedId = btn.getAttribute('data-inv-id') || '';
+            if (!state.variableInputRows[inp.name]) state.variableInputRows[inp.name] = {};
+            state.variableInputRows[inp.name].inventory_item_id = pickerState.selectedId;
+            rerender();
           });
         }
 

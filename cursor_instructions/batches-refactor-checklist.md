@@ -10,6 +10,11 @@ Work order: top to bottom; `[x]` = implemented or reviewed with resolution.
 - [x] **C3** `execution-modal-secondary.js` — `refreshExecutionModalInventory`: generation token to drop stale in-flight refresh
 - [x] **C4** `execution-modal-secondary.js` — `bindUntrackedOutputForm`: prevent duplicate `submit` binding; double-submit guard on untracked form
 - [x] **C5** `execution-open-step.js` — open generation: ignore stale async completion when user opens another step quickly
+- [x] **C6** `execution-doc-overlay.js` + `execution-render-docs.js` — defense in depth: block `javascript:`/`data:` and **cross-origin** URLs for embedded iframe/img (links still available)
+
+## Performance — scoped fixes
+
+- [x] **P1** `execution-step-spa.js` — inventory picker: **event delegation** instead of attaching new click handlers on every `rerender()` (listener accumulation)
 
 ## High — maintainability / correctness (scoped fixes)
 
@@ -42,6 +47,8 @@ Work order: top to bottom; `[x]` = implemented or reviewed with resolution.
 | `refreshExecutionModalInventory` race | `execution-modal-secondary.js` | Critical | `refreshInventoryGeneration` token; abort stale DOM pass after `getInventory` |
 | Duplicate submit bind / double submit | `execution-modal-secondary.js` | Critical | `_executionUntrackedFormBound`, `_untrackedSubmitInFlight` + `finally` |
 | Stale open / async chain | `execution-open-step.js` | Critical | `openExecutionModalGeneration` + guards after `Promise.all`, prompts, outputs, before `showModal` |
+| Untrusted embed URLs | `execution-doc-overlay.js`, `execution-render-docs.js` | Critical | `isSameOriginDocumentUrl`; blocks dangerous schemes + cross-origin **embed** (Open/Download unchanged) |
+| Picker listener pile-up | `execution-step-spa.js` | High (perf) | Delegated click on `#exec-spa-cards-*` via `_execSpaPickerDelegate` |
 | Silent org users failure | `execution-shared-utils.js` | High | `console.warn` when `/org/users` fails; empty map unchanged |
 | Globals / isolation | Many | Medium | Deferred — see M1 |
 | core-api retry/cancel | `core-api.js` | Medium | Deferred — see M2 |
@@ -57,10 +64,27 @@ Work order: top to bottom; `[x]` = implemented or reviewed with resolution.
 
 | Test module | Asserts (intent) | Files covered |
 |-------------|------------------|---------------|
-| `tests/test_batches_refactor_frontend_guards.py` :: `test_doc_overlay_sandbox_and_teardown` | Overlay teardown helpers, sandbox, referrer, ESC/popstate | `execution-doc-overlay.js` |
-| `test_render_docs_iframe_hardening_and_summary_dom` | Iframe sandbox/referrer, DOM-built summaries | `execution-render-docs.js` |
+| `tests/test_batches_refactor_frontend_guards.py` :: `test_doc_overlay_sandbox_and_teardown` | Overlay teardown helpers, sandbox, referrer, ESC/popstate, same-origin URL guard | `execution-doc-overlay.js` |
+| `test_render_docs_iframe_hardening_and_summary_dom` | Iframe sandbox/referrer, DOM-built summaries, embed same-origin guard | `execution-render-docs.js` |
+| `test_execution_step_spa_picker_event_delegation` | Single delegated click handler (no per-rerender listener pile-up) | `execution-step-spa.js` |
 | `test_open_step_generation_guard` | Generation counter and stale guards | `execution-open-step.js` |
 | `test_modal_secondary_bind_refresh_and_submit_guards` | Refresh token, form bind + in-flight flags | `execution-modal-secondary.js` |
 | `test_shared_utils_org_users_warn` | Warn on org users fetch failure | `execution-shared-utils.js` |
 
 **Note:** Guards are string/pattern checks on source so refactors cannot drop protections silently; they do not execute in a browser.
+
+---
+
+## Security & performance — gaps still worth knowing
+
+These were **not** fully closable in one refactor pass; prioritize by risk.
+
+| Area | Status | Why it still matters |
+|------|--------|---------------------|
+| **`CoreAPI` + `AbortSignal`** | Open | In-flight requests are not cancelled when the user leaves the step; wastes bandwidth and can race edge cases beyond generation guards. |
+| **`execution-render-prompts.js`** | Open | Evidence/file listeners and async hydration can still duplicate or resolve stale unless given render tokens or delegation (similar fix to SPA picker). |
+| **`ExecutionSubmit` / modal submit** | Verify locally | Main “Complete step” path should use the same double-submit / busy patterns as SPA (`setBusy`). Confirm in `execution-submit.js` wherever it lives in your tree. |
+| **Sandboxed iframe + PDF** | Tradeoff | `allow-scripts` + `allow-same-origin` is needed for many PDF viewers; risk is reduced by **same-origin URL enforcement** + server-side doc URLs only. |
+| **Globals (`window.*`)** | Open | Partially mitigated by refresh/open generations; true isolation needs architectural change. |
+| **SPA picker (`execution-step-spa.js`)** | **Fixed** | Replaced per-card listeners on every rerender with **one delegated** handler on the card container (performance + avoids listener accumulation). |
+| **Doc embed URLs** | **Hardened** | **`javascript:` / `data:` / cross-origin** blocked for iframe/img embed; links below still allow explicit user navigation to download/open. |
