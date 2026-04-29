@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
@@ -100,12 +100,10 @@ class ExecutionRepository:
         return query.order_by(Execution.created_at.desc()).all()
 
     def get_execution_with_steps(self, execution_id: UUID, org_id: UUID) -> Execution | None:
-        """Get execution with all execution steps loaded"""
-        execution = self.get_execution_by_id(execution_id, org_id)
-        if execution:
-            # Eager load execution steps
-            _ = execution.execution_steps
-        return execution
+        """Get execution with execution steps and related Step rows loaded (no N+1)."""
+        q = self.db.query(Execution).options(joinedload(Execution.execution_steps).joinedload(ExecutionStep.step))
+        q = q.filter(Execution.id == execution_id, Execution.org_id == org_id)
+        return q.first()
 
     def get_ready_steps(self, execution_id: UUID, org_id: UUID) -> list[ExecutionStep]:
         """Get all execution steps that are ready to execute"""

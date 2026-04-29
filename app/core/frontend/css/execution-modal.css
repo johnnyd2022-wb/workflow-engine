@@ -1,0 +1,276 @@
+/**
+ * Execute-step modal (#execute-step-modal) — markup in shared/execution-modal.html.
+ *
+ * - Overlay + panel defaults match former inline styles (flows2 / core2 modal).
+ * - Page embedding: body.batch-start-spa and/or data-render-mode="page" (set by openExecutionModal).
+ */
+
+/* --- Overlay -------------------------------------------------------------- */
+#execute-step-modal.exec-modal {
+  display: none;
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+/* Inline page (record-step route): no backdrop; scroll with document */
+#execute-step-modal.exec-modal[data-render-mode="page"],
+.batch-start-spa #execute-step-modal.exec-modal {
+  display: block !important;
+  position: static !important;
+  inset: auto !important;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  z-index: auto !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+/* --- Panel ---------------------------------------------------------------- */
+#execute-step-modal.exec-modal .exec-modal__panel {
+  box-sizing: border-box;
+  max-width: 700px;
+  width: 90%;
+  padding: 24px;
+  margin: 24px auto;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+#execute-step-modal.exec-modal[data-render-mode="page"] .exec-modal__panel,
+.batch-start-spa #execute-step-modal.exec-modal .exec-modal__panel {
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: none !important;
+  overflow: visible !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* --- Modal chrome hidden when embedded as page (hero + sticky CTA replace) */
+#execute-step-modal.exec-modal[data-render-mode="page"] .exec-modal__header,
+#execute-step-modal.exec-modal[data-render-mode="page"] .exec-modal__footer,
+.batch-start-spa #execute-step-modal.exec-modal .exec-modal__header,
+.batch-start-spa #execute-step-modal.exec-modal .exec-modal__footer {
+  display: none !important;
+}
+
+#execute-step-modal.exec-modal .exec-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+#execute-step-modal.exec-modal .exec-modal__header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+#execute-step-modal.exec-modal .exec-modal__close {
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+
+#execute-step-modal.exec-modal .exec-modal__close:hover {
+  color: var(--text-primary);
+}
+
+/* Docs block hidden until JS loads content */
+#execute-step-modal.exec-modal #execute-docs-section {
+  display: none;
+  margin-bottom: 32px;
+}
+
+#execute-step-modal.exec-modal .exec-modal__section {
+  margin-bottom: 32px;
+}
+
+#execute-step-modal.exec-modal .exec-modal__section > h3 {
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border-default);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+#execute-step-modal.exec-modal .exec-modal__section > h3 svg {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+#execute-step-modal.exec-modal .exec-modal__footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* --- Inventory picker (was injected via execution-modal.js; loaded globally with base_spa) --- */
+.exec-picker-panel {
+  margin-top: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--border-default, #e5e7eb);
+}
+.exec-picker-search {
+  margin: 0 0 10px 0;
+}
+.exec-picker-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: none;
+  overflow: visible;
+}
+.exec-picker-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-default, #e5e7eb);
+  background: var(--bg-card, #fff);
+  color: var(--text-primary, #111827);
+  cursor: pointer;
+}
+.exec-picker-card:hover {
+  border-color: rgba(59, 130, 246, 0.6);
+}
+.exec-picker-card[aria-pressed='true'] {
+  border-color: rgba(217, 56, 75, 0.55);
+  box-shadow: 0 0 0 2px rgba(217, 56, 75, 0.1);
+}
+.exec-picker-card[data-expanded='false'] {
+  min-height: 176px;
+}
+.exec-picker-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.exec-picker-card__toggle {
+  flex-shrink: 0;
+  border: 1px solid var(--border-default, #e5e7eb);
+  background: var(--bg-secondary, #f3f4f6);
+  color: var(--text-secondary, #6b7280);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.exec-picker-card__toggle:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+  color: var(--text-primary, #111827);
+}
+.exec-picker-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+.exec-picker-card__sub {
+  font-size: 12px;
+  color: var(--text-tertiary, #9ca3af);
+  margin: 0;
+  line-height: 1.4;
+}
+.exec-picker-card__meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.exec-picker-card__actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+.exec-picker-card__spacer {
+  flex: 1;
+}
+.exec-picker-card__details {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-default, #e5e7eb);
+  display: none;
+}
+.exec-picker-card[data-expanded='true'] .exec-picker-card__details {
+  display: block;
+}
+.exec-picker-kv {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 6px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.exec-picker-kv__k {
+  color: var(--text-tertiary, #9ca3af);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.exec-picker-kv__v {
+  color: var(--text-primary, #111827);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.exec-picker-kv__pre {
+  grid-column: 1 / -1;
+  margin: 8px 0 0 0;
+  padding: 10px 12px;
+  background: var(--bg-secondary, #f9fafb);
+  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: 10px;
+  overflow: auto;
+  max-height: 320px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  color: var(--text-primary, #111827);
+}
+.exec-picker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default, #e5e7eb);
+  background: var(--bg-secondary, #f3f4f6);
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+}
+.exec-picker-chip--warn {
+  background: hsl(42, 93%, 96%);
+  border-color: var(--warning, #f59e0b);
+  color: #92400e;
+}
+.exec-picker-chip--danger {
+  background: hsl(0, 93%, 94%);
+  border-color: var(--error, #ef4444);
+  color: #b91c1c;
+}

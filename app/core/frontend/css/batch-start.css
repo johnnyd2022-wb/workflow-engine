@@ -1,0 +1,169 @@
+.batch-start-spa .batch-start-hero {
+  text-align: center;
+  padding: 0 0 4px 0;
+}
+.batch-start-spa .batch-start-hero__title {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--text-primary, #111827);
+}
+.batch-start-spa .batch-start-hero__desc {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text-secondary, #6b7280);
+  margin: 8px auto 0;
+}
+
+/* Page shell for execute-step lives in execution-modal.css (.batch-start-spa + .exec-modal).
+   Below: record-step page typography + section rhythm only. */
+
+/* Section headings: match SPA create/edit pages (small uppercase titles). */
+.batch-start-spa #execute-step-modal .exec-modal__section h3 {
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 10px !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  color: var(--text-secondary, #6b7280) !important;
+}
+
+/* Major section spacing + dividers (match flow wizard stack feel). */
+.batch-start-spa #execute-step-modal .exec-modal__section {
+  margin: 0 !important;
+  padding: 18px 0 !important;
+}
+.batch-start-spa #execute-step-modal #execute-docs-section {
+  padding-top: 0 !important;
+}
+.batch-start-spa #execute-step-modal #exec-section-compliance,
+.batch-start-spa #execute-step-modal #exec-section-outputs {
+  border-top: 1px solid var(--border-default, #e5e7eb);
+}
+/* First divider is owned by the "More information" disclosure (like create inputs/outputs). */
+.batch-start-spa #execute-step-modal #exec-section-inputs {
+  border-top: none !important;
+}
+
+/* Remove the modal section extra spacing; use consistent stack spacing. */
+.batch-start-spa #execute-step-modal #execute-docs-section,
+.batch-start-spa #execute-step-modal #execute-inputs-container,
+.batch-start-spa #execute-step-modal #execute-prompts-container,
+.batch-start-spa #execute-step-modal #execute-outputs-container {
+  margin: 0 !important;
+}
+
+/* Active input row affordance (click row, then pick cards). */
+.batch-start-spa .execute-input-row--active {
+  outline: 2px solid rgba(59, 130, 246, 0.22);
+  outline-offset: 2px;
+  border-radius: var(--radius-md, 10px);
+}
+
+/* Fix: stacked input rows (avoid overlap). */
+.batch-start-spa .execute-input-rows-container {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  width: 100% !important;
+}
+.batch-start-spa .execute-input-rows-container > .execute-input-row {
+  position: static !important;
+  display: block !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 14px 14px 12px 14px;
+  border: 1px solid var(--border-default, #e5e7eb);
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-card, #fff);
+}
+/* Before an input is confirmed, don't show an empty container. */
+.batch-start-spa .execute-input-rows-container > .execute-input-row:not([data-selection-locked="true"]) {
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
+/* Also remove the "active row" outline until confirmed. */
+.batch-start-spa .execute-input-rows-container > .execute-input-row.execute-input-row--active:not([data-selection-locked="true"]) {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-radius: 0 !important;
+}
+.batch-start-spa .execute-input-rows-container > .execute-input-row:not([data-selection-locked="true"]) .execute-remove-input-row-btn {
+  display: none !important;
+}
+
+/* Quantity field should be neutral until submit validation paints it red. */
+.batch-start-spa .execute-quantity-input,
+.batch-start-spa .execute-quantity-input:invalid,
+.batch-start-spa .execute-quantity-input:user-invalid {
+  border: 1px solid var(--border-default, #e5e7eb) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Evidence file input: make \"Choose files\" look like other buttons. */
+.batch-start-spa .execute-evidence-file-input {
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+}
+.batch-start-spa .execute-evidence-file-input::file-selector-button,
+.batch-start-spa .execute-evidence-file-input::-webkit-file-upload-button {
+  padding: 6px 12px;
+  margin-right: 10px;
+  font-size: 0.875rem;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-default, #e5e7eb);
+  background: var(--bg-secondary, #f3f4f6);
+  color: var(--text-primary, #111827);
+  cursor: pointer;
+}
+.batch-start-spa .execute-evidence-file-input::file-selector-button:hover,
+.batch-start-spa .execute-evidence-file-input::-webkit-file-upload-button:hover {
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+/* Confirm input selection button: match \"Add as input\". */
+.batch-start-spa .exec-picker-confirm-btn.btn.btn-primary.btn-sm {
+  width: auto !important;
+  margin: 10px 0 0 0 !important;
+  border-color: var(--primary, hsl(210, 100%, 50%)) !important;
+  background: var(--primary, hsl(210, 100%, 50%)) !important;
+  color: #fff !important;
+}
+.batch-start-spa .execute-confirm-selection-wrap {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* More information disclosure: match create inputs/outputs (sits ABOVE Inputs). */
+.batch-start-spa .process-flow-wizard__more.flow-wizard-example-disclosure {
+  width: 100%;
+  margin: 0 0 1rem 0;
+  padding-bottom: 2px;
+  border-top: none !important;
+  border-bottom: 1px solid var(--border-default, #e5e7eb);
+  box-sizing: border-box;
+  text-align: left;
+}
+html[data-spa-theme="dark"] .batch-start-spa .process-flow-wizard__more.flow-wizard-example-disclosure {
+  border-bottom-color: var(--border-default, rgba(148, 163, 184, 0.35));
+}
+.batch-start-spa .process-flow-wizard__intro {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-secondary, #6b7280);
+  margin: 0 0 0.75rem 0;
+  font-weight: 400;
+}
+.batch-start-spa .process-flow-wizard__intro:last-child {
+  margin-bottom: 0;
+}
+.batch-start-spa .spa-page-hero {
+  padding-bottom: 8px;
+}
+
