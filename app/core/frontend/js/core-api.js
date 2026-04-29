@@ -682,7 +682,7 @@ if (typeof window !== 'undefined') {
         return output.name ? 'out-' + String(output.name).replace(/\s+/g, '-') : 'out-unknown';
     };
 
-    // Single source of truth for execution expiry UI markup (used by both execution-modal.js and shared/execution-modal.js)
+    // Single source of truth for execution expiry UI markup (used by execution-modal.js and render modules)
     window.renderExecutionExpiryUI = function(output, escapeHtml) {
         if (!output || typeof escapeHtml !== 'function') return '';
         var outputId = window.getExecutionOutputId(output);

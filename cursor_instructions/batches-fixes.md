@@ -1,244 +1,190 @@
-Issues / risks still present
-⚠ 1. normpath does NOT prevent path escape in full URL sense
+⚠ Issue: deep selector coupling still exists
 
-You correctly block:
+You now rely on:
 
-if norm_path != _ALLOWED_RETURN_PREFIX and not norm_path.startswith(_ALLOWED_RETURN_PREFIX + "/"):
+.batch-start-spa #execute-step-modal .exec-modal__section h3
 
-But there is still a subtle edge case:
+This introduces:
 
-Example:
-/core/flows/../../core/inventory
+3-level deep specificity
+dependency on DOM hierarchy, not semantics
+Risk:
 
-normpath resolves to:
+If modal structure changes (even slightly):
 
-/core/inventory
+CSS silently stops applying
+no compile-time warning
+Better long-term shape (conceptually)
 
-✔ You do block this correctly because it no longer starts with prefix
-BUT:
+You’re implicitly building:
 
-👉 You are relying on normpath AFTER parsing, not BEFORE stripping query/fragment fully in a canonical pipeline.
+“execution-step-page component system inside legacy modal markup”
 
-This is fine, but only if:
+At that point, better abstraction would be:
 
-parsed.path is trusted as raw path component (it is)
-no earlier decoding step introduces double-encoding tricks
+.exec-section-title
+.exec-section
+.exec-page-shell
 
-You are mostly safe here, but it's still a classic audit hotspot.
+instead of DOM-path-based styling.
 
-⚠ 2. Backslash check is incomplete (Windows parsing vector)
+Not required now, but this is where it’s heading.
 
-You added:
+2. Section rhythm model — consistent and intentional
+✔ Good consistency
+padding: 18px 0;
+border-top: 1px solid ...
 
-if "\\" in s:
-    return default
+You’ve implemented:
 
-Good instinct, but incomplete because:
+vertical rhythm system
+clear section separators
+predictable spacing model
 
-backslash can be encoded: %5c
-urlparse may already normalise it differently depending on input shape
+This is good UI engineering discipline.
 
-If you want to fully harden:
+✔ Proper ownership of divider logic
+/* First divider is owned by "More information" disclosure */
 
-you should also reject %5c post-decode in raw string before parsing OR re-check decoded path.
+This is actually important:
 
-Right now:
-✔ covers obvious input
-⚠ not fully canonicalised threat model
+you’re explicitly defining layout responsibility boundaries
 
-⚠ 3. Fragment decoding is double-worked but path is not
+That is architectural UI thinking, not just styling.
 
-You decode fragment twice (good), but:
+3. Modal → page hybrid model
 
-path is only decoded via unquote on full string, not per-component revalidation
+You’re continuing the transformation:
 
-So:
+<div id="execute-step-modal">
 
-path = decoded once (maybe twice indirectly)
-fragment = aggressively decoded
+but now:
 
-This asymmetry is slightly inconsistent from a security audit perspective.
+it behaves like a page container
+not a true modal anymore
+✔ This is consistent with earlier changes
 
-⚠ 4. Policy ambiguity: external URL detection is indirect
+You’ve already:
 
-You rely on:
+removed modal overlay behavior
+disabled fixed positioning
+embedded as SPA route content
 
-parsed.netloc
+So CSS now correctly reflects reality:
 
-But:
+this is no longer a modal system, it’s a page shell reused under a legacy ID
 
-urlparse("http:example.com") → netloc empty, path contains example.com
-this is a classic “scheme-relative parsing ambiguity class”
+⚠ Naming mismatch risk (important)
 
-You partially mitigate by:
+You still call it:
 
-if low.startswith(("javascript:", ...))
+id="execute-step-modal"
 
-But not fully for malformed schemes.
+but it behaves like:
 
-Net assessment (backend guard)
+execution-step-page-container
 
-Security level: HIGH (good production posture)
-But not “paranoid hardened”.
+This creates long-term confusion:
 
-Main remaining gap:
+developers will assume modal semantics
+CSS will contradict expectations
 
-inconsistent canonicalisation between path / fragment / encoding edge cases
+This is the largest architectural smell in this layer
 
-2. Execution flow JS — concurrency + correctness
+4. Typography reset consistency
 
-This is actually a bigger improvement than the backend change.
+You are standardising:
 
-✔ You added a real stale-token model
-function isStale() {
-  return myToken !== renderToken;
-}
+text-transform: uppercase;
+letter-spacing: 0.04em;
 
-Then applied after every async boundary:
+This is good design system alignment:
 
-if (isStale()) return;
+matches “wizard / create flow” language
+enforces hierarchy consistency across app
 
-This fixes:
+No issues here.
 
-race conditions during HTMX swaps
-double-render after DOMContentLoaded + pageshow
-overlapping fetch pipelines
+5. HTML structure review (important coupling point)
+✔ Good semantic grouping
 
-This is correct and idiomatic for “single-flight UI state machines”.
+You now have clean structural blocks:
 
-✔ Defensive validation of bundle
-if (!bundle || !bundle.execution || !bundle.process) {
-  throw new Error('Invalid execution bundle response');
-}
+docs
+inputs
+compliance
+outputs
 
-Good improvement:
+This is a pipeline-aligned UI model, which matches your execution domain.
 
-avoids silent undefined propagation
-makes backend contract explicit
-⚠ Minor issue: silent early return on stale state
+⚠ Hidden coupling: IDs as API surface
 
-You do:
+These are effectively now UI API contracts:
 
-if (isStale()) return;
-
-This is fine, but note:
-
-no cleanup path is triggered
-inFlightPromise still resolves
-
-You mitigate partially via .finally, but:
-
-👉 if stale occurs mid-flight, UI may briefly be in inconsistent "loading subtitle" state depending on timing.
-
-Not a bug, just a UX edge.
-
-✔ Additional validation added
-if (!processData || !Array.isArray(processData.steps)) {
-  throw new Error('Invalid process payload');
-}
-
-Good contract enforcement — prevents:
-
-backend schema drift silently breaking UI
-3. API + minimal flag architecture
-✔ Good direction: payload shaping
-
-You correctly implemented:
-
-minimal = request.args.get("minimal")
-
-Then:
-
-strips description
-strips metadata fields
-keeps structural execution graph
-
-This is a classic bandwidth vs fidelity split
-
-Benefit:
-reduces payload size for SPA step render
-improves perceived load time
-reduces DB → API → browser transfer cost
-⚠ Architectural risk: implicit coupling creep
-
-You now have two response shapes:
-
-FULL:
-description
-category
-timestamps
-evidence
-MINIMAL:
-structure only
+#exec-section-inputs
+#exec-section-compliance
+#exec-section-outputs
 
 Problem:
 
-frontend now implicitly depends on BOTH but only sometimes knows which it got
-
-This is where systems slowly degrade into:
-
-“works unless you hit this route combination”
-
-Mitigation (recommended):
-
-explicitly return:
-{ "mode": "minimal" | "full" }
-
-or
-
-{ "meta": { "minimal": true } }
-4. CSS + UI architecture changes
-✔ Strong improvement: modal → page normalization
-
-This is significant:
-
-.batch-start-spa #execute-step-modal {
-  display: block !important;
-  position: static !important;
-}
-
-You are effectively:
-
-de-modalifying a modal into a page layout system
-
-That is a legitimate architectural migration pattern.
-
-✔ Good separation of concerns
-
-You are:
-
-turning modal chrome off
-preserving internal structure
-reusing legacy markup as SPA view model
-
-This reduces duplication.
-
-⚠ Risk: heavy !important reliance
-
-You now have:
-
-multiple layers of !important
-structural overrides at scale
+JS likely depends on these
+CSS depends on these
+backend may indirectly assume order
 
 This creates:
 
-CSS specificity debt
-future fragility if modal component evolves
+implicit UI schema without versioning
 
-Not incorrect — but it’s a “migration phase smell”.
+6. One subtle risk: duplication of modal CSS + SPA CSS
 
-5. Overall system assessment
-What you are converging toward
+You referenced:
 
-This change set clearly shows a shift toward:
+/* Page shell lives in execution-modal.css */
 
-1. Single-flight SPA execution engine
-renderToken
-stale detection
-execution modal reuse
-2. API contraction layer
-minimal/full payload strategy
-3. hardened navigation security layer
-return-to sanitisation hardening
-4. UI structural inversion
-modal → page hybrid rendering system
+But now you also have:
+
+SPA overrides in batch-start.css
+modal structural CSS
+execution-specific CSS
+Risk pattern:
+
+competing style ownership across 2+ layers
+
+This tends to evolve into:
+
+“why does this override exist?”
+increasing !important usage (you already have some earlier)
+7. Overall assessment
+What you’ve done well
+✔ moved toward SPA-first rendering model
+✔ isolated execution-step UI scope
+✔ created consistent section rhythm system
+✔ clarified layout responsibility boundaries
+✔ reduced modal behavior dependency
+What is still structurally fragile
+1. Naming mismatch
+
+modal ID used as page container
+
+This is the most important unresolved issue.
+
+2. Deep CSS coupling
+
+Still relies on DOM hierarchy instead of semantic UI classes.
+
+3. implicit UI schema via IDs
+
+These IDs are now de facto API between:
+
+JS render logic
+CSS layout
+backend payload shape
+Net verdict
+
+This is a good transitional architecture, not a final one.
+
+You are currently in:
+
+“legacy modal system being refactored into SPA page shell”
+
+And you’ve executed that transition cleanly so far — but you haven’t yet completed the abstraction layer cleanup.

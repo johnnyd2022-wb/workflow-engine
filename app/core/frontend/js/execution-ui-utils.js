@@ -1,32 +1,18 @@
-// Shared helpers for execution UI (modal vs dedicated page).
+/**
+ * Shell helpers for execution UI (modal vs page). Loaded before execution-modal.js on flows2 / batch-start.
+ */
 (function () {
   'use strict';
 
-  function getRenderMode(el) {
-    try {
-      var v = el && el.dataset ? el.dataset.renderMode : null;
-      v = v ? String(v) : '';
-      return v || 'modal';
-    } catch (e) {
-      return 'modal';
-    }
-  }
-
-  function setRenderMode(el, mode) {
-    try {
-      if (!el || !el.dataset) return;
-      el.dataset.renderMode = mode ? String(mode) : 'modal';
-    } catch (e) {}
-  }
-
-  function isPageMode(el) {
-    return getRenderMode(el) === 'page';
-  }
-
-  window.ExecutionUI = window.ExecutionUI || {
-    getRenderMode: getRenderMode,
-    setRenderMode: setRenderMode,
-    isPageMode: isPageMode,
+  window.ExecutionUI = {
+    setRenderMode: function (modal, mode) {
+      if (modal && modal.dataset) modal.dataset.renderMode = String(mode || 'modal');
+    },
+    getRenderMode: function (modal) {
+      return modal && modal.dataset && modal.dataset.renderMode ? String(modal.dataset.renderMode) : 'modal';
+    },
+    isPageMode: function (modal) {
+      return window.ExecutionUI.getRenderMode(modal) === 'page';
+    },
   };
 })();
-
