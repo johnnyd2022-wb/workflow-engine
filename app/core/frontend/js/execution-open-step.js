@@ -6,6 +6,11 @@
   "use strict";
 
   var openExecutionModalGeneration = 0;
+  var openExecutionModalAbortController = null;
+
+  function staleOpen(gen) {
+    return gen !== openExecutionModalGeneration;
+  }
 
   async function openExecutionModal(ctx, executionId, executionStep, stepDefinition, options) {
     var SessionAPI = ctx.SessionAPI;
@@ -26,6 +31,14 @@
       return;
     }
     var openGen = ++openExecutionModalGeneration;
+    if (openExecutionModalAbortController) {
+      try {
+        openExecutionModalAbortController.abort();
+      } catch (e) {}
+    }
+    openExecutionModalAbortController = new AbortController();
+    var signal = openExecutionModalAbortController.signal;
+
     options = options || {};
     var renderMode = (options && options.renderMode) ? String(options.renderMode) : 'modal';
     if (window.ExecutionUI && typeof window.ExecutionUI.setRenderMode === 'function') {
@@ -100,19 +113,44 @@
 
     // Load inventory, expired/flagged, untracked, and step documentation in parallel
     const stepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
-    const docsPromise = (stepId && typeof CoreAPI.getStepDocumentation === 'function')
-      ? CoreAPI.getStepDocumentation(stepId).catch(function() { return { documents: [] }; })
-      : Promise.resolve({ documents: [] });
-    
-    const [inventoryData, expiredData, untrackedData, docsData, orgUsersMap] = await Promise.all([
-      CoreAPI.getInventory(),
-      CoreAPI.getExpiredMaterials().catch(function() { return { expired_raw_materials: [], impacted_items: [] }; }),
-      CoreAPI.getUntrackedItems().catch(function() { return { untracked_items: [] }; }),
-      docsPromise,
-      loadOrgUsersMap()
-    ]);
+    const docsPromise =
+      stepId && typeof CoreAPI.getStepDocumentation === 'function'
+        ? CoreAPI.getStepDocumentation(stepId, { signal: signal }).catch(function (e) {
+            if (e && e.name === 'AbortError') throw e;
+            return { documents: [] };
+          })
+        : Promise.resolve({ documents: [] });
 
-    if (openGen !== openExecutionModalGeneration) {
+    var inventoryData;
+    var expiredData;
+    var untrackedData;
+    var docsData;
+    var orgUsersMap;
+    try {
+      var results = await Promise.all([
+        CoreAPI.getInventory(null, null, { signal: signal }),
+        CoreAPI.getExpiredMaterials({ signal: signal }).catch(function (e) {
+          if (e && e.name === 'AbortError') throw e;
+          return { expired_raw_materials: [], impacted_items: [] };
+        }),
+        CoreAPI.getUntrackedItems({ signal: signal }).catch(function (e) {
+          if (e && e.name === 'AbortError') throw e;
+          return { untracked_items: [] };
+        }),
+        docsPromise,
+        loadOrgUsersMap({ signal: signal }),
+      ]);
+      inventoryData = results[0];
+      expiredData = results[1];
+      untrackedData = results[2];
+      docsData = results[3];
+      orgUsersMap = results[4];
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      throw e;
+    }
+
+    if (staleOpen(openGen)) {
       return;
     }
 
@@ -185,27 +223,39 @@
       inputsContainer.innerHTML = '<p style="color: var(--text-secondary); font-size: 14px; padding: 16px;">No variable inputs for this step.</p>';
     }
     
-    await window.ExecutionRenderPrompts.renderExecutionPrompts({
-      modal: modal,
-      ses: ses,
-      promptsContainer: promptsContainer,
-      stepDefinition: stepDefinition,
-      escapeHtml: escapeHtml,
-    });
+    try {
+      await window.ExecutionRenderPrompts.renderExecutionPrompts({
+        modal: modal,
+        ses: ses,
+        promptsContainer: promptsContainer,
+        stepDefinition: stepDefinition,
+        escapeHtml: escapeHtml,
+        signal: signal,
+      });
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      throw e;
+    }
 
-    if (openGen !== openExecutionModalGeneration) {
+    if (staleOpen(openGen)) {
       return;
     }
 
-    await window.ExecutionRenderOutputs.renderVariableOutputs({
-      modal: modal,
-      outputsContainer: outputsContainer,
-      stepDefinition: stepDefinition,
-      untrackedItems: untrackedItems,
-      escapeHtml: escapeHtml,
-    });
+    try {
+      await window.ExecutionRenderOutputs.renderVariableOutputs({
+        modal: modal,
+        outputsContainer: outputsContainer,
+        stepDefinition: stepDefinition,
+        untrackedItems: untrackedItems,
+        escapeHtml: escapeHtml,
+        signal: signal,
+      });
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      throw e;
+    }
 
-    if (openGen !== openExecutionModalGeneration) {
+    if (staleOpen(openGen)) {
       return;
     }
 
@@ -218,7 +268,7 @@
       submitButton.title = '';
     }
 
-    if (openGen !== openExecutionModalGeneration) {
+    if (staleOpen(openGen)) {
       return;
     }
 

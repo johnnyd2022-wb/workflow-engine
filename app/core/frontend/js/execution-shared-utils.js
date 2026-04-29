@@ -15,12 +15,16 @@
           : {};
   }
 
-  async function loadOrgUsersMap() {
+  async function loadOrgUsersMap(opts) {
+    opts = opts || {};
+    var signal = opts.signal;
     var g = getGlobalStore();
     if (g.__OrgUsersMap) return g.__OrgUsersMap;
     try {
       async function tryFetchUsers(url) {
-        var resp = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+        var fetchOpts = { credentials: 'same-origin', cache: 'no-store' };
+        if (signal) fetchOpts.signal = signal;
+        var resp = await fetch(url, fetchOpts);
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         return await resp.json();
       }
@@ -40,6 +44,9 @@
       g.__OrgUsersMap = m;
       return m;
     } catch (e) {
+      if (e && e.name === 'AbortError') {
+        throw e;
+      }
       if (typeof console !== 'undefined' && typeof console.warn === 'function') {
         console.warn('loadOrgUsersMap: failed to fetch /org/users', e);
       }

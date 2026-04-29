@@ -12,6 +12,7 @@
     var promptsContainer = ctx.promptsContainer;
     var stepDefinition = ctx.stepDefinition;
     var escapeHtml = ctx.escapeHtml;
+    var signal = ctx.signal;
     var CoreAPI = root.CoreAPI;
     var showNotification = root.showNotification;
     var executionPrompts = (stepDefinition && stepDefinition.execution_prompts) || [];
@@ -23,7 +24,7 @@
       if (!ses.pendingEvidenceFilesByStepId) ses.pendingEvidenceFilesByStepId = new Map();
       if (CoreAPI && typeof CoreAPI.listEvidence === 'function' && executionIdForEvidence && currentStepId) {
         try {
-          const res = await CoreAPI.listEvidence(executionIdForEvidence);
+          const res = await CoreAPI.listEvidence(executionIdForEvidence, { signal: signal });
           const allEvidence = res.evidence || [];
           var byStepDef = new Map();
           var byExecStep = new Map();
@@ -41,16 +42,21 @@
           });
           var stepList = (byStepDef.get(currentStepId) || []).concat(byExecStep.get(currentStepId) || []);
           evidenceListForStep = stepList.filter(function(e, i, arr) { return arr.findIndex(function(x) { return x.id === e.id; }) === i; });
-        } catch (e) { evidenceListForStep = []; }
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+          evidenceListForStep = [];
+        }
       }
       if (!ses.evidenceByStepId) ses.evidenceByStepId = new Map();
       ses.evidenceByStepId.set(currentStepId, evidenceListForStep);
       var maxEvidenceBytes = 10 * 1024 * 1024;
       if (CoreAPI && typeof CoreAPI.getEvidenceConfig === 'function') {
         try {
-          var evidenceCfg = await CoreAPI.getEvidenceConfig();
+          var evidenceCfg = await CoreAPI.getEvidenceConfig({ signal: signal });
           if (evidenceCfg && evidenceCfg.max_file_size_bytes != null) maxEvidenceBytes = evidenceCfg.max_file_size_bytes;
-        } catch (e) {}
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+        }
       }
       executionPrompts.forEach(prompt => {
         const promptSection = document.createElement('div');

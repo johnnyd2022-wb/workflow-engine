@@ -17,6 +17,9 @@
 
     const modal = document.getElementById('execute-step-modal');
     if (!modal) return;
+    if (modal._submitExecutionInFlight) return;
+    modal._submitExecutionInFlight = true;
+    try {
     var ses = SessionAPI.get(modal);
     const renderMode =
       (window.ExecutionUI && typeof window.ExecutionUI.getRenderMode === 'function')
@@ -534,6 +537,10 @@
     } catch (error) {
       console.error('Failed to complete step:', error);
       showNotification('error', 'Failed to Complete Step', error.message || 'Failed to complete step. Please try again.');
+    }
+
+    } finally {
+      modal._submitExecutionInFlight = false;
     }
 
   }

@@ -7,6 +7,7 @@
 
   function install(ctx) {
     var refreshInventoryGeneration = 0;
+    var refreshInventoryAbort = null;
     var config = ctx.config || {};
     var CoreAPI = ctx.CoreAPI != null ? ctx.CoreAPI : root.CoreAPI;
     var escapeHtml =
@@ -146,6 +147,13 @@
   // Refetches inventory and updates execute-step-modal dropdowns; optionally selects the new item.
   window.refreshExecutionModalInventory = async function(newItem) {
     var gen = ++refreshInventoryGeneration;
+    if (refreshInventoryAbort) {
+      try {
+        refreshInventoryAbort.abort();
+      } catch (e) {}
+    }
+    refreshInventoryAbort = new AbortController();
+    var refreshSignal = refreshInventoryAbort.signal;
     var modal = document.getElementById('execute-step-modal');
     if (!modal) return;
     var pageEmbed =
@@ -158,7 +166,13 @@
     var ctx = window.addInventoryContext;
     if (!ctx || !ctx.fromExecutionModal) return;
 
-    var inventoryData = await CoreAPI.getInventory();
+    var inventoryData;
+    try {
+      inventoryData = await CoreAPI.getInventory(null, null, { signal: refreshSignal });
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      throw e;
+    }
     if (gen !== refreshInventoryGeneration) {
       return;
     }

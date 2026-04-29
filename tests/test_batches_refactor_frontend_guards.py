@@ -71,3 +71,37 @@ def test_shared_utils_org_users_warn():
     s = _read("execution-shared-utils.js")
     assert "loadOrgUsersMap: failed to fetch" in s
     assert "console.warn" in s
+
+
+def test_core_api_abort_error_passthrough():
+    s = _read("core-api.js")
+    assert "AbortError" in s
+    assert "error.name === 'AbortError'" in s or "name === 'AbortError'" in s
+
+
+def test_open_step_abort_and_stale_helper():
+    s = _read("execution-open-step.js")
+    assert "openExecutionModalAbortController" in s
+    assert "staleOpen" in s
+    assert "getInventory(null, null, { signal" in s or "signal: signal" in s
+
+
+def test_submit_execution_in_flight_guard():
+    s = _read("execution-submit.js")
+    assert "_submitExecutionInFlight" in s
+
+
+def test_modal_secondary_refresh_abort():
+    s = _read("execution-modal-secondary.js")
+    assert "refreshInventoryAbort" in s
+    assert "getInventory(null, null, { signal" in s or "refreshSignal" in s
+
+
+def test_jinja_execution_stack_include_order():
+    root = _REPO / "app" / "core" / "frontend" / "shared" / "execution_modal_stack_scripts.html"
+    t = root.read_text(encoding="utf-8")
+    assert "execution-open-step.js" in t
+    assert "execution-modal.js" in t
+    i_open = t.find("execution-open-step")
+    i_modal = t.find("execution-modal.js")
+    assert i_open != -1 and i_modal != -1 and i_open < i_modal

@@ -12,6 +12,7 @@
     var stepDefinition = ctx.stepDefinition;
     var untrackedItems = ctx.untrackedItems;
     var escapeHtml = ctx.escapeHtml;
+    var signal = ctx.signal;
     var CoreAPI = root.CoreAPI;
     // Render variable outputs (confirmation/override)
     const variableOutputs = (stepDefinition.outputs || []).filter(output =>
@@ -30,11 +31,12 @@
           variableOutputs.map(function(o) {
             var name = (o.name && String(o.name).trim()) || '';
             var unit = (o.unit && String(o.unit).trim()) || 'units';
-            return CoreAPI.getMatchingUntracked(name, unit, null, currentExecutionId);
+            return CoreAPI.getMatchingUntracked(name, unit, null, currentExecutionId, { signal: signal });
           })
         );
         matchingUntrackedPerOutput = results.map(function(r) { return (r && r.matching_untracked) ? r.matching_untracked : []; });
       } catch (e) {
+        if (e && e.name === 'AbortError') throw e;
         console.warn('Could not fetch matching untracked per output', e);
       }
     }

@@ -23,11 +23,11 @@ Work order: top to bottom; `[x]` = implemented or reviewed with resolution.
 
 ## Medium / architectural (review or defer; document rationale)
 
-- [x] **M1** Global `window.*` / execution context isolation — **deferred**: moving off globals requires bundler/module graph and touch many templates; incremental guards (C3–C5) reduce worst races.
-- [x] **M2** `core-api.js` — retry, cancellation, caching — **deferred**: cross-cutting API layer; should be a dedicated initiative with AbortSignal propagation.
-- [x] **M3** HTML templates — duplicate script stacks, load order — **deferred**: needs single entry/build or import maps; duplicate bind mitigated for untracked form (C4).
-- [x] **M4** `batch-start.css` — `!important` / modal-as-page — **deferred**: unwinding risks regressions in SPA vs modal; tracked as tech debt.
-- [x] **M5** `execution-render-prompts.js` — async races / listener accumulation — **reviewed**: open-step generation (C5) prevents stale full orchestration; prompts module would still benefit from render-scoped abort in a follow-up.
+- [x] **M1** Global `window.*` / execution context isolation — **partially addressed**: still no ES modules; **AbortSignal** on open-step + refresh cancels in-flight API work when superseded. Full isolation remains a bundler follow-up.
+- [x] **M2** `core-api.js` — **AbortSignal** on `request()` / key GETs (`getInventory`, `getExpiredMaterials`, `getUntrackedItems`, `getStepDocumentation`, `listEvidence`, `getEvidenceConfig`, `getMatchingUntracked`, `uploadEvidence`); **AbortError** rethrown without treating as network failure. Retry/caching still **not** implemented.
+- [x] **M3** HTML templates — **partial**: shared include `shared/execution_modal_stack_scripts.html` used by `batch-start.html`, `flows2.html`, `core2.html` (single load-order source). Page-specific scripts (e.g. `core.js`, `execution-ui-utils.js`) stay per page.
+- [ ] **M4** `batch-start.css` — `!important` / modal-as-page — **still deferred**: large CSS unwind; no change in this pass.
+- [x] **M5** `execution-render-prompts.js` — **signal wired**: `listEvidence` / `getEvidenceConfig` use open-step `AbortController`; abort errors propagate. Evidence list click handlers remain per-render (one render per open).
 - [x] **M6** `execution-modal-secondary.js` — innerHTML vs `createElement` for cards — **deferred**: inventory labels use `escapeHtml`; full DOM build is large refactor for marginal gain.
 - [x] **M7** `execution-render-inputs.js` — `filterAddAnotherDropdown` complexity — **reviewed**: nested loops acceptable for typical dropdown sizes; optimize only if profiling shows pain.
 
@@ -82,9 +82,9 @@ These were **not** fully closable in one refactor pass; prioritize by risk.
 
 | Area | Status | Why it still matters |
 |------|--------|---------------------|
-| **`CoreAPI` + `AbortSignal`** | Open | In-flight requests are not cancelled when the user leaves the step; wastes bandwidth and can race edge cases beyond generation guards. |
-| **`execution-render-prompts.js`** | Open | Evidence/file listeners and async hydration can still duplicate or resolve stale unless given render tokens or delegation (similar fix to SPA picker). |
-| **`ExecutionSubmit` / modal submit** | Verify locally | Main “Complete step” path should use the same double-submit / busy patterns as SPA (`setBusy`). Confirm in `execution-submit.js` wherever it lives in your tree. |
+| **`CoreAPI` + `AbortSignal`** | **Addressed** | `fetch` uses `signal`; new open aborts previous `AbortController`; refresh inventory aborts in-flight `getInventory`. |
+| **`execution-render-prompts.js`** | **Addressed** (network) | `listEvidence` / `getEvidenceConfig` use the same `signal` as `openExecutionModal`. |
+| **`ExecutionSubmit` / modal submit** | **Addressed** | `modal._submitExecutionInFlight` with `try`/`finally` on the full submit path. |
 | **Sandboxed iframe + PDF** | Tradeoff | `allow-scripts` + `allow-same-origin` is needed for many PDF viewers; risk is reduced by **same-origin URL enforcement** + server-side doc URLs only. |
 | **Globals (`window.*`)** | Open | Partially mitigated by refresh/open generations; true isolation needs architectural change. |
 | **SPA picker (`execution-step-spa.js`)** | **Fixed** | Replaced per-card listeners on every rerender with **one delegated** handler on the card container (performance + avoids listener accumulation). |

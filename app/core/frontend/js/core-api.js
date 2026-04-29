@@ -46,8 +46,11 @@ window.CoreAPI = window.CoreAPI || {
             }
             return data;
         } catch (error) {
+            if (error && error.name === 'AbortError') {
+                throw error;
+            }
             console.error(`API request failed: ${endpoint}`, error);
-            if (error.name === 'TypeError' && (error.message === 'Failed to fetch' || error.message === 'Load failed')) {
+            if (error && error.name === 'TypeError' && (error.message === 'Failed to fetch' || error.message === 'Load failed')) {
                 throw new Error('Network error. Check your connection and that the server is running, then try again.');
             }
             throw error;
@@ -152,24 +155,27 @@ window.CoreAPI = window.CoreAPI || {
     },
     
     // Inventory
-    async getInventory(type = null, processId = null) {
+    async getInventory(type = null, processId = null, options = {}) {
         const params = new URLSearchParams();
         if (type) params.append('type', type);
         if (processId) params.append('process_id', processId);
         const query = params.toString() ? `?${params.toString()}` : '';
-        return this.request(`/inventory${query}`);
+        const signal = options.signal;
+        return this.request(`/inventory${query}`, signal ? { signal } : {});
     },
     
     async getOutOfStockRawMaterials() {
         return this.request('/inventory/out-of-stock');
     },
     
-    async getExpiredMaterials() {
-        return this.request('/inventory/expired-materials');
+    async getExpiredMaterials(options = {}) {
+        const signal = options.signal;
+        return this.request('/inventory/expired-materials', signal ? { signal } : {});
     },
 
-    async getUntrackedItems() {
-        return this.request('/inventory/untracked-items');
+    async getUntrackedItems(options = {}) {
+        const signal = options.signal;
+        return this.request('/inventory/untracked-items', signal ? { signal } : {});
     },
 
     /** Get output ready date findings (outputs not yet usable). */
@@ -179,11 +185,12 @@ window.CoreAPI = window.CoreAPI || {
 
     /** Get untracked items matching name and unit (for Add to Inventory and execution modal reconciliation).
      * When executionId is provided, includes items with qty 0 that were consumed in that execution. */
-    async getMatchingUntracked(name, unit, processId = null, executionId = null) {
+    async getMatchingUntracked(name, unit, processId = null, executionId = null, options = {}) {
         const params = new URLSearchParams({ name: name || '', unit: unit || '' });
         if (processId) params.set('process_id', processId);
         if (executionId) params.set('execution_id', executionId);
-        return this.request(`/inventory/reconcile/matching-untracked?${params.toString()}`);
+        const signal = options.signal;
+        return this.request(`/inventory/reconcile/matching-untracked?${params.toString()}`, signal ? { signal } : {});
     },
 
     /** Path A: Add to inventory with optional mapping to an untracked item. */
@@ -307,7 +314,8 @@ window.CoreAPI = window.CoreAPI || {
     },
 
     // Evidence (execution attachments: images, PDFs)
-    async uploadEvidence(formData) {
+    async uploadEvidence(formData, options = {}) {
+        const signal = options.signal;
         const url = `${this.baseURL}/evidence/upload`;
         // Include CSRF token for mutating multipart uploads.
         const csrfMeta = typeof document !== 'undefined' && document.querySelector
@@ -320,7 +328,9 @@ window.CoreAPI = window.CoreAPI || {
         }
         const config = { method: 'POST', body: formData, headers };
         if (typeof window !== 'undefined' && window.fetch) {
-            const response = await fetch(url, { ...config, credentials: 'same-origin' });
+            const fetchOpts = { ...config, credentials: 'same-origin' };
+            if (signal) fetchOpts.signal = signal;
+            const response = await fetch(url, fetchOpts);
             const raw = await response.text();
             let data;
             try {
@@ -331,11 +341,14 @@ window.CoreAPI = window.CoreAPI || {
             if (!response.ok) throw new Error((data && data.error) || `HTTP ${response.status}`);
             return data;
         }
-        return this.request('/evidence/upload', { method: 'POST', body: formData });
+        const reqOpts = { method: 'POST', body: formData };
+        if (signal) reqOpts.signal = signal;
+        return this.request('/evidence/upload', reqOpts);
     },
 
-    async listEvidence(executionId) {
-        return this.request(`/evidence/list?execution_id=${encodeURIComponent(executionId)}`);
+    async listEvidence(executionId, options = {}) {
+        const signal = options.signal;
+        return this.request(`/evidence/list?execution_id=${encodeURIComponent(executionId)}`, signal ? { signal } : {});
     },
 
     /** Remove evidence (record and file). Use from execution modal before completing the step. */
@@ -344,8 +357,9 @@ window.CoreAPI = window.CoreAPI || {
     },
 
     /** Evidence upload limits (single source of truth; use for client-side size check). */
-    async getEvidenceConfig() {
-        return this.request('/evidence/config');
+    async getEvidenceConfig(options = {}) {
+        const signal = options.signal;
+        return this.request('/evidence/config', signal ? { signal } : {});
     },
 
     getEvidenceDownloadUrl(evidenceId) {
@@ -358,8 +372,9 @@ window.CoreAPI = window.CoreAPI || {
     },
 
     // Process step documentation (SOP) – for execution modal and step creation
-    async getStepDocumentation(stepId) {
-        return this.request(`/process-docs/${encodeURIComponent(stepId)}`);
+    async getStepDocumentation(stepId, options = {}) {
+        const signal = options.signal;
+        return this.request(`/process-docs/${encodeURIComponent(stepId)}`, signal ? { signal } : {});
     },
 
     /** Create or update inline SOP for a step (admin). Used when defining steps. */
