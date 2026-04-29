@@ -6,6 +6,7 @@
   'use strict';
 
   function install(ctx) {
+    var refreshInventoryGeneration = 0;
     var config = ctx.config || {};
     var CoreAPI = ctx.CoreAPI != null ? ctx.CoreAPI : root.CoreAPI;
     var escapeHtml =
@@ -73,8 +74,17 @@
   function bindUntrackedOutputForm() {
     var form = document.getElementById('add-untracked-output-form');
     if (!form) return;
+    if (form._executionUntrackedFormBound) {
+      return;
+    }
+    form._executionUntrackedFormBound = true;
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
+      if (form._untrackedSubmitInFlight) {
+        return;
+      }
+      form._untrackedSubmitInFlight = true;
+      try {
       var ctx = window.untrackedOutputContext;
       if (!ctx) return;
       var name = (form.querySelector('[name="name"]') || {}).value;
@@ -121,6 +131,9 @@
         console.error('Failed to add untracked output:', err);
         if (typeof showNotification === 'function') showNotification('error', 'Failed to add', err.message || 'Could not add untracked output.');
       }
+      } finally {
+        form._untrackedSubmitInFlight = false;
+      }
     });
   }
   if (document.readyState === 'loading') {
@@ -132,6 +145,7 @@
   // Called by core2/flows2 add-inventory success when item was added from execution modal.
   // Refetches inventory and updates execute-step-modal dropdowns; optionally selects the new item.
   window.refreshExecutionModalInventory = async function(newItem) {
+    var gen = ++refreshInventoryGeneration;
     var modal = document.getElementById('execute-step-modal');
     if (!modal) return;
     var pageEmbed =
@@ -145,6 +159,9 @@
     if (!ctx || !ctx.fromExecutionModal) return;
 
     var inventoryData = await CoreAPI.getInventory();
+    if (gen !== refreshInventoryGeneration) {
+      return;
+    }
     var allInventory = inventoryData.inventory_items || [];
     var currentExecutionId = modal.dataset.executionId;
 

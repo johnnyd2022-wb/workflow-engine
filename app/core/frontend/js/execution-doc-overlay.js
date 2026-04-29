@@ -5,8 +5,16 @@
 (function (root) {
   'use strict';
 
+  function removeDocFullscreenOverlay() {
+    var existing = document.getElementById('doc-fullscreen-overlay');
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+  }
+
   root.openDocFullScreenOverlay = function (docUrl, docTitle) {
     if (!docUrl || docUrl === '#') return;
+    removeDocFullscreenOverlay();
     var overlay = document.createElement('div');
     overlay.id = 'doc-fullscreen-overlay';
     overlay.setAttribute('role', 'dialog');
@@ -20,17 +28,40 @@
     backBtn.type = 'button';
     backBtn.className = 'btn btn-secondary';
     backBtn.innerHTML = '&#8592; Back to step';
-    backBtn.onclick = function () {
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-    };
-    bar.appendChild(backBtn);
     var frameWrap = document.createElement('div');
     frameWrap.style.cssText = 'flex: 1; min-height: 0; width: 100%;';
     var iframe = document.createElement('iframe');
     iframe.src = docUrl;
     iframe.title = docTitle || 'Step instructions';
+    iframe.setAttribute(
+      'sandbox',
+      'allow-same-origin allow-scripts allow-popups allow-downloads'
+    );
+    iframe.referrerPolicy = 'strict-origin-when-cross-origin';
     iframe.style.cssText = 'width: 100%; height: 100%; border: none; display: block;';
     frameWrap.appendChild(iframe);
+
+    function teardown() {
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('popstate', onPopState);
+      removeDocFullscreenOverlay();
+    }
+
+    function onKeyDown(ev) {
+      if (ev.key === 'Escape') {
+        teardown();
+      }
+    }
+
+    function onPopState() {
+      teardown();
+    }
+
+    backBtn.onclick = teardown;
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('popstate', onPopState);
+
+    bar.appendChild(backBtn);
     overlay.appendChild(bar);
     overlay.appendChild(frameWrap);
     document.body.appendChild(overlay);

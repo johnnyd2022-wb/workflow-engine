@@ -50,8 +50,12 @@
 
         var summary = document.createElement('summary');
         summary.className = 'flow-wizard-example-disclosure__summary';
-        summary.innerHTML =
-          'View inline<span class="flow-wizard-example-disclosure__hint" aria-hidden="true">(click to collapse)</span>';
+        summary.appendChild(document.createTextNode('View inline'));
+        var sumHint = document.createElement('span');
+        sumHint.className = 'flow-wizard-example-disclosure__hint';
+        sumHint.setAttribute('aria-hidden', 'true');
+        sumHint.textContent = '(click to collapse)';
+        summary.appendChild(sumHint);
         details.appendChild(summary);
 
         var body = document.createElement('div');
@@ -85,8 +89,12 @@
         preview.style.cssText = 'margin-top: 12px; border-top: none;';
         var sum = document.createElement('summary');
         sum.className = 'flow-wizard-example-disclosure__summary';
-        sum.innerHTML =
-          'View inline<span class="flow-wizard-example-disclosure__hint" aria-hidden="true">(click to expand)</span>';
+        sum.appendChild(document.createTextNode('View inline'));
+        var expHint = document.createElement('span');
+        expHint.className = 'flow-wizard-example-disclosure__hint';
+        expHint.setAttribute('aria-hidden', 'true');
+        expHint.textContent = '(click to expand)';
+        sum.appendChild(expHint);
         preview.appendChild(sum);
         var body = document.createElement('div');
         body.className = 'flow-wizard-example-disclosure__body';
@@ -106,6 +114,11 @@
           var iframe = document.createElement('iframe');
           iframe.src = viewUrl;
           iframe.title = doc.title || 'Documentation';
+          iframe.setAttribute(
+            'sandbox',
+            'allow-same-origin allow-scripts allow-popups allow-downloads'
+          );
+          iframe.referrerPolicy = 'strict-origin-when-cross-origin';
           iframe.style.cssText =
             'display: block; width: 100%; height: min(70vh, 820px); min-height: 420px; border: none;';
           frameWrap.appendChild(iframe);

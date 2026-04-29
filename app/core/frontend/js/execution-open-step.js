@@ -5,6 +5,8 @@
 (function (root) {
   "use strict";
 
+  var openExecutionModalGeneration = 0;
+
   async function openExecutionModal(ctx, executionId, executionStep, stepDefinition, options) {
     var SessionAPI = ctx.SessionAPI;
     var convertUnit = ctx.convertUnit;
@@ -23,6 +25,7 @@
       console.error('Execution modal not found');
       return;
     }
+    var openGen = ++openExecutionModalGeneration;
     options = options || {};
     var renderMode = (options && options.renderMode) ? String(options.renderMode) : 'modal';
     if (window.ExecutionUI && typeof window.ExecutionUI.setRenderMode === 'function') {
@@ -108,7 +111,11 @@
       docsPromise,
       loadOrgUsersMap()
     ]);
-    
+
+    if (openGen !== openExecutionModalGeneration) {
+      return;
+    }
+
     // Render step documentation (SOP) – read-only
     const documents = (docsData && docsData.documents) ? docsData.documents : [];
     window.ExecutionRenderDocs.renderStepDocumentation(docsSection, docsContainer, documents);
@@ -186,7 +193,10 @@
       escapeHtml: escapeHtml,
     });
 
-    
+    if (openGen !== openExecutionModalGeneration) {
+      return;
+    }
+
     await window.ExecutionRenderOutputs.renderVariableOutputs({
       modal: modal,
       outputsContainer: outputsContainer,
@@ -195,7 +205,10 @@
       escapeHtml: escapeHtml,
     });
 
-    
+    if (openGen !== openExecutionModalGeneration) {
+      return;
+    }
+
     // Submit button is always enabled; we do not enforce strict quantity or require every input to have a selection
     const submitButton = modal.querySelector('#execute-step-submit-btn');
     if (submitButton) {
@@ -204,7 +217,11 @@
       submitButton.style.cursor = 'pointer';
       submitButton.title = '';
     }
-    
+
+    if (openGen !== openExecutionModalGeneration) {
+      return;
+    }
+
     // Show modal
     showModal();
 

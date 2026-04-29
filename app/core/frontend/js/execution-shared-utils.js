@@ -40,6 +40,9 @@
       g.__OrgUsersMap = m;
       return m;
     } catch (e) {
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn('loadOrgUsersMap: failed to fetch /org/users', e);
+      }
       g.__OrgUsersMap = new Map();
       return g.__OrgUsersMap;
     }
