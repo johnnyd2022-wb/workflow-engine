@@ -1,13 +1,16 @@
 # Execution UI parity checklist
 
-Use this when refactoring `execution-modal.js` into **ExecutionRenderer** + **Modal/Page shells**. Each row is a regression scenario to run manually (or automate later) before merging risky slices.
+Use this when validating execute-step behaviour after changes to **modal/page shells**, **submit**, or any **`execution-*.js`** module. Each row in §A–H is a regression scenario to run manually (or automate later) before merging risky slices.
 
-**Primary implementation:** `app/core/frontend/js/execution-modal.js`  
-**Markup:** `app/core/frontend/shared/execution-modal.html`  
-**Styles:** `app/core/frontend/css/execution-modal.css`, `app/core/frontend/css/batch-start.css`  
-**Page loader:** `app/core/frontend/js/execution-step-page.js` (batch execute-step route)
+**Bootstrap / entrypoints:** `app/core/frontend/js/execution-modal.js` — assigns `openExecutionModal`, `submitExecution`; wires globals (`ExecutionModalConfig`, polyfills); **`ExecutionModalSecondary.install`**.
 
-**Legacy duplicate:** `app/core/frontend/shared/execution-modal.js` — not wired from templates seen in-repo; confirm dead before deleting.
+**Orchestration:** `execution-open-step.js` (`ExecutionOpenStep.openExecutionModal`) loads data and delegates rendering.
+
+**Rendering:** `execution-render-docs.js`, `execution-render-prompts.js`, `execution-render-inputs.js`, `execution-render-outputs.js` · **Submit:** `execution-submit.js` · **Secondary flows / inventory refresh:** `execution-modal-secondary.js` · **Doc fullscreen iframe:** `execution-doc-overlay.js` · **Shared helpers:** `execution-shared-utils.js`, `execution-session.js`, `execution-ui-utils.js` (`ExecutionUI`).
+
+**Markup:** `app/core/frontend/shared/execution-modal.html` (included from flows2 / core2). **Styles:** `execution-modal.css`, `batch-start.css`. **Batch page loader:** `execution-step-page.js`.
+
+**Script load order** (see `batch-start.html` / `flows2.html` / `core2.html`): where linked, `execution-ui-utils.js` → `execution-shared-utils.js` → `execution-session.js` → `execution-doc-overlay.js` → `execution-render-docs.js` → `execution-render-prompts.js` → `execution-render-inputs.js` → `execution-render-outputs.js` → `execution-submit.js` → `execution-modal-secondary.js` → `execution-open-step.js` → **`execution-modal.js`** (last).
 
 ---
 
@@ -54,7 +57,7 @@ Use **flows2 “Next step”** navigation or open the URL directly with valid `e
 ## C. Draft batch (“start new batch” on execute-step)
 
 - [ ] **Context:** `draft` + `step_id` + `process_id`; `openExecutionModal(null, null, stepDefinition, { processId, renderMode: 'page' })`.
-- [ ] **Submit:** Creates execution then completes step (execution-modal draft branch); datasets updated before `completeStep`.
+- [ ] **Submit:** Creates execution then completes step (`execution-submit.js` draft handling); datasets updated before `completeStep`.
 - [ ] **No duplicate phantom state:** Re-opening or refreshing does not duplicate inputs from `_inputStateByKey` leaks.
 
 ---
@@ -65,7 +68,7 @@ Use **flows2 “Next step”** navigation or open the URL directly with valid `e
 - [ ] **Ready-date confirmation:** Intercepts submit when “not ready” inventory chosen; **Cancel** vs **Use anyway** paths.
 - [ ] **Add missing item:** `openAddInventoryModalForMissingInput` opens add-inventory flow; on success `refreshExecutionModalInventory` refreshes pickers.
 - [ ] **Refresh after add:** New item appears; selection can be applied; submit enables when all required selections filled.
-- [ ] **Page mode visibility:** `refreshExecutionModalInventory` must **not** bail incorrectly when `display` is not `none` (page embed). After refactor, gate on session/root visibility—not only `modal.style.display === 'none'`.
+- [ ] **Page mode visibility:** `refreshExecutionModalInventory` (`execution-modal-secondary.js`) uses **`renderMode === 'page'`** or **`body.batch-start-spa`**, not only `modal.style.display === 'none'`.
 
 ---
 
@@ -87,9 +90,9 @@ Use **flows2 “Next step”** navigation or open the URL directly with valid `e
 ## G. Globals and integrations
 
 - [ ] **`CoreAPI`:** `getExecution`, `getProcess`, `getExecutionWithProcess`, `getInventory`, `getExpiredMaterials`, `getUntrackedItems`, `getStepDocumentation`, `completeStep`, evidence upload helpers — unchanged contracts unless intentionally versioned.
-- [ ] **`escapeHtml`, `getCurrentUser`, `showNotification`:** Still available where renderer/submit expect them.
+- [ ] **`escapeHtml`, `getCurrentUser`, `showNotification`:** Globals (execution-modal polyfills `showNotification` / `getCurrentUser` if missing); render/submit modules read from `window` where needed.
 - [ ] **`ExecutionModalConfig.onStepCompleted`:** Runs after successful step on both modal and page flows.
-- [ ] **`execution-ui-utils.js`:** Referenced from `batch-start.html` but file may be missing; **ExecutionUI** hooks optional—document target state after Part 8 of refactor.
+- [ ] **`execution-ui-utils.js`:** Loaded on **batch-start** and **flows2** before the execution stack; provides **`ExecutionUI`** (`setRenderMode`, `getRenderMode`, `isPageMode`). **core2** does not include this script; modal/page mode still works via `dataset.renderMode` fallbacks in **`execution-open-step.js`** / **`execution-modal.js`**.
 
 ---
 
@@ -135,4 +138,6 @@ node --test tests/js/*.test.js
 11. ~~Doc fullscreen overlay → `execution-doc-overlay.js` (`openDocFullScreenOverlay`)~~  
 12. ~~Cleanup duplicate `shared/execution-modal.js` (removed; HTML partial `execution-modal.html` remains)~~  
 
-When a part merges, add a short note under **Sign-off** with what was covered.
+The duplicate **`shared/execution-modal.js`** file was deleted; templates never loaded it. **`shared/execution-modal.html`** remains the shared DOM shell.
+
+When a risky slice merges, add a short note under **Sign-off** with what was covered.
