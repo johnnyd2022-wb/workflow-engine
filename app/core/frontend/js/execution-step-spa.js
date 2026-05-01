@@ -70,6 +70,9 @@
   function invMatchesType(inv, selected) {
     if (!selected || selected === 'all') return true;
     var t = String((inv && (inv.inventory_type || inv.type || inv.category || inv.item_type)) || '').toLowerCase();
+    if (t === 'intermediate' || t === 'wip') t = 'work_in_progress';
+    if (t === 'final') t = 'final_product';
+    if (t === 'raw') t = 'raw_material';
     return t === selected;
   }
 
@@ -150,9 +153,8 @@
             '<span>(Expected: ' + escapeHtml(String(inp.quantity || '0')) + ' ' + escapeHtml(inp.unit || '') + ')</span></p>' +
           '<div class="exec-picker-tabs" role="tablist" data-tabs-for="' + escapeHtml(safe) + '">' +
             '<button type="button" class="exec-picker-tab" role="tab" data-exec-type="raw_material" aria-selected="true">Raw materials</button>' +
-            '<button type="button" class="exec-picker-tab" role="tab" data-exec-type="work_in_progress" aria-selected="false">Work in progress</button>' +
-            '<button type="button" class="exec-picker-tab" role="tab" data-exec-type="final_product" aria-selected="false">Final product</button>' +
-            '<button type="button" class="exec-picker-tab" role="tab" data-exec-type="all" aria-selected="false">All</button>' +
+            '<button type="button" class="exec-picker-tab" role="tab" data-exec-type="work_in_progress" aria-selected="false">Intermediate</button>' +
+            '<button type="button" class="exec-picker-tab" role="tab" data-exec-type="final_product" aria-selected="false">Finals products</button>' +
           '</div>' +
           '<div class="exec-picker-search">' +
             '<input type="search" class="spa-inp" data-search-for="' + escapeHtml(safe) + '" placeholder="Search inventory…" autocomplete="off">' +
@@ -195,10 +197,10 @@
         var t = p.type || 'text';
         var req = p.required !== false;
         var inputHtml;
-        if (t === 'number') inputHtml = '<input type="number" class="spa-inp" step="0.01"' + (req ? ' required' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
-        else if (t === 'date') inputHtml = '<input type="date" class="spa-inp"' + (req ? ' required' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
-        else if (t === 'select') inputHtml = '<select class="spa-inp"' + (req ? ' required' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '"><option value="">Select…</option></select>';
-        else inputHtml = '<input type="text" class="spa-inp"' + (req ? ' required' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
+        if (t === 'number') inputHtml = '<input type="number" class="spa-inp" step="0.01"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
+        else if (t === 'date') inputHtml = '<input type="date" class="spa-inp"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
+        else if (t === 'select') inputHtml = '<select class="spa-inp"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '"><option value="">Select…</option></select>';
+        else inputHtml = '<input type="text" class="spa-inp"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
         html += '<div><label class="spa-field-label">' + escapeHtml(p.label || 'Prompt') +
           (req ? ' <span style="color: var(--error);">*</span>' : '') + '</label>' + inputHtml + '</div>';
       });
@@ -320,6 +322,22 @@
     // ── Submit ────────────────────────────────────────────────────────────────
     root.querySelector('#exec-spa-submit').addEventListener('click', async function() {
       var submitBtn = this;
+      var promptMissing = [];
+      $all(root, '[data-prompt][data-required="true"]').forEach(function(el) {
+        var ok = String(el.value || '').trim();
+        if (!ok) {
+          promptMissing.push(el.getAttribute('data-prompt') || 'Field');
+          el.style.border = '2px solid var(--error, #ef4444)';
+        } else {
+          el.style.border = '';
+        }
+      });
+      if (promptMissing.length) {
+        if (window.showNotification) {
+          window.showNotification('error', 'Validation error', 'Please fill in: ' + promptMissing.join(', ') + '.');
+        }
+        return;
+      }
       setBusy(submitBtn, true, 'Completing…');
       try {
         var createResult = await CoreAPI.createExecution(ctx.processId);

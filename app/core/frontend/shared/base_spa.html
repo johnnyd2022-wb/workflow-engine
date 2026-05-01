@@ -1053,6 +1053,32 @@
     <span>Loading…</span>
   </div>
 
+  {# System-styled notifications (same pattern as flows2 / core2; execution stack uses showNotification for validation). #}
+  <div id="notification-modal" class="spa-notification-toast" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 10000; max-width: 400px; min-width: 300px;" role="status" aria-live="polite">
+    <div class="card" style="padding: 16px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12)); border: 1px solid var(--border-light, #e5e7eb);">
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div id="notification-icon" style="flex-shrink: 0; margin-top: 2px;"></div>
+        <div style="flex: 1; min-width: 0;">
+          <h3 id="notification-title" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; margin-top: 0;">Notification</h3>
+          <p id="notification-message" style="color: var(--text-secondary); font-size: 14px; line-height: 1.4; margin: 0; word-wrap: break-word;"></p>
+        </div>
+        <button type="button" onclick="window.closeNotification && window.closeNotification()" style="padding: 4px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; border-radius: var(--radius-md); flex-shrink: 0; margin-left: 8px;" aria-label="Dismiss notification">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <style>
+    @keyframes spaSlideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .spa-notification-toast { animation: spaSlideInRight 0.3s ease-out; }
+  </style>
+
   {# Core JS and shared behaviour #}
   <script src="{{ url_for('core.serve_core_js', filename='core-api.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
@@ -1585,6 +1611,52 @@
           window.SystemFindingsNotifications.refreshBadge();
         }
       });
+    })();
+  </script>
+
+  <script>
+    (function () {
+      'use strict';
+      var notificationTimeout = null;
+      window.closeNotification = function () {
+        var el = document.getElementById('notification-modal');
+        if (el) el.style.display = 'none';
+        if (notificationTimeout) {
+          clearTimeout(notificationTimeout);
+          notificationTimeout = null;
+        }
+      };
+      if (typeof window.showNotification === 'function') return;
+      window.showNotification = function (type, title, message) {
+        var modal = document.getElementById('notification-modal');
+        if (!modal) {
+          if (typeof console !== 'undefined' && console.warn) console.warn(type, title, message);
+          return;
+        }
+        if (notificationTimeout) {
+          clearTimeout(notificationTimeout);
+          notificationTimeout = null;
+        }
+        var titleEl = document.getElementById('notification-title');
+        var messageEl = document.getElementById('notification-message');
+        var iconEl = document.getElementById('notification-icon');
+        if (titleEl) titleEl.textContent = title || '';
+        if (messageEl) messageEl.textContent = message || '';
+        if (type === 'success' && iconEl) {
+          iconEl.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+          iconEl.style.color = 'var(--success, #10b981)';
+        } else if (type === 'error' && iconEl) {
+          iconEl.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+          iconEl.style.color = 'var(--error, #ef4444)';
+        }
+        modal.style.display = 'flex';
+        var timeoutDuration = type === 'error' ? 8000 : 6000;
+        notificationTimeout = setTimeout(function () {
+          window.closeNotification();
+        }, timeoutDuration);
+      };
     })();
   </script>
 

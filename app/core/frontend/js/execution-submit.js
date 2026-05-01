@@ -5,6 +5,331 @@
 (function (root) {
   'use strict';
 
+  /**
+   * Client-side checks only (inventory, prompts, evidence attachments, confirm qty/unit).
+   * Does not require execution id — safe to run before the record-step confirmation modal.
+   * Mutates field borders like submit (same UX as direct Complete step).
+   */
+  function collectClientValidationErrors(modal, ses, convertUnit) {
+    const validationErrors = [];
+
+    const inputRows = modal.querySelectorAll('.execute-input-row');
+    inputRows.forEach(function (row) {
+      const select = row.querySelector('.execute-inventory-select');
+      const quantityInput = row.querySelector('.execute-quantity-input');
+      if (!select || !quantityInput) return;
+      const inventoryId = select.value;
+      const inputName = select.dataset.inputName;
+      if (!inventoryId || inventoryId === '') return;
+      const quantity = parseFloat(quantityInput.value);
+      if (!quantity || isNaN(quantity) || quantity <= 0) {
+        validationErrors.push('Please enter a valid quantity for "' + inputName + '" (selected row)');
+        quantityInput.style.border = '2px solid var(--error, #ef4444)';
+      } else {
+        quantityInput.style.border = '';
+        const availableQty = parseFloat(select.dataset.quantity);
+        if (!isNaN(availableQty) && quantity > availableQty) {
+          const inventoryUnit = select.dataset.unit || '';
+          const stepUnit = (quantityInput.dataset.stepUnit || '').trim();
+          var qtyInInvUnit = quantity;
+          if (stepUnit && inventoryUnit && stepUnit.toLowerCase() !== inventoryUnit.toLowerCase()) {
+            const conv = convertUnit(quantity, stepUnit, inventoryUnit);
+            if (conv !== quantity || stepUnit.toLowerCase() === inventoryUnit.toLowerCase()) {
+              qtyInInvUnit = conv;
+            } else {
+              qtyInInvUnit = NaN;
+            }
+          }
+          if (!isNaN(qtyInInvUnit) && qtyInInvUnit > availableQty) {
+            const qtyLabel = stepUnit ? quantity + ' ' + stepUnit : String(quantity);
+            const availLabel = stepUnit
+              ? Number(convertUnit(availableQty, inventoryUnit, stepUnit).toFixed(3)) + ' ' + stepUnit
+              : String(availableQty) + ' ' + inventoryUnit;
+            validationErrors.push('Quantity for "' + inputName + '" (' + qtyLabel + ') exceeds available inventory (' + availLabel + ')');
+            quantityInput.style.border = '2px solid var(--error, #ef4444)';
+          }
+        }
+      }
+    });
+
+    modal.querySelectorAll('.execute-input-rows-container').forEach(function (container) {
+      var inputName = container.dataset.inputName || '';
+      var rows = container.querySelectorAll('.execute-input-row');
+      if (!inputName || !rows.length) return;
+      var ok = false;
+      rows.forEach(function (row) {
+        var sel = row.querySelector('.execute-inventory-select');
+        var qtyEl = row.querySelector('.execute-quantity-input');
+        var stateKey = row.dataset.stateKey;
+        var invId = sel && sel.value ? String(sel.value).trim() : '';
+        if (!invId && stateKey && ses.inputStateByKey && ses.inputStateByKey.has(stateKey)) {
+          var st = ses.inputStateByKey.get(stateKey);
+          if (st && st.inventory_item_id) invId = String(st.inventory_item_id);
+        }
+        var q = qtyEl ? parseFloat(qtyEl.value) : NaN;
+        if ((isNaN(q) || q <= 0) && stateKey && ses.inputStateByKey && ses.inputStateByKey.has(stateKey)) {
+          var stQty = ses.inputStateByKey.get(stateKey);
+          if (stQty && stQty.quantity != null) q = parseFloat(stQty.quantity);
+        }
+        if (invId && !isNaN(q) && q > 0) ok = true;
+      });
+      if (!ok) {
+        validationErrors.push('Please select inventory and a valid quantity for "' + inputName + '".');
+        rows.forEach(function (row) {
+          var qtyEl = row.querySelector('.execute-quantity-input');
+          var sel = row.querySelector('.execute-inventory-select');
+          var sk = row.dataset.stateKey;
+          var id = sel && sel.value ? String(sel.value).trim() : '';
+          if (!id && sk && ses.inputStateByKey && ses.inputStateByKey.has(sk)) {
+            var st2 = ses.inputStateByKey.get(sk);
+            if (st2 && st2.inventory_item_id) id = String(st2.inventory_item_id);
+          }
+          if (!id && qtyEl) qtyEl.style.border = '2px solid var(--error, #ef4444)';
+          else if (id && qtyEl) {
+            var qq = parseFloat(qtyEl.value);
+            if (isNaN(qq) || qq <= 0) qtyEl.style.border = '2px solid var(--error, #ef4444)';
+          }
+        });
+      }
+    });
+
+    modal.querySelectorAll('.execute-prompt-input[data-required="true"]').forEach(function (input) {
+      const label = input.dataset.promptLabel;
+      const value = input.value.trim();
+      if (!value) {
+        validationErrors.push('Please fill in required field: "' + label + '"');
+        input.style.border = '2px solid var(--error, #ef4444)';
+      } else {
+        input.style.border = '';
+      }
+    });
+
+    modal.querySelectorAll('.execute-prompt-section[data-prompt-type="evidence"][data-prompt-required="true"]').forEach(function (section) {
+      const uploadZone = section.querySelector('.execute-evidence-upload');
+      const label = section.dataset.promptLabel || 'Evidence';
+      const stepId = uploadZone && uploadZone.dataset.stepId;
+      const list = (ses.evidenceByStepId && stepId && ses.evidenceByStepId.get(stepId)) || [];
+      const pending = (ses.pendingEvidenceFilesByStepId && stepId && ses.pendingEvidenceFilesByStepId.get(stepId)) || [];
+      const count = (list.length || 0) + (pending.length || 0);
+      if (count < 1) {
+        validationErrors.push('Please upload at least one file for "' + label + '"');
+        if (uploadZone) uploadZone.style.borderColor = 'var(--error, #ef4444)';
+      } else if (uploadZone) {
+        uploadZone.style.borderColor = '';
+      }
+    });
+
+    modal.querySelectorAll('.execute-confirm-quantity-input[data-required="true"]').forEach(function (input) {
+      const quantity = parseFloat(input.value);
+      const inputName = input.dataset.inputName;
+      const confirmUnitSelects = modal.querySelectorAll('.execute-confirm-unit-input[data-required="true"]');
+      const unitSelect = Array.from(confirmUnitSelects).find(function (sel) {
+        return sel.dataset.inputName === inputName;
+      });
+      const unit = unitSelect ? unitSelect.value : '';
+      if (isNaN(quantity) || quantity <= 0) {
+        validationErrors.push('Please enter a valid quantity for "' + inputName + '"');
+        input.style.border = '2px solid var(--error, #ef4444)';
+      } else {
+        input.style.border = '';
+      }
+      if (!unit) {
+        validationErrors.push('Please select a unit for "' + inputName + '"');
+        if (unitSelect) unitSelect.style.border = '2px solid var(--error, #ef4444)';
+      } else if (unitSelect) {
+        unitSelect.style.border = '';
+      }
+    });
+
+    return validationErrors;
+  }
+
+  async function fetchAllStepOutputsForModal(modal, CoreAPI) {
+    if (!CoreAPI || typeof CoreAPI.getProcess !== 'function') return null;
+    var processId = (modal.dataset && modal.dataset.processId) ? String(modal.dataset.processId).trim() : '';
+    var stepDefId = (modal.dataset && modal.dataset.stepDefinitionId) ? String(modal.dataset.stepDefinitionId).trim() : '';
+    try {
+      if (root.ExecutionStepPageContext) {
+        if (!processId && root.ExecutionStepPageContext.processId) processId = String(root.ExecutionStepPageContext.processId);
+        if (!stepDefId && root.ExecutionStepPageContext.stepId) stepDefId = String(root.ExecutionStepPageContext.stepId);
+      }
+    } catch (e) {}
+    var executionId = modal.dataset && modal.dataset.executionId ? String(modal.dataset.executionId).trim() : '';
+    if ((!processId || !stepDefId) && executionId && typeof CoreAPI.getExecution === 'function') {
+      try {
+        var ex = await CoreAPI.getExecution(executionId);
+        if (ex && ex.process_id && !processId) processId = String(ex.process_id);
+        if (!stepDefId && modal.dataset.executionStepId && ex.execution_steps) {
+          var es = (ex.execution_steps || []).find(function (s) {
+            return String(s.id) === String(modal.dataset.executionStepId);
+          });
+          if (es && es.step_id != null) stepDefId = String(es.step_id);
+        }
+      } catch (e) {}
+    }
+    if (!processId || !stepDefId) return null;
+    try {
+      var processData = await CoreAPI.getProcess(processId);
+      var steps = (processData && processData.steps) ? processData.steps : [];
+      var stepDef = steps.find(function (s) {
+        return String(s.id) === String(stepDefId);
+      });
+      if (!stepDef) return null;
+      return stepDef.outputs && stepDef.outputs.length ? stepDef.outputs : [];
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * set_at_execution custom expiry + ready date + cross-check (same rules as submit body).
+   */
+  function collectOutputSetAtExecutionValidationErrors(modal, allStepOutputs) {
+    var errs = [];
+    if (!allStepOutputs || !allStepOutputs.length) return errs;
+    var expiryValidator = window.CustomExpiryValidation || {};
+    var durationToHours =
+      typeof expiryValidator.durationToHours === 'function'
+        ? expiryValidator.durationToHours
+        : function () {
+            return null;
+          };
+    var getOutputId =
+      window.getExecutionOutputId ||
+      function (o) {
+        return o && o.id ? String(o.id) : 'out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown');
+      };
+
+    (allStepOutputs || []).forEach(function (outputDef) {
+      var ce = (outputDef.extra_data || {}).custom_expiry;
+      if (!ce || !ce.enabled || (ce.mode || '') !== 'set_at_execution') return;
+      var outName = (outputDef.name || '').trim();
+      var outId = getOutputId(outputDef);
+      var box = Array.from(modal.querySelectorAll('.execute-output-expiry-input')).find(function (b) {
+        return (b.dataset.outputId || '').trim() === outId;
+      });
+      if (!box) return;
+      var modeSel = box.querySelector('.execute-output-expiry-input-mode');
+      var inputMode = modeSel ? modeSel.value || 'duration' : 'duration';
+      var warnValEl = box.querySelector('.execute-output-expiry-warning-value');
+      var warnUnitEl = box.querySelector('.execute-output-expiry-warning-unit');
+      var warnVal = warnValEl ? parseInt((warnValEl.value || '').trim(), 10) : 0;
+      var warnUnit = (warnUnitEl && warnUnitEl.value) || 'days';
+      var expiryHours = null;
+      if (inputMode === 'duration') {
+        var dvEl = box.querySelector('.execute-output-expiry-duration-value');
+        var duEl = box.querySelector('.execute-output-expiry-duration-unit');
+        var dv = dvEl ? parseInt((dvEl.value || '').trim(), 10) : null;
+        var du = (duEl && duEl.value) || 'days';
+        expiryHours = durationToHours(dv != null && !isNaN(dv) ? dv : null, du);
+      } else {
+        var dtEl = box.querySelector('.execute-output-expiry-datetime');
+        var raw = dtEl ? (dtEl.value || '').trim() : '';
+        if (raw) {
+          var expiryAt = new Date(raw);
+          if (!isNaN(expiryAt.getTime())) expiryHours = (expiryAt.getTime() - Date.now()) / (1000 * 60 * 60);
+        }
+      }
+      if (expiryHours != null && expiryHours <= 0 && inputMode === 'datetime') {
+        errs.push('Output "' + outName + '": expiry date and time must be in the future.');
+        return;
+      }
+      if (typeof expiryValidator.validateWarnNotLongerThanExpiry === 'function') {
+        var res = expiryValidator.validateWarnNotLongerThanExpiry({
+          outputName: outName,
+          warnValue: isNaN(warnVal) ? null : warnVal,
+          warnUnit: warnUnit,
+          expiryHours: expiryHours,
+          expiryLabel: inputMode === 'datetime' ? 'the time remaining until expiry' : 'the expiry period',
+        });
+        if (res && res.valid === false) {
+          errs.push(res.message || 'Output "' + outName + '": invalid warn-before-expiry setting.');
+        }
+      }
+    });
+
+    (allStepOutputs || []).forEach(function (outputDef) {
+      var rd = (outputDef.extra_data || {}).ready_date;
+      if (!rd || !rd.enabled || (rd.mode || '') !== 'set_at_execution') return;
+      var outName = (outputDef.name || '').trim();
+      var outputId = getOutputId(outputDef);
+      var payload =
+        typeof window.collectExecutionOutputReadyDatePayload === 'function'
+          ? window.collectExecutionOutputReadyDatePayload(modal, outputId)
+          : null;
+      if (!payload || !payload.date) {
+        errs.push('Output "' + outName + '": set the date when this output can be used.');
+      }
+    });
+
+    if (
+      typeof window.ExpiryReadyDateValidation !== 'undefined' &&
+      typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDates === 'function'
+    ) {
+      for (var ei = 0; ei < (allStepOutputs || []).length; ei++) {
+        var od = allStepOutputs[ei];
+        var rd2 = (od.extra_data || {}).ready_date;
+        var ce2 = (od.extra_data || {}).custom_expiry;
+        if (!rd2 || !rd2.enabled || (rd2.mode || '') !== 'set_at_execution') continue;
+        if (!ce2 || !ce2.enabled || (ce2.mode || '') !== 'set_at_execution') continue;
+        var oid = getOutputId(od);
+        var readyPayload =
+          typeof window.collectExecutionOutputReadyDatePayload === 'function'
+            ? window.collectExecutionOutputReadyDatePayload(modal, oid)
+            : null;
+        var expiryPayload =
+          typeof window.collectExecutionOutputExpiryPayload === 'function'
+            ? window.collectExecutionOutputExpiryPayload(modal, oid)
+            : null;
+        var readyIso = readyPayload && readyPayload.date ? readyPayload.date : null;
+        var expiryIso =
+          expiryPayload && expiryPayload.mode === 'datetime' && expiryPayload.expiry_at ? expiryPayload.expiry_at : null;
+        if (readyIso && expiryIso) {
+          var oname = (od.name || '').trim();
+          var erResult = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDates(oname, readyIso, expiryIso);
+          if (!erResult.valid) errs.push(erResult.message || 'Output "' + oname + '": expiry must be after ready date.');
+        }
+      }
+    }
+
+    return errs;
+  }
+
+  async function mergeOutputValidationErrors(modal, CoreAPI) {
+    var outputs = await fetchAllStepOutputsForModal(modal, CoreAPI);
+    if (!outputs || !outputs.length) return [];
+    return collectOutputSetAtExecutionValidationErrors(modal, outputs);
+  }
+
+  async function validateExecutionStepForm(ctx) {
+    var showNotification =
+      typeof ctx.showNotification === 'function' ? ctx.showNotification : root.showNotification;
+    var SessionAPI = ctx.SessionAPI;
+    var convertUnit = ctx.convertUnit;
+    var CoreAPI = ctx.CoreAPI != null ? ctx.CoreAPI : root.CoreAPI;
+    var modal = document.getElementById('execute-step-modal');
+    if (!modal) return false;
+    var ses = SessionAPI.get(modal);
+    var validationErrors = collectClientValidationErrors(modal, ses, convertUnit);
+    var outputErrs = await mergeOutputValidationErrors(modal, CoreAPI);
+    validationErrors = validationErrors.concat(outputErrs || []);
+    if (validationErrors.length > 0) {
+      if (typeof showNotification === 'function') {
+        showNotification('error', 'Validation Error', validationErrors.join('. ') + '.');
+      }
+      var firstError = modal.querySelector('[style*="border: 2px solid var(--error"]');
+      if (!firstError) {
+        firstError = modal.querySelector('.execute-output-ready-date-input, .execute-output-expiry-input');
+      }
+      if (firstError) {
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof firstError.focus === 'function') firstError.focus();
+      }
+      return false;
+    }
+    return true;
+  }
+
   async function submitExecution(ctx) {
     var SessionAPI = ctx.SessionAPI;
     var convertUnit = ctx.convertUnit;
@@ -59,65 +384,24 @@
       showNotification('error', 'Error', 'Execution context missing.');
       return;
     }
-    
-    // VALIDATION: For each input row that has an inventory selected, require valid quantity (no strict match to step expected)
-    const validationErrors = [];
-    const inputRows = modal.querySelectorAll('.execute-input-row');
-    inputRows.forEach(row => {
-      const select = row.querySelector('.execute-inventory-select');
-      const quantityInput = row.querySelector('.execute-quantity-input');
-      if (!select || !quantityInput) return;
-      const inventoryId = select.value;
-      const inputName = select.dataset.inputName;
-      if (!inventoryId || inventoryId === '') return;
-      const quantity = parseFloat(quantityInput.value);
-      if (!quantity || isNaN(quantity) || quantity <= 0) {
-        validationErrors.push(`Please enter a valid quantity for "${inputName}" (selected row)`);
-        quantityInput.style.border = '2px solid var(--error, #ef4444)';
-      } else {
-        quantityInput.style.border = '';
-        const availableQty = parseFloat(select.dataset.quantity);
-        if (!isNaN(availableQty) && quantity > availableQty) {
-          const inventoryUnit = select.dataset.unit || '';
-          const stepUnit = (quantityInput.dataset.stepUnit || '').trim();
-          // Compare in inventory units (convert from step unit when needed).
-          let qtyInInvUnit = quantity;
-          if (stepUnit && inventoryUnit && stepUnit.toLowerCase() !== inventoryUnit.toLowerCase()) {
-            const conv = convertUnit(quantity, stepUnit, inventoryUnit);
-            // If conversion didn't change but units differ, treat as incompatible: skip max check.
-            if (conv !== quantity || stepUnit.toLowerCase() === inventoryUnit.toLowerCase()) {
-              qtyInInvUnit = conv;
-            } else {
-              qtyInInvUnit = NaN;
-            }
-          }
-          if (!isNaN(qtyInInvUnit) && qtyInInvUnit > availableQty) {
-            const qtyLabel = stepUnit ? `${quantity} ${stepUnit}` : `${quantity}`;
-            const availLabel = stepUnit
-              ? `${Number(convertUnit(availableQty, inventoryUnit, stepUnit).toFixed(3))} ${stepUnit}`
-              : `${availableQty} ${inventoryUnit}`;
-            validationErrors.push(`Quantity for "${inputName}" (${qtyLabel}) exceeds available inventory (${availLabel})`);
-            quantityInput.style.border = '2px solid var(--error, #ef4444)';
-          }
-        }
-      }
-    });
-    
-    // VALIDATION: Check required execution prompts (text/number/date/select)
-    const promptInputs = modal.querySelectorAll('.execute-prompt-input[required]');
-    promptInputs.forEach(input => {
-      const label = input.dataset.promptLabel;
-      const value = input.value.trim();
-      
-      if (!value) {
-        validationErrors.push(`Please fill in required field: "${label}"`);
-        input.style.border = '2px solid var(--error, #ef4444)';
-      } else {
-        input.style.border = '';
-      }
-    });
 
-    // Upload staged evidence (draft flow uploads happen only on Record step).
+    var validationErrors = collectClientValidationErrors(modal, ses, convertUnit);
+    var outputValErrs = await mergeOutputValidationErrors(modal, CoreAPI);
+    validationErrors = validationErrors.concat(outputValErrs || []);
+    if (validationErrors.length > 0) {
+      showNotification('error', 'Validation Error', validationErrors.join('. ') + '.');
+      var firstErrEl = modal.querySelector('[style*="border: 2px solid var(--error"]');
+      if (!firstErrEl) {
+        firstErrEl = modal.querySelector('.execute-output-ready-date-input, .execute-output-expiry-input');
+      }
+      if (firstErrEl) {
+        firstErrEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof firstErrEl.focus === 'function') firstErrEl.focus();
+      }
+      return;
+    }
+
+    // Upload staged evidence (draft flow uploads happen only on Record step) — after validation passes.
     try {
       if (!ses.pendingEvidenceFilesByStepId) ses.pendingEvidenceFilesByStepId = new Map();
       var stepIdForEvidence = modal.dataset.executionStepId || modal.dataset.executionStepDefinitionId || '';
@@ -176,60 +460,6 @@
       return;
     }
 
-    // VALIDATION: Check required evidence (counts uploaded + staged)
-    const evidenceSections = modal.querySelectorAll('.execute-prompt-section[data-prompt-type="evidence"][data-prompt-required="true"]');
-    evidenceSections.forEach(section => {
-      const uploadZone = section.querySelector('.execute-evidence-upload');
-      const label = section.dataset.promptLabel || 'Evidence';
-      const stepId = uploadZone && uploadZone.dataset.stepId;
-      const list = (ses.evidenceByStepId && stepId && ses.evidenceByStepId.get(stepId)) || [];
-      const pending = (ses.pendingEvidenceFilesByStepId && stepId && ses.pendingEvidenceFilesByStepId.get(stepId)) || [];
-      const count = (list.length || 0) + (pending.length || 0);
-      if (count < 1) {
-        validationErrors.push(`Please upload at least one file for "${label}"`);
-        if (uploadZone) uploadZone.style.borderColor = 'var(--error, #ef4444)';
-      } else if (uploadZone) {
-        uploadZone.style.borderColor = '';
-      }
-    });
-    
-    // Validate confirm inputs (editable quantity/unit)
-    const confirmQuantityInputs = modal.querySelectorAll('.execute-confirm-quantity-input[data-required="true"]');
-    const confirmUnitSelects = modal.querySelectorAll('.execute-confirm-unit-input[data-required="true"]');
-    
-    confirmQuantityInputs.forEach(input => {
-      const quantity = parseFloat(input.value);
-      const inputName = input.dataset.inputName;
-      const unitSelect = Array.from(confirmUnitSelects).find(sel => sel.dataset.inputName === inputName);
-      const unit = unitSelect ? unitSelect.value : '';
-      
-      if (isNaN(quantity) || quantity <= 0) {
-        validationErrors.push(`Please enter a valid quantity for "${inputName}"`);
-        input.style.border = '2px solid var(--error, #ef4444)';
-      } else {
-        input.style.border = '';
-      }
-      
-      if (!unit) {
-        validationErrors.push(`Please select a unit for "${inputName}"`);
-        if (unitSelect) unitSelect.style.border = '2px solid var(--error, #ef4444)';
-      } else if (unitSelect) {
-        unitSelect.style.border = '';
-      }
-    });
-    
-    // If validation errors exist, show them and prevent submission
-    if (validationErrors.length > 0) {
-      showNotification('error', 'Validation Error', validationErrors.join('. ') + '.');
-      // Scroll to first error
-      const firstError = modal.querySelector('[style*="border: 2px solid var(--error"]');
-      if (firstError) {
-        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        firstError.focus();
-      }
-      return;
-    }
-    
     var invList = ses.inventoryForSubmit || [];
     var invById = new Map();
     invList.forEach(function(i) { if (i && i.id != null) invById.set(String(i.id), i); });
@@ -343,111 +573,7 @@
       const actualOutputs = [];
       const allStepOutputs = stepDefinitionForOutputs.outputs || [];
 
-      // Validate set_at_execution expiry: warn must not exceed expiry period (duration or time until datetime)
-      var expiryValidator = (window.CustomExpiryValidation || {});
-      var durationToHours = (typeof expiryValidator.durationToHours === 'function') ? expiryValidator.durationToHours : function() { return null; };
-      const expiryValidationErrors = [];
-      (allStepOutputs || []).forEach(function(outputDef) {
-        var ce = (outputDef.extra_data || {}).custom_expiry;
-        if (!ce || !ce.enabled || (ce.mode || '') !== 'set_at_execution') return;
-        var outName = (outputDef.name || '').trim();
-        var getOutputId = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
-        var outId = getOutputId(outputDef);
-        var box = Array.from(modal.querySelectorAll('.execute-output-expiry-input')).find(function(b) {
-          return (b.dataset.outputId || '').trim() === outId;
-        });
-        if (!box) return;
-        var modeSel = box.querySelector('.execute-output-expiry-input-mode');
-        var inputMode = modeSel ? (modeSel.value || 'duration') : 'duration';
-        var warnValEl = box.querySelector('.execute-output-expiry-warning-value');
-        var warnUnitEl = box.querySelector('.execute-output-expiry-warning-unit');
-        var warnVal = warnValEl ? parseInt((warnValEl.value || '').trim(), 10) : 0;
-        var warnUnit = (warnUnitEl && warnUnitEl.value) || 'days';
-        var expiryHours = null;
-        if (inputMode === 'duration') {
-          var dvEl = box.querySelector('.execute-output-expiry-duration-value');
-          var duEl = box.querySelector('.execute-output-expiry-duration-unit');
-          var dv = dvEl ? parseInt((dvEl.value || '').trim(), 10) : null;
-          var du = (duEl && duEl.value) || 'days';
-          expiryHours = durationToHours(dv != null && !isNaN(dv) ? dv : null, du);
-        } else {
-          var dtEl = box.querySelector('.execute-output-expiry-datetime');
-          var raw = dtEl ? (dtEl.value || '').trim() : '';
-          if (raw) {
-            var expiryAt = new Date(raw);
-            if (!isNaN(expiryAt.getTime())) expiryHours = (expiryAt.getTime() - Date.now()) / (1000 * 60 * 60);
-          }
-        }
-        if (expiryHours != null && expiryHours <= 0 && inputMode === 'datetime') {
-          expiryValidationErrors.push('Output "' + outName + '": expiry date and time must be in the future.');
-          return;
-        }
-        if (typeof expiryValidator.validateWarnNotLongerThanExpiry === 'function') {
-          var res = expiryValidator.validateWarnNotLongerThanExpiry({
-            outputName: outName,
-            warnValue: isNaN(warnVal) ? null : warnVal,
-            warnUnit: warnUnit,
-            expiryHours: expiryHours,
-            expiryLabel: (inputMode === 'datetime') ? 'the time remaining until expiry' : 'the expiry period',
-          });
-          if (res && res.valid === false) expiryValidationErrors.push(res.message || ('Output "' + outName + '": invalid warn-before-expiry setting.'));
-        }
-      });
-      if (expiryValidationErrors.length > 0) {
-        showNotification('error', 'Invalid expiry settings', expiryValidationErrors[0]);
-        var firstBox = modal.querySelector('.execute-output-expiry-input');
-        if (firstBox) firstBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-
-      // Validate set_at_execution ready date: date of availability must be set
-      var readyDateValidationErrors = [];
-      (allStepOutputs || []).forEach(function(outputDef) {
-        var rd = (outputDef.extra_data || {}).ready_date;
-        if (!rd || !rd.enabled || (rd.mode || '') !== 'set_at_execution') return;
-        var outName = (outputDef.name || '').trim();
-        var getOutputId = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
-        var outputId = getOutputId(outputDef);
-        var payload = (typeof window.collectExecutionOutputReadyDatePayload === 'function')
-          ? window.collectExecutionOutputReadyDatePayload(modal, outputId)
-          : null;
-        if (!payload || !payload.date) {
-          readyDateValidationErrors.push('Output "' + outName + '": set the date when this output can be used.');
-        }
-      });
-      if (readyDateValidationErrors.length > 0) {
-        showNotification('error', 'Ready date required', readyDateValidationErrors[0]);
-        var firstReadyBox = modal.querySelector('.execute-output-ready-date-input');
-        if (firstReadyBox) firstReadyBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-
-      // When both expiry and ready date are set at execution, expiry cannot be before ready date (shared config)
-      var getOutputIdForValidation = window.getExecutionOutputId || function(o) { return (o && o.id) ? String(o.id) : ('out-' + (o && o.name ? String(o.name).replace(/\s+/g, '-') : 'unknown')); };
-      if (typeof window.ExpiryReadyDateValidation !== 'undefined' && typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDates === 'function') {
-        for (var ei = 0; ei < (allStepOutputs || []).length; ei++) {
-          var outputDef = allStepOutputs[ei];
-          var rd = (outputDef.extra_data || {}).ready_date;
-          var ce = (outputDef.extra_data || {}).custom_expiry;
-          if (!rd || !rd.enabled || (rd.mode || '') !== 'set_at_execution') continue;
-          if (!ce || !ce.enabled || (ce.mode || '') !== 'set_at_execution') continue;
-          var outputId = getOutputIdForValidation(outputDef);
-          var readyPayload = typeof window.collectExecutionOutputReadyDatePayload === 'function' ? window.collectExecutionOutputReadyDatePayload(modal, outputId) : null;
-          var expiryPayload = typeof window.collectExecutionOutputExpiryPayload === 'function' ? window.collectExecutionOutputExpiryPayload(modal, outputId) : null;
-          var readyIso = readyPayload && readyPayload.date ? readyPayload.date : null;
-          var expiryIso = expiryPayload && expiryPayload.mode === 'datetime' && expiryPayload.expiry_at ? expiryPayload.expiry_at : null;
-          if (readyIso && expiryIso) {
-            var outName = (outputDef.name || '').trim();
-            var erResult = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDates(outName, readyIso, expiryIso);
-            if (!erResult.valid) {
-              showNotification('error', 'Expiry and ready date', erResult.message);
-              var firstReadyBoxEl = modal.querySelector('.execute-output-ready-date-input');
-              if (firstReadyBoxEl) firstReadyBoxEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              return;
-            }
-          }
-        }
-      }
+      // set_at_execution expiry / ready date / cross-validation runs earlier with collectOutputSetAtExecutionValidationErrors.
 
       // First, collect variable outputs (user-entered quantities). Always include each variable output
       // so reconciliation selection (untracked_item_id) is never dropped when quantity is empty.
@@ -547,5 +673,7 @@
 
   root.ExecutionSubmit = {
     submitExecution: submitExecution,
+    validateExecutionStepForm: validateExecutionStepForm,
+    collectClientValidationErrors: collectClientValidationErrors,
   };
 })(typeof window !== 'undefined' ? window : this);

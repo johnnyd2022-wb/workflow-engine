@@ -167,3 +167,186 @@ html[data-spa-theme="dark"] .batch-start-spa .process-flow-wizard__more.flow-wiz
   padding-bottom: 8px;
 }
 
+/* Inventory picker: same horizontal extent as section dividers (no inset from panel padding). */
+.batch-start-spa .exec-picker-panel {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+.batch-start-spa .exec-picker-panel .flow-mode-segmented,
+.batch-start-spa .exec-picker-panel .exec-picker-search,
+.batch-start-spa .exec-picker-panel .exec-picker-cards {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.batch-start-spa .exec-picker-panel .exec-picker-search .spa-inp {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* ---- Scroll column + fixed “Record step” bar (aligned with sidebar; clears mobile bottom nav) ---- */
+body.batch-start-spa .main-content {
+  min-height: 0;
+}
+body.batch-start-spa #page-content.page-content {
+  min-height: 0;
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 767px) {
+  body.batch-start-spa #page-content.page-content {
+    padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 69px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.batch-start-record-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 220;
+  margin: 0;
+  background: var(--bg-app, hsl(220, 20%, 97%));
+  border-top: 1px solid var(--border-default, #e5e7eb);
+  box-sizing: border-box;
+}
+html[data-spa-theme="dark"] .batch-start-record-bar {
+  background: var(--bg-app, #030303);
+  border-top-color: var(--border-default, rgba(148, 163, 184, 0.35));
+}
+@media (min-width: 768px) {
+  .batch-start-record-bar {
+    left: 260px;
+  }
+  .app-layout:has(#sidebar.collapsed) .batch-start-record-bar {
+    left: 72px;
+  }
+}
+@media (max-width: 767px) {
+  .batch-start-record-bar {
+    bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.batch-start-record-bar__inner {
+  padding: 10px 16px;
+  padding-left: calc(16px + max(0px, env(safe-area-inset-left, 0px)));
+  padding-right: calc(16px + max(0px, env(safe-area-inset-right, 0px)));
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .batch-start-record-bar__inner {
+    padding: 12px 32px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.batch-start-record-bar__btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 48px;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+/* Bottom confirmation sheet (no backdrop blur; backdrop clicks do not dismiss) */
+.batch-record-confirm[hidden] {
+  display: none !important;
+}
+.batch-record-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.batch-record-confirm__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.48);
+}
+html[data-spa-theme="dark"] .batch-record-confirm__backdrop {
+  background: rgba(0, 0, 0, 0.62);
+}
+.batch-record-confirm__sheet {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 22px 20px calc(22px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg-card, #fff);
+  color: var(--text-primary, #111827);
+  border-radius: var(--radius-xl, 20px) var(--radius-xl, 20px) 0 0;
+  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.14);
+  animation: batchRecordSheetIn 0.28s ease-out;
+  box-sizing: border-box;
+}
+html[data-spa-theme="dark"] .batch-record-confirm__sheet {
+  background: var(--bg-card, #0f172a);
+  color: var(--text-primary, #f1f5f9);
+  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.45);
+}
+@media (min-width: 600px) {
+  .batch-record-confirm__sheet {
+    border-radius: var(--radius-xl, 20px);
+    margin-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    padding-bottom: 24px;
+    max-width: 440px;
+  }
+}
+@keyframes batchRecordSheetIn {
+  from {
+    transform: translateY(110%);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.batch-record-confirm__title {
+  margin: 0 0 10px 0;
+  font-size: clamp(1.125rem, 2.5vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+.batch-record-confirm__text {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary, #6b7280);
+}
+html[data-spa-theme="dark"] .batch-record-confirm__text {
+  color: var(--text-secondary, #94a3b8);
+}
+.batch-record-confirm__actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+.batch-record-confirm__actions .btn {
+  flex: 1 1 140px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+body.batch-record-confirm--open,
+html.batch-record-confirm--open {
+  overflow: hidden;
+}
+
