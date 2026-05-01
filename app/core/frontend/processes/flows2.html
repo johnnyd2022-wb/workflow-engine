@@ -1016,21 +1016,28 @@
           <!-- Batches (was Executions) -->
           <div class="flows2-panel" id="flows2-panel-batches" data-active="false">
             <div style="display:flex; flex-direction:column; gap: 18px;">
-              <div style="display:flex; justify-content:flex-end; gap: 10px; flex-wrap: wrap;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="startExecution(); return false;" title="Start a new batch on a dedicated page (no modal)">
-                  Start new batch
-                </button>
-              </div>
               <section class="spa-form-section" aria-label="In-progress batches">
-                <h2 class="spa-form-section-title" style="margin-bottom: 8px;">IN-PROGRESS BATCHES</h2>
-                <p class="page-subtitle" style="margin-top: 0; margin-bottom: 10px;"><span id="active-count">0</span> in-progress batch<span id="active-count-plural">es</span></p>
-                <div class="execution-list" id="active-executions-container"></div>
+                <details id="flows2-batches-active-details" open>
+                  <summary class="spa-form-section-title" style="margin-bottom: 8px; cursor: pointer; user-select: none;">
+                    IN-PROGRESS BATCHES
+                    <span class="page-subtitle" style="margin-left: 10px;">
+                      <span id="active-count">0</span> in-progress batch<span id="active-count-plural">es</span>
+                    </span>
+                  </summary>
+                  <div class="execution-list" id="active-executions-container" style="margin-top: 10px;"></div>
+                </details>
               </section>
 
               <section class="spa-form-section" aria-label="Completed batches">
-                <h2 class="spa-form-section-title" style="margin-bottom: 8px;">COMPLETED BATCHES</h2>
-                <p class="page-subtitle" style="margin-top: 0; margin-bottom: 10px;"><span id="completed-count">0</span> completed batch<span id="completed-count-plural">es</span></p>
-                <div class="execution-list" id="completed-executions-container"></div>
+                <details id="flows2-batches-completed-details">
+                  <summary class="spa-form-section-title" style="margin-bottom: 8px; cursor: pointer; user-select: none;">
+                    COMPLETED BATCHES
+                    <span class="page-subtitle" style="margin-left: 10px;">
+                      <span id="completed-count">0</span> completed batch<span id="completed-count-plural">es</span>
+                    </span>
+                  </summary>
+                  <div class="execution-list" id="completed-executions-container" style="margin-top: 10px;"></div>
+                </details>
               </section>
             </div>
           </div>
@@ -1954,10 +1961,48 @@
         
         // Render executions
         await renderExecutions(active, completed);
+
+        // Restore collapse/expand state after first render (so counts are already updated).
+        restoreBatchesPanelCollapseState();
         
       } catch (error) {
         console.error('Failed to load executions:', error);
         showNotification('error', 'Failed to Load Executions', error.message || 'Failed to load executions');
+      }
+    }
+
+    function restoreBatchesPanelCollapseState() {
+      var activeDetails = document.getElementById('flows2-batches-active-details');
+      var completedDetails = document.getElementById('flows2-batches-completed-details');
+      if (!activeDetails || !completedDetails) return;
+
+      function safeGet(k) {
+        try { return window.localStorage ? window.localStorage.getItem(k) : null; } catch (e) { return null; }
+      }
+      function safeSet(k, v) {
+        try { if (window.localStorage) window.localStorage.setItem(k, v); } catch (e) {}
+      }
+
+      var a = safeGet('flows2:batches:active:open');
+      var c = safeGet('flows2:batches:completed:open');
+
+      // Defaults: active open, completed collapsed.
+      if (a === '0') activeDetails.open = false;
+      if (a === '1') activeDetails.open = true;
+      if (c === '1') completedDetails.open = true;
+      if (c === '0' || c == null) completedDetails.open = false;
+
+      if (!activeDetails._collapseBound) {
+        activeDetails.addEventListener('toggle', function () {
+          safeSet('flows2:batches:active:open', activeDetails.open ? '1' : '0');
+        });
+        activeDetails._collapseBound = true;
+      }
+      if (!completedDetails._collapseBound) {
+        completedDetails.addEventListener('toggle', function () {
+          safeSet('flows2:batches:completed:open', completedDetails.open ? '1' : '0');
+        });
+        completedDetails._collapseBound = true;
       }
     }
     
