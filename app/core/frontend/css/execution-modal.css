@@ -155,13 +155,16 @@
   background: var(--bg-card, #fff);
   color: var(--text-primary, #111827);
   cursor: pointer;
+  transition: border-color 120ms, box-shadow 120ms, background 120ms;
 }
 .exec-picker-card:hover {
-  border-color: rgba(59, 130, 246, 0.6);
+  border-color: hsla(145, 70%, 42%, 0.45);
+  border-color: color-mix(in srgb, var(--success, hsl(145, 70%, 42%)) 45%, transparent);
 }
 .exec-picker-card[aria-pressed='true'] {
-  border-color: rgba(217, 56, 75, 0.55);
-  box-shadow: 0 0 0 2px rgba(217, 56, 75, 0.1);
+  border-color: var(--success, hsl(145, 70%, 42%));
+  box-shadow: 0 0 0 3px hsla(145, 70%, 42%, 0.22);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success, hsl(145, 70%, 42%)) 22%, transparent);
 }
 .exec-picker-card[data-expanded='false'] {
   min-height: 176px;

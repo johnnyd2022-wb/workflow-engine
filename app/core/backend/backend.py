@@ -1724,20 +1724,23 @@ def complete_step(execution_id: str, execution_step_id: str):
 
     repo = ExecutionRepository(db_session)
     try:
+        # Single transaction: mark step complete + inventory + outputs commit together.
+        # If validation fails after marking COMPLETED in-session, rollback so the step stays READY
+        # and the client can retry (avoids "not in a state that can be completed" on the next attempt).
         execution_step = repo.complete_step(
             execution_step_id=execution_step_uuid,
             org_id=org_id,
             actual_inputs=actual_inputs,
             actual_outputs=actual_outputs,
             execution_data=execution_data,
+            commit=False,
         )
 
         if not execution_step:
             return jsonify({"error": "Execution step not found"}), 404
 
-        # Refresh execution_step to ensure we have the latest data including execution_data
-        db_session.refresh(execution_step)
-        # Capture step outputs for post-commit audit (avoid lazy load after commit)
+        db_session.flush()
+        # Capture step outputs for audit (same transaction as completion)
         step_outputs_for_audit = None
         step_def = getattr(execution_step, "step", None)
         if step_def is not None:
@@ -1867,11 +1870,7 @@ def complete_step(execution_id: str, execution_step_id: str):
 
         # FAILURE HANDLING: Block execution if critical errors occurred
         if execution_errors:
-            # Persist errors to execution_data for audit trail
-            if not execution_step.execution_data:
-                execution_step.execution_data = {}
-            execution_step.execution_data["execution_errors"] = execution_errors
-            db_session.commit()
+            db_session.rollback()
             return jsonify({"error": "Execution failed", "details": execution_errors}), 400
 
         # Create inventory items for outputs if specified
@@ -2147,10 +2146,7 @@ def complete_step(execution_id: str, execution_step_id: str):
 
         # Block inventory creation when output validation failed (e.g. custom_expiry warning > duration)
         if execution_errors:
-            if not execution_step.execution_data:
-                execution_step.execution_data = {}
-            execution_step.execution_data["execution_errors"] = execution_errors
-            db_session.commit()
+            db_session.rollback()
             return jsonify({"error": "Execution failed", "details": execution_errors}), 400
 
         # FAILURE HANDLING: Persist warnings to execution_data for audit trail
@@ -2266,6 +2262,7 @@ def complete_step(execution_id: str, execution_step_id: str):
             response_data["execution_warnings"] = execution_warnings
         return (jsonify(response_data), 200)
     except ValueError as e:
+        db_session.rollback()
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         # Log the full error for debugging; return message and details for diagnosis
@@ -2274,6 +2271,7 @@ def complete_step(execution_id: str, execution_step_id: str):
         logger = logging.getLogger(__name__)
         logger.exception("Error completing execution step")
         err_detail = str(e) if e else "Unknown error"
+        db_session.rollback()
         return jsonify({"error": "Failed to complete step", "details": err_detail}), 500
 
 
@@ -2548,6 +2546,13 @@ def list_inventory():
             except Exception:
                 # If lookup fails, just continue without process name
                 pass
+        if not process_name:
+            try:
+                tagged = (extra_data or {}).get("producing_process_name")
+                if tagged:
+                    process_name = str(tagged)
+            except Exception:
+                pass
 
         # For untracked items, resolve producing step (step that defines this output) for "Execute next step" button
         producing_step_id = None
@@ -2575,6 +2580,13 @@ def list_inventory():
                             producing_step_id = execution_step.step_id
                             if execution_step.step:
                                 producing_step_name = execution_step.step.name
+            except Exception:
+                pass
+        if not producing_step_name:
+            try:
+                tagged_step = (extra_data or {}).get("producing_step_name")
+                if tagged_step:
+                    producing_step_name = str(tagged_step)
             except Exception:
                 pass
 

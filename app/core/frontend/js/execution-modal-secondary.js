@@ -24,15 +24,51 @@
   // Opens the page's Add Inventory modal with prefill. Set window.addInventoryContext
   // so the add-inventory submit handler can call refreshExecutionModalInventory(savedItem) on success.
   window.openAddInventoryModalForMissingInput = function(prefill) {
+    prefill = prefill || {};
+    var invType = String(prefill.inventory_type || 'raw_material').trim();
+
+    // Intermediate / final (same as legacy “Add untracked output” during execution — notes + type, not supplier-led raw form).
+    if (invType === 'work_in_progress' || invType === 'final_product') {
+      // UX: always use the manual add page (no modal) so operators have a consistent "leave → add → return" flow.
+      var execModal = document.getElementById('execute-step-modal');
+      var processId = execModal && execModal.dataset ? (execModal.dataset.processId || '') : '';
+      var paramsWip = new URLSearchParams();
+      if (prefill.name) paramsWip.set('name', String(prefill.name));
+      if (prefill.unit) paramsWip.set('unit', String(prefill.unit));
+      paramsWip.set('inventory_type', invType);
+      if (processId) paramsWip.set('producing_process_id', String(processId));
+      if (prefill.producing_process_name) paramsWip.set('producing_process_name', String(prefill.producing_process_name));
+      if (prefill.producing_step_name) paramsWip.set('producing_step_name', String(prefill.producing_step_name));
+      try {
+        var rtw = window.location.pathname + window.location.search;
+        if (rtw && rtw.charAt(0) === '/') paramsWip.set('return_to', rtw);
+      } catch (eW) {}
+      window.location.href = '/core/inventory/add/manual?' + paramsWip.toString();
+      return;
+    }
+
     var addModal = document.getElementById('add-inventory-modal');
-    if (!addModal) return;
+    // flows2 embeds #add-inventory-modal; batch/start and other shells do not — send operators to manual add with prefill.
+    if (!addModal) {
+      var params = new URLSearchParams();
+      if (prefill.name) params.set('name', String(prefill.name));
+      // Do not pass step "expected" quantity — operator enters the amount they are adding.
+      if (prefill.unit) params.set('unit', String(prefill.unit));
+      params.set('inventory_type', 'raw_material');
+      try {
+        var rt = window.location.pathname + window.location.search;
+        if (rt && rt.charAt(0) === '/') params.set('return_to', rt);
+      } catch (e0) {}
+      window.location.href = '/core/inventory/add/manual?' + params.toString();
+      return;
+    }
     var form = addModal.querySelector('form');
     if (form) {
       var nameEl = form.querySelector('[name="name"]');
       var qtyEl = form.querySelector('[name="quantity"]');
       var unitEl = form.querySelector('[name="unit"]');
       if (nameEl) nameEl.value = prefill.name || '';
-      if (qtyEl) qtyEl.value = prefill.quantity != null && prefill.quantity !== '' ? prefill.quantity : '';
+      if (qtyEl) qtyEl.value = '';
       if (unitEl) unitEl.value = prefill.unit || 'kg';
     }
     window.addInventoryContext = { fromExecutionModal: true, inputName: prefill.name || '' };
@@ -42,9 +78,11 @@
   };
 
   // Open lightweight "Add untracked output" modal (missing output recorded during execution).
-  window.openAddUntrackedOutputModal = function(outputDef, executionId, executionStepId) {
+  window.openAddUntrackedOutputModal = function(outputDef, executionId, executionStepId, options) {
     var m = document.getElementById('add-untracked-output-modal');
     if (!m) return;
+    outputDef = outputDef || {};
+    options = options || {};
     var nameEl = document.getElementById('untracked-output-name');
     var qtyEl = document.getElementById('untracked-output-quantity');
     var unitEl = document.getElementById('untracked-output-unit');
@@ -62,6 +100,13 @@
     }
     var notesEl = document.getElementById('untracked-output-notes');
     if (notesEl) notesEl.value = '';
+    var typeSel = document.getElementById('untracked-output-inventory-type');
+    if (typeSel) {
+      var pref = options.inventory_type || options.inventoryType;
+      if (pref === 'work_in_progress' || pref === 'final_product') {
+        typeSel.value = pref;
+      }
+    }
     window.untrackedOutputContext = {
       executionId: executionId,
       executionStepId: executionStepId,

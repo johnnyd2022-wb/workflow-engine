@@ -117,7 +117,7 @@
     SessionAPI.resetForOpen(modal);
     var ses = SessionAPI.get(modal);
 
-    // Load inventory, expired/flagged, untracked, and step documentation in parallel
+    // Load inventory, expired/flagged, untracked, step documentation, and (optionally) process graph in parallel
     const stepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
     const docsPromise =
       stepId && typeof CoreAPI.getStepDocumentation === 'function'
@@ -132,7 +132,15 @@
     var untrackedData;
     var docsData;
     var orgUsersMap;
+    var processData = null;
     try {
+      var processPromise =
+        options && options.processId && CoreAPI && typeof CoreAPI.getProcess === 'function'
+          ? CoreAPI.getProcess(options.processId, { signal: signal }).catch(function (e) {
+              if (e && e.name === 'AbortError') throw e;
+              return null;
+            })
+          : Promise.resolve(null);
       var results = await Promise.all([
         CoreAPI.getInventory(null, null, { signal: signal }),
         CoreAPI.getExpiredMaterials({ signal: signal }).catch(function (e) {
@@ -145,12 +153,14 @@
         }),
         docsPromise,
         loadOrgUsersMap({ signal: signal }),
+        processPromise,
       ]);
       inventoryData = results[0];
       expiredData = results[1];
       untrackedData = results[2];
       docsData = results[3];
       orgUsersMap = results[4];
+      processData = results[5];
     } catch (e) {
       if (e && e.name === 'AbortError') return;
       throw e;
@@ -188,6 +198,92 @@
     
     // convertUnit is defined at module scope (used by submit validation too).
     
+    // Infer expected inventory type for previous-output inputs from the process graph (no operator tab click needed).
+    // Heuristic: outputs from the last step are final products; outputs from earlier steps are intermediate.
+    // This is only applied when the input does not already specify expected_inventory_type.
+    try {
+      if (processData && Array.isArray(processData.steps) && stepDefinition && Array.isArray(stepDefinition.inputs)) {
+        var steps = processData.steps || [];
+        var processName = processData && processData.name ? String(processData.name) : '';
+        function stepOrder(s) {
+          var p = s && s.position != null ? Number(s.position) : NaN;
+          if (Number.isFinite(p)) return p;
+          var n = s && s.step_number != null ? Number(s.step_number) : NaN;
+          return Number.isFinite(n) ? n : 0;
+        }
+        function norm(s) {
+          return String(s || '').trim().toLowerCase();
+        }
+        function keyNameUnit(name, unit) {
+          return norm(name) + '|' + norm(unit);
+        }
+
+        var maxOrder = 0;
+        steps.forEach(function (s) {
+          var o = stepOrder(s);
+          if (o > maxOrder) maxOrder = o;
+        });
+
+        // Build output metadata maps for inference.
+        var outIdToMeta = new Map();
+        var outKeyToMeta = new Map(); // name|unit -> best guess
+
+        steps.forEach(function (s) {
+          var o = stepOrder(s);
+          var outs = (s && s.outputs) ? s.outputs : [];
+          (outs || []).forEach(function (out) {
+            var oid = out && (out.id || out.output_id);
+            var oname = out && out.name;
+            var ounit = out && out.unit;
+            if (!oid && !oname) return;
+
+            var explicit = out && out.inventory_type;
+            var inferred = explicit === 'work_in_progress' || explicit === 'final_product'
+              ? explicit
+              : (o >= maxOrder ? 'final_product' : 'work_in_progress');
+            var meta = {
+              inventory_type: inferred,
+              producing_step_name: s && s.name ? String(s.name) : '',
+              producing_process_name: processName,
+              producing_step_order: o
+            };
+            if (oid) outIdToMeta.set(String(oid), meta);
+
+            // For name/unit correlation, keep the most "final" match (later step wins).
+            if (oname) {
+              var k = keyNameUnit(oname, ounit || '');
+              var prev = outKeyToMeta.get(k);
+              if (!prev || (meta.producing_step_order >= prev.producing_step_order)) {
+                outKeyToMeta.set(k, meta);
+              }
+            }
+          });
+        });
+
+        stepDefinition.inputs.forEach(function (inp) {
+          if (!inp) return;
+          if (inp.expected_inventory_type || inp.expectedInventoryType) return;
+
+          var meta = null;
+          if (inp.source_output_id) {
+            meta = outIdToMeta.get(String(inp.source_output_id)) || null;
+          } else if (inp.name) {
+            meta = outKeyToMeta.get(keyNameUnit(inp.name, inp.unit || '')) || null;
+          }
+
+          if (meta && (meta.inventory_type === 'work_in_progress' || meta.inventory_type === 'final_product')) {
+            inp.expected_inventory_type = meta.inventory_type;
+            inp.producing_step_name = meta.producing_step_name || undefined;
+            inp.producing_process_name = meta.producing_process_name || undefined;
+          } else if (inp.source_output_id) {
+            // Previous outputs are never raw materials.
+            inp.expected_inventory_type = 'work_in_progress';
+            inp.producing_process_name = processName || undefined;
+          }
+        });
+      }
+    } catch (eInfer) {}
+
     // Render variable inputs (inventory selection)
     const variableInputs = (stepDefinition.inputs || []).filter(input => 
       input.requires_inventory_selection !== false && input.is_variable !== false

@@ -127,13 +127,10 @@
   border-color: rgba(59, 130, 246, 0.45);
 }
 
-/* Confirm input selection button: match \"Add as input\". */
-.batch-start-spa .exec-picker-confirm-btn.btn.btn-primary.btn-sm {
+/* Confirm input: layout only; success highlight from execution-modal.css */
+.batch-start-spa .exec-picker-card__actions .exec-picker-confirm-btn.btn.btn-sm {
   width: auto !important;
   margin: 10px 0 0 0 !important;
-  border-color: var(--primary, hsl(210, 100%, 50%)) !important;
-  background: var(--primary, hsl(210, 100%, 50%)) !important;
-  color: #fff !important;
 }
 .batch-start-spa .execute-confirm-selection-wrap {
   display: flex;
@@ -187,6 +184,19 @@ html[data-spa-theme="dark"] .batch-start-spa .process-flow-wizard__more.flow-wiz
   max-width: 100% !important;
 }
 
+/* Manual add link from variable inventory row (“Add missing item” / similar copy from execution-render-inputs). */
+.batch-start-spa #execute-inputs-container a[href*="inventory/add/manual"],
+#execute-step-modal #execute-inputs-container a[href*="inventory/add/manual"],
+.batch-start-spa [data-var-input] a[href*="inventory/add/manual"],
+.batch-start-spa .exec-picker-panel a[href*="inventory/add/manual"] {
+  font-weight: 700;
+}
+
+/* Set by base_spa shell when button/link label contains “Add missing” (execution JS renders <button> often). */
+.exec-add-missing-item-btn {
+  font-weight: 700 !important;
+}
+
 /* ---- Scroll column + fixed “Record step” bar (aligned with sidebar; clears mobile bottom nav) ---- */
 body.batch-start-spa .main-content {
   min-height: 0;
@@ -238,6 +248,9 @@ html[data-spa-theme="dark"] .batch-start-record-bar {
 }
 @media (min-width: 768px) {
   .batch-start-record-bar__inner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
     padding: 12px 32px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
@@ -252,6 +265,15 @@ html[data-spa-theme="dark"] .batch-start-record-bar {
   min-height: 48px;
   font-weight: 600;
   box-sizing: border-box;
+}
+@media (min-width: 768px) {
+  .batch-start-record-bar__btn {
+    width: auto;
+    min-width: 220px;
+    max-width: min(420px, 100%);
+    padding-left: 28px;
+    padding-right: 28px;
+  }
 }
 
 /* Bottom confirmation sheet (no backdrop blur; backdrop clicks do not dismiss) */

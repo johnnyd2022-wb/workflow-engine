@@ -62,6 +62,7 @@
             });
         var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
         var hasMatch = matchingUntracked.length > 0;
+        var promptsContainer = modal ? modal.querySelector('#execute-prompts-container') : null;
         var ce = (output.extra_data || {}).custom_expiry;
         var rd = (output.extra_data || {}).ready_date;
         var customExpiryHtml = '';
@@ -114,23 +115,152 @@
             </label>
             <input type="number" class="spa-inp execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
-            <div class="execute-reconcile-untracked-wrapper" data-output-id="${escapeHtml(outputId)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
-              <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
-              <label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 8px;">Reconcile to untracked item (optional)</label>
-              <p style="margin: 0 0 8px 0; color: #92400e; font-size: 12px;">Choose an item from the dropdown to reconcile when you complete the step.</p>
-              <div class="execute-reconcile-untracked-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
-                <span class="execute-reconcile-trigger-label" style="flex: 1; text-align: left; min-width: 0;">— None —</span>
-                <span class="execute-reconcile-trigger-arrow-box" style="flex-shrink: 0; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-md, 6px); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); color: var(--text-secondary);">
-                  <svg class="execute-reconcile-trigger-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
-                </span>
-              </div>
-              <div class="execute-reconcile-untracked-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
-                <div class="execute-reconcile-untracked-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
-              </div>
-            </div>
+            <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
           </div>
         `;
         outputsContainer.appendChild(outputSection);
+
+        // Reconciliation UI belongs in Compliance and traceability section (not Outputs).
+        if (hasMatch && promptsContainer) {
+          var recon = document.createElement('div');
+          recon.className = 'execute-reconcile-untracked-wrapper';
+          recon.setAttribute('data-output-id', String(outputId));
+          recon.style.cssText = 'margin-top: 12px; padding: 14px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px;';
+          recon.innerHTML =
+            '<label style="display:block; font-weight: 700; color: #92400e; margin-bottom: 6px;">Reconciliation</label>' +
+            '<p style="margin: 0 0 12px 0; color: #92400e; font-size: 12px; line-height: 1.45;">This step produces an output that is currently untracked in your inventory. Choose an item to reconcile when you record this step.</p>' +
+            '<div class="execute-reconcile-untracked-cards" style="display:flex; flex-direction:column; gap: 10px;"></div>';
+          promptsContainer.appendChild(recon);
+
+          var cardsContainer = recon.querySelector('.execute-reconcile-untracked-cards');
+          var hiddenInput = outputSection.querySelector('.execute-reconcile-untracked-value');
+
+          function setLocked(locked) {
+            recon.dataset.reconcileLocked = locked ? '1' : '0';
+          }
+
+          function applyVisibility() {
+            var locked = recon.dataset.reconcileLocked === '1';
+            var selectedId = (hiddenInput.value || '').trim();
+            recon.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
+              if (!locked) {
+                c.style.display = '';
+                return;
+              }
+              var id = c.dataset.untrackedId || '';
+              c.style.display = id === selectedId ? '' : 'none';
+            });
+          }
+
+          function setSelection(selectedId) {
+            hiddenInput.value = selectedId || '';
+            recon.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
+              var id = c.dataset.untrackedId || '';
+              var selected = id === selectedId;
+              c.classList.toggle('execute-reconcile-card-selected', selected);
+              c.style.borderColor = selected ? 'var(--warning, #f59e0b)' : '';
+              c.style.boxShadow = selected ? '0 0 0 2px rgba(245, 158, 11, 0.25)' : '';
+              var btn = c.querySelector('.exec-reconcile-confirm-btn');
+              if (btn) {
+                btn.textContent = selected ? 'Reconciliation selected' : 'Confirm reconciliation';
+                btn.disabled = !!selected;
+              }
+              var removeBtn = c.querySelector('.exec-reconcile-remove-btn');
+              if (removeBtn) {
+                removeBtn.style.display = selected ? '' : 'none';
+              }
+            });
+            applyVisibility();
+          }
+
+          var noneCard = document.createElement('div');
+          noneCard.className = 'execute-reconcile-untracked-card' + (defaultId ? '' : ' execute-reconcile-card-selected');
+          noneCard.dataset.untrackedId = '';
+          noneCard.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;';
+          noneCard.innerHTML =
+            '<div style="padding: 12px 16px;">' +
+              '<div style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">— None —</div>' +
+            '</div>' +
+            '<div style="padding: 0 16px 14px 16px;">' +
+              '<div style="display:flex; gap: 10px; justify-content:flex-start;">' +
+                '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-confirm-btn" style="font-size: 12px; font-weight: 700;">Confirm reconciliation</button>' +
+              '</div>' +
+            '</div>';
+          noneCard.querySelector('.exec-reconcile-confirm-btn').addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            setLocked(false);
+            setSelection('');
+          });
+          cardsContainer.appendChild(noneCard);
+
+          matchingUntracked.forEach(function(u) {
+            var id = String(u.id);
+            var card = document.createElement('div');
+            card.className = 'execute-reconcile-untracked-card card card-interactive' + (id === defaultId ? ' execute-reconcile-card-selected' : '');
+            card.dataset.untrackedId = id;
+            card.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; overflow: hidden;';
+            var createdStr = '';
+            if (u.created_at) {
+              try { createdStr = new Date(u.created_at).toLocaleDateString(); } catch (e) {}
+            }
+            var unreconciledQty = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? String(u.remaining_balance_to_reconcile).trim() : null;
+            var subtitleParts = [];
+            if (unreconciledQty !== null) {
+              subtitleParts.push('Unreconciled: ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || ''));
+            } else {
+              subtitleParts.push(escapeHtml(u.quantity != null ? String(u.quantity) : '0') + ' ' + escapeHtml(u.unit || ''));
+            }
+            if (u.process_name || u.producing_step_name || u.step_name) {
+              var stepLabel = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : u.step_name;
+              var ps = [u.process_name, stepLabel].filter(Boolean).map(function(x) { return escapeHtml(x); }).join(' · ');
+              if (ps) subtitleParts.push(ps);
+            }
+            if (u.source_step_completed_by) subtitleParts.push('Completed by: ' + escapeHtml(u.source_step_completed_by));
+            var subtitleLine = subtitleParts.join(' · ');
+            var detailsParts = [];
+            if (unreconciledQty !== null) {
+              detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Unreconciled quantity</span> ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || '') + '</p>');
+            }
+            if (u.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
+            if (u.producing_step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step to execute to reconcile</span> ' + escapeHtml(u.producing_step_name) + '</p>');
+            else if (u.step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
+            if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
+            if (u.notes) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Notes</span> ' + escapeHtml(u.notes) + '</p>');
+            if (u.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(u.supplier) + '</p>');
+            if (u.supplier_batch_number) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(u.supplier_batch_number) + '</p>');
+            card.style.cursor = 'default';
+            card.innerHTML =
+              '<div style="padding: 12px 16px;">' +
+                '<div style="font-size: 14px; font-weight: 700; color: var(--text-primary);">' + escapeHtml(u.name || 'Unknown') + '</div>' +
+              '</div>' +
+              '<div style="padding: 0 16px 14px 16px;">' +
+                '<div style="padding: 12px 14px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+                  detailsParts.join('') +
+                '</div>' +
+                '<div style="display:flex; gap: 10px; justify-content:flex-start; margin-top: 12px;">' +
+                  '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-confirm-btn" style="font-size: 12px; font-weight: 700;">Confirm reconciliation</button>' +
+                  '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-remove-btn" style="font-size: 12px; display:none;">Remove reconciliation</button>' +
+                '</div>' +
+              '</div>';
+            card.querySelector('.exec-reconcile-confirm-btn').addEventListener('click', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+              setLocked(true);
+              setSelection(id);
+            });
+            card.querySelector('.exec-reconcile-remove-btn').addEventListener('click', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+              setLocked(false);
+              setSelection('');
+            });
+            cardsContainer.appendChild(card);
+          });
+
+          setLocked(false);
+          setSelection(defaultId);
+        }
 
         // Wire expiry input toggle (set_at_execution)
         try {
@@ -256,145 +386,7 @@
           }
         } catch (e) {}
 
-        if (hasMatch) {
-          var wrapper = outputSection.querySelector('.execute-reconcile-untracked-wrapper');
-          var trigger = outputSection.querySelector('.execute-reconcile-untracked-trigger');
-          var triggerLabel = outputSection.querySelector('.execute-reconcile-trigger-label');
-          var triggerArrow = outputSection.querySelector('.execute-reconcile-trigger-arrow');
-          var dropdown = outputSection.querySelector('.execute-reconcile-untracked-dropdown');
-          var cardsContainer = outputSection.querySelector('.execute-reconcile-untracked-cards');
-          var hiddenInput = outputSection.querySelector('.execute-reconcile-untracked-value');
-          var safeId = function(s) { return String(s).replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 40); };
-          var detailId = function(uOrId) { var id = typeof uOrId === 'string' ? uOrId : (uOrId && uOrId.id); return 'execute-reconcile-details-' + safeId(outName) + '-' + id; };
-          var arrowId = function(uOrId) { var id = typeof uOrId === 'string' ? uOrId : (uOrId && uOrId.id); return 'execute-reconcile-arrow-' + safeId(outName) + '-' + id; };
-
-          function getSelectionLabel(id) {
-            if (!id) return '— None —';
-            var u = matchingUntracked.find(function(x) { return String(x.id) === id; });
-            if (!u) return '— None —';
-            var qtyLabel = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? 'Unreconciled: ' + u.remaining_balance_to_reconcile : (u.quantity != null ? u.quantity : '0');
-            return (u.name || 'Unknown') + ' · ' + qtyLabel + ' ' + (u.unit || '');
-          }
-
-          function closeDropdown() {
-            dropdown.style.display = 'none';
-            if (triggerArrow) triggerArrow.style.transform = '';
-            document.removeEventListener('click', closeDropdownOutside);
-          }
-          function closeDropdownOutside(e) {
-            if (wrapper && !wrapper.contains(e.target)) closeDropdown();
-          }
-          function openDropdown() {
-            dropdown.style.display = 'block';
-            if (triggerArrow) triggerArrow.style.transform = 'rotate(180deg)';
-            setTimeout(function() { document.addEventListener('click', closeDropdownOutside); }, 0);
-          }
-          function toggleDropdown() {
-            var isOpen = dropdown.style.display === 'block';
-            if (isOpen) closeDropdown(); else openDropdown();
-          }
-          trigger.addEventListener('click', function(e) { e.stopPropagation(); toggleDropdown(); });
-          trigger.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDropdown(); } });
-          dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
-
-          function setSelection(selectedId) {
-            hiddenInput.value = selectedId || '';
-            triggerLabel.textContent = getSelectionLabel(selectedId);
-            wrapper.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
-              var id = c.dataset.untrackedId || '';
-              var selected = id === selectedId;
-              c.classList.toggle('execute-reconcile-card-selected', selected);
-              c.style.borderColor = selected ? 'var(--warning, #f59e0b)' : '';
-              c.style.boxShadow = selected ? '0 0 0 2px rgba(245, 158, 11, 0.25)' : '';
-            });
-            closeDropdown();
-          }
-
-          function toggleCardDetails(itemId) {
-            var details = outputSection.querySelector('#' + detailId(itemId));
-            var arrow = outputSection.querySelector('#' + arrowId(itemId));
-            if (!details || !arrow) return;
-            var isExpanded = details.style.display === 'block';
-            details.style.display = isExpanded ? 'none' : 'block';
-            arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
-          }
-
-          var noneCard = document.createElement('div');
-          noneCard.className = 'execute-reconcile-untracked-card' + (defaultId ? '' : ' execute-reconcile-card-selected');
-          noneCard.dataset.untrackedId = '';
-          noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
-          noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
-          noneCard.onclick = function(e) { e.stopPropagation(); setSelection(''); };
-          cardsContainer.appendChild(noneCard);
-
-          matchingUntracked.forEach(function(u) {
-            var id = String(u.id);
-            var card = document.createElement('div');
-            card.className = 'execute-reconcile-untracked-card card card-interactive' + (id === defaultId ? ' execute-reconcile-card-selected' : '');
-            card.dataset.untrackedId = id;
-            card.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; overflow: hidden;';
-            var createdStr = '';
-            if (u.created_at) {
-              try { createdStr = new Date(u.created_at).toLocaleDateString(); } catch (e) {}
-            }
-            var unreconciledQty = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? String(u.remaining_balance_to_reconcile).trim() : null;
-            var subtitleParts = [];
-            if (unreconciledQty !== null) {
-              subtitleParts.push('Unreconciled: ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || ''));
-            } else {
-              subtitleParts.push(escapeHtml(u.quantity != null ? String(u.quantity) : '0') + ' ' + escapeHtml(u.unit || ''));
-            }
-            if (u.process_name || u.producing_step_name || u.step_name) {
-              var stepLabel = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : u.step_name;
-              var ps = [u.process_name, stepLabel].filter(Boolean).map(function(x) { return escapeHtml(x); }).join(' · ');
-              if (ps) subtitleParts.push(ps);
-            }
-            if (u.source_step_completed_by) subtitleParts.push('Completed by: ' + escapeHtml(u.source_step_completed_by));
-            var subtitleLine = subtitleParts.join(' · ');
-            var promptsHtml = '';
-            if (u.source_step_execution_prompts && typeof u.source_step_execution_prompts === 'object' && Object.keys(u.source_step_execution_prompts).length > 0) {
-              promptsHtml = '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);"><div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Step metadata</div><div style="display: flex; flex-direction: column; gap: 6px;">' +
-                Object.entries(u.source_step_execution_prompts).map(function(e) {
-                  return '<div style="padding: 6px 10px; background: var(--bg-secondary, #f9fafb); border-radius: 6px;"><span style="color: var(--text-secondary); font-size: 11px;">' + escapeHtml(e[0]) + '</span><br><span style="color: var(--text-primary); font-size: 13px;">' + escapeHtml(String(e[1])) + '</span></div>';
-                }).join('') + '</div></div>';
-            }
-            var detailsParts = [];
-            if (unreconciledQty !== null) {
-              detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Unreconciled quantity</span> ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || '') + '</p>');
-            }
-            if (u.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
-            if (u.producing_step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step to execute to reconcile</span> ' + escapeHtml(u.producing_step_name) + '</p>');
-            else if (u.step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
-            if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
-            if (u.notes) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Notes</span> ' + escapeHtml(u.notes) + '</p>');
-            if (u.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(u.supplier) + '</p>');
-            if (u.supplier_batch_number) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(u.supplier_batch_number) + '</p>');
-            card.innerHTML =
-              '<div class="process-card-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; word-wrap: break-word; overflow-wrap: break-word;">' +
-                '<div style="flex: 1; min-width: 0; cursor: pointer;" data-expand-trigger="1">' +
-                  '<h4 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary);">' + escapeHtml(u.name || 'Unknown') + '</h4>' +
-                  '<p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + subtitleLine + '</p>' +
-                '</div>' +
-                '<svg class="execute-reconcile-arrow" id="' + arrowId(u) + '" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-expand-trigger="1">' +
-                  '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>' +
-                '</svg>' +
-              '</div>' +
-              '<div class="execute-reconcile-details" id="' + detailId(u) + '" style="display: none; padding: 12px 16px; border-top: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); font-size: 13px;">' +
-                detailsParts.join('') +
-                promptsHtml +
-              '</div>';
-            card.onclick = function(e) {
-              if (e.target.closest('[data-expand-trigger="1"]')) {
-                e.stopPropagation();
-                toggleCardDetails(id);
-                return;
-              }
-              setSelection(id);
-            };
-            cardsContainer.appendChild(card);
-          });
-          setSelection(defaultId);
-        }
+        // Reconciliation cards are rendered above (in prompts section). No dropdown wiring needed here.
       });
     } else if (outputsContainer) {
       outputsContainer.innerHTML = '<p style="color: var(--text-secondary); font-size: 14px; padding: 16px;">No variable outputs for this step.</p>';

@@ -23,37 +23,41 @@
         // Page-style sections (no card chrome). CSS can further refine.
         inputSection.style.cssText = 'margin: 0; padding: 18px 0;' + (inputIdx === 0 ? '' : ' border-top: 1px solid var(--border-default, #e5e7eb);');
         
-        // Filter inventory by material name (shows all matching items)
-        const matchingInventory = allInventory.filter(inv => 
-          inv.name.toLowerCase().includes(input.name.toLowerCase()) || 
-          input.name.toLowerCase().includes(inv.name.toLowerCase())
-        );
-        
-        // Get current execution ID from modal context
+        // Get current execution ID from modal context (used to prioritize inventory produced in this execution).
         const currentExecutionId = modal.dataset.executionId;
-        
-        // Sort inventory: items with same execution_id first, then others
-        const sortedInventory = matchingInventory.sort((a, b) => {
-          const aExecutionId = a.source_execution_id || a.execution_id || null;
-          const bExecutionId = b.source_execution_id || b.execution_id || null;
-          
-          // If current execution ID is available, prioritize items from same execution
-          if (currentExecutionId) {
-            const aMatches = aExecutionId && String(aExecutionId) === String(currentExecutionId);
-            const bMatches = bExecutionId && String(bExecutionId) === String(currentExecutionId);
-            
-            if (aMatches && !bMatches) return -1; // a comes first
-            if (!aMatches && bMatches) return 1;  // b comes first
-          }
-          
-          // If both match or both don't match, maintain original order
-          return 0;
+
+        function safeName(inv) {
+          try { return String((inv && inv.name) || '').trim().toLowerCase(); } catch (e) { return ''; }
+        }
+
+        // Default list (no search): only inventory whose name exactly matches the expected input (trimmed, case-insensitive).
+        const expectedInputNorm = String((input && input.name) || '').trim().toLowerCase();
+        const matchingInventory = allInventory.filter(function(inv) {
+          if (!expectedInputNorm) return false;
+          return safeName(inv) === expectedInputNorm;
         });
+
+        // Keep ordering stable, but float "same execution" items to the top.
+        function sortWithExecutionBias(list) {
+          return (list || []).slice().sort((a, b) => {
+            const aExecutionId = a.source_execution_id || a.execution_id || null;
+            const bExecutionId = b.source_execution_id || b.execution_id || null;
+
+            if (currentExecutionId) {
+              const aMatches = aExecutionId && String(aExecutionId) === String(currentExecutionId);
+              const bMatches = bExecutionId && String(bExecutionId) === String(currentExecutionId);
+              if (aMatches && !bMatches) return -1;
+              if (!aMatches && bMatches) return 1;
+            }
+            return 0;
+          });
+        }
+
+        const sortedInventory = sortWithExecutionBias(matchingInventory);
+        const allInventorySorted = sortWithExecutionBias(allInventory);
         
         // Check if no matching inventory is available
         const hasNoInventory = sortedInventory.length === 0;
-        const errorStyle = hasNoInventory ? 'border: 2px solid var(--error, #ef4444);' : '';
-        const errorMessage = hasNoInventory ? `<p class="execute-input-no-inventory-warning" style="color: var(--error, #ef4444); font-size: 12px; margin-top: 4px; font-weight: 500;">⚠️ No matching inventory items found. Please add inventory before executing this step.</p>` : '';
         const safeInputName = (input.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
         const inventoryById = new Map();
         allInventory.forEach(function(inv) { inventoryById.set(String(inv.id), inv); });
@@ -77,6 +81,12 @@
             </div>
             <div class="exec-picker-cards" data-exec-picker-cards="true"></div>
           </div>
+          ${hasNoInventory ? `
+          <div class="execute-missing-inventory-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">⚠️ Nothing in inventory matches this input yet. Use <strong>Add Missing Item</strong> below to register what you need—you’ll be returned here afterwards to continue recording this step.</p>
+            <button type="button" class="btn btn-secondary btn-sm exec-add-missing-item-btn add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-expected-inventory-type="${(input.expected_inventory_type || input.expectedInventoryType) ? escapeHtml(String(input.expected_inventory_type || input.expectedInventoryType)) : (input.source_output_id ? 'work_in_progress' : '')}" data-producing-process-name="${input.producing_process_name ? escapeHtml(String(input.producing_process_name)) : ''}" data-producing-step-name="${input.producing_step_name ? escapeHtml(String(input.producing_step_name)) : ''}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-source-step-id="${input.source_step_id ? escapeHtml(String(input.source_step_id)) : ''}" data-source-process-id="${input.source_process_id ? escapeHtml(String(input.source_process_id)) : ''}" style="font-size: 13px;">Add Missing Item</button>
+          </div>
+          ` : ''}
           <div class="execute-add-input-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Add another input</label>
             <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;">Add one or more inputs to meet step quantity (e.g. multiple batches) or to record an additional material when inputs are not always set per execution.</p>
@@ -84,8 +94,6 @@
           </div>
           <div class="execute-input-qty-expected-warning" style="display: none; margin-top: 12px; padding: 10px 12px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); color: #92400e; font-size: 13px; font-weight: 500;" role="status"></div>
           <div class="execute-input-unexpected-material-warning" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
-          ${errorMessage}
-          ${hasNoInventory ? `<p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-source-step-id="${input.source_step_id ? escapeHtml(String(input.source_step_id)) : ''}" data-source-process-id="${input.source_process_id ? escapeHtml(String(input.source_process_id)) : ''}" style="font-size: 13px;">Add Missing Item</button></p>` : ''}
         `;
 
         const rowsContainer = inputSection.querySelector('.execute-input-rows-container');
@@ -159,9 +167,13 @@
             });
           } catch (e) {}
 
-          var list = sortedInventory
+          var qTrim = (q || '').trim();
+          // Default (no search): show inventory related to expected input name.
+          // While searching: search across all inventory.
+          var base = qTrim ? allInventorySorted : sortedInventory;
+          var list = base
             .filter(function(inv) { return invMatchesType(inv, activeType); })
-            .filter(function(inv) { return invMatchesSearch(inv, q); });
+            .filter(function(inv) { return invMatchesSearch(inv, qTrim); });
           list = list.filter(function(inv) {
             var id = String(inv.id);
             if (pendingId && id === pendingId) return true;
@@ -220,6 +232,7 @@
             metaBits += addMeta('Created by', inv.created_by_name || inv.created_by || '');
 
             // Extra metadata (bounded): show up to 8 keys, include small objects with "name"/"email".
+            // Notes are important but can be long; show them in Details instead of the top meta grid.
             var extraBits = '';
             try {
               var extra = inv.extra_data;
@@ -230,6 +243,13 @@
                   if (shown >= 8) break;
                   var key = keys[k];
                   if (key === 'execution_prompts') continue; // handled elsewhere / too verbose
+                  if (key === 'variable_output') continue; // same as card title / subtitle; omit from meta grid
+                  if (key === 'remaining_balance_to_reconcile') continue; // internal reconciliation counter
+                  if (key === 'notes') continue;
+                  // These are used for manual untracked association; show them in Details (not the card's top meta grid).
+                  if (key === 'producing_process_id') continue;
+                  if (key === 'producing_process_name') continue;
+                  if (key === 'producing_step_name') continue;
                   var val = extra[key];
                   if (val == null) continue;
                   var vv = '';
@@ -271,6 +291,7 @@
             try {
               Object.keys(inv || {}).forEach(function(k) {
                 if (k === 'extra_data') return;
+                if (k === 'remaining_balance_to_reconcile') return;
                 var v = inv[k];
                 if (v == null) return;
                 if (typeof v === 'object') return;
@@ -286,7 +307,14 @@
             var extraJson = '';
             try {
               if (inv.extra_data && typeof inv.extra_data === 'object') {
-                extraJson = JSON.stringify(inv.extra_data, null, 2);
+                var extraCopy = inv.extra_data;
+                try {
+                  if (extraCopy && Object.prototype.hasOwnProperty.call(extraCopy, 'remaining_balance_to_reconcile')) {
+                    extraCopy = Object.assign({}, extraCopy);
+                    delete extraCopy.remaining_balance_to_reconcile;
+                  }
+                } catch (eDel) {}
+                extraJson = JSON.stringify(extraCopy, null, 2);
               }
             } catch (e) {}
             // Audit history (extra_data.inventory_audit_history): show human-friendly operator + cleaned labels.
@@ -379,13 +407,28 @@
               var prompts = (inv.extra_data && inv.extra_data.execution_prompts) ? inv.extra_data.execution_prompts : null;
               var vInputs = (inv.extra_data && inv.extra_data.variable_inputs) ? inv.extra_data.variable_inputs : null;
               var vOut = (inv.extra_data && inv.extra_data.variable_output) ? inv.extra_data.variable_output : null;
+              var notes = (inv.extra_data && inv.extra_data.notes) ? String(inv.extra_data.notes) : '';
+              var producingProcessName =
+                (inv.extra_data && inv.extra_data.producing_process_name) ? String(inv.extra_data.producing_process_name) : '';
+              var producingStepName =
+                (inv.producing_step_name != null && String(inv.producing_step_name).trim())
+                  ? String(inv.producing_step_name)
+                  : ((inv.extra_data && inv.extra_data.producing_step_name) ? String(inv.extra_data.producing_step_name) : '');
 
               var top = '';
               var topRows = '';
               if (inv.process_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Process name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.process_name)) + '</div>';
+              // Manual-untracked association: keep these in Details only (not the top meta grid).
+              if (producingProcessName && (!inv.process_name || String(inv.process_name) !== String(producingProcessName))) {
+                topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Producing process') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(producingProcessName)) + '</div>';
+              }
               if (inv.source_step_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Source step name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.source_step_name)) + '</div>';
+              if (producingStepName) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Producing step') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(producingStepName)) + '</div>';
               if (topRows) top = '<div class="exec-picker-kv">' + topRows + '</div>';
               humanDetails += section('Production', top);
+              if (notes && notes.trim()) {
+                humanDetails += section('Notes', '<div style="font-size: 13px; color: var(--text-primary,#111827); line-height: 1.5; white-space: pre-line;">' + escapeHtml(notes) + '</div>');
+              }
 
               // Custom expiry (differentiate inputs)
               var ceActual = (inv.extra_data && inv.extra_data.custom_expiry_actual) ? inv.extra_data.custom_expiry_actual : null;
@@ -430,49 +473,48 @@
                 humanDetails += section('Inputs', ul2);
               }
 
-              // Variable output (human-readable)
-              if (vOut && typeof vOut === 'object') {
-                var outNm = vOut.name || inv.name || '';
-                var outQ = vOut.quantity != null ? vOut.quantity : '';
-                var outU = vOut.unit || inv.unit || '';
-                var outRows = '';
-                if (outNm) outRows += '<div class="exec-picker-kv__k">' + escapeHtml('Output name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(outNm)) + '</div>';
-                if (outQ !== '' && outQ != null) outRows += '<div class="exec-picker-kv__k">' + escapeHtml('Output quantity') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(outQ)) + (outU ? (' ' + escapeHtml(String(outU))) : '') + '</div>';
-                humanDetails += section('Output', outRows ? ('<div class="exec-picker-kv">' + outRows + '</div>') : '');
-              }
+              // variable_output: name matches card title; qty/unit are shown in the card subtitle — omit duplicate "Output" block.
 
-              // Execution trace (audit-like, human labels)
-              var auditBits = '';
-              var ts = inv.created_at || (trace && trace.completed_at) || '';
-              // Operator: prefer completed_by label; else map completed_by_user_id to org user display; else email.
-              var op = (trace && (trace.completed_by || trace.completed_by_email)) || inv.operator_name || inv.created_by_name || '';
-              if (!op) {
-                var uid = trace && (trace.completed_by_user_id || trace.completed_by_user || trace.user_id);
-                if (uid && orgUsersMap && typeof orgUsersMap.get === 'function') {
-                  op = orgUsersMap.get(String(uid)) || '';
+              // Execution trace (audit-like, human labels). If we have real audit history entries, prefer those
+              // (avoid duplicate "Audit history" blocks where the trace lacks operator/source method).
+              var hasAuditHistory =
+                !!(inv.extra_data &&
+                   inv.extra_data.inventory_audit_history &&
+                   Array.isArray(inv.extra_data.inventory_audit_history) &&
+                   inv.extra_data.inventory_audit_history.length);
+              if (!hasAuditHistory) {
+                var auditBits = '';
+                var ts = inv.created_at || (trace && trace.completed_at) || '';
+                // Operator: prefer completed_by label; else map completed_by_user_id to org user display; else email.
+                var op = (trace && (trace.completed_by || trace.completed_by_email)) || inv.operator_name || inv.created_by_name || '';
+                if (!op) {
+                  var uid = trace && (trace.completed_by_user_id || trace.completed_by_user || trace.user_id);
+                  if (uid && orgUsersMap && typeof orgUsersMap.get === 'function') {
+                    op = orgUsersMap.get(String(uid)) || '';
+                  }
                 }
+                var srcMethod = (trace && trace.source_method) || '';
+                if (!srcMethod && inv.source_execution_step_id) srcMethod = 'completed step';
+                auditBits += '<div class="exec-picker-kv">' +
+                  '<div class="exec-picker-kv__k">' + escapeHtml('Action') + '</div><div class="exec-picker-kv__v">' + escapeHtml('Inventory item created') + '</div>' +
+                  '<div class="exec-picker-kv__k">' + escapeHtml('Timestamp UTC') + '</div><div class="exec-picker-kv__v">' + escapeHtml(ts ? fmtIso(ts) : '—') + '</div>' +
+                  '<div class="exec-picker-kv__k">' + escapeHtml('Operator') + '</div><div class="exec-picker-kv__v">' + escapeHtml(op || '—') + '</div>' +
+                  '<div class="exec-picker-kv__k">' + escapeHtml('Source method') + '</div><div class="exec-picker-kv__v">' + escapeHtml(srcMethod ? prettyLabel(srcMethod) : '—') + '</div>' +
+                '</div>';
+                humanDetails += section('Audit history', auditBits);
               }
-              var srcMethod = (trace && trace.source_method) || '';
-              if (!srcMethod && inv.source_execution_step_id) srcMethod = 'completed step';
-              auditBits += '<div class="exec-picker-kv">' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Action') + '</div><div class="exec-picker-kv__v">' + escapeHtml('Inventory item created') + '</div>' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Timestamp UTC') + '</div><div class="exec-picker-kv__v">' + escapeHtml(ts ? fmtIso(ts) : '—') + '</div>' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Operator') + '</div><div class="exec-picker-kv__v">' + escapeHtml(op || '—') + '</div>' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Source method') + '</div><div class="exec-picker-kv__v">' + escapeHtml(srcMethod ? prettyLabel(srcMethod) : '—') + '</div>' +
-              '</div>';
-              humanDetails += section('Audit history', auditBits);
             }
 
             var detailsHtml =
               '<div class="exec-picker-card__details">' +
-                (isRawMaterial ? '' : humanDetails) +
-                (isRawMaterial ? auditHtml : '') +
+                humanDetails +
+                auditHtml +
               '</div>';
             var actions = '';
             if (isPending) {
               actions =
                 '<div class="exec-picker-card__actions" style="justify-content:flex-start;">' +
-                  '<button type="button" class="btn btn-secondary btn-sm exec-picker-confirm-btn" data-action="confirm-input" data-inv-id="' + id + '">Confirm input</button>' +
+                  '<button type="button" class="btn btn-secondary btn-sm exec-picker-confirm-btn" data-action="confirm-input" data-inv-id="' + id + '"><strong>Confirm input</strong></button>' +
                 '</div>';
             }
             return (
@@ -505,12 +547,27 @@
           });
           return counts;
         }
+        /** Hint from process designer (inventory category chosen for this input); overrides fallback heuristics. */
+        function normalizeExpectedInventoryTabHint(inp) {
+          if (!inp) return null;
+          var v = inp.expected_inventory_type != null ? inp.expected_inventory_type : inp.expectedInventoryType;
+          if (v == null || v === '') return null;
+          var s = String(v).toLowerCase().trim();
+          if (s === 'intermediate' || s === 'wip' || s === 'work_in_progress') return 'work_in_progress';
+          if (s === 'final' || s === 'final_product') return 'final_product';
+          if (s === 'raw' || s === 'raw_material') return 'raw_material';
+          return null;
+        }
+
         /**
          * Choose initial category tab from name-matched inventory.
          * Previously any WIP/final in the fuzzy-matched set forced WIP/final over raw — wrong when the step
          * expects a raw material but loose name matching also pulled in finals.
          */
         function pickDefaultPickerType() {
+          var hinted = normalizeExpectedInventoryTabHint(input);
+          if (hinted) return hinted;
+
           var list = sortedInventory || [];
           var expected = normInputName(input && input.name);
           var exact =
@@ -543,11 +600,39 @@
           var hasFinal = counts.final_product > 0;
           var hasRaw = counts.raw_material > 0;
 
+          // No rows matching this input name: tab counts are all zero — avoid defaulting to Raw unless we are sure.
+          if (!list.length) {
+            if (input && input.source_output_id) return 'work_in_progress';
+            var expectedN = normInputName(input && input.name);
+            if (expectedN && allInventory && allInventory.length) {
+              var byName = allInventory.filter(function(inv) {
+                return normInputName(inv && inv.name) === expectedN;
+              });
+              if (byName.length) {
+                var gc = countTabTypes(byName);
+                var gr = gc.raw_material > 0;
+                var gw = gc.work_in_progress > 0;
+                var gf = gc.final_product > 0;
+                var gkinds = (gr ? 1 : 0) + (gw ? 1 : 0) + (gf ? 1 : 0);
+                if (gkinds === 1) {
+                  if (gr) return 'raw_material';
+                  if (gw) return 'work_in_progress';
+                  return 'final_product';
+                }
+                if (gw && !gr && !gf) return 'work_in_progress';
+                if (gf && !gr && !gw) return 'final_product';
+                if (gr && !gw && !gf) return 'raw_material';
+              }
+            }
+            return 'raw_material';
+          }
+
           if (input && input.source_output_id) {
             if (hasWip || hasFinal) {
               return counts.final_product > counts.work_in_progress ? 'final_product' : 'work_in_progress';
             }
-            return 'raw_material';
+            // Chained / previous-output inputs are never raw materials; default Intermediate when stock is missing.
+            return 'work_in_progress';
           }
 
           if (hasRaw && !hasWip && !hasFinal) return 'raw_material';
@@ -564,6 +649,9 @@
         var pickerState = { activeType: defaultPickerType, q: '' };
         function syncTabState(next) {
           pickerState.activeType = next;
+          try {
+            inputSection.dataset.activePickerType = String(next || '');
+          } catch (e) {}
           pickerTabs.forEach(function(t) {
             var isOn = t.getAttribute('data-exec-type') === next;
             t.setAttribute('aria-pressed', isOn ? 'true' : 'false');
@@ -860,7 +948,9 @@
               quantityInput.dataset.originalQuantity = input.quantity || '';
               quantityInput.dataset.inventoryUnit = '';
             }
+            hiddenInput.setAttribute('data-input-name', input.name || '');
             if (st) {
+              st.input_name = input.name || '';
               st.inventory_item_id = '';
               st.unit = (quantityInput && (quantityInput.dataset.stepUnit || input.unit)) || (input.unit || '');
               st.expired_reason = '';
@@ -890,7 +980,10 @@
             hiddenInput.dataset.unit = inv.unit || '';
             const reason = getExpiredReason(inv.id);
             hiddenInput.dataset.expiredReason = reason || '';
+            var consumedLabel = (inv.name && String(inv.name).trim()) ? String(inv.name).trim() : (input.name || '');
+            hiddenInput.setAttribute('data-input-name', consumedLabel);
             if (st) {
+              st.input_name = consumedLabel;
               st.inventory_item_id = String(inv.id);
               st.unit = (quantityInput && (quantityInput.dataset.stepUnit || input.unit)) || (input.unit || inv.unit || '');
               st.expired_reason = reason || '';
@@ -1229,7 +1322,7 @@
           });
         }
         
-        // Add Missing Item: fromOutput = from previous output; else raw material modal
+        // Add Missing Item: previous-step output → untracked/WIP modal; catalog intermediate/final → same modal (via openAddInventoryModalForMissingInput); raw → raw modal or /inventory/add/manual
         const addMissingBtn = inputSection.querySelector('.add-missing-item-btn');
         if (addMissingBtn) {
           addMissingBtn.addEventListener('click', function() {
@@ -1238,17 +1331,29 @@
             var name_ = this.dataset.inputName || '';
             var quantity_ = this.dataset.inputQuantity != null && this.dataset.inputQuantity !== '' ? this.dataset.inputQuantity : '';
             var unit_ = this.dataset.inputUnit || '';
-            if (fromOutput && window.openAddUntrackedOutputModal) {
-              window.addInventoryContext = { fromExecutionModal: true, inputName: name_ };
-              window.openAddUntrackedOutputModal(
-                { name: name_, quantity: quantity_, unit: unit_, id: sourceOutputId || undefined },
-                modal.dataset.executionId,
-                modal.dataset.executionStepId
-              );
-              var untrackedModal = document.getElementById('add-untracked-output-modal');
-              if (untrackedModal) untrackedModal.style.zIndex = '1001';
-            } else if (!fromOutput && window.openAddInventoryModalForMissingInput) {
-              window.openAddInventoryModalForMissingInput({ name: name_, quantity: quantity_, unit: unit_ });
+            var expectedInv = (this.dataset.expectedInventoryType || '').trim();
+            if (!expectedInv) {
+              try {
+                expectedInv = String((inputSection && inputSection.dataset && inputSection.dataset.activePickerType) || '').trim();
+              } catch (e0) {}
+            }
+            if (!expectedInv && pickerState && pickerState.activeType) {
+              expectedInv = String(pickerState.activeType || '').trim();
+            }
+            var typeOpt =
+              expectedInv === 'work_in_progress' || expectedInv === 'final_product' ? { inventory_type: expectedInv } : undefined;
+            // Always route through openAddInventoryModalForMissingInput so batches/start uses the manual add page
+            // and so intermediate/final get the correct field set.
+            if (fromOutput && !expectedInv) expectedInv = 'work_in_progress';
+            if (window.openAddInventoryModalForMissingInput) {
+              window.openAddInventoryModalForMissingInput({
+                name: name_,
+                quantity: quantity_,
+                unit: unit_,
+                inventory_type: expectedInv || 'raw_material',
+                producing_process_name: this.dataset.producingProcessName || '',
+                producing_step_name: this.dataset.producingStepName || ''
+              });
             }
           });
         }
