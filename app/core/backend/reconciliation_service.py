@@ -187,6 +187,9 @@ def _untracked_item_to_dict(item: Any) -> dict[str, Any]:
         "unit": item.unit,
         "inventory_type": getattr(item, "inventory_type", None),
         "supplier": getattr(item, "supplier", None),
+        "supplier_batch_number": getattr(item, "supplier_batch_number", None),
+        "expiry_date": item.expiry_date.isoformat() if getattr(item, "expiry_date", None) else None,
+        "barcode": getattr(item, "barcode", None),
         "purchase_date": item.purchase_date.isoformat() if getattr(item, "purchase_date", None) else None,
         "source_execution_id": str(item.source_execution_id) if getattr(item, "source_execution_id", None) else None,
         "source_execution_step_id": str(item.source_execution_step_id)

@@ -350,6 +350,8 @@
         stepDefinition: stepDefinition,
         untrackedItems: untrackedItems,
         escapeHtml: escapeHtml,
+        prettyLabel: prettyLabel,
+        orgUsersMap: orgUsersMap,
         signal: signal,
       });
     } catch (e) {
