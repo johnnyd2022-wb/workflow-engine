@@ -6,8 +6,6 @@ These tests lock in key patterns; they are not browser E2E tests.
 
 from pathlib import Path
 
-import pytest
-
 _REPO = Path(__file__).resolve().parents[1]
 _JS = _REPO / "app" / "core" / "frontend" / "js"
 
