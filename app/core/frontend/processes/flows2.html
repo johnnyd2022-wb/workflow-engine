@@ -1208,11 +1208,11 @@
     // Inventory sub-tabs (Raw / Intermediate / Final) — uses flows2RerenderInventory after load
     (function () {
       function setInvFilter(type) {
-        window.flows2InventoryFilter = type || 'raw_material';
+        flows2Inventory.filter = type || 'raw_material';
         var buttons = document.querySelectorAll('[data-flows2-inv-type]');
         buttons.forEach(function (b) {
           var t = b.getAttribute('data-flows2-inv-type');
-          var active = t === window.flows2InventoryFilter;
+          var active = t === flows2Inventory.filter;
           b.classList.toggle('flow-mode-segment--active', active);
           b.setAttribute('aria-selected', active ? 'true' : 'false');
         });
@@ -1514,8 +1514,80 @@
     
     let currentProcess = null;
     let currentUser = null;
-    let flows2InventoryItemsCache = [];
-    window.flows2InventoryFilter = 'raw_material';
+
+    /** Caps for API-fed lists (performance / accidental huge payloads). */
+    const FLOWS2_MAX_AUDIT_HISTORY = 80;
+    const FLOWS2_MAX_RECONCILIATION_BLOCKS = 50;
+    const FLOWS2_MAX_SYSTEM_FINDING_MESSAGES = 30;
+    const FLOWS2_MAX_UPSTREAM_STEPS = 40;
+    const FLOWS2_MAX_PROMPT_ENTRIES = 40;
+    const FLOWS2_MAX_COMPLETED_EXECUTION_STEPS = 100;
+    const FLOWS2_MAX_EVIDENCE_ITEMS = 50;
+    const FLOWS2_MAX_IO_ROWS_PER_STEP = 200;
+    const FLOWS2_MAX_EXECUTION_METADATA_KEYS = 50;
+
+    /** Own enumerable keys only; drop prototype-pollution-prone names. */
+    function flows2SafeKeys(obj) {
+      if (!obj || typeof obj !== 'object') return [];
+      return Object.keys(obj).filter(
+        (k) =>
+          k !== '__proto__' &&
+          k !== 'constructor' &&
+          k !== 'prototype' &&
+          Object.prototype.hasOwnProperty.call(obj, k)
+      );
+    }
+
+    function flows2EscapeAttr(val) {
+      return String(val)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+    }
+
+    /** Resolve element by id when id may contain CSS-special characters (matches dataset inventory IDs). */
+    function flows2QueryById(id) {
+      const s = String(id);
+      if (typeof CSS !== 'undefined' && CSS.escape) {
+        return document.querySelector('#' + CSS.escape(s));
+      }
+      return document.getElementById(s);
+    }
+
+    /**
+     * Module-scoped inventory UI state (avoid window.*).
+     * itemsByType: map inventory_type -> items; allItems: full list from last load.
+     */
+    const flows2Inventory = {
+      filter: 'raw_material',
+      allItems: [],
+      itemsByType: {},
+    };
+
+    function flows2SetInventoryFromApi(items) {
+      const list = Array.isArray(items) ? items : [];
+      flows2Inventory.allItems = list;
+      const by = {};
+      list.forEach((i) => {
+        const t = i.inventory_type || 'raw_material';
+        if (!by[t]) by[t] = [];
+        by[t].push(i);
+      });
+      flows2Inventory.itemsByType = by;
+    }
+
+    function flows2GetFilteredInventoryItems() {
+      const f = flows2Inventory.filter || 'raw_material';
+      return flows2Inventory.itemsByType[f] || [];
+    }
+
+    /** HTML text (and attribute) escape; do not use falsy check — preserve 0 / false. */
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      const div = document.createElement('div');
+      div.textContent = String(text);
+      return div.innerHTML;
+    }
     
     // ============================================================
     // GET CURRENT USER
@@ -2200,7 +2272,8 @@
       // Next step button (only for active executions) - shown in header next to Started/Started by
       let executeStepHtml = '';
       if (status === 'active' && currentStep.step_id) {
-        executeStepHtml = `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); completeCurrentStep('${executionId}')" style="white-space: nowrap;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>Next step</button>`;
+        executeStepHtml =
+          '<button type="button" class="btn btn-primary btn-sm flows2-exec-next-step" style="white-space: nowrap;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>Next step</button>';
       }
       
       // Fetch execution details once for both completed steps and next step
@@ -2215,11 +2288,12 @@
           const executionSteps = executionData.execution_steps || [];
           const evidenceList = executionData.evidence || [];
           if (evidenceList.length > 0) {
+            const evidenceShown = evidenceList.slice(0, FLOWS2_MAX_EVIDENCE_ITEMS);
             executionEvidenceHtml = `
               <div class="execution-evidence-section" style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-light, #e5e7eb);">
                 <div style="font-size: 12px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Evidence (${evidenceList.length})</div>
                 <div style="display: flex; flex-direction: column; gap: 6px;">
-                  ${evidenceList.map(ev => {
+                  ${evidenceShown.map(ev => {
                     const viewUrl = typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceViewUrl ? CoreAPI.getEvidenceViewUrl(ev.id) : '#';
                     const downloadUrl = typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceDownloadUrl ? CoreAPI.getEvidenceDownloadUrl(ev.id) : '#';
                     const fileName = escapeHtml(ev.file_name || 'Evidence file');
@@ -2236,11 +2310,16 @@
             .sort((a, b) => a.step_number - b.step_number);
           
           if (completedSteps.length > 0) {
+            const completedStepsCapped = completedSteps.slice(0, FLOWS2_MAX_COMPLETED_EXECUTION_STEPS);
             const completedStepsSectionId = `completed-steps-${executionId}`;
-            const sectionTitle = status === 'completed' ? `All Steps (${completedSteps.length})` : `Completed Steps (${completedSteps.length})`;
+            let sectionTitle =
+              status === 'completed' ? `All Steps (${completedSteps.length})` : `Completed Steps (${completedSteps.length})`;
+            if (completedSteps.length > FLOWS2_MAX_COMPLETED_EXECUTION_STEPS) {
+              sectionTitle += ` — showing ${FLOWS2_MAX_COMPLETED_EXECUTION_STEPS}`;
+            }
             completedStepsHtml = `
               <div class="completed-steps-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
-                <div class="completed-steps-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; margin-bottom: 12px;" onclick="toggleCompletedSteps('${completedStepsSectionId}')">
+                <div class="completed-steps-header flows2-completed-steps-toggle" data-completed-section-id="${flows2EscapeAttr(completedStepsSectionId)}" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; margin-bottom: 12px;">
                   <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">${sectionTitle}</div>
                   <div class="completed-steps-toggle" id="${completedStepsSectionId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2249,7 +2328,7 @@
                   </div>
                 </div>
                 <div class="completed-steps-content" id="${completedStepsSectionId}" style="display: none;">
-                ${completedSteps.map(es => {
+                ${completedStepsCapped.map(es => {
                   const completedDate = es.completed_at ? new Date(es.completed_at).toLocaleString('en-US', {
                     month: 'short',
                     day: 'numeric',
@@ -2272,16 +2351,18 @@
                   // Get execution metadata (execution prompts and other data)
                   const executionData = es.execution_data || {};
                   const executionMetadata = [];
-                  // Extract execution prompts (exclude internal fields)
                   const internalFields = ['completed_by', 'completed_by_email', 'completed_by_user_id', 'completed_at'];
-                  Object.keys(executionData).forEach(key => {
-                    if (!internalFields.includes(key) && executionData[key] !== null && executionData[key] !== undefined && executionData[key] !== '') {
-                      executionMetadata.push({
-                        label: key,
-                        value: executionData[key]
-                      });
-                    }
-                  });
+                  flows2SafeKeys(executionData)
+                    .filter((key) => !internalFields.includes(key))
+                    .slice(0, FLOWS2_MAX_EXECUTION_METADATA_KEYS)
+                    .forEach((key) => {
+                      if (executionData[key] !== null && executionData[key] !== undefined && executionData[key] !== '') {
+                        executionMetadata.push({
+                          label: key,
+                          value: executionData[key],
+                        });
+                      }
+                    });
                   
                   // Create unique IDs for this step's panes using execution step ID
                   const executionStepId = es.id || `step-${es.step_id}-${es.step_number}-${Math.random().toString(36).substr(2, 9)}`;
@@ -2293,7 +2374,7 @@
                   if (displayInputs.length > 0) {
                     inputsPaneHtml = `
                       <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-right: 8px; overflow: hidden;">
-                        <div class="io-pane-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;" onclick="toggleIOPane('${inputsPaneId}', event)">
+                        <div class="io-pane-header flows2-io-pane-hdr" data-io-pane-id="${flows2EscapeAttr(inputsPaneId)}" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;">
                           <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Inputs (${displayInputs.length})</div>
                           <div class="io-pane-toggle" id="${inputsPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2302,7 +2383,7 @@
                           </div>
                         </div>
                         <div class="io-pane-content" id="${inputsPaneId}" style="display: none; padding: 0 10px 10px 10px;">
-                          ${displayInputs.map(input => {
+                          ${displayInputs.slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP).map(input => {
                             const inputName = input.name || 'Unknown';
                             const inputQty = input.quantity !== null && input.quantity !== undefined ? input.quantity : '';
                             const inputUnit = input.unit || '';
@@ -2325,7 +2406,7 @@
                   if (displayOutputs.length > 0) {
                     outputsPaneHtml = `
                       <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-left: 8px; overflow: hidden;">
-                        <div class="io-pane-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;" onclick="toggleIOPane('${outputsPaneId}', event)">
+                        <div class="io-pane-header flows2-io-pane-hdr" data-io-pane-id="${flows2EscapeAttr(outputsPaneId)}" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;">
                           <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Outputs (${displayOutputs.length})</div>
                           <div class="io-pane-toggle" id="${outputsPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2334,7 +2415,7 @@
                           </div>
                         </div>
                         <div class="io-pane-content" id="${outputsPaneId}" style="display: none; padding: 0 10px 10px 10px;">
-                          ${displayOutputs.map(output => {
+                          ${displayOutputs.slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP).map(output => {
                             const outputName = output.name || 'Unknown';
                             const outputQty = output.quantity !== null && output.quantity !== undefined ? output.quantity : '';
                             const outputUnit = output.unit || '';
@@ -2356,7 +2437,7 @@
                     const metadataPaneId = `metadata-${executionStepId}`;
                     metadataPaneHtml = `
                       <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-top: 8px; overflow: hidden;">
-                        <div class="io-pane-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;" onclick="toggleIOPane('${metadataPaneId}', event)">
+                        <div class="io-pane-header flows2-io-pane-hdr" data-io-pane-id="${flows2EscapeAttr(metadataPaneId)}" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;">
                           <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Execution Metadata (${executionMetadata.length})</div>
                           <div class="io-pane-toggle" id="${metadataPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2456,13 +2537,13 @@
       }
       
       card.innerHTML = `
-        <div class="execution-header" style="display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);" onclick="toggleExecution(this)">
+        <div class="execution-header flows2-exec-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);">
           <div style="flex: 1; min-width: 0;">
             ${status === 'active' ? `
               ${nextStepHeaderHtml || ''}
               <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px; margin-top: ${nextStepHeaderHtml ? '8px' : '0'};">Started: ${startDate}</div>
               <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Started by: ${escapeHtml(user.username)}</div>
-              ${executeStepHtml ? `<div onclick="event.stopPropagation();" style="margin-top: 8px;">${executeStepHtml}</div>` : ''}
+              ${executeStepHtml ? `<div class="flows2-exec-next-step-wrap" style="margin-top: 8px;">${executeStepHtml}</div>` : ''}
               <div class="execution-progress" style="margin-top: 12px;">
                 <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Progress</div>
                 <div class="progress-bar" style="height: 8px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden;">
@@ -2513,7 +2594,39 @@
           ${completedStepsHtml}
         </div>
       `;
-      
+
+      const execHdr = card.querySelector('.flows2-exec-card-header');
+      if (execHdr) {
+        execHdr.addEventListener('click', (e) => {
+          if (e.target.closest('.flows2-exec-next-step-wrap')) return;
+          if (typeof window.toggleExecution === 'function') window.toggleExecution(execHdr);
+        });
+      }
+      const nextWrap = card.querySelector('.flows2-exec-next-step-wrap');
+      if (nextWrap) {
+        nextWrap.addEventListener('click', (e) => e.stopPropagation());
+      }
+      const nextBtn = card.querySelector('.flows2-exec-next-step');
+      if (nextBtn && executionId) {
+        nextBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (typeof window.completeCurrentStep === 'function') window.completeCurrentStep(executionId);
+        });
+      }
+      card.querySelectorAll('.flows2-completed-steps-toggle').forEach((hdr) => {
+        hdr.addEventListener('click', () => {
+          const sid = hdr.getAttribute('data-completed-section-id');
+          if (sid && typeof window.toggleCompletedSteps === 'function') window.toggleCompletedSteps(sid);
+        });
+      });
+      card.querySelectorAll('.flows2-io-pane-hdr').forEach((hdr) => {
+        hdr.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const pid = hdr.getAttribute('data-io-pane-id');
+          if (pid && typeof window.toggleIOPane === 'function') window.toggleIOPane(pid, ev);
+        });
+      });
+
       return card;
     }
     
@@ -2704,7 +2817,7 @@
     function flows2FormatInventoryOutputValue(key, v) {
       if (v === null || v === undefined) return '—';
       if (typeof v === 'object' && !Array.isArray(v)) {
-        if (Object.keys(v).length === 0) return '—';
+        if (flows2SafeKeys(v).length === 0) return '—';
         const ks = String(key || '');
         if (ks === 'ready_date_input' || ks.includes('ready_date')) {
           if (v.date != null && v.date !== '') {
@@ -2811,7 +2924,7 @@
           if (v !== undefined && v !== null && v !== '') keys.push(k);
         }
       });
-      Object.keys(entry).forEach((k) => {
+      flows2SafeKeys(entry).forEach((k) => {
         if (skip.has(k) || keys.includes(k)) return;
         const v = entry[k];
         if (v === undefined || v === null || v === '') return;
@@ -2833,9 +2946,10 @@
     /** Audit rows only — batch/start picker parity (execution-modal.css .exec-picker-kv). */
     function flows2FormatAuditHistoryEntries(history) {
       if (!Array.isArray(history) || !history.length) return '';
+      // UX only: hide values that look like raw UUIDs in name fields (not a security boundary).
       const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       return history
-        .slice()
+        .slice(-FLOWS2_MAX_AUDIT_HISTORY)
         .reverse()
         .map((h) => {
           if (!h || typeof h !== 'object') return '';
@@ -2887,6 +3001,7 @@
           }
         }
       }
+      // UX only: avoid showing raw UUID as operator name when a friendlier field exists (not a security check).
       if (opName && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(opName.trim())) opName = '';
       let srcMethod = trace.source_method ? String(trace.source_method) : '';
       if (!srcMethod && item.source_execution_step_id) srcMethod = 'completed step';
@@ -2909,7 +3024,7 @@
         return `<div class="flows2-inv-detail-section"><h4>Audit history</h4><div class="exec-picker-kv">${persisted}</div></div>`;
       }
       const trace = ex.execution_trace;
-      if (trace && typeof trace === 'object' && Object.keys(trace).length) {
+      if (trace && typeof trace === 'object' && flows2SafeKeys(trace).length) {
         return `<div class="flows2-inv-detail-section"><h4>Audit history</h4>${flows2RenderSyntheticAuditFromTrace(item, trace)}</div>`;
       }
       return (
@@ -2936,6 +3051,7 @@
         });
         if (messages.length) {
           messagesHtml = messages
+            .slice(0, FLOWS2_MAX_SYSTEM_FINDING_MESSAGES)
             .map(
               (m) =>
                 `<div style="margin:0 0 10px 0;font-size:13px;line-height:1.4;color:var(--text-primary,#111827);">${escapeHtml(m)}</div>`
@@ -2962,6 +3078,7 @@
           'surplus_from_reconciliation',
         ];
         const blocks = arr
+          .slice(0, FLOWS2_MAX_RECONCILIATION_BLOCKS)
           .map((entry) => {
             if (!entry || typeof entry !== 'object') return '';
             const rows = flows2RenderKvRowsFromObject(entry, {
@@ -3008,7 +3125,7 @@
       const skipOutKeys = new Set(['ready_date_input', 'ready_date_actual']);
 
       if (vOut && typeof vOut === 'object') {
-        Object.keys(vOut).forEach((k) => {
+        flows2SafeKeys(vOut).forEach((k) => {
           if (skipOutKeys.has(k)) return;
           const v = vOut[k];
           const label = flows2InventoryOutputFieldLabel(k);
@@ -3030,7 +3147,7 @@
         !vOutHas('custom_expiry_actual') &&
         cea &&
         typeof cea === 'object' &&
-        Object.keys(cea).length > 0
+        flows2SafeKeys(cea).length > 0
       ) {
         pairs.push(['Custom expiry applied', flows2FormatCustomExpiryObj(cea) || '—']);
       }
@@ -3084,6 +3201,7 @@
       const blocks =
         Array.isArray(vInputs) && vInputs.length
           ? vInputs
+              .slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP)
               .map((input) => {
                 return `<div style="padding:10px;background:var(--bg-secondary,#f9fafb);border-radius:8px;border:1px solid var(--border-light,#e5e7eb);margin-bottom:8px;">
               <p style="margin:0 0 4px;font-weight:600;">${escapeHtml(input.name || 'Input')}</p>
@@ -3103,6 +3221,7 @@
       const prevSteps = ex.previous_steps_data;
       if (!Array.isArray(prevSteps) || !prevSteps.length) return '';
       const blocks = prevSteps
+        .slice(0, FLOWS2_MAX_UPSTREAM_STEPS)
         .map((step) => {
           const sn = step.step_name || 'Step';
           const snum = step.step_number != null ? `#${step.step_number}` : '';
@@ -3111,12 +3230,13 @@
           if (step.input_name)
             inner += `<p style="margin:0 0 4px;font-size:12px;">Consumed: ${escapeHtml(step.input_name)} — ${escapeHtml(fq(step.input_quantity))} ${escapeHtml(step.input_unit || '')}</p>`;
           const sp = step.execution_prompts;
-          if (sp && typeof sp === 'object' && Object.keys(sp).length) {
+          if (sp && typeof sp === 'object' && flows2SafeKeys(sp).length) {
             inner += `<p style="margin:8px 0 4px;font-size:11px;font-weight:600;color:var(--text-secondary);">Prompts in chain</p>`;
-            inner += Object.entries(sp)
+            inner += flows2SafeKeys(sp)
+              .slice(0, FLOWS2_MAX_PROMPT_ENTRIES)
               .map(
-                ([k, v]) =>
-                  `<div class="flows2-inv-kv"><span>${escapeHtml(k)}</span><span>${escapeHtml(flows2SerializeForDisplay(v))}</span></div>`
+                (k) =>
+                  `<div class="flows2-inv-kv"><span>${escapeHtml(k)}</span><span>${escapeHtml(flows2SerializeForDisplay(sp[k]))}</span></div>`
               )
               .join('');
           }
@@ -3143,11 +3263,12 @@
       html += flows2RenderInventorySystemFindingsSection(item);
 
       const prompts = ex.execution_prompts;
-      if (prompts && typeof prompts === 'object' && Object.keys(prompts).length) {
-        const rows = Object.entries(prompts)
+      if (prompts && typeof prompts === 'object' && flows2SafeKeys(prompts).length) {
+        const rows = flows2SafeKeys(prompts)
+          .slice(0, FLOWS2_MAX_PROMPT_ENTRIES)
           .map(
-            ([k, v]) =>
-              `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel(k))}</div><div class="exec-picker-kv__v">${escapeHtml(flows2SerializeForDisplay(v))}</div>`
+            (k) =>
+              `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel(k))}</div><div class="exec-picker-kv__v">${escapeHtml(flows2SerializeForDisplay(prompts[k]))}</div>`
           )
           .join('');
         html += `<div class="flows2-inv-detail-section"><h4>Custom prompts</h4><div class="exec-picker-kv">${rows}</div></div>`;
@@ -3199,7 +3320,7 @@
 
       card.innerHTML = `
         ${untrackedReasonBlock}
-        <div class="execution-header" style="display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);" onclick="toggleInventoryItemDetailsFlows('${item.id}')">
+        <div class="execution-header flows2-inv-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);">
           <div style="flex: 1; min-width: 0;">
             <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px; word-wrap: break-word;">${escapeHtml(item.name)}</div>
             <div class="execution-details" style="margin-top: 8px; gap: 1rem;">
@@ -3219,6 +3340,12 @@
           ${detailsHtml}
         </div>
       `;
+      const invHeader = card.querySelector('.flows2-inv-card-header');
+      if (invHeader) {
+        invHeader.addEventListener('click', () => {
+          toggleInventoryItemDetailsFlows(String(item.id));
+        });
+      }
       return card;
     }
 
@@ -3228,7 +3355,7 @@
 
       container.innerHTML = '';
 
-      if (!flows2InventoryItemsCache.length) {
+      if (!flows2Inventory.allItems.length) {
         container.innerHTML =
           '<div class="flows2-inv-empty"><p>No inventory items for this process.</p></div>';
         return;
@@ -3246,10 +3373,7 @@
     }
 
     function flows2RerenderInventory() {
-      const filter = window.flows2InventoryFilter || 'raw_material';
-      const items = (flows2InventoryItemsCache || []).filter(
-        (i) => (i.inventory_type || 'raw_material') === filter
-      );
+      const items = flows2GetFilteredInventoryItems();
       flows2RenderInventoryList(items);
     }
 
@@ -3259,7 +3383,7 @@
       try {
         const inventoryData = await CoreAPI.getInventory(null, processId);
         const items = inventoryData.inventory_items || [];
-        flows2InventoryItemsCache = items;
+        flows2SetInventoryFromApi(items);
         flows2RerenderInventory();
       } catch (error) {
         console.error('Failed to load inventory:', error);
@@ -3268,10 +3392,12 @@
     }
 
     function toggleInventoryItemDetailsFlows(itemId) {
-      const card = document.querySelector(`[data-inventory-id="${itemId}"]`);
+      const idStr = String(itemId);
+      const escAttr = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(idStr) : idStr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const card = document.querySelector(`[data-inventory-id="${escAttr}"]`);
       if (!card) return;
-      const details = document.getElementById(`details-flows-${itemId}`);
-      const arrow = document.getElementById(`arrow-flows-${itemId}`);
+      const details = flows2QueryById('details-flows-' + idStr);
+      const arrow = flows2QueryById('arrow-flows-' + idStr);
       if (!details || !arrow) return;
       const isExpanded = card.dataset.isExpanded === 'true';
 
@@ -4736,14 +4862,6 @@
       }
     }
     
-    // Escape HTML
-    function escapeHtml(text) {
-      if (!text) return '';
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-    
     // Load data on page load (system findings banner is handled by shared system-findings-banner.js)
     document.addEventListener('DOMContentLoaded', function() {
       if (processId) {
@@ -4839,9 +4957,9 @@
   <script>
     (function() {
       function escapeHtml(text) {
-        if (text == null) return '';
+        if (text == null || text === undefined) return '';
         var div = document.createElement('div');
-        div.textContent = text;
+        div.textContent = String(text);
         return div.innerHTML;
       }
       function initRecordWastageModal() {
