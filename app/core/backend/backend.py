@@ -69,6 +69,28 @@ logger = logging.getLogger(__name__)
 # Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
 MAX_WASTAGE_BATCH_ENTRIES = 100
 
+# GET /api/core/inventory: bound nested display-only lists (aligned with flows2.html caps; not persisted).
+LIST_INVENTORY_MAX_PREVIOUS_STEPS = 80
+LIST_INVENTORY_MAX_AUDIT_HISTORY = 120
+LIST_INVENTORY_MAX_RECONCILIATION_HISTORY = 60
+
+
+def _bound_inventory_extra_data_for_list_response(extra_data: dict) -> dict:
+    """Clamp large nested lists in extra_data for list responses (operator UI only)."""
+    if not extra_data:
+        return extra_data
+    out = dict(extra_data)
+    psd = out.get("previous_steps_data")
+    if isinstance(psd, list) and len(psd) > LIST_INVENTORY_MAX_PREVIOUS_STEPS:
+        out["previous_steps_data"] = psd[:LIST_INVENTORY_MAX_PREVIOUS_STEPS]
+    ah = out.get("inventory_audit_history")
+    if isinstance(ah, list) and len(ah) > LIST_INVENTORY_MAX_AUDIT_HISTORY:
+        out["inventory_audit_history"] = ah[:LIST_INVENTORY_MAX_AUDIT_HISTORY]
+    rh = out.get("reconciliation_history")
+    if isinstance(rh, list) and len(rh) > LIST_INVENTORY_MAX_RECONCILIATION_HISTORY:
+        out["reconciliation_history"] = rh[:LIST_INVENTORY_MAX_RECONCILIATION_HISTORY]
+    return out
+
 # Create core blueprint
 core_bp = Blueprint(
     "core",
@@ -2728,7 +2750,7 @@ def list_inventory():
                 "producing_step_id": str(producing_step_id) if producing_step_id else None,
                 "producing_step_name": producing_step_name,
                 "created_at": item.created_at.isoformat() if item.created_at else None,
-                "extra_data": extra_data,
+                "extra_data": _bound_inventory_extra_data_for_list_response(extra_data),
                 "system_findings": findings_by_id.get(str(item.id), []),
                 "ready_date_display": ready_date_display,
             }

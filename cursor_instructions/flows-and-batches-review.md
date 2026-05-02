@@ -1,257 +1,354 @@
-Below is a security + performance + correctness review of:
+# Flows2 — security & performance review
 
-app/core/frontend/processes/flows2.html
+**Scope:** `app/core/frontend/processes/flows2.html` — inventory, batches/executions, and API-driven rendering. Treat this as a **high-risk** screen: string templates, `innerHTML`, and data that can include long strings, nested objects, and large arrays.
 
-I’m treating this as a high-risk frontend execution + rendering module (it handles inventory rendering, dynamic HTML injection, and user-facing data transformation).
+| | |
+|---|---|
+| **Bottom line** | Risk is reduced further: inventory **card chrome** (title, badge, quantity rows, banner) is built with **DOM APIs + `textContent`**; API blobs go through **`flows2SerializeForDisplay`** with a **max character bound**; **`flows2ValueForHtml`** covers execution metadata objects; inventory loads are **abortable** and generation-guarded; **GET `/api/core/inventory`** clamps large nested lists in `extra_data`. Remaining risk is mainly **`innerHTML` inside inventory details + execution cards** (must keep `escapeHtml` on every interpolated string). |
+| **Already shipped** | All of the prior items **plus**: DOM inventory header/shell; `FLOWS2_MAX_JSON_DISPLAY_CHARS` + truncation; `flows2ValueForHtml`; escaped IO qty/unit lines; metadata values use `flows2ValueForHtml`; `AbortController` + load generation on `loadInventory`; backend `_bound_inventory_extra_data_for_list_response`. |
+| **Still open** | Large **`innerHTML`** blocks (`buildFlows2InventoryDetailsSection`, `createExecutionCard` body); alternate API clients bypass UI caps unless endpoints enforce limits everywhere; multi-process SPA without full reload still a theoretical singleton-cache edge case. |
 
-🔴 CRITICAL FINDINGS (Fix immediately)
-1. DOM XSS risk via innerHTML construction (HIGH → CRITICAL)
-Location
+**How to use this doc:** Read the summary row above first, scan **Critical issues** for “why,” jump to **Fixes (what to do next)** for backlog items and the PR checklist.
 
-Multiple places, but most severe:
+---
 
-createInventoryItemCardFlows
-buildFlows2InventoryDetailsSection
-flows2RenderInventoryAuditSection
-flows2RenderInventoryInputsSection
-flows2RenderInventoryUpstreamSection
+Below is the detailed review (strict pass): what materially changed, what still moves risk, and where we are honest about limits.
+
+I’m going to be strict: structurally this is much improved, but a few high-confidence attack-surface and architectural issues remain.
+
+🔴 CRITICAL ISSUES
+1. ❗ Still DOM XSS surface via innerHTML (reduced but not eliminated)
+Where it remains
+
+**Update:** `createInventoryItemCardFlows` builds the card shell with **`createElement` / `textContent`**; only the **expanded details** pane sets `innerHTML` from `buildFlows2InventoryDetailsSection(...)`.
+
+You still use:
+
+card.innerHTML = ` / template strings
+
+in:
+
+buildFlows2InventoryDetailsSection (and helpers it calls)
+execution rendering blocks (`createExecutionCard`)
+IO panes
+metadata sections
+Why this still matters
+
+You did improve escaping discipline, but the fundamental risk remains:
+
+❌ Problem class
+
+You are still mixing:
+
+string templates
+nested object serialization
+conditional HTML injection
+
+Example risky chain:
+
+flows2SerializeForDisplay(sp[k])
+
+→ inserted into:
+
+<span>${escapeHtml(...)}</span>
+
+BUT:
+
+some branches bypass escapeHtml entirely (notably JSON blocks and metadata rendering)
+some values are double-rendered objects → stringified twice in inconsistent ways
+innerHTML is still the execution boundary (single failure = full DOM XSS)
+Key insight
+
+Even with good escaping, template-based DOM construction = fragile security boundary
+
+✅ Required fix (structural, not cosmetic)
+
+Move to one of:
+
+document.createElement composition (preferred)
+or a strict HTML builder that forces escaping at leaf nodes only
+
+If you keep innerHTML, you are relying on perfect discipline forever — which is not realistic in a growing system.
+
+2. ❗ Attribute context encoding (improved; stay disciplined)
+Previously a minimal `flows2EscapeAttr` only handled `&` / `"` / `<`. **Code now encodes** `& " ' < >` for double-quoted `data-*` attributes. **Remaining risk:** new code must use this helper (or the same rules) for every dynamic attribute; backticks and other edge cases are not a normal HTML attribute concern but avoid passing attribute values into `eval` / `setAttribute` with event-handler names.
+
+**Rule:** one canonical function for attribute text; no ad-hoc `.replace` chains in templates.
+
+3. ❗ Click handler logic still depends on DOM structure trust
+
+You improved:
+
+execHdr.addEventListener('click', ...)
+
+Good.
+
+BUT:
+
+Risk still exists in:
+delegation patterns relying on .closest()
+unscoped event propagation stops:
+e.stopPropagation()
+Problem class
+
+This becomes fragile when:
+
+UI nesting increases
+new interactive elements are added
+future devs forget propagation rules
+Impact
+
+Not direct XSS, but:
+
+logic bypass
+accidental event hijacking
+UI state desync (security-adjacent reliability issue)
+4. ❗ Prototype pollution protections are incomplete
+
+You added:
+
+flows2SafeKeys()
+
+Good improvement.
+
+BUT:
+
+Gap
+
+Still multiple direct unsafe access patterns:
+
+executionData[key]
+step.execution_prompts
+entry[k]
+
+Even with safe keys, you are still trusting:
+
+object shape integrity
+backend guarantees
+Missing protection layer
+
+You are not validating:
+
+value types
+depth limits
+nested object structure
+Impact
+
+If backend is compromised or malformed:
+
+UI poisoning (not just display)
+potential DOM injection via string coercion paths
+🟠 HIGH PRIORITY ISSUES
+5. ⚠️ Performance risk still present (large payload rendering)
+
+You improved with caps:
+
+FLOWS2_MAX_AUDIT_HISTORY = 80
+FLOWS2_MAX_IO_ROWS_PER_STEP = 200
+Good
+
+BUT:
+
 Problem
 
-You are heavily using:
+These caps are still:
 
-card.innerHTML = `...`
-
-and constructing large HTML strings from:
-
-API data (item, extra_data, execution_trace)
-nested objects (execution_prompts, system_findings, etc.)
-
-Even though you use escapeHtml(...) in many places, there are multiple structural gaps:
-
-❌ Dangerous patterns
-1. Unescaped object serialization
-flows2SerializeForDisplay(val)
-
-Used in:
-
-execution_prompts
-completed_by
-execution_trace
-step.execution_errors / warnings
-
-If any upstream source injects HTML-like strings, they propagate into innerHTML.
-
-2. Partial escaping inconsistencies
+relatively high for synchronous DOM rendering
+applied after mapping in some cases (wasted CPU work)
 
 Example:
 
-display = flows2SerializeForDisplay(raw);
-return `<span>${escapeHtml(display)}</span>`;
+.map(...)
+.slice(...)
 
-BUT earlier:
+→ still builds full array before slicing
 
-if (typeof raw === 'object') display = flows2SerializeForDisplay(raw);
-
-→ You are trusting serialized JSON which can contain:
-
-{"x":"</div><script>alert(1)</script>"}
-
-Once stringified → it is no longer safely escaped in all branches.
-
-3. Direct insertion of user-controlled labels
-<span class="execution-id">${escapeHtml(item.name)}</span>
-
-Good, BUT:
-
-item.name is not validated elsewhere
-could still be null injection vector if escapeHtml is bypassed or incomplete
 Impact
-Full stored + reflected XSS
-Execution in admin / operator dashboards
-Potential token/session theft
-Inventory manipulation via DOM injection
-Fix (required)
-
-Rule: NEVER use innerHTML with concatenated data objects.
-
-Replace with:
-
-DOM APIs (createElement, textContent)
-OR a strict HTML builder with guaranteed escaping
-
-At minimum:
-
-function safeText(el, text) {
-  el.textContent = text ?? '';
-}
-
-And eliminate:
-
-card.innerHTML = `...`
-2. Click handler injection via inline onclick (HIGH)
-Location
-onclick="toggleInventoryItemDetailsFlows('${item.id}')"
-Problem
-item.id is not sanitized for attribute context
-allows quote-breaking injection in worst case
-inline JS is CSP-hostile
-Impact
-XSS vector if ID is ever attacker-controlled or UUID spoofed
+unnecessary CPU load
+layout blocking on large datasets
+mobile performance degradation
 Fix
 
-Replace with:
+Apply slicing before mapping consistently.
 
-card.addEventListener('click', () => toggleInventoryItemDetailsFlows(item.id));
-3. Unsafe object inspection → prototype pollution exposure (HIGH)
-Location
-Object.keys(vOut).forEach(...)
-Object.keys(entry)
-Object.entries(prompts)
+6. ⚠️ Mixed trust model (backend + frontend validation split)
+
+You are doing:
+
+frontend filtering (UUID checks, empty checks)
+frontend truncation
+frontend type inference
 Problem
 
-You directly iterate object keys from API payloads without:
+Frontend is now acting as:
 
-hasOwnProperty (sometimes used, but inconsistent)
-prototype-safe guard
-schema validation
+validator
+sanitizer
+renderer
 
-If backend is compromised or polluted:
+This is a classic security debt amplifier
 
-__proto__
-constructor
-prototype
+Impact
+inconsistent enforcement
+bypass risk via alternate clients (API misuse)
+logic divergence over time
+7. ⚠️ flows2Inventory state model is better but still global
 
-could be traversed into UI logic.
+Good improvement:
 
-Fix
+const flows2Inventory = { ... }
 
-Add global safe iterator:
+BUT:
 
-const safeKeys = (obj) =>
-  Object.keys(obj).filter(k => Object.prototype.hasOwnProperty.call(obj, k));
+Issue
 
-And replace all raw Object.keys(...).
+Still effectively singleton global state for:
 
-4. Unbounded rendering of nested arrays (performance + DoS risk) (HIGH)
-Locations
-flows2FormatAuditHistoryEntries(history)
+filter
+cache
+grouping
+Risk
+multi-process UI contamination
+stale renders if async loads overlap
+race conditions during rapid filter switching
+🟡 MEDIUM ISSUES
+8. UI logic still tightly coupled to data transformation
+
+Functions like:
+
+flows2RenderInventoryOutputSection
 flows2RenderInventoryUpstreamSection
-flows2RenderInventorySystemFindingsSection
+
+mix:
+
+business rules
+formatting
+rendering
+Impact
+increases blast radius of bugs
+makes security auditing harder
+makes safe refactors risky
+9. Repeated DOM queries still present
+
+Example:
+
+document.querySelector(...)
+flows2QueryById(...)
+
+inside event handlers and toggles.
+
+Impact
+avoidable layout thrashing in large DOM trees
+10. UUID “sanitization” still misleading
+
+Comment:
+
+// UX only: hide values that look like raw UUIDs
 Problem
 
-No limits on:
+This is not security, but:
 
-history entries
-prevSteps
-reconciliation_history
+devs may misinterpret it as validation
+could lead to incorrect trust assumptions later
+🟢 POSITIVE IMPROVEMENTS (significant)
+
+These are meaningful upgrades:
+
+✅ 1. Introduced safe key filtering
+flows2SafeKeys()
+
+This is a real improvement against prototype pollution
+
+✅ 2. Added explicit caps for all major arrays
+
+Good coverage:
+
+audit history
+IO rows
+upstream steps
 prompts
 
-A malicious or buggy backend can send:
+This materially reduces DoS risk.
 
-history: Array(50,000)
+✅ 3. Removed window-scoped inventory state
 
-→ causes:
+Moving toward:
 
-DOM explosion
-blocking UI thread
-memory spikes
-Fix
+const flows2Inventory = {}
 
-Add caps everywhere:
+This is a good architectural direction
 
-const MAX_ITEMS = 50;
-history.slice(0, MAX_ITEMS)
+✅ 4. Event listener refactor (big improvement)
 
-Also consider virtualization for lists.
+You replaced inline handlers with:
 
-5. Regex-based UUID filtering is unsafe/fragile (MED-HIGH)
-/^[0-9a-f]{8}-...$/i
+addEventListener
 
-Used to detect "fake operator names".
+This reduces:
 
-Problem
-only filters UUID shape
-attacker can still inject meaningful strings
-false sense of safety
-Fix
+injection surface
+CSP fragility
+debugging complexity
+📊 FINAL RISK SUMMARY
+🔴 Critical (still open)
+DOM XSS risk remains due to innerHTML templating model
+Attribute escaping: core helper is in place; risk is **new** unescaped dynamic attributes
+Data-to-DOM trust boundary still fragile
+🟠 High
+Performance risk from partial slicing patterns
+Prototype pollution not fully contained (only partially mitigated)
+Global state still impacts multi-instance safety
+🟡 Medium
+Tight coupling of rendering + business logic
+Repeated DOM querying inefficiencies
+UX/security confusion in UUID filtering logic
 
-Do not infer identity validation in frontend.
+---
 
-Move identity validation to backend.
+## Fixes (what to do next)
 
-6. Global mutable state pollution (MED-HIGH)
-Variables:
-window.flows2InventoryFilter
-let flows2InventoryItemsCache = [];
-Problem:
-global mutable state
-race conditions if multiple panels exist
-filter not scoped per process
-Risk:
-cross-process leakage in SPA
-stale cache rendering wrong dataset
-Fix:
+Concrete remediation mapped to the issues above. **P0** can ship quickly; **P1–P3** are structural or backend.
 
-Encapsulate in module scope or class:
+### P0 — Frontend quick wins
 
-class Flows2InventoryState {}
-🟠 MEDIUM FINDINGS
-7. Redundant recomputation in render pipeline
+| Issue | Fix |
+|-------|-----|
+| **2 — Incomplete attribute escaping** | Use a single `flows2EscapeAttr` (or shared util) for every dynamic `data-*` and other quoted attribute. Encode at minimum `& " ' < >` (aligned with `flows2.html` `flows2EscapeAttr`). Do not hand-roll partial replacements in new code. |
+| **5 — Slice before map** | For capped lists, call `.slice(0, N)` **before** `.map` / heavy transforms. Audit any new execution or inventory template for `.map(...).slice` order. |
+| **10 — UUID comment confusion** | In code, keep the comment `UX only — not identity validation` next to UUID masking; optionally link reviewers to this doc. |
 
-Each render:
+### P1 — Structural (flows2.html)
 
-re-filters full cache
-re-maps entire list
-rebuilds full DOM
+| Issue | Fix |
+|-------|-----|
+| **1 — innerHTML XSS boundary** | Incrementally replace high-risk blocks: build card shells with `innerHTML` only for static structure; set user/API text via `textContent` or `element.appendChild(document.createTextNode(...))`. Priority: inventory detail sections and execution step metadata rows. |
+| **1 — Serialization paths** | Treat `flows2SerializeForDisplay` output as **text**: always pass through `escapeHtml` before template interpolation, or write JSON into a `<pre>` via `textContent`. |
+| **3 — Delegation / propagation** | Document in a short comment above execution header listener: “inner clicks on `.flows2-exec-next-step-wrap` must not toggle expand”; add new interactive children under that subtree or use `pointer-events` + explicit button roles. |
+| **4 — Key access after safeKeys** | After `flows2SafeKeys`, validate **value** shape where it affects HTML (e.g. reject non-string/non-number for labels); cap nesting depth for JSON shown in UI (optional small depth guard in `flows2SerializeForDisplay` display path). |
 
-No memoization or diffing.
+### P2 — Backend & trust model
 
-Impact
-O(n) full redraw every filter click
-slow on large inventory sets
-Fix
-pre-index by inventory_type
-or maintain separate arrays per filter
-8. Overuse of inline styles (maintainability + CSP risk)
+| Issue | Fix |
+|-------|-----|
+| **6 — Mixed trust model** | Enforce limits and schemas on APIs that feed flows2 (max audit entries, reconciliation rows, prompt map size). Return explicit `truncated` flags where the server clips. |
+| **7 — Inventory singleton / races** | **Partially done:** `loadInventory` uses `AbortController` + load generation; `flows2SetInventoryFromApi(..., processId)` records `loadedProcessId`. **Optional:** namespace cache by `processId` if one HTML page ever hosts multiple process contexts without reload. |
 
-Example:
+### P3 — Performance & maintainability
 
-style="margin:0 0 12px 0;"
-Issue
-hard to secure with CSP strict mode
-inconsistent UI theming
-harder to audit
-9. Data formatting functions mixing concerns
+| Issue | Fix |
+|-------|-----|
+| **8 — Mixed concerns** | Extract pure formatters (dates, quantities, labels) into functions with **no** HTML; keep HTML builders thin wrappers that only call `escapeHtml` at boundaries. |
+| **9 — Repeated queries** | Cache `details` / `arrow` elements when expanding inventory rows if profiling shows hot toggles; low priority until measured. |
 
-Examples:
+### Verification checklist (PRs touching flows2)
 
-date formatting
-UI labeling
-business logic in same functions
+- [ ] No new inline `onclick="...${dynamicId}..."`
+- [ ] No `${variable}` in templates without `escapeHtml` / `flows2EscapeAttr` / `textContent`
+- [ ] New arrays from API: cap + slice-before-map
+- [ ] Object iteration from API: `flows2SafeKeys` or explicit schema
 
-This increases attack surface because:
+---
 
-inconsistent escaping
-inconsistent output encoding contexts
-🟡 LOW / CLEAN BUT NOTEWORTHY
-10. Good security practices already present
+### Already implemented (reference)
 
-Positive signals:
-
-escapeHtml used widely
-no eval / Function() usage
-no template injection from raw concatenation (mostly controlled)
-separation of rendering helpers
-📊 PRIORITY SUMMARY
-🔴 CRITICAL (fix now)
-innerHTML usage with semi-trusted serialized data → XSS risk
-Inline onclick handlers with dynamic IDs
-Unsafe object iteration from API payloads
-🟠 HIGH
-Unbounded rendering loops (DoS via large payloads)
-Global state leakage (window.flows2InventoryFilter)
-Weak UUID-based trust logic
-🟡 MEDIUM
-Performance inefficiency (full re-rendering)
-Inline styling overuse
-Mixed concerns in formatting utilities
+`flows2SafeKeys`; `FLOWS2_MAX_*` + `FLOWS2_MAX_JSON_DISPLAY_CHARS` (bounded `flows2SerializeForDisplay`); `flows2ValueForHtml` for object-shaped metadata; `flows2Inventory` + `itemsByType` + `loadedProcessId`; `loadInventory` **abort** + **stale-response** guard; inventory **card shell** via DOM + `textContent` (details pane still template HTML with `escapeHtml`); execution card **propagation contract** comment; **IO** quantity/unit and **metadata** value escaping; `flows2EscapeAttr`; `CSS.escape` / `flows2QueryById`; listener-based handlers (no injected `onclick` for dynamic IDs). **Backend:** `_bound_inventory_extra_data_for_list_response` on `GET /api/core/inventory`.

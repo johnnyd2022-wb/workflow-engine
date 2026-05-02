@@ -1525,6 +1525,11 @@
     const FLOWS2_MAX_EVIDENCE_ITEMS = 50;
     const FLOWS2_MAX_IO_ROWS_PER_STEP = 200;
     const FLOWS2_MAX_EXECUTION_METADATA_KEYS = 50;
+    /** Bound serialized JSON / strings from API objects shown in the UI (DoS / huge stringify). */
+    const FLOWS2_MAX_JSON_DISPLAY_CHARS = 65536;
+
+    let flows2InventoryFetchController = null;
+    let flows2InventoryLoadGeneration = 0;
 
     /** Own enumerable keys only; drop prototype-pollution-prone names. */
     function flows2SafeKeys(obj) {
@@ -1538,11 +1543,14 @@
       );
     }
 
+    /** Double-quoted HTML attributes; safe if attrs stay quoted (single-quote contexts include &#39;). */
     function flows2EscapeAttr(val) {
       return String(val)
         .replace(/&/g, '&amp;')
         .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;');
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
     }
 
     /** Resolve element by id when id may contain CSS-special characters (matches dataset inventory IDs). */
@@ -1562,11 +1570,13 @@
       filter: 'raw_material',
       allItems: [],
       itemsByType: {},
+      loadedProcessId: null,
     };
 
-    function flows2SetInventoryFromApi(items) {
+    function flows2SetInventoryFromApi(items, forProcessId) {
       const list = Array.isArray(items) ? items : [];
       flows2Inventory.allItems = list;
+      if (forProcessId !== undefined) flows2Inventory.loadedProcessId = forProcessId;
       const by = {};
       list.forEach((i) => {
         const t = i.inventory_type || 'raw_material';
@@ -2391,7 +2401,7 @@
                             return `
                               <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
                                 <div style="font-weight: 500;">${escapeHtml(inputName)}</div>
-                                ${inputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${inputQty} ${inputUnit}</div>` : ''}
+                                ${inputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${escapeHtml(String(inputQty))} ${escapeHtml(String(inputUnit))}</div>` : ''}
                                 ${inventoryItemId ? `<div style="font-size: 10px; color: var(--text-tertiary, #9ca3af); margin-top: 2px;">Inventory ID: ${escapeHtml(inventoryItemId)}</div>` : ''}
                               </div>
                             `;
@@ -2422,7 +2432,7 @@
                             return `
                               <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
                                 <div style="font-weight: 500;">${escapeHtml(outputName)}</div>
-                                ${outputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${outputQty} ${outputUnit}</div>` : ''}
+                                ${outputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${escapeHtml(String(outputQty))} ${escapeHtml(String(outputUnit))}</div>` : ''}
                               </div>
                             `;
                           }).join('')}
@@ -2452,7 +2462,7 @@
                             return `
                               <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
                                 <div style="font-weight: 500;">${escapeHtml(metaLabel)}</div>
-                                <div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${escapeHtml(String(metaValue))}</div>
+                                <div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${escapeHtml(flows2ValueForHtml(metaValue))}</div>
                               </div>
                             `;
                           }).join('')}
@@ -2595,6 +2605,8 @@
         </div>
       `;
 
+      // Clicks on .flows2-exec-next-step-wrap / .flows2-exec-next-step must not toggle card expand
+      // (see stopPropagation on the wrap; do not add interactive children on the header outside that wrap without updating this).
       const execHdr = card.querySelector('.flows2-exec-card-header');
       if (execHdr) {
         execHdr.addEventListener('click', (e) => {
@@ -2726,11 +2738,26 @@
       if (val === null || val === undefined) return '';
       if (typeof val === 'object') {
         try {
-          return JSON.stringify(val, null, 2);
+          let s = JSON.stringify(val, null, 2);
+          if (s.length > FLOWS2_MAX_JSON_DISPLAY_CHARS) {
+            return s.slice(0, FLOWS2_MAX_JSON_DISPLAY_CHARS) + '\n… [truncated for display]';
+          }
+          return s;
         } catch {
-          return String(val);
+          const fallback = String(val);
+          return fallback.length > FLOWS2_MAX_JSON_DISPLAY_CHARS
+            ? fallback.slice(0, FLOWS2_MAX_JSON_DISPLAY_CHARS) + '…'
+            : fallback;
         }
       }
+      const str = String(val);
+      return str.length > FLOWS2_MAX_JSON_DISPLAY_CHARS ? str.slice(0, FLOWS2_MAX_JSON_DISPLAY_CHARS) + '…' : str;
+    }
+
+    /** Normalize any API value to a display string before escapeHtml (objects → bounded JSON text). */
+    function flows2ValueForHtml(val) {
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'object') return flows2SerializeForDisplay(val);
       return String(val);
     }
 
@@ -3292,60 +3319,94 @@
       const isUntracked = item.extra_data && item.extra_data.untracked === true;
       const card = document.createElement('div');
       card.className = 'execution-card' + (isUntracked ? ' inventory-card-untracked' : '');
-      card.dataset.inventoryId = item.id;
+      card.dataset.inventoryId = String(item.id);
       card.dataset.isExpanded = 'false';
 
       const fq = flows2InvFormatQty;
       const formattedQuantity = fq(item.quantity);
       const typeBadge = flows2InventoryTypeLabel(item.inventory_type);
 
-      function hdrRow(label, value) {
-        if (value === undefined || value === null || value === '') return '';
-        return `<div class="execution-detail">
-          <span class="execution-detail-label">${escapeHtml(label)}</span>
-          <span class="execution-detail-value">${escapeHtml(String(value))}</span>
-        </div>`;
+      if (isUntracked) {
+        const banner = document.createElement('div');
+        banner.style.cssText =
+          'margin-bottom: 0; padding: 10px 12px; background: hsl(0, 93%, 94%); border-bottom: 1px solid var(--border-light); color: #b91c1c; font-size: 12px; font-weight: 500;';
+        banner.textContent = 'Untracked item — reconciliation may be required';
+        card.appendChild(banner);
       }
 
-      const headerDetailRows = [
-        hdrRow('Available quantity', `${formattedQuantity} ${item.unit || ''}`.trim()),
-        item.created_at ? hdrRow('Created', flows2InvFormatDate(item.created_at)) : '',
-      ].join('');
+      const header = document.createElement('div');
+      header.className = 'execution-header flows2-inv-card-header';
+      header.style.cssText =
+        'display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);';
 
-      const untrackedReasonBlock = isUntracked
-        ? `<div style="margin-bottom: 0; padding: 10px 12px; background: hsl(0, 93%, 94%); border-bottom: 1px solid var(--border-light); color: #b91c1c; font-size: 12px; font-weight: 500;">Untracked item — reconciliation may be required</div>`
-        : '';
+      const left = document.createElement('div');
+      left.style.cssText = 'flex: 1; min-width: 0;';
 
-      const detailsHtml = buildFlows2InventoryDetailsSection(item);
+      const title = document.createElement('div');
+      title.className = 'execution-id';
+      title.style.cssText =
+        'font-weight: 600; color: var(--text-primary); margin-bottom: 4px; word-wrap: break-word;';
+      title.textContent = item.name != null ? String(item.name) : '';
 
-      card.innerHTML = `
-        ${untrackedReasonBlock}
-        <div class="execution-header flows2-inv-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);">
-          <div style="flex: 1; min-width: 0;">
-            <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px; word-wrap: break-word;">${escapeHtml(item.name)}</div>
-            <div class="execution-details" style="margin-top: 8px; gap: 1rem;">
-              ${headerDetailRows}
-            </div>
-          </div>
-          <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-            <span class="badge badge-accent" style="flex-shrink: 0;">${escapeHtml(typeBadge)}</span>
-            <div class="execution-toggle" id="arrow-flows-${item.id}" style="transition: transform 0.2s; transform: rotate(0deg);">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
-        </div>
-        <div class="execution-content" id="details-flows-${item.id}" style="display: none; padding: 12px;">
-          ${detailsHtml}
-        </div>
-      `;
-      const invHeader = card.querySelector('.flows2-inv-card-header');
-      if (invHeader) {
-        invHeader.addEventListener('click', () => {
-          toggleInventoryItemDetailsFlows(String(item.id));
-        });
+      const detailsRowWrap = document.createElement('div');
+      detailsRowWrap.className = 'execution-details';
+      detailsRowWrap.style.cssText = 'margin-top: 8px; gap: 1rem;';
+
+      function appendInventoryHdrRow(label, value) {
+        if (value === undefined || value === null || value === '') return;
+        const row = document.createElement('div');
+        row.className = 'execution-detail';
+        const lab = document.createElement('span');
+        lab.className = 'execution-detail-label';
+        lab.textContent = label;
+        const val = document.createElement('span');
+        val.className = 'execution-detail-value';
+        val.textContent = String(value);
+        row.appendChild(lab);
+        row.appendChild(val);
+        detailsRowWrap.appendChild(row);
       }
+
+      appendInventoryHdrRow('Available quantity', `${formattedQuantity} ${item.unit || ''}`.trim());
+      if (item.created_at) appendInventoryHdrRow('Created', flows2InvFormatDate(item.created_at));
+
+      left.appendChild(title);
+      left.appendChild(detailsRowWrap);
+
+      const right = document.createElement('div');
+      right.style.cssText = 'display: flex; align-items: center; gap: 12px; flex-shrink: 0;';
+
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-accent';
+      badge.style.flexShrink = '0';
+      badge.textContent = typeBadge;
+
+      const arrowWrap = document.createElement('div');
+      arrowWrap.className = 'execution-toggle';
+      arrowWrap.id = 'arrow-flows-' + item.id;
+      arrowWrap.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg);';
+      arrowWrap.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+
+      right.appendChild(badge);
+      right.appendChild(arrowWrap);
+
+      header.appendChild(left);
+      header.appendChild(right);
+      card.appendChild(header);
+
+      const content = document.createElement('div');
+      content.className = 'execution-content';
+      content.id = 'details-flows-' + item.id;
+      content.style.cssText = 'display: none; padding: 12px;';
+      content.innerHTML = buildFlows2InventoryDetailsSection(item);
+
+      card.appendChild(content);
+
+      header.addEventListener('click', () => {
+        toggleInventoryItemDetailsFlows(String(item.id));
+      });
+
       return card;
     }
 
@@ -3379,13 +3440,21 @@
 
     async function loadInventory() {
       if (!processId) return;
-
+      if (flows2InventoryFetchController) {
+        flows2InventoryFetchController.abort();
+      }
+      flows2InventoryFetchController = new AbortController();
+      const requestedPid = processId;
+      const gen = ++flows2InventoryLoadGeneration;
+      const { signal } = flows2InventoryFetchController;
       try {
-        const inventoryData = await CoreAPI.getInventory(null, processId);
+        const inventoryData = await CoreAPI.getInventory(null, requestedPid, { signal });
+        if (gen !== flows2InventoryLoadGeneration || requestedPid !== processId) return;
         const items = inventoryData.inventory_items || [];
-        flows2SetInventoryFromApi(items);
+        flows2SetInventoryFromApi(items, requestedPid);
         flows2RerenderInventory();
       } catch (error) {
+        if (error && error.name === 'AbortError') return;
         console.error('Failed to load inventory:', error);
         showNotification('error', 'Failed to Load Inventory', error.message || 'Failed to load inventory');
       }
