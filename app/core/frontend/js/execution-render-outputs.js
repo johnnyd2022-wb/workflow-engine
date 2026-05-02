@@ -6,10 +6,11 @@
 (function (root) {
   'use strict';
 
-  /** Tracks containers that already have the delegated reconcile click handler (avoids DOM property mutation). */
-  var reconcileCardsDelegationBound =
-    typeof WeakSet !== 'undefined' ? new WeakSet() : null;
-  var reconcileCardsDelegationFallback = [];
+  /**
+   * Delegated reconcile clicks: one listener per `.execute-reconcile-untracked-cards` node.
+   * Each execute-step render builds new containers; detached nodes are GC’d with their listeners.
+   */
+  var reconcileCardsDelegationBound = new WeakSet();
 
   /**
    * Collapsible details for untracked reconciliation cards — aligns with inventory picker (audit, notes).
@@ -309,30 +310,19 @@
           if (!cardsContainer || !hiddenInput) {
             console.warn('execute reconcile UI: missing cards container or hidden input');
           } else {
-          function setLocked(locked) {
-            recon.dataset.reconcileLocked = locked ? '1' : '0';
-          }
+          var cardEls = [];
+          var reconcileState = { locked: false, selectedId: '' };
 
-          function applyVisibility(cards) {
-            var locked = recon.dataset.reconcileLocked === '1';
-            var selectedId = (hiddenInput.value || '').trim();
-            var list = cards || recon.querySelectorAll('.execute-reconcile-untracked-card');
-            list.forEach(function(c) {
-              if (!locked) {
-                c.style.display = '';
-                return;
-              }
+          function setReconcileState(locked, selectedId) {
+            reconcileState.locked = !!locked;
+            reconcileState.selectedId = selectedId != null ? String(selectedId) : '';
+            hiddenInput.value = reconcileState.selectedId;
+            recon.dataset.reconcileLocked = reconcileState.locked ? '1' : '0';
+            var sel = reconcileState.selectedId;
+            var lock = reconcileState.locked;
+            cardEls.forEach(function(c) {
               var id = c.dataset.untrackedId || '';
-              c.style.display = id === selectedId ? '' : 'none';
-            });
-          }
-
-          function setSelection(selectedId) {
-            hiddenInput.value = selectedId || '';
-            var cards = recon.querySelectorAll('.execute-reconcile-untracked-card');
-            cards.forEach(function(c) {
-              var id = c.dataset.untrackedId || '';
-              var selected = id === selectedId;
+              var selected = id === sel;
               c.classList.toggle('execute-reconcile-card-selected', selected);
               c.style.borderColor = selected ? 'var(--warning, #f59e0b)' : '';
               c.style.boxShadow = selected ? '0 0 0 2px rgba(245, 158, 11, 0.25)' : '';
@@ -345,18 +335,17 @@
               if (removeBtn) {
                 removeBtn.style.display = selected ? '' : 'none';
               }
+              if (!lock) {
+                c.style.display = '';
+              } else {
+                c.style.display = selected ? '' : 'none';
+              }
             });
-            applyVisibility(cards);
           }
 
           function bindReconcileCardsDelegation() {
-            if (reconcileCardsDelegationBound) {
-              if (reconcileCardsDelegationBound.has(cardsContainer)) return;
-              reconcileCardsDelegationBound.add(cardsContainer);
-            } else {
-              if (reconcileCardsDelegationFallback.indexOf(cardsContainer) !== -1) return;
-              reconcileCardsDelegationFallback.push(cardsContainer);
-            }
+            if (reconcileCardsDelegationBound.has(cardsContainer)) return;
+            reconcileCardsDelegationBound.add(cardsContainer);
             cardsContainer.addEventListener('click', function(ev) {
               var target = ev.target;
               var detailBtn = target && target.closest
@@ -383,11 +372,9 @@
                 if (!rowCard || !cardsContainer.contains(rowCard)) return;
                 var uid = (rowCard.dataset.untrackedId || '').trim();
                 if (uid === '') {
-                  setLocked(false);
-                  setSelection('');
+                  setReconcileState(false, '');
                 } else {
-                  setLocked(true);
-                  setSelection(uid);
+                  setReconcileState(true, uid);
                 }
                 return;
               }
@@ -397,8 +384,7 @@
               if (removeBtn && cardsContainer.contains(removeBtn)) {
                 ev.preventDefault();
                 ev.stopPropagation();
-                setLocked(false);
-                setSelection('');
+                setReconcileState(false, '');
               }
             });
           }
@@ -468,10 +454,13 @@
 
           cardsContainer.appendChild(cardsFrag);
 
+          cardEls = Array.prototype.slice.call(
+            cardsContainer.querySelectorAll('.execute-reconcile-untracked-card')
+          );
+
           bindReconcileCardsDelegation();
 
-          setLocked(false);
-          setSelection(defaultId);
+          setReconcileState(false, defaultId);
           }
         }
 
