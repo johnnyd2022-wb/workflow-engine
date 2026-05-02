@@ -310,35 +310,24 @@
           if (!cardsContainer || !hiddenInput) {
             console.warn('execute reconcile UI: missing cards container or hidden input');
           } else {
-          var cardEls = [];
+          /** Authoritative reconcile UI state; hidden input + data-reconcile-locked are derived on each update only. */
           var reconcileState = { locked: false, selectedId: '' };
 
           function setReconcileState(locked, selectedId) {
             reconcileState.locked = !!locked;
             reconcileState.selectedId = selectedId != null ? String(selectedId) : '';
             hiddenInput.value = reconcileState.selectedId;
-            recon.dataset.reconcileLocked = reconcileState.locked ? '1' : '0';
+            cardsContainer.dataset.reconcileLocked = reconcileState.locked ? '1' : '0';
             var sel = reconcileState.selectedId;
-            var lock = reconcileState.locked;
-            cardEls.forEach(function(c) {
+            var cards = cardsContainer.querySelectorAll('.execute-reconcile-untracked-card');
+            cards.forEach(function(c) {
               var id = c.dataset.untrackedId || '';
               var selected = id === sel;
               c.classList.toggle('execute-reconcile-card-selected', selected);
-              c.style.borderColor = selected ? 'var(--warning, #f59e0b)' : '';
-              c.style.boxShadow = selected ? '0 0 0 2px rgba(245, 158, 11, 0.25)' : '';
               var btn = c.querySelector('.exec-reconcile-confirm-btn');
               if (btn) {
                 btn.textContent = selected ? 'Reconciliation selected' : 'Confirm reconciliation';
                 btn.disabled = !!selected;
-              }
-              var removeBtn = c.querySelector('.exec-reconcile-remove-btn');
-              if (removeBtn) {
-                removeBtn.style.display = selected ? '' : 'none';
-              }
-              if (!lock) {
-                c.style.display = '';
-              } else {
-                c.style.display = selected ? '' : 'none';
               }
             });
           }
@@ -392,7 +381,6 @@
           var noneCard = document.createElement('div');
           noneCard.className = 'execute-reconcile-untracked-card' + (defaultId ? '' : ' execute-reconcile-card-selected');
           noneCard.dataset.untrackedId = '';
-          noneCard.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;';
           noneCard.innerHTML =
             '<div style="padding: 12px 16px;">' +
               '<div style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">— None —</div>' +
@@ -410,7 +398,6 @@
             var card = document.createElement('div');
             card.className = 'execute-reconcile-untracked-card card card-interactive' + (id === defaultId ? ' execute-reconcile-card-selected' : '');
             card.dataset.untrackedId = id;
-            card.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; overflow: hidden;';
             var unreconciledQty = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? String(u.remaining_balance_to_reconcile).trim() : null;
             var subtitleParts = [];
             if (unreconciledQty !== null) {
@@ -446,17 +433,13 @@
               '<div style="padding: 0 16px 14px 16px;">' +
                 '<div style="display:flex; gap: 10px; justify-content:flex-start;">' +
                   '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-confirm-btn" style="font-size: 12px; font-weight: 700;">Confirm reconciliation</button>' +
-                  '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-remove-btn" style="font-size: 12px; display:none;">Remove reconciliation</button>' +
+                  '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-remove-btn" style="font-size: 12px;">Remove reconciliation</button>' +
                 '</div>' +
               '</div>';
             cardsFrag.appendChild(card);
           });
 
           cardsContainer.appendChild(cardsFrag);
-
-          cardEls = Array.prototype.slice.call(
-            cardsContainer.querySelectorAll('.execute-reconcile-untracked-card')
-          );
 
           bindReconcileCardsDelegation();
 

@@ -1,222 +1,188 @@
-🔴 1. Event delegation + DOM lifecycle correctness (CRITICAL)
-1.1 Delegation guard is correct — but fallback weakens it
+This version is significantly cleaner than the previous one — you’ve moved toward a proper state-driven UI controller pattern, which is the right direction. That said, there are still a few high-impact architectural and correctness issues worth calling out.
 
-You introduced:
+I’ll re-rank everything based on this latest state of the file.
 
-var reconcileCardsDelegationBound = new WeakSet();
-var reconcileCardsDelegationFallback = [];
+🔴 1. State desynchronisation risk (highest severity)
+Current pattern
+var reconcileState = { locked: false, selectedId: '' };
+var cardEls = [];
+
+and:
+
+cardEls.forEach(function(c) { ... });
+Core issue
+
+You are now maintaining three sources of truth:
+
+reconcileState
+hiddenInput.value
+DOM state (dataset, classList, style)
+Why this is dangerous
+
+These can drift in subtle ways:
+
+external code mutates hidden input
+DOM re-render occurs without reinitialising cardEls
+delegation triggers before cardEls is populated
+state update happens but DOM query set is stale
+Severity: 🔴 HIGH (correctness + UI drift bug class)
+🔴 2. cardEls is a snapshot, not a live binding
+cardEls = Array.prototype.slice.call(
+  cardsContainer.querySelectorAll(...)
+);
 Problem
 
-This is dual-state tracking of event binding, which creates subtle risks:
+This is a static snapshot of DOM nodes.
 
-WeakSet path = correct (memory-safe, DOM lifecycle aligned)
-Array fallback = leaky + never cleaned
-No teardown on modal close / rerender
-Why this matters
+So if:
 
-If containers are ever:
+new cards are injected
+cards are filtered or replaced
+async update modifies container
 
-re-rendered
-re-mounted in SPA navigation
-recreated in modals
+→ setReconcileState() operates on stale nodes.
 
-you will accumulate:
+Real failure mode:
+UI shows new card
+selection logic ignores it
+or worse: partially updates old + new nodes inconsistently
+Severity: 🔴 HIGH
+🔴 3. Hidden coupling: DOM + state + dataset triad
 
-duplicate event handlers
-silent duplicate state transitions
-Severity: 🔴 HIGH (correctness + hidden duplication bugs)
-Fix direction
+Inside state update:
 
-Pick ONE:
-
-WeakSet only (preferred)
-OR event delegation at a higher stable root (best architecture)
-
-Remove fallback entirely unless IE11-level support is required (it isn’t here).
-
-🔴 2. Hidden logic bug: applyVisibility(cards) coupling
-applyVisibility(cards);
+recon.dataset.reconcileLocked = reconcileState.locked ? '1' : '0';
+hiddenInput.value = reconcileState.selectedId;
 Problem
 
-applyVisibility depends on:
+You are encoding state in three parallel representations:
 
-DOM state (recon.dataset.reconcileLocked)
-hidden input state
-optionally passed node list OR DOM query fallback
+Layer	Purpose
+JS object	runtime truth
+DOM dataset	UI condition
+hidden input	form submission truth
+Issue
 
-This creates state divergence risk:
+No single authoritative layer exists.
 
-If cards are:
+This is a classic eventual inconsistency bug surface.
 
-partially removed
-dynamically inserted
-or filtered externally
+Severity: 🔴 HIGH (systemic maintainability + bug risk)
+🟠 4. Performance: repeated full-array iteration on every state change
+cardEls.forEach(...)
 
-visibility logic becomes inconsistent.
+Triggered on:
 
-Severity: 🔴 HIGH (UI correctness bug under mutation)
-🔴 3. Memory leak / repeated listener risk (still present)
-
-Even with delegation:
-
-cardsContainer.addEventListener('click', function(ev) { ... });
+selection
+lock toggle
+remove
 Problem
 
-This is safe only if bind happens once per container lifetime.
+This is O(n) DOM mutation per interaction.
 
-But:
-
-container lifecycle is unclear
-WeakSet guard only prevents duplicate binding per container reference, not per DOM replacement
-fallback array doesn't dedupe structurally identical but new DOM nodes
-Real-world failure mode:
-modal re-renders container → new node → new listener → stale old listener remains attached to old detached node
-Severity: 🔴 HIGH (SPA memory + duplicate logic risk)
-🟠 4. Performance: DOM query explosion still present
-
-Even with fragment optimization added (good improvement 👍):
-
-Still expensive patterns:
-recon.querySelectorAll('.execute-reconcile-untracked-card')
-
-used in:
-
-setSelection
-applyVisibility
-Problem
-
-Each selection triggers:
-
-full subtree scan
-O(n) DOM walk per click
-
-If n = 50–200 cards:
+If n grows (50–300 cards):
 
 interaction cost becomes noticeable
-Severity: 🟠 MEDIUM (scales poorly under load)
-🟠 5. Fragment usage partially improved but incomplete
+layout thrashing increases due to style + class toggles
+Severity: 🟠 MEDIUM (scales poorly)
+🟠 5. Style mutation inside loops (layout thrash risk)
+c.style.borderColor = ...
+c.style.boxShadow = ...
+c.style.display = ...
+Problem
 
-You added:
+Inline style updates force:
 
-var cardsFrag = document.createDocumentFragment();
+style recalculation
+potential reflow per node
 
-✔ good improvement for initial render
+Better pattern:
 
-BUT:
+toggle CSS classes only
+move visual logic into stylesheet
+Severity: 🟠 MEDIUM
+🟠 6. Delegation model is correct — but slightly brittle
+reconcileCardsDelegationBound.has(cardsContainer)
+Strength
 
-innerHTML is still heavily used per card
-no templating reuse
-no node reuse strategy
+✔ good use of WeakSet
+✔ prevents duplicate binding per container instance
 
-So benefit is partial only
+Weakness
+still depends on DOM node identity stability
+assumes container is never “recycled” in place (some frameworks do this)
+Severity: 🟡 LOW-MEDIUM
+🟡 7. Logic clarity improvement (positive change)
 
-🟠 6. UX/state race condition (important subtle bug)
-Pattern:
-setLocked(true);
-setSelection(uid);
+This is an improvement over previous version:
 
-AND inside confirm handler:
+setReconcileState(locked, selectedId)
 
-if (uid === '') {
-  setLocked(false);
-  setSelection('');
-}
-Risk
+✔ centralises state mutation
+✔ reduces duplicated logic
+✔ removes inline event state scatter
 
-If multiple rapid clicks happen:
+This is a good architectural direction.
 
-locked state can flip before selection updates finish DOM propagation
-hidden input becomes source of truth but DOM still mid-update
-Severity: 🟠 MEDIUM (rare but real race condition in fast interactions)
-🟡 7. Error handling improvement (good but inconsistent)
+🟡 8. Missing abstraction boundary (still present)
 
-You improved:
+Even though improved, this function still owns:
 
-console.warn('Could not fetch matching untracked per output', e);
-
-AND:
-
-matchingUntrackedFetchFailed = true;
-
-✔ good separation of failure state
-
-BUT:
-
-UI fallback is implicit (“using list from this page”) but not guaranteed
-no explicit degraded-mode flag passed to render pipeline
-🟡 8. Maintainability: function size still too large
-
-Even after improvements:
-
-renderVariableOutputs(ctx) is still:
-data fetch orchestration
-UI rendering
-event binding
-reconciliation logic
-DOM state management
-conditional feature flags
-
-This is effectively a mini frontend framework inside one function
-
+rendering
+state management
+event handling
+DOM reconciliation
+business rules
+This is still a “mini framework function”
 Severity: 🟡 HIGH (long-term scaling issue)
-🟡 9. Micro-issues (low severity but worth noting)
-9.1 Inline styles still pervasive
-
-Still tightly coupled UI → logic.
-
-9.2 Mixed const/let/var usage
-let matchingUntrackedPerOutput
-var reconcileCardsDelegationBound
-const currentExecutionId
-
-Inconsistent ES model → harder refactor path.
-
-📊 UPDATED FILE RISK SUMMARY
+📊 UPDATED RISK RANKING (THIS FILE ONLY)
 Category	Severity
-Event delegation lifecycle correctness	🔴 HIGH
-UI state consistency (visibility/selection)	🔴 HIGH
-Memory leak risk (DOM rebind patterns)	🔴 HIGH
-DOM performance (query loops)	🟠 MEDIUM
-Race conditions (selection/lock timing)	🟠 MEDIUM
-Maintainability (function complexity)	🟡 HIGH
-UX degradation handling	🟡 MEDIUM
-Style coupling	🟡 LOW
-🧭 Where this file actually sits architecturally
+State inconsistency (multi-source truth)	🔴 HIGH
+Stale DOM snapshot (cardEls)	🔴 HIGH
+DOM + dataset + hidden input coupling	🔴 HIGH
+Performance (O(n) updates per interaction)	🟠 MEDIUM
+Style mutation in loops	🟠 MEDIUM
+Delegation lifecycle robustness	🟡 MEDIUM
+Maintainability (monolithic controller)	🟡 HIGH
+🧠 Key architectural diagnosis
 
-This is no longer “a render helper”.
+You are currently in a transition state between:
 
-It is:
+Old model
+imperative DOM manipulation
+ad-hoc event binding
+string-based rendering
+New model (emerging)
+state object (reconcileState)
+delegated events
+partial separation of concerns
+🚨 The main unresolved issue
 
-Stateful UI controller for inventory reconciliation inside execution workflow
+You introduced state management, but it is not yet the single source of truth.
 
-Which means:
+Everything still synchronises to state instead of from state.
 
-it should NOT be a single procedural function
-it should be split into:
-data layer (fetch + normalize)
-state manager (selection/locking)
-renderer (pure UI)
-event controller (delegation only)
-🚨 What I would fix first (order matters)
+That’s the core structural gap.
 
-If this were production triage:
+🧭 Highest-impact fixes (priority order)
 
-1. Remove fallback delegation array
+If you fix only 3 things, do these:
 
-Replace with single mechanism.
+1. Remove cardEls entirely
 
-2. Decouple selection state from DOM
+Replace with:
 
-Introduce single source of truth object.
+cardsContainer.querySelectorAll(...) OR
+better: data-index map {id -> element}
+2. Make reconcileState the ONLY source of truth
 
-3. Stop querying DOM repeatedly in setSelection/applyVisibility
+Derived DOM state should be computed, not stored.
 
-Cache card nodes.
+3. Replace style mutations with CSS classes
 
-4. Split renderVariableOutputs into 3 modules
-renderer
-state
-event binder
-5. Move away from innerHTML for card rendering
+Move:
 
-At least for reconcile cards.
+selected
+locked hidden state
+
+into CSS rules

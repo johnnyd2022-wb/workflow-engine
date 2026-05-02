@@ -2110,3 +2110,29 @@
     align-self: stretch;
   }
 }
+
+/* Execute-step modal: untracked reconciliation cards — state from data-reconcile-locked + BEM-style selection class */
+#execute-step-modal .execute-reconcile-untracked-card {
+  margin-bottom: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+#execute-step-modal .execute-reconcile-untracked-card.card-interactive {
+  cursor: pointer;
+}
+#execute-step-modal .execute-reconcile-untracked-card.execute-reconcile-card-selected {
+  border-color: var(--warning, #f59e0b);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+}
+#execute-step-modal .execute-reconcile-untracked-cards[data-reconcile-locked="1"] > .execute-reconcile-untracked-card:not(.execute-reconcile-card-selected) {
+  display: none;
+}
+#execute-step-modal .execute-reconcile-untracked-card .exec-reconcile-remove-btn {
+  display: none;
+}
+#execute-step-modal .execute-reconcile-untracked-card.execute-reconcile-card-selected .exec-reconcile-remove-btn {
+  display: inline-flex;
+}
