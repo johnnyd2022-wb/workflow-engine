@@ -550,13 +550,18 @@
       }
     }
 
-    // HTMX-aware navigation: triggers boost on a temporary anchor so sidebar/topbar don't reload.
+    // HTMX-aware navigation: swaps #page-content without reloading sidebar/topbar.
     function flows2Navigate(url) {
-      var a = document.createElement('a');
-      a.href = url;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      if (window.htmx) {
+        history.pushState({}, '', url);
+        htmx.ajax('GET', url, {
+          target: '#page-content',
+          swap: 'innerHTML',
+          select: '#page-content',
+        });
+      } else {
+        window.location.href = url;
+      }
     }
 
     // startExecutionSpa removed: startExecution() routes to the dedicated execution-step screen.

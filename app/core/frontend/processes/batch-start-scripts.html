@@ -11,11 +11,16 @@
 
   (function () {
     function batchStartNavigate(url) {
-      var a = document.createElement('a');
-      a.href = url;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      if (window.htmx) {
+        history.pushState({}, '', url);
+        htmx.ajax('GET', url, {
+          target: '#page-content',
+          swap: 'innerHTML',
+          select: '#page-content',
+        });
+      } else {
+        window.location.href = url;
+      }
     }
 
     window.ExecutionModalConfig = {
