@@ -1,21 +1,22 @@
-    let currentProcess = null;
-    let currentUser = null;
+    // State reset on every navigation — window properties survive HTMX swaps across pages
+    window.currentProcess = null;
+    window.currentUser = window.currentUser || null;
 
     /** Caps for API-fed lists (performance / accidental huge payloads). */
-    const FLOWS2_MAX_AUDIT_HISTORY = 80;
-    const FLOWS2_MAX_RECONCILIATION_BLOCKS = 50;
-    const FLOWS2_MAX_SYSTEM_FINDING_MESSAGES = 30;
-    const FLOWS2_MAX_UPSTREAM_STEPS = 40;
-    const FLOWS2_MAX_PROMPT_ENTRIES = 40;
-    const FLOWS2_MAX_COMPLETED_EXECUTION_STEPS = 100;
-    const FLOWS2_MAX_EVIDENCE_ITEMS = 50;
-    const FLOWS2_MAX_IO_ROWS_PER_STEP = 200;
-    const FLOWS2_MAX_EXECUTION_METADATA_KEYS = 50;
+    var FLOWS2_MAX_AUDIT_HISTORY = 80;
+    var FLOWS2_MAX_RECONCILIATION_BLOCKS = 50;
+    var FLOWS2_MAX_SYSTEM_FINDING_MESSAGES = 30;
+    var FLOWS2_MAX_UPSTREAM_STEPS = 40;
+    var FLOWS2_MAX_PROMPT_ENTRIES = 40;
+    var FLOWS2_MAX_COMPLETED_EXECUTION_STEPS = 100;
+    var FLOWS2_MAX_EVIDENCE_ITEMS = 50;
+    var FLOWS2_MAX_IO_ROWS_PER_STEP = 200;
+    var FLOWS2_MAX_EXECUTION_METADATA_KEYS = 50;
     /** Bound serialized JSON / strings from API objects shown in the UI (DoS / huge stringify). */
-    const FLOWS2_MAX_JSON_DISPLAY_CHARS = 65536;
+    var FLOWS2_MAX_JSON_DISPLAY_CHARS = 65536;
 
     /** In-flight inventory fetch + generation counter (avoid stale overwrites). */
-    const Flows2InvLoad = {
+    var Flows2InvLoad = {
       controller: null,
       generation: 0,
       begin() {
@@ -61,7 +62,7 @@
      * Module-scoped inventory UI state (avoid window.*).
      * itemsByType: map inventory_type -> items; allItems: full list from last load.
      */
-    const flows2Inventory = {
+    var flows2Inventory = {
       filter: 'raw_material',
       allItems: [],
       itemsByType: {},

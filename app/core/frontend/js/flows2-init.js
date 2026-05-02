@@ -24,6 +24,8 @@
       }
 
       function bind() {
+        if (document._flows2TabsBound) return;
+        document._flows2TabsBound = true;
         document.addEventListener('click', onClick);
       }
 
@@ -53,7 +55,10 @@
         if (!type) return;
         setInvFilter(type);
       }
-      document.addEventListener('click', onClick);
+      if (!document._flows2InvTabsBound) {
+        document._flows2InvTabsBound = true;
+        document.addEventListener('click', onClick);
+      }
     })();
 
     // Manage menu (sticky bar)
@@ -97,34 +102,35 @@
         return !!(els.menu && els.menu.getAttribute('data-open') === 'true');
       }
 
-      // Capture outside interactions so they close the sheet and do NOT trigger underlying UI (tabs, etc).
-      document.addEventListener('pointerdown', function (e) {
-        if (!isOpen()) return;
-        var els = getEls();
-        if (!els.btn || !els.menu) return;
-        var t = e.target;
-        if (t === els.btn || (els.btn.contains && els.btn.contains(t))) return;
-        if (els.menu.contains && els.menu.contains(t)) return;
-        // Outside: close and swallow the interaction
-        closeMenu();
-        e.preventDefault();
-        e.stopPropagation();
-      }, true);
-
-      document.addEventListener('click', function (e) {
-        var els = getEls();
-        if (!els.btn || !els.menu) return;
-        var t = e.target;
-        if (t === els.btn || (els.btn.contains && els.btn.contains(t))) {
-          if (isOpen()) closeMenu(); else openMenu();
-          return;
-        }
-        if (els.menu.contains && els.menu.contains(t)) return;
-        if (isOpen()) closeMenu();
-      });
-      document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && isOpen()) closeMenu();
-      });
+      // Document-level listeners: bind once — handlers use getEls() at call time so work with new DOM
+      if (!document._flows2ManageMenuBound) {
+        document._flows2ManageMenuBound = true;
+        document.addEventListener('pointerdown', function (e) {
+          if (!isOpen()) return;
+          var els = getEls();
+          if (!els.btn || !els.menu) return;
+          var t = e.target;
+          if (t === els.btn || (els.btn.contains && els.btn.contains(t))) return;
+          if (els.menu.contains && els.menu.contains(t)) return;
+          closeMenu();
+          e.preventDefault();
+          e.stopPropagation();
+        }, true);
+        document.addEventListener('click', function (e) {
+          var els = getEls();
+          if (!els.btn || !els.menu) return;
+          var t = e.target;
+          if (t === els.btn || (els.btn.contains && els.btn.contains(t))) {
+            if (isOpen()) closeMenu(); else openMenu();
+            return;
+          }
+          if (els.menu.contains && els.menu.contains(t)) return;
+          if (isOpen()) closeMenu();
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && isOpen()) closeMenu();
+        });
+      }
 
       var els = getEls();
       if (els.del) {
@@ -158,8 +164,7 @@
         });
       }
     })();
-    // Global variable for notification timeout
-    let notificationTimeout = null;
+    var notificationTimeout = null;
 
     function flows2SvgNotificationSuccess24() {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -346,12 +351,22 @@
         cancelBtn.id = 'static-warning-cancel';
         cancelBtn.style.padding = '10px 20px';
         cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', function() {
+          modal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+          if (callback) callback(false);
+        });
         const contBtn = document.createElement('button');
         contBtn.type = 'button';
         contBtn.className = 'btn btn-primary';
         contBtn.id = 'static-warning-continue';
         contBtn.style.cssText = 'padding: 10px 20px; background: var(--warning, #f59e0b); border-color: var(--warning, #f59e0b);';
         contBtn.textContent = 'Continue with Static';
+        contBtn.addEventListener('click', function() {
+          modal.style.display = 'none';
+          document.body.style.overflow = 'auto';
+          if (callback) callback(true);
+        });
         footer.appendChild(cancelBtn);
         footer.appendChild(contBtn);
         shell.appendChild(headerRow);
@@ -359,35 +374,6 @@
         shell.appendChild(footer);
         modal.appendChild(shell);
         document.body.appendChild(modal);
-        
-        // Close on overlay click - DISABLED to prevent accidental closes
-        // modal.addEventListener('click', function(e) {
-        //   if (e.target === modal) {
-        //     modal.style.display = 'none';
-        //     document.body.style.overflow = 'auto';
-        //     if (callback) callback(false);
-        //   }
-        // });
-        
-        // Cancel button
-        const cancelBtn = modal.querySelector('#static-warning-cancel');
-        if (cancelBtn) {
-          cancelBtn.addEventListener('click', function() {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-            if (callback) callback(false);
-          });
-        }
-        
-        // Continue button
-        const continueBtn = modal.querySelector('#static-warning-continue');
-        if (continueBtn) {
-          continueBtn.addEventListener('click', function() {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-            if (callback) callback(true);
-          });
-        }
       }
       
       // Show modal
@@ -565,11 +551,22 @@
     }
 
     // startExecutionSpa removed: startExecution() routes to the dedicated execution-step screen.
-    document.addEventListener('DOMContentLoaded', function() {
-      if (processId) {
+
+    // Works on both initial page load (DOMContentLoaded not yet fired) and HTMX swap (DOM already ready)
+    function flows2InitPage() {
+      if (window.processId) {
         loadProcessData();
       } else {
-        document.getElementById('process-name').textContent = 'No Process Selected';
-        document.getElementById('process-description').textContent = 'Please select a process from the Process Hub';
+        var nameEl = document.getElementById('process-name');
+        var descEl = document.getElementById('process-description');
+        if (nameEl) nameEl.textContent = 'No Process Selected';
+        if (descEl) descEl.textContent = 'Please select a process from the Process Hub';
       }
-    });
+    }
+    window.flows2InitPage = flows2InitPage;
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', flows2InitPage);
+    } else {
+      flows2InitPage();
+    }

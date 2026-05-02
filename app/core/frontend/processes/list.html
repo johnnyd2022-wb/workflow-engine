@@ -215,7 +215,7 @@
             var draft = p.is_draft ? ' · Draft' : '';
             var meta = steps + ' step' + (steps === 1 ? '' : 's') + ' · ' + active + ' active · ' + done + ' completed' + draft;
             return (
-              '<a href="' + esc(href) + '" class="processes-list-item" hx-boost="false">' +
+              '<a href="' + esc(href) + '" class="processes-list-item">' +
                 '<div class="processes-list-item__main">' +
                   '<p class="processes-list-item__name">' + esc(p.name || 'Untitled') + '</p>' +
                   '<p class="processes-list-item__meta">' + esc(meta) + '</p>' +
