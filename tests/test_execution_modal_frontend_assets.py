@@ -240,6 +240,25 @@ def test_open_step_clears_picker_card_cache_before_inputs_reset():
     assert "clearInventoryPickerCardCaches" in text
 
 
+def test_execution_render_inputs_picker_cache_row_cap_branch():
+    """Guards optional review item: cache disabled when list exceeds PICKER_CARD_CACHE_MAX_ROWS."""
+    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-inputs.js"
+    body = js_path.read_text(encoding="utf-8")
+    assert "var usePickerCardCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS" in body
+    assert "if (usePickerCardCache)" in body
+
+
+def test_inventory_refresh_clears_picker_cache_before_row_updates():
+    """Refresh must drop picker Maps before rebuilding dropdown rows (integration order)."""
+    secondary = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal-secondary.js"
+    text = secondary.read_text(encoding="utf-8")
+    clear_call = "ExecutionRenderInputs.clearInventoryPickerCardCaches(modal)"
+    selects_loop = "var selects = modal.querySelectorAll('.execute-inventory-select')"
+    i_clear = text.find(clear_call)
+    i_selects = text.find(selects_loop)
+    assert 0 < i_clear < i_selects
+
+
 def test_execution_modal_calls_render_inputs_api():
     js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")

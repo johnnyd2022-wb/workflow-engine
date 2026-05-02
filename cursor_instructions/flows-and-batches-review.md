@@ -1,185 +1,214 @@
-1. Security review (front-end only)
-✅ Good (no immediate vulnerabilities)
-✔ No innerHTML usage in sensitive paths
-execution-inventory-picker-view.js correctly uses:
-textContent
-DOM APIs only
+This is very close to mergeable. I’ll separate this into security, performance, and integration risk, because the changes touch both rendering safety and DOM reuse behavior.
 
-This eliminates the usual XSS injection class from inventory metadata.
+1. Security review (high confidence safe)
+✅ Strong points
+1. XSS posture is solid
 
-✔ No unsafe URL navigation / injection
-No dynamic URL construction
-No window.location mutation based on inventory data
-✔ No eval / Function constructor / script injection
+Your explicit contract in execution-inventory-picker-view.js is correct:
 
-Clean.
+textContent is used consistently for:
+notes
+audit history labels/values
+prompts
+unknown expiry payloads (JSON.stringify fallback)
 
-✔ Proper escaping strategy is consistent
+That means:
 
-Where HTML strings exist (legacy dropdown subtitle in other module), they are still passed through escapeHtml.
+No innerHTML
+No string interpolation into HTML
+No DOM injection surfaces introduced in this patch
 
-⚠️ Minor security considerations (not blockers)
-1. notes field rendered as plain text (good) but high trust assumption exists
-notesDiv.textContent = notes;
+This is good defensive UI design, especially for extra_data which is typically the highest-risk field.
 
-This is safe, but:
-
-You are trusting backend-provided text to remain non-structured
-If later someone switches this to innerHTML, it becomes a latent XSS risk
-
-Status: safe, but fragile contract
-
-2. JSON.stringify(obj) fallback for expiry
+2. JSON fallback is safe (important nuance)
 el.textContent = JSON.stringify(obj);
 
-This is safe, but:
+✔ Safe from XSS
+✔ Prevents accidental HTML execution
+✔ Avoids implicit coercion bugs
 
-Could expose sensitive metadata unintentionally (debug leakage surface)
-Not a security risk, but a data exposure concern
-3. dataset usage is safe
+Only minor note: this can leak structure of backend data, but that’s not a security issue—just information exposure.
 
-All dataset assignments are stringified explicitly → no injection vector.
+3. Audit history rendering remains safe
 
-2. Performance review
-✅ Strong improvements
-✔ Search performance optimized (important win)
+Even though you're iterating dynamic keys and values:
+
+everything goes into .textContent
+no HTML concatenation
+operator fallback logic is safe (UUID guard included)
+
+✔ No injection vectors here.
+
+4. Cache clearing hooks do not introduce attack surface
+
+The new:
+
+clearInventoryPickerCardCaches()
+only clears in-memory Map
+no external input influence
+no prototype pollution paths
+
+✔ Safe
+
+⚠️ Security edge case (minor, theoretical)
+
+This line:
+
 inv._inventorySearchHayLower
 
-This is a material optimization:
+From inventory-type-utils.js:
 
-removes repeated allocations per keystroke
-reduces .toLowerCase() + .join() churn
+You are mutating inventory objects with a cached field.
 
-This matters if:
+This is not a security issue, but:
 
-inventory > 500–2000 items
-user is actively typing
-✔ DOM reuse cache introduced correctly
-pickerCardCache.set(rawId, card);
+If inventory objects are ever shared across contexts (rare but possible in global SPA stores), this is a non-enumerable mutation risk
+No injection, but potential state leakage across views
 
-Combined with:
+➡️ Mitigation (optional hardening):
+Use a WeakMap instead of mutating the object.
 
-syncCard() update path
-seenIds cleanup
+Not required for merge.
 
-This is a pseudo-virtual DOM pattern, and it’s efficient.
+2. Performance review (this is where most value is)
+✅ Major improvement: conditional picker cache
 
-✔ DocumentFragment usage everywhere appropriate
-buildPayload → fragments
-renderPickerCards → fragment batching
+This is the most important change:
 
-This avoids layout thrashing.
+var usePickerCardCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS;
+What you fixed correctly:
+Prevents Map growth explosion
+Prevents DOM retention at scale
+Adds deterministic cutoff behavior
+Clears cache when threshold exceeded
 
-⚠️ Performance risks (non-blocking but worth noting)
-1. Card cache can grow unbounded
-Map<id, DOMNode>
+✔ This is a very good pattern for SPA list rendering
 
-If inventory is:
-
-frequently changing
-large (>2–5k items over session lifecycle)
-
-Then:
-
-memory usage grows
-DOM nodes are retained even if not visible
-
-Not urgent, but long-lived sessions may need:
-
-eviction strategy (LRU or max size)
-or reset on full dataset reload
-2. buildDetailsFragment() is moderately heavy
-
-It:
-
-walks multiple optional nested structures
-creates many DOM nodes conditionally
-processes audit history in reverse order
-
-This is fine because it is:
-
-only executed on render/sync
-not per keystroke
-
-But:
-
-if inventory list is large and filter refresh is frequent, this becomes the main cost center
-
-3. Filtering pipeline is double-pass
-.filter(matchesInventoryTab)
-.filter(matchesSearch)
-
-Not expensive, but:
-
-could be fused into single pass if needed later
-
-Right now it’s fine.
-
-3. Correctness / behavioural risks
-⚠️ Minor logic duplication risk
+⚠️ One performance concern
+Cache invalidation asymmetry
 
 You now have:
 
-computeExecPickerCardPayload(inv) always recomputed per render cycle
+if (!usePickerCardCache) pickerCardCache.clear();
 
-Even with cache, payload is recomputed whenever card is re-used.
+and later:
 
-This is fine but:
+else pickerCardCache.clear();
 
-no memoization at payload level
-sync still rebuilds some DOM fragments indirectly
+This is fine, but subtle issue:
 
-Not a bug, just architecture note.
+When toggling between small ↔ large lists rapidly:
+Map is repeatedly cleared
+Cards are repeatedly recreated
 
-⚠️ Subtle state coupling (row renderer + picker)
+This is expected, but means:
 
-Row system depends on:
+no warm cache benefit across large/small transitions
 
-stateKey
-ses.inputStateByKey
+Not a bug—just trade-off.
 
-Picker depends on:
+⚠️ DOM churn still exists (expected)
 
-selectedIds
-pendingId
+Even with caching:
 
-These are fine but:
+pickerCards.replaceChildren(pickerFrag);
 
-state is distributed across 3 systems without a central store
+This means:
 
-This is maintainable now, but debugging complexity increases over time.
+full reflow per filter/search
+cached nodes only reduce rebuild cost, not DOM replacement cost
 
-4. Test coverage
+That’s acceptable for:
 
-Good signal:
+inventory picker UI scale (< ~400 items threshold already enforced)
+⚠️ Micro inefficiency (very minor)
 
-validates module existence
-validates function exports
-validates search helpers
-validates picker view contract
+Inside loop:
 
-This is exactly what you want for a DOM-heavy vanilla system.
+pickerCardCache.forEach(...)
 
-No gaps visible at this level.
+This runs after every render.
 
-Final verdict
-✔ Security: SAFE
-No XSS vectors introduced
-No unsafe DOM patterns
-No injection surfaces in new code
-✔ Performance: GOOD
-Search optimization is a net gain
-DOM reuse system is correct and efficient
-Fragment batching prevents layout thrash
-⚠️ Risks (manageable)
-Unbounded DOM cache growth over long sessions
-Payload rebuild overhead in sync path
-Distributed state complexity (not a runtime issue yet)
-Recommendation
+At high frequency filtering:
 
-You can merge safely.
+O(n) map scan per render
 
-If you want a minimal hardening step before merging (optional, not required):
+But:
 
-Add a soft cap or reset hook for pickerCardCache
-Ensure extra_data.notes and audit history remain strictly textContent-only (no future refactor to innerHTML)
+bounded by <= 400
+negligible in real usage
+3. Integration / architectural review
+👍 Good decoupling improvements
+1. Picker view is now cleanly isolated
+
+ExecutionInventoryPickerView now:
+
+builds payload
+assembles DOM
+syncs updates
+
+✔ No controller leakage
+✔ Good separation from execution-render-inputs.js
+
+2. Row renderer API injection is correct
+api: rowInputApi
+
+and later:
+
+setRowSelection
+setActiveRow
+refreshPicker
+
+✔ This is clean dependency inversion
+✔ Avoids circular imports
+
+3. Cache lifecycle is now properly controlled externally
+
+You added:
+
+clearInventoryPickerCardCaches
+invoked in:
+modal reset
+open step reset
+
+✔ Correct lifecycle ownership (UI teardown responsibility)
+
+⚠️ Small architectural smell
+
+This pattern:
+
+inputSection._execPickerCardElCache = new Map();
+
+is still:
+
+DOM mutation as state container
+
+Not dangerous, but:
+
+makes debugging harder
+couples lifecycle to DOM nodes
+
+Better long-term:
+
+move to controller-owned WeakMap keyed by section
+
+Not blocking.
+
+4. Test coverage review
+
+You added:
+
+module existence checks
+ordering constraints
+function existence assertions
+
+✔ Good “load order safety net”
+
+But missing:
+
+Missing test coverage (recommended)
+cache cutoff behavior (> 400)
+cache clearing after refresh
+ensure no duplicate DOM nodes when reuse occurs
+
+Not required for merge, but would reduce regression risk.
