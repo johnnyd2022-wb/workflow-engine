@@ -5,13 +5,173 @@ globs:
 alwaysApply: false
 ---
 
-When writing or modifying HTML templates, apply the review skill at `.agents/skills/html.md`.
+# HTML / Jinja2 Review: Structure, Security & Design System
 
-Work through its checklist before finalising any implementation. Fix violations inline — do not leave them for the user.
+You are working in a **multi-tenant SaaS** using Flask, Jinja2, vanilla JS, and HTMX. The SPA shell is `app/core/frontend/shared/base_spa.html`. Shared partials/macros live in `app/core/frontend/shared/`. Before finalising any HTML template you write or modify, check every rule below and fix violations inline.
 
-Non-negotiable items:
-1. New pages must extend `shared/base_spa.html` — never standalone `<!DOCTYPE html>`
-2. Use existing shared partials/macros (`page_header`, `primary_card`, `delete-doc-confirm-modal`, etc.) — don't reimplement them
-3. Never use `| safe` on user-controlled Jinja2 values — XSS
-4. No sensitive data in `data-*` attributes or `<input type="hidden">`
-5. HTMX swaps must target `#page-content`; cross-blueprint links use `hx-boost="false"`
+---
+
+## STRUCTURE
+
+### 1. Extend `base_spa.html` — Never Write Standalone HTML Pages
+
+`base_spa.html` provides the shell, sidebar, CSRF meta tag, global CSS, font loading, theme init, and the `#page-content` HTMX swap target. Bypassing it silently breaks multiple things.
+
+**BAD**:
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="/static/styles.css">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+  <!-- reimplementing sidebar... -->
+```
+**GOOD**:
+```html
+{% extends "shared/base_spa.html" %}
+{% block title %}Inventory{% endblock %}
+{% block head_extras %}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-spa-header.css') }}">
+{% endblock %}
+{% block content %}
+  <div id="page-content" class="page-content">...</div>
+{% endblock %}
+```
+
+---
+
+### 2. Use Shared Partials and Macros — Never Duplicate Their Markup
+
+| Need | What to use |
+|---|---|
+| Page title + subtitle + optional CTA | `{% from 'shared/page_header.html' import page_header %}` → `{{ page_header(title, subtitle, href, label) }}` |
+| Content card with heading | `{% from 'shared/primary_card.html' import primary_card %}` → `{% call primary_card(title) %}…{% endcall %}` |
+| Sidebar | Already in `base_spa.html` — never include manually |
+| Delete confirmation modal | `{% include 'shared/delete-doc-confirm-modal.html' %}` |
+| Execution modal | `{% include 'shared/execution-modal.html' %}` |
+| Sticky bottom action bar | Set `spa_fixed_action_right_html`, then `{% include 'shared/spa-fixed-action-bar.html' %}` |
+| Back link | `{% include 'shared/back_link.html' %}` |
+
+**BAD** — hand-rolling a page header:
+```html
+<div style="display: flex; justify-content: space-between; align-items: center;">
+  <h1 style="font-size: 1.5rem; font-weight: 600;">Inventory</h1>
+  <a href="/inventory/add" class="btn btn-primary">Add Item</a>
+</div>
+```
+**GOOD**:
+```html
+{% from 'shared/page_header.html' import page_header %}
+{{ page_header(title="Inventory", primary_action_href="/inventory/add", primary_action_label="Add Item") }}
+```
+
+---
+
+## SECURITY
+
+### 3. Never Use `| safe` on User-Supplied Values — XSS
+
+Jinja2 autoescapes `{{ var }}` by default. `| safe` disables that.
+
+**BAD**: `<h2>{{ user.name | safe }}</h2>` — XSS if user.name contains `<script>`.
+**GOOD**: `<h2>{{ user.name }}</h2>` — autoescaped, no change needed.
+
+`| safe` is only acceptable for known-safe, developer-controlled HTML (e.g. a hardcoded SVG string built in Python).
+
+---
+
+### 4. Don't Put Sensitive Data in `data-*` Attributes or Hidden Inputs
+
+`data-*` and `<input type="hidden">` are fully visible in devtools. Never put session tokens, API keys, or org secrets there.
+
+**BAD**:
+```html
+<div data-user-token="{{ session_token }}" data-org-secret="{{ org_api_key }}">
+<input type="hidden" name="org_id" value="{{ current_org_id }}">
+```
+**GOOD**: The backend reads `g.current_org_id` from the session — it never trusts a client-submitted `org_id`. UI correlation IDs (non-privileged) are fine in `data-*`.
+
+---
+
+### 5. Feature-Gated Pages Must Be Gated Server-Side
+
+Template conditionals are cosmetic — direct requests bypass them.
+
+**BAD**: `{% if current_user.org.crm_enabled %}<a href="/crm">CRM</a>{% endif %}` while `/crm` routes are always registered.
+**GOOD**: `crm_bp` is only registered in the app factory when `crm_enabled` is `True`. The template link is a UX hint, not the gate.
+
+---
+
+## DESIGN SYSTEM
+
+### 6. Use CSS Variables and Design-System Classes — No Hardcoded Colours
+
+**BAD**: `<button style="background: #3b82f6; color: white; border-radius: 8px;">Save</button>`
+**GOOD**: `<button class="btn btn-primary">Save</button>`
+
+Key tokens: `var(--primary)`, `var(--text-primary)`, `var(--text-secondary)`, `var(--text-tertiary)`, `var(--bg-card)`, `var(--bg-app)`, `var(--border-default)`, `var(--error)`, `var(--success)`, `var(--radius-md/lg/xl)`, `var(--shadow-lg)`.
+
+Utility classes: `btn btn-primary`, `btn btn-secondary`, `btn btn-glass`, `card`, `glass-card`, `page-title`, `page-subtitle`, `card-title`, `card-content`.
+
+---
+
+### 7. Scope Page-Specific CSS — Don't Add Unscoped Rules Globally
+
+Unscoped rules in `styles2.css` or `base_spa.html` affect every page.
+
+**BAD** in a global stylesheet: `.table-row { background: var(--bg-card); }`
+**GOOD** in `{% block head_extras %}`:
+```html
+{% block head_extras %}
+<style>
+  .inventory-view .table-row { background: var(--bg-card); }
+</style>
+{% endblock %}
+```
+
+---
+
+## HTMX
+
+### 8. Always Swap Into `#page-content`
+
+**BAD**: `<a hx-get="/inventory" hx-target="#main">Inventory</a>` — wrong target breaks sidebar and scroll.
+**GOOD**: `<a hx-get="/inventory" hx-target="#page-content" hx-swap="innerHTML">Inventory</a>`
+
+For intentional full-page navigation across blueprints: `<a href="/core" hx-boost="false">Core</a>`
+
+---
+
+## ACCESSIBILITY
+
+### 9. Labels, Roles, and `aria-*` on Interactive Elements
+
+**BAD**:
+```html
+<input type="text" placeholder="Search...">
+<button onclick="deleteItem(id)"><svg>…</svg></button>
+```
+**GOOD**:
+```html
+<label for="search-input">Search</label>
+<input id="search-input" type="text" placeholder="Search…">
+<button onclick="deleteItem(id)" aria-label="Delete item"><svg aria-hidden="true">…</svg></button>
+```
+
+Modals need `role="dialog" aria-modal="true" aria-labelledby="<heading-id>"`.
+
+---
+
+## CHECKLIST
+
+- [ ] Page extends `shared/base_spa.html` — no standalone `<!DOCTYPE html>`
+- [ ] Shared partials/macros used instead of hand-rolled markup
+- [ ] No `| safe` on user-supplied Jinja2 values
+- [ ] No sensitive data in `data-*` attributes or `<input type="hidden">`
+- [ ] Feature gates enforced server-side (blueprint registration), not only in templates
+- [ ] No hardcoded hex colours — CSS variables and design-system classes used
+- [ ] Page-specific CSS scoped to a component class, not added globally
+- [ ] HTMX swaps target `#page-content`; cross-blueprint links use `hx-boost="false"`
+- [ ] Every `<input>` has an associated `<label>`; icon buttons have `aria-label`
