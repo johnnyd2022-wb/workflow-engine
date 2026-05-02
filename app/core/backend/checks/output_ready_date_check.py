@@ -221,9 +221,14 @@ def get_operator_ready_instant_for_item(
         if dt:
             return dt
     if isinstance(actual, str) and actual.strip():
-        dt = _normalize_dt(actual.strip())
+        raw_s = actual.strip()
+        dt = _normalize_dt(raw_s)
         if dt:
             return dt
+        _log.debug(
+            "ready_date_actual string did not parse (expect ISO-8601): %.120s",
+            raw_s,
+        )
 
     step_id = getattr(item, "source_execution_step_id", None)
     if not step_id:

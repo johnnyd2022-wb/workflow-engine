@@ -382,6 +382,16 @@ _EXECUTION_DATA_TRACE_KEYS = {
 }
 
 
+def _strip_incoming_execution_trace_keys(execution_data: dict | None) -> dict:
+    """
+    Remove audit/trace keys from the client JSON payload before merge/persist.
+    Server code sets these (identity from auth, warnings/errors during validation) — clients must not supply them.
+    """
+    if not execution_data:
+        return {}
+    return {k: v for k, v in execution_data.items() if k not in _EXECUTION_DATA_TRACE_KEYS}
+
+
 def _to_iso_timestamp(ts) -> str | None:
     """Normalize a timestamp to ISO format string for consistent API output."""
     if ts is None:
@@ -398,10 +408,9 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
     Split execution_data into user prompts and system trace. Single place for prompt/trace split logic.
     Returns (prompts_dict, trace_dict). Use for extra_data.execution_prompts and extra_data.execution_trace.
 
-    Audit keys (completed_by, completed_by_email, …) are mirrored from persisted execution_data. Identity for
-    steps completed via the API is set server-side in ``complete_step`` from the authenticated session before save;
-    this function does not reinterpret or validate them—callers that persist execution_data outside that path
-    must enforce trust boundaries themselves.
+    Audit keys (completed_by, completed_by_email, …) are mirrored from persisted execution_data. For HTTP step
+    completion, ``_strip_incoming_execution_trace_keys`` drops client-supplied trace keys before merge; identity is
+    then set from the authenticated session. Other persistence paths must enforce the same contract.
     """
     if not execution_data:
         return {}, {}
@@ -1712,7 +1721,7 @@ def complete_step(execution_id: str, execution_step_id: str):
     data = request.get_json() or {}
     actual_inputs = data.get("actual_inputs", [])
     actual_outputs = data.get("actual_outputs", [])
-    execution_data = data.get("execution_data", {})
+    execution_data = _strip_incoming_execution_trace_keys(data.get("execution_data") or {})
     allow_consumption_override = data.get("allow_consumption_override") is True
 
     # Get current user from Flask g and always store in execution_data for accuracy
@@ -2310,15 +2319,19 @@ def list_inventory():
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
 
-    # One query for all producing steps (avoids N+1 hydration + ready-date lookups). Scoped by org via Execution.
+    # One query for all producing steps (avoids N+1 hydration + ready-date lookups).
+    # Scope to org via IN (subquery) instead of JOIN — tends to plan better on Postgres for pk lookups.
+    # Step.outputs is JSONB on `steps` (not a relationship); joinedload(ExecutionStep.step) loads the row once — no lazy chain N+1 for outputs.
     step_ids = {i.source_execution_step_id for i in items if i.source_execution_step_id}
     execution_step_by_id: dict = {}
     if step_ids:
+        org_execution_ids = db_session.query(Execution.id).filter(Execution.org_id == org_id)
         loaded_steps = (
             db_session.query(ExecutionStep)
-            .join(Execution, ExecutionStep.execution_id == Execution.id)
-            .filter(Execution.org_id == org_id)
-            .filter(ExecutionStep.id.in_(step_ids))
+            .filter(
+                ExecutionStep.id.in_(step_ids),
+                ExecutionStep.execution_id.in_(org_execution_ids),
+            )
             .options(joinedload(ExecutionStep.step))
             .all()
         )
@@ -2365,7 +2378,7 @@ def list_inventory():
                     if matching_output:
                         extra_data["variable_output"] = matching_output
             except Exception:
-                logger.debug("list_inventory hydrate extra_data failed item_id=%s", item.id, exc_info=True)
+                logger.warning("list_inventory hydrate extra_data failed item_id=%s", item.id, exc_info=True)
 
         # Look up previous steps data for intermediate products AND final products
         # DAG TRAVERSAL PERFORMANCE WARNING:
@@ -2594,14 +2607,18 @@ def list_inventory():
                             if es_untracked.step:
                                 producing_step_name = es_untracked.step.name
             except Exception:
-                pass
+                logger.warning(
+                    "list_inventory producing_step resolution failed item_id=%s",
+                    item.id,
+                    exc_info=True,
+                )
         if not producing_step_name:
             try:
                 tagged_step = (extra_data or {}).get("producing_step_name")
                 if tagged_step:
                     producing_step_name = str(tagged_step)
             except Exception:
-                pass
+                logger.warning("list_inventory producing_step_name fallback failed item_id=%s", item.id, exc_info=True)
 
         # Single operator-facing ready instant (set_at_execution date or fixed-duration from step completion)
         ready_date_display = None
@@ -2610,7 +2627,7 @@ def list_inventory():
             if rdt:
                 ready_date_display = rdt.isoformat()
         except Exception:
-            logger.debug("list_inventory ready_date_display failed item_id=%s", item.id, exc_info=True)
+            logger.warning("list_inventory ready_date_display failed item_id=%s", item.id, exc_info=True)
 
         result.append(
             {
