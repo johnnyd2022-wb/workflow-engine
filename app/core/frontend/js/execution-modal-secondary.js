@@ -18,18 +18,36 @@
           };
     var showNotification = root.showNotification;
 
-    /** Same-origin path under /core/ only; blocks protocol-relative //… redirects. */
+    /**
+     * return_to for manual add inventory: same-origin, pathname must start with /core/.
+     * Uses URL parsing so encoded slashes / protocol-relative //… do not bypass checks.
+     */
     function safeInventoryManualReturnTo(rt) {
       try {
         var s = String(rt || '').trim();
         if (!s) return '';
-        if (s.indexOf('//') === 0) return '';
-        if (s.charAt(0) !== '/') return '';
-        if (!/^\/core\//i.test(s)) return '';
-        return s;
+        var loc = window.location;
+        var url = new URL(s, loc.origin);
+        if (url.origin !== loc.origin) return '';
+        var path = url.pathname || '';
+        if (!/^\/core\//i.test(path)) return '';
+        return path + (url.search || '');
       } catch (e) {
         return '';
       }
+    }
+
+    /** Plain-text label for picker trigger (keep innerHTML paths separate). */
+    function formatExecutionInventoryTriggerLabel(inv) {
+      if (!inv) return '';
+      return (
+        (inv.process_name ? String(inv.process_name) + ' - ' : '') +
+        String(inv.name || '') +
+        ' - ' +
+        (inv.quantity != null ? inv.quantity : '') +
+        ' ' +
+        (inv.unit || '')
+      );
     }
 
   // ============================================================
@@ -315,7 +333,7 @@
             hiddenInput.value = id;
             hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
             hiddenInput.dataset.unit = inv.unit || '';
-            if (triggerLabel) triggerLabel.textContent = (inv.process_name ? String(inv.process_name) + ' - ' : '') + String(inv.name || '') + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+            if (triggerLabel) triggerLabel.textContent = formatExecutionInventoryTriggerLabel(inv);
             var q = section.querySelector('.execute-quantity-input');
             var u = section.querySelector('.execute-quantity-unit-display');
             if (q && u) {
@@ -345,7 +363,7 @@
         hiddenInput.value = selectedId;
         hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
         hiddenInput.dataset.unit = inv.unit || '';
-        if (triggerLabel) triggerLabel.textContent = (inv.process_name ? String(inv.process_name) + ' - ' : '') + String(inv.name || '') + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+        if (triggerLabel) triggerLabel.textContent = formatExecutionInventoryTriggerLabel(inv);
         var qtyInput = section ? section.querySelector('.execute-quantity-input') : null;
         var unitDisplay = section ? section.querySelector('.execute-quantity-unit-display') : null;
         if (qtyInput && unitDisplay) {

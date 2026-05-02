@@ -317,7 +317,6 @@
       window.ExecutionRenderInputs.renderConfirmExecutionInputs({
         inputsContainer: inputsContainer,
         confirmInputs: confirmInputs,
-        escapeHtml: escapeHtml,
       });
     }
 

@@ -1,246 +1,223 @@
-🔴 CRITICAL (must fix / high risk)
-1. execution-render-inputs.js — DOM XSS surface via inventory rendering
-Risk: Stored / reflected XSS (HIGH)
+Here’s the security + performance review for the changes in these two files, ordered by severity and focusing only on critical/high risk.
 
-You are building large HTML blocks with:
+🔴 CRITICAL (security-impacting)
+1. execution-render-inputs.js — remaining DOM XSS surface via HTML attribute interpolation
+Risk: XSS (medium-to-high likelihood depending on escapeHtml correctness)
 
-escapeHtml(...) used inconsistently
-direct interpolation into HTML strings:
-humanDetails += section(...)
-extraBits += ...
-JSON.stringify(...) injected into DOM
-innerHTML style construction implied (via string concatenation patterns)
-Problem areas:
-a) Inventory fields rendered into HTML
-escapeHtml(String(inv.process_name))
-escapeHtml(String(inv.source_step_name))
+You still have multiple instances like:
 
-Good — but later you also do:
+data-input-name="${escapeHtml(input.name)}"
+data-safe-name="${safeInputName}"
 
-var notes = String(inv.extra_data.notes)
-...
-white-space: pre-line;">' + escapeHtml(notes)
+and:
 
-Fine in isolation, BUT:
+<input ... data-input-name="${escapeHtml(input.name)}" ...>
+Why this is still risky
 
-🚨 Critical issue:
+Even though escapeHtml() is used, this is not a safe guarantee for attribute contexts inside template literals.
 
-You sometimes bypass escaping in nested / conditional rendering paths:
+If escapeHtml() is not explicitly attribute-safe (quotes, backticks, newlines), you can still get:
 
-humanDetails += section(...) (unknown implementation safety)
-extraJson = JSON.stringify(extraCopy, null, 2); later rendered → likely injected into DOM
+attribute breakouts (", ')
+injection of synthetic attributes
+malformed DOM leading to script execution depending on downstream handlers
+Key issue:
 
-If section() or downstream rendering uses innerHTML, JSON blobs become XSS vectors if attacker controls inventory metadata.
+You are mixing:
 
-Attack surface:
+HTML string building
+attribute injection
+dynamic DOM parsing
 
-Any inventory field originating from:
+That combination is the classic DOM XSS pattern surface.
 
-user input
-external integrations
-execution metadata
-can inject script payloads.
-✔️ Fix recommendation:
-Ensure all HTML injection points use textContent or safe DOM APIs
-Never inject raw JSON via innerHTML
+✔️ Fix (important)
 
-Replace:
+Replace string-based DOM construction with:
 
-JSON.stringify(...)
+const el = document.createElement('div');
+el.dataset.inputName = input.name || '';
+el.dataset.safeName = safeInputName;
 
-rendering with:
+This removes all parsing-based injection risk.
 
-<pre> + textContent
-or DOM node construction
-Audit section() function — this is likely your highest-risk choke point
-2. execution-render-inputs.js — uncontrolled dataset injection into DOM attributes
-Risk: Attribute injection → DOM manipulation / XSS chain
+2. execution-render-inputs.js — inline HTML label injection (label + span blocks)
+
+Example:
+
+<span> ${escapeHtml(String(input.quantity != null ? input.quantity : '0'))} ${escapeHtml(input.unit || '')}</span>
+Risk: low → medium (context dependent)
+
+Why:
+
+still HTML string concatenation
+still dependent on escapeHtml correctness
+used in multiple UI entry points (execution flow)
+Impact:
+
+If bypass occurs here:
+
+UI spoofing of expected quantities
+misleading operator instructions
+potential workflow manipulation (not just visual)
+✔️ Fix:
+
+Prefer DOM construction for labels:
+
+span.textContent = `${qty} ${unit}`;
+3. execution-modal-secondary.js — return_to sanitization is improved but still incomplete
+What you fixed:
+
+Good improvement:
+
+/^\/core\//i.test(s)
+
+and:
+
+if (s.indexOf('//') === 0) return '';
+Remaining issue:
+
+You are not preventing:
+
+⚠️ URL encoding bypasses
+
+Examples still possible depending on server decode behavior:
+
+/core/%2f%2fevil.com
+/core//evil.com (already partially blocked but ambiguous)
+/core/..%2fcore/...
+Risk:
+open redirect chaining
+phishing via return_to parameter
+session confusion in navigation flows
+✔️ Fix (recommended hardening)
+
+Use stricter parsing:
+
+const url = new URL(rt, window.location.origin);
+if (url.origin !== window.location.origin) return '';
+if (!url.pathname.startsWith('/core/')) return '';
+return url.pathname + url.search;
+
+This eliminates:
+
+encoding tricks
+protocol-relative bypass attempts
+path traversal ambiguity
+🟠 HIGH (robustness / integrity risks)
+4. execution-render-inputs.js — duplicate normalization logic still spread across system
+
+Even after improvements, you still have:
+
+normalizeInventoryTabType
+pickDefaultInventoryTab
+inline normalization inside picker logic
+Risk:
+inconsistent classification between:
+modal
+SPA
+secondary execution modal
+Impact:
+inventory misclassification drift
+UI showing wrong tabs
+subtle workflow integrity issues (WIP vs final mismatches)
+✔️ Fix:
+
+Centralize:
+
+inventory-type-utils.js
+
+Single source of truth for:
+
+raw_material / work_in_progress / final_product mapping
+expected_inventory_type inference
+5. execution-render-inputs.js — dataset usage still a trust boundary leak
 
 Example:
 
 data-input-name="${escapeHtml(input.name)}"
-data-input-unit="${escapeHtml(input.unit || '')}"
-Problem:
-
-escapeHtml() is NOT sufficient for HTML attributes inside double quotes when used in template literals.
-
-If escapeHtml is not attribute-aware, you can still break context:
-
-" injection closes attribute
-allows injection of new attributes or event handlers
-✔️ Fix:
-
-Use strict attribute encoding or:
-
-setAttribute() instead of string HTML construction
-
-Example safer pattern:
-
-btn.setAttribute('data-input-name', input.name || '');
-3. execution-open-step.js — process inference logic trusts API data implicitly
-Risk: Logic manipulation / data poisoning
-
-This block:
-
-var steps = processData.steps || [];
-...
-var explicit = out && out.inventory_type;
-var inferred = explicit === 'work_in_progress' || explicit === 'final_product'
-  ? explicit
-  : (o >= maxOrder ? 'final_product' : 'work_in_progress');
-Problem:
-
-You are:
-
-trusting processData.steps
-trusting out.inventory_type
-deriving business-critical classification from client-fetched data
-Why this matters:
-
-If CoreAPI.getProcess() is compromised or returns malformed data:
-
-inventory classification is wrong
-downstream execution decisions become inconsistent
-UI + workflow desync risk
-✔️ Fix:
-Treat process graph as advisory only
-Validate server-side again during:
-execution completion
-inventory classification persistence
-4. execution-modal-secondary.js — open redirect + URL construction risk
-Risk: Open redirect + parameter injection
-window.location.href = '/core/inventory/add/manual?' + params.toString();
-
-and:
-
-params.set('return_to', rtw);
-Problem:
-
-return_to is derived from:
-
-window.location.pathname + window.location.search
-
-If attacker can manipulate URL or querystring:
-
-they can inject arbitrary return paths
-potential open redirect chaining
-phishing / workflow hijack vector
-✔️ Fix:
-
-Strict allowlist:
-
-if (!rtw.startsWith('/core/')) rtw = '/core/';
-
-or validate against regex:
-
-^/core/[\w/-]*$
-5. execution-render-inputs.js — dynamic filtering logic DoS vector
-Risk: CPU amplification / UI slowdown
-
-Pattern:
-
-allInventory.filter(...)
-.sort(...)
-.map(...)
-
-inside repeated render cycles:
-
-filtering by name
-type filtering
-execution bias sorting
-repeated DOM rebuilds
-Problem:
-
-Large inventory datasets → quadratic UI slowdown:
-
-filter + sort + DOM rebuild per keystroke
-✔️ Fix:
-memoize:
-normalized inventory names
-type classification
-debounce search input rendering
-
-pre-index inventory:
-
-Map(name → items)
-Map(type → items)
-🟠 HIGH (security-adjacent / robustness)
-6. dataset-based state explosion (multiple files)
-
-You are heavily relying on:
-
-dataset.expectedInventoryType
-dataset.outputInventoryType
-dataset.sourceOutputId
+data-step-unit="${escapeHtml(input.unit || '')}"
 Risk:
-client-side state tampering
-inconsistent UI state vs backend truth
-Fix:
-treat dataset as UI hint only
-always validate on API submit
-7. Weak normalization logic duplicated across files
 
-Multiple copies of:
+Dataset is being used as:
 
-normalizeExpectedInventoryTabHint
-normalizeInventoryTabType
-safeName
-Risk:
-divergence bugs → inconsistent classification
-subtle security bypass via inconsistent parsing
-Fix:
+state carrier
+implicit backend truth substitute
+Problem:
+any DOM mutation or extension script can alter dataset
+no integrity guarantee
+Impact:
+inventory mismatch bugs
+potential bypass of expected inventory constraints
+✔️ Fix:
 
-centralize normalization module
+Treat dataset as:
 
-8. HTML injection via fallback string concatenation
+UI hint only, never authoritative state
+
+Ensure backend re-validates:
+
+expected_inventory_type
+source_output_id
+quantities
+6. execution-modal-secondary.js — DOM label composition risk
 
 Example:
 
-'<div class="exec-picker-kv__v">' + escapeHtml(String(inv.process_name)) + '</div>'
+triggerLabel.textContent =
+  (inv.process_name ? inv.process_name + ' - ' : '') +
+  inv.name + ' - ' + inv.quantity + ' ' + inv.unit;
+Risk: low but real injection surface if any upstream field escapes escaping rules elsewhere
 
-Even if escaped, mixing string HTML construction increases risk surface.
+You are safe because this is textContent, but:
 
-Fix:
+inconsistent use vs other areas (string concatenation patterns elsewhere)
+introduces accidental future regressions (someone may switch to innerHTML)
+✔️ Recommendation:
 
-Use:
+Good pattern but standardize:
 
-DOM API construction
-or templating library with auto-escaping
-🟡 MEDIUM (performance / maintainability risks)
-9. Repeated full inventory scans
+triggerLabel.textContent = formatInventoryLabel(inv);
+🟡 MEDIUM (performance / architectural risk)
+7. execution-render-inputs.js — repeated string filtering on large inventory
 
-Multiple files:
+Still present:
 
-.filter()
-.map()
-.sort()
+allInventory.filter(...)
 
-per render / modal open
+inside picker rendering logic
 
-Fix:
-index once per load
-reuse immutable cache
-10. repeated Map construction per render
-const inventoryById = new Map();
-allInventory.forEach(...)
+Risk:
+O(n²) behavior under frequent re-renders
+UI lag with large inventories (500–5000+ items)
+✔️ Fix:
 
-inside render path → unnecessary allocation
+Precompute indices:
 
-11. inline style explosion
+Map(name → inventory[])
+Map(type → inventory[])
+memoized normalized names
+8. repeated normalization functions inside closures
 
-Not security-critical, but:
+Example:
 
-makes CSP hard
-prevents style hashing
-increases XSS impact surface if styles ever user-controlled
-🟢 SUMMARY (priority actions)
-🚨 Do immediately
-Audit section() → likely XSS root
-Replace all innerHTML construction paths in execution-render-inputs
-Stop JSON.stringify injection into DOM
-Fix return_to open redirect risk
-Replace attribute string interpolation with setAttribute
-⚠️ Next
-Centralize inventory normalization logic
-Add server-side validation for inventory classification
-Add caching/indexing for inventory filtering
+function normalizeExpectedInventoryTabHint(i) { ... }
+function safeName(inv) { ... }
+Risk:
+repeated function allocation
+inconsistent logic across modules
+✔️ Fix:
+
+Hoist to shared module scope
+
+🟢 SUMMARY (what actually matters)
+🚨 Must fix (security integrity)
+Replace string-based DOM construction with DOM APIs in execution-render-inputs
+Strengthen return_to using new URL() validation
+Remove reliance on escapeHtml for attribute injection contexts
+⚠️ Should fix (robustness)
+Centralize inventory type normalization logic
+Treat dataset as non-authoritative state only
+🟡 Improve (performance)
+Pre-index inventory instead of repeated filtering
+Hoist normalization utilities

@@ -5,6 +5,11 @@
 (function (root) {
   "use strict";
 
+  var ITU = root.InventoryTypeUtils;
+  if (!ITU || typeof ITU.normalizeInventoryTabType !== "function" || typeof ITU.normalizeExpectedInventoryTabHint !== "function") {
+    throw new Error("inventory-type-utils.js must load before execution-render-inputs.js");
+  }
+
   function renderVariableInventoryInputs(ctx) {
     var modal = ctx.modal;
     var ses = ctx.ses;
@@ -62,44 +67,158 @@
         const inventoryById = new Map();
         allInventory.forEach(function(inv) { inventoryById.set(String(inv.id), inv); });
 
-        inputSection.innerHTML = `
-          <div class="execute-input-section-header" style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-              ${escapeHtml(input.name)} 
-              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${escapeHtml(String(input.quantity != null ? input.quantity : '0'))} ${escapeHtml(input.unit || '')})</span>
-            </label>
-          </div>
-          <div class="execute-input-rows-container" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}"></div>
-          <div class="exec-picker-panel" data-exec-picker-panel="true" style="display:block; margin-top: 10px;">
-            <div class="flow-mode-segmented" role="group" aria-label="Inventory category" style="margin-bottom: 10px;">
-              <button type="button" class="flow-mode-segment flow-mode-segment--active" data-exec-type="raw_material" aria-pressed="true">Raw materials</button>
-              <button type="button" class="flow-mode-segment" data-exec-type="work_in_progress" aria-pressed="false">Intermediate</button>
-              <button type="button" class="flow-mode-segment" data-exec-type="final_product" aria-pressed="false">Finals products</button>
-            </div>
-            <div class="exec-picker-search">
-              <input type="search" class="spa-inp" data-exec-picker-search="true" placeholder="Search inventory…" autocomplete="off">
-            </div>
-            <div class="exec-picker-cards" data-exec-picker-cards="true"></div>
-          </div>
-          ${hasNoInventory ? `
-          <div class="execute-missing-inventory-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
-            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;">⚠️ Nothing in inventory matches this input yet. Use <strong>Add Missing Item</strong> below to register what you need—you’ll be returned here afterwards to continue recording this step.</p>
-            <button type="button" class="btn btn-secondary btn-sm exec-add-missing-item-btn add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-expected-inventory-type="${(input.expected_inventory_type || input.expectedInventoryType) ? escapeHtml(String(input.expected_inventory_type || input.expectedInventoryType)) : (input.source_output_id ? 'work_in_progress' : '')}" data-producing-process-name="${input.producing_process_name ? escapeHtml(String(input.producing_process_name)) : ''}" data-producing-step-name="${input.producing_step_name ? escapeHtml(String(input.producing_step_name)) : ''}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-source-step-id="${input.source_step_id ? escapeHtml(String(input.source_step_id)) : ''}" data-source-process-id="${input.source_process_id ? escapeHtml(String(input.source_process_id)) : ''}" style="font-size: 13px;">Add Missing Item</button>
-          </div>
-          ` : ''}
-          <div class="execute-add-input-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Add another input</label>
-            <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;">Add one or more inputs to meet step quantity (e.g. multiple batches) or to record an additional material when inputs are not always set per execution.</p>
-            <button type="button" class="btn btn-secondary btn-sm execute-add-another-input-btn" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}" style="font-size: 13px;">+ Add another input</button>
-          </div>
-          <div class="execute-input-qty-expected-warning" style="display: none; margin-top: 12px; padding: 10px 12px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); color: #92400e; font-size: 13px; font-weight: 500;" role="status"></div>
-          <div class="execute-input-unexpected-material-warning" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
-        `;
+        var invSearchHayCache = new WeakMap();
+        function searchHayLower(inv) {
+          if (!inv) return "";
+          var c = invSearchHayCache.get(inv);
+          if (c != null) return c;
+          c = [
+            inv.name,
+            inv.unit,
+            inv.supplier,
+            inv.supplier_batch_number,
+            inv.process_name,
+          ].filter(Boolean).join(" ").toLowerCase();
+          invSearchHayCache.set(inv, c);
+          return c;
+        }
 
-        const rowsContainer = inputSection.querySelector('.execute-input-rows-container');
-        const pickerPanel = inputSection.querySelector('[data-exec-picker-panel="true"]');
-        const pickerCards = inputSection.querySelector('[data-exec-picker-cards="true"]');
-        const pickerSearch = inputSection.querySelector('[data-exec-picker-search="true"]');
+        var headerEl = document.createElement("div");
+        headerEl.className = "execute-input-section-header";
+        headerEl.style.marginBottom = "12px";
+        var headerLabel = document.createElement("label");
+        headerLabel.style.cssText = "display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;";
+        headerLabel.appendChild(document.createTextNode(input.name || ""));
+        headerLabel.appendChild(document.createTextNode(" "));
+        var expSpan = document.createElement("span");
+        expSpan.style.cssText = "color: var(--text-secondary); font-weight: normal;";
+        expSpan.textContent =
+          "(Expected: " +
+          String(input.quantity != null ? input.quantity : "0") +
+          " " +
+          (input.unit || "") +
+          ")";
+        headerLabel.appendChild(expSpan);
+        headerEl.appendChild(headerLabel);
+        inputSection.appendChild(headerEl);
+
+        const rowsContainer = document.createElement("div");
+        rowsContainer.className = "execute-input-rows-container";
+        rowsContainer.dataset.inputName = input.name || "";
+        rowsContainer.dataset.safeName = safeInputName;
+        inputSection.appendChild(rowsContainer);
+
+        var pickerPanel = document.createElement("div");
+        pickerPanel.className = "exec-picker-panel";
+        pickerPanel.setAttribute("data-exec-picker-panel", "true");
+        pickerPanel.style.display = "block";
+        pickerPanel.style.marginTop = "10px";
+        var seg = document.createElement("div");
+        seg.className = "flow-mode-segmented";
+        seg.setAttribute("role", "group");
+        seg.setAttribute("aria-label", "Inventory category");
+        seg.style.marginBottom = "10px";
+        [["raw_material", "Raw materials", true], ["work_in_progress", "Intermediate", false], ["final_product", "Finals products", false]].forEach(function(spec) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "flow-mode-segment" + (spec[2] ? " flow-mode-segment--active" : "");
+          b.setAttribute("data-exec-type", spec[0]);
+          b.setAttribute("aria-pressed", spec[2] ? "true" : "false");
+          b.textContent = spec[1];
+          seg.appendChild(b);
+        });
+        pickerPanel.appendChild(seg);
+        var searchWrap = document.createElement("div");
+        searchWrap.className = "exec-picker-search";
+        var pickerSearch = document.createElement("input");
+        pickerSearch.type = "search";
+        pickerSearch.className = "spa-inp";
+        pickerSearch.setAttribute("data-exec-picker-search", "true");
+        pickerSearch.placeholder = "Search inventory…";
+        pickerSearch.autocomplete = "off";
+        searchWrap.appendChild(pickerSearch);
+        pickerPanel.appendChild(searchWrap);
+        var pickerCards = document.createElement("div");
+        pickerCards.className = "exec-picker-cards";
+        pickerCards.setAttribute("data-exec-picker-cards", "true");
+        pickerPanel.appendChild(pickerCards);
+        inputSection.appendChild(pickerPanel);
+
+        if (hasNoInventory) {
+          var missPane = document.createElement("div");
+          missPane.className = "execute-missing-inventory-pane";
+          missPane.style.cssText =
+            "margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);";
+          var missP = document.createElement("p");
+          missP.style.cssText = "font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;";
+          missP.appendChild(document.createTextNode("⚠️ Nothing in inventory matches this input yet. Use "));
+          var sStrong = document.createElement("strong");
+          sStrong.textContent = "Add Missing Item";
+          missP.appendChild(sStrong);
+          missP.appendChild(
+            document.createTextNode(
+              " below to register what you need—you’ll be returned here afterwards to continue recording this step."
+            )
+          );
+          missPane.appendChild(missP);
+          var missBtn = document.createElement("button");
+          missBtn.type = "button";
+          missBtn.className = "btn btn-secondary btn-sm exec-add-missing-item-btn add-missing-item-btn";
+          missBtn.style.fontSize = "13px";
+          missBtn.dataset.inputName = input.name || "";
+          missBtn.dataset.inputQuantity = input.quantity != null ? String(input.quantity) : "";
+          missBtn.dataset.inputUnit = input.unit || "";
+          missBtn.dataset.expectedInventoryType =
+            input.expected_inventory_type || input.expectedInventoryType
+              ? String(input.expected_inventory_type || input.expectedInventoryType)
+              : input.source_output_id
+                ? "work_in_progress"
+                : "";
+          if (input.producing_process_name) missBtn.dataset.producingProcessName = String(input.producing_process_name);
+          if (input.producing_step_name) missBtn.dataset.producingStepName = String(input.producing_step_name);
+          if (input.source_output_id) missBtn.dataset.sourceOutputId = String(input.source_output_id);
+          if (input.source_step_id) missBtn.dataset.sourceStepId = String(input.source_step_id);
+          if (input.source_process_id) missBtn.dataset.sourceProcessId = String(input.source_process_id);
+          missBtn.textContent = "Add Missing Item";
+          missPane.appendChild(missBtn);
+          inputSection.appendChild(missPane);
+        }
+
+        var addPane = document.createElement("div");
+        addPane.className = "execute-add-input-pane";
+        addPane.style.cssText =
+          "margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);";
+        var addLbl = document.createElement("label");
+        addLbl.style.cssText = "display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;";
+        addLbl.textContent = "Add another input";
+        addPane.appendChild(addLbl);
+        var addDesc = document.createElement("p");
+        addDesc.style.cssText = "font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;";
+        addDesc.textContent =
+          "Add one or more inputs to meet step quantity (e.g. multiple batches) or to record an additional material when inputs are not always set per execution.";
+        addPane.appendChild(addDesc);
+        var execAddAnotherButton = document.createElement("button");
+        execAddAnotherButton.type = "button";
+        execAddAnotherButton.className = "btn btn-secondary btn-sm execute-add-another-input-btn";
+        execAddAnotherButton.style.fontSize = "13px";
+        execAddAnotherButton.dataset.inputName = input.name || "";
+        execAddAnotherButton.dataset.safeName = safeInputName;
+        execAddAnotherButton.textContent = "+ Add another input";
+        addPane.appendChild(execAddAnotherButton);
+        inputSection.appendChild(addPane);
+
+        var qtyWarn = document.createElement("div");
+        qtyWarn.className = "execute-input-qty-expected-warning";
+        qtyWarn.style.cssText =
+          "display: none; margin-top: 12px; padding: 10px 12px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); color: #92400e; font-size: 13px; font-weight: 500;";
+        qtyWarn.setAttribute("role", "status");
+        inputSection.appendChild(qtyWarn);
+        var matWarn = document.createElement("div");
+        matWarn.className = "execute-input-unexpected-material-warning";
+        matWarn.style.cssText =
+          "display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;";
+        matWarn.setAttribute("role", "status");
+        inputSection.appendChild(matWarn);
 
         // Ensure rows stack cleanly when adding additional inputs.
         if (rowsContainer) {
@@ -111,17 +230,8 @@
         let rowIndex = 0;
         if (!ses.inputStateByKey) ses.inputStateByKey = new Map();
 
-        function getInvType(inv) {
-          return inv && (inv.inventory_type || inv.type || inv.category || inv.item_type || '');
-        }
-        /** Map API/mock inventory types onto picker tab keys (raw_material | work_in_progress | final_product). */
         function normalizeInventoryTabType(inv) {
-          var t = String(getInvType(inv) || '').toLowerCase().trim();
-          if (!t) return 'raw_material';
-          if (t === 'intermediate' || t === 'work_in_progress' || t === 'wip') return 'work_in_progress';
-          if (t === 'final' || t === 'final_product') return 'final_product';
-          if (t === 'raw' || t === 'raw_material') return 'raw_material';
-          return t;
+          return ITU.normalizeInventoryTabType(inv);
         }
         function invMatchesType(inv, selected) {
           if (!selected || selected === 'all') return true;
@@ -130,14 +240,7 @@
         function invMatchesSearch(inv, q) {
           q = (q || '').trim().toLowerCase();
           if (!q) return true;
-          var hay = [
-            inv && inv.name,
-            inv && inv.unit,
-            inv && inv.supplier,
-            inv && inv.supplier_batch_number,
-            inv && inv.process_name,
-          ].filter(Boolean).join(' ').toLowerCase();
-          return hay.indexOf(q) !== -1;
+          return searchHayLower(inv).indexOf(q) !== -1;
         }
         function fmtQty(inv) {
           if (!inv) return '';
@@ -180,16 +283,8 @@
             return !selectedIds.has(id);
           });
 
-          // Keep list stable during preview (no reordering).
-          if (!list.length) {
-            pickerCards.innerHTML = '<p style="margin: 0; font-size: 13px; color: var(--text-secondary); padding: 6px 2px;">No inventory matches.</p>';
-            return;
-          }
-          pickerCards.innerHTML = list.map(function(inv) {
+          function buildExecPickerCard(inv) {
             var rawId = String(inv.id);
-            var id = escapeHtml(rawId);
-            var name = escapeHtml(inv.name || 'Unnamed');
-            var sub = escapeHtml(fmtQty(inv));
             var chips = '';
             if (inv.supplier) chips += '<span class="exec-picker-chip">' + escapeHtml(inv.supplier) + '</span>';
             if (inv.supplier_batch_number) chips += '<span class="exec-picker-chip">Batch ' + escapeHtml(inv.supplier_batch_number) + '</span>';
@@ -468,35 +563,93 @@
               }
             }
 
-            var detailsHtml =
-              '<div class="exec-picker-card__details">' +
-                humanDetails +
-                auditHtml +
-              '</div>';
-            var actions = '';
-            if (isPending) {
-              actions =
-                '<div class="exec-picker-card__actions" style="justify-content:flex-start;">' +
-                  '<button type="button" class="btn btn-secondary btn-sm exec-picker-confirm-btn" data-action="confirm-input" data-inv-id="' + id + '"><strong>Confirm input</strong></button>' +
-                '</div>';
+            var detailsInnerHtml = humanDetails + auditHtml;
+
+            var card = document.createElement('div');
+            card.className = 'exec-picker-card';
+            card.setAttribute('role', 'button');
+            card.tabIndex = 0;
+            card.dataset.invId = rawId;
+            card.setAttribute('aria-pressed', isPending ? 'true' : 'false');
+            card.dataset.expanded = 'false';
+
+            var topOuter = document.createElement('div');
+            topOuter.className = 'exec-picker-card__top';
+            var leftCol = document.createElement('div');
+            leftCol.style.minWidth = '0';
+            var titleP = document.createElement('p');
+            titleP.className = 'exec-picker-card__title';
+            titleP.textContent = inv.name || 'Unnamed';
+            var subP = document.createElement('p');
+            subP.className = 'exec-picker-card__sub';
+            subP.textContent = fmtQty(inv);
+            leftCol.appendChild(titleP);
+            leftCol.appendChild(subP);
+            var toggleBtn = document.createElement('button');
+            toggleBtn.type = 'button';
+            toggleBtn.className = 'exec-picker-card__toggle';
+            toggleBtn.setAttribute('data-action', 'toggle-details');
+            toggleBtn.dataset.invId = rawId;
+            toggleBtn.textContent = 'Details';
+            topOuter.appendChild(leftCol);
+            topOuter.appendChild(toggleBtn);
+            card.appendChild(topOuter);
+
+            if (chips) {
+              var chipHolder = document.createElement('div');
+              chipHolder.className = 'exec-picker-card__meta';
+              chipHolder.innerHTML = chips;
+              card.appendChild(chipHolder);
             }
-            return (
-              '<div class="exec-picker-card" role="button" tabindex="0" data-inv-id="' + id + '" aria-pressed="' + (isPending ? 'true' : 'false') + '" data-expanded="false">' +
-                '<div class="exec-picker-card__top">' +
-                  '<div style="min-width:0;">' +
-                    '<p class="exec-picker-card__title">' + name + '</p>' +
-                    '<p class="exec-picker-card__sub">' + sub + '</p>' +
-                  '</div>' +
-                  '<button type="button" class="exec-picker-card__toggle" data-action="toggle-details" data-inv-id="' + id + '">Details</button>' +
-                '</div>' +
-                (chips ? '<div class="exec-picker-card__meta">' + chips + '</div>' : '') +
-                metaBlock +
-                '<div class="exec-picker-card__spacer"></div>' +
-                actions +
-                detailsHtml +
-              '</div>'
-            );
-          }).join('');
+            if (metaBlock) {
+              var metaTmp = document.createElement('div');
+              metaTmp.innerHTML = metaBlock;
+              while (metaTmp.firstChild) {
+                card.appendChild(metaTmp.firstChild);
+              }
+            }
+
+            var spacerEl = document.createElement('div');
+            spacerEl.className = 'exec-picker-card__spacer';
+            card.appendChild(spacerEl);
+
+            if (isPending) {
+              var actDiv = document.createElement('div');
+              actDiv.className = 'exec-picker-card__actions';
+              actDiv.style.justifyContent = 'flex-start';
+              var cBtn = document.createElement('button');
+              cBtn.type = 'button';
+              cBtn.className = 'btn btn-secondary btn-sm exec-picker-confirm-btn';
+              cBtn.setAttribute('data-action', 'confirm-input');
+              cBtn.dataset.invId = rawId;
+              var strongEl = document.createElement('strong');
+              strongEl.textContent = 'Confirm input';
+              cBtn.appendChild(strongEl);
+              actDiv.appendChild(cBtn);
+              card.appendChild(actDiv);
+            }
+
+            var detailsEl = document.createElement('div');
+            detailsEl.className = 'exec-picker-card__details';
+            detailsEl.innerHTML = detailsInnerHtml;
+            card.appendChild(detailsEl);
+
+            return card;
+          }
+
+          if (!list.length) {
+            pickerCards.replaceChildren();
+            var emptyP = document.createElement('p');
+            emptyP.style.cssText = 'margin: 0; font-size: 13px; color: var(--text-secondary); padding: 6px 2px;';
+            emptyP.textContent = 'No inventory matches.';
+            pickerCards.appendChild(emptyP);
+            return;
+          }
+          var pickerFrag = document.createDocumentFragment();
+          list.forEach(function(inv) {
+            pickerFrag.appendChild(buildExecPickerCard(inv));
+          });
+          pickerCards.replaceChildren(pickerFrag);
         }
 
         function normInputName(s) {
@@ -510,16 +663,8 @@
           });
           return counts;
         }
-        /** Hint from process designer (inventory category chosen for this input); overrides fallback heuristics. */
         function normalizeExpectedInventoryTabHint(inp) {
-          if (!inp) return null;
-          var v = inp.expected_inventory_type != null ? inp.expected_inventory_type : inp.expectedInventoryType;
-          if (v == null || v === '') return null;
-          var s = String(v).toLowerCase().trim();
-          if (s === 'intermediate' || s === 'wip' || s === 'work_in_progress') return 'work_in_progress';
-          if (s === 'final' || s === 'final_product') return 'final_product';
-          if (s === 'raw' || s === 'raw_material') return 'raw_material';
-          return null;
+          return ITU.normalizeExpectedInventoryTabHint(inp);
         }
 
         /**
@@ -628,9 +773,15 @@
           });
         });
         if (pickerSearch) {
+          var searchDebounceTimer = null;
           pickerSearch.addEventListener('input', function() {
-            pickerState.q = pickerSearch.value || '';
-            renderPickerCards(pickerState.activeType, pickerState.q);
+            var v = pickerSearch.value || '';
+            if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(function() {
+              searchDebounceTimer = null;
+              pickerState.q = v;
+              renderPickerCards(pickerState.activeType, pickerState.q);
+            }, 300);
           });
         }
         if (pickerPanel) {
@@ -708,27 +859,78 @@
               expired_reason: '',
             });
           }
-          row.innerHTML = `
-            <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-quantity="" data-unit="" data-expired-reason="" value="">
+          var hidInv = document.createElement("input");
+          hidInv.type = "hidden";
+          hidInv.className = "execute-inventory-select";
+          hidInv.dataset.inputName = input.name || "";
+          hidInv.dataset.quantity = "";
+          hidInv.dataset.unit = "";
+          hidInv.dataset.expiredReason = "";
+          hidInv.value = "";
+          row.appendChild(hidInv);
 
-            <div style="display:flex; justify-content:flex-end; margin-bottom: 10px;">
-              <button type="button" class="execute-remove-input-row-btn btn btn-secondary btn-sm" style="font-size: 12px;">Remove input</button>
-            </div>
+          var rmWrap = document.createElement("div");
+          rmWrap.style.cssText = "display:flex; justify-content:flex-end; margin-bottom: 10px;";
+          var rmBtn = document.createElement("button");
+          rmBtn.type = "button";
+          rmBtn.className = "execute-remove-input-row-btn btn btn-secondary btn-sm";
+          rmBtn.style.fontSize = "12px";
+          rmBtn.textContent = "Remove input";
+          rmWrap.appendChild(rmBtn);
+          row.appendChild(rmWrap);
 
-            <div class="execute-selected-inv-card" style="display:none; padding: 12px 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); background: var(--bg-card, #fff);"></div>
+          var selCard = document.createElement("div");
+          selCard.className = "execute-selected-inv-card";
+          selCard.style.cssText =
+            "display:none; padding: 12px 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); background: var(--bg-card, #fff);";
+          row.appendChild(selCard);
 
-            <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
-            <div class="execute-input-unexpected-row-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
+          var expWarn = document.createElement("div");
+          expWarn.className = "execute-input-expired-warning";
+          expWarn.dataset.inputName = input.name || "";
+          expWarn.style.cssText =
+            "display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;";
+          expWarn.setAttribute("role", "alert");
+          row.appendChild(expWarn);
 
-            <div class="execute-qty-pane" style="display:none; margin-top: 12px;">
-              <label class="spa-field-label">Quantity to consume</label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="number" class="spa-inp execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" placeholder="${escapeHtml(String(input.quantity != null ? input.quantity : '0'))}" value="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" step="0.01" min="0" style="flex: 1;">
-                <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${escapeHtml(input.unit || '')}</span>
-              </div>
-            </div>
-          `;
-          var qtyInput = row.querySelector('.execute-quantity-input');
+          var rowUnexp = document.createElement("div");
+          rowUnexp.className = "execute-input-unexpected-row-warning";
+          rowUnexp.dataset.inputName = input.name || "";
+          rowUnexp.style.cssText =
+            "display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;";
+          rowUnexp.setAttribute("role", "status");
+          row.appendChild(rowUnexp);
+
+          var qtyPane = document.createElement("div");
+          qtyPane.className = "execute-qty-pane";
+          qtyPane.style.cssText = "display:none; margin-top: 12px;";
+          var qtyLbl = document.createElement("label");
+          qtyLbl.className = "spa-field-label";
+          qtyLbl.textContent = "Quantity to consume";
+          qtyPane.appendChild(qtyLbl);
+          var qtyRow = document.createElement("div");
+          qtyRow.style.cssText = "display: flex; align-items: center; gap: 8px;";
+          var qtyInput = document.createElement("input");
+          qtyInput.type = "number";
+          qtyInput.className = "spa-inp execute-quantity-input";
+          qtyInput.dataset.inputName = input.name || "";
+          qtyInput.dataset.stepUnit = input.unit || "";
+          qtyInput.dataset.originalQuantity =
+            input.quantity != null ? String(input.quantity) : "";
+          qtyInput.placeholder = String(input.quantity != null ? input.quantity : "0");
+          qtyInput.value = input.quantity != null ? String(input.quantity) : "";
+          qtyInput.step = "0.01";
+          qtyInput.min = "0";
+          qtyInput.style.flex = "1";
+          qtyRow.appendChild(qtyInput);
+          var unitDisp = document.createElement("span");
+          unitDisp.className = "execute-quantity-unit-display";
+          unitDisp.style.cssText =
+            "font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;";
+          unitDisp.textContent = input.unit || "";
+          qtyRow.appendChild(unitDisp);
+          qtyPane.appendChild(qtyRow);
+          row.appendChild(qtyPane);
           if (qtyInput) {
             // Ensure we start from a neutral border (avoid stale inline styles / bfcache).
             qtyInput.style.border = '1px solid var(--border-default, #e5e7eb)';
@@ -962,27 +1164,58 @@
                 if (!raw) return '';
                 try { return new Date(raw).toLocaleDateString(); } catch (e) { return String(raw); }
               }
-              var meta = [];
-              if (inv.supplier) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Supplier</span><div style="font-weight:600;">' + escapeHtml(inv.supplier) + '</div></div>');
+              function addMetaCell(grid, label, value) {
+                if (value == null || String(value) === '') return;
+                var cell = document.createElement('div');
+                var lab = document.createElement('span');
+                lab.style.cssText = 'color:var(--text-tertiary,#9ca3af); font-size:12px;';
+                lab.textContent = label;
+                var valEl = document.createElement('div');
+                valEl.style.fontWeight = '600';
+                valEl.textContent = String(value);
+                cell.appendChild(lab);
+                cell.appendChild(valEl);
+                grid.appendChild(cell);
+              }
+              selectedCardEl.replaceChildren();
+              var rowTop = document.createElement('div');
+              rowTop.style.cssText = 'display:flex; align-items:flex-start; justify-content:space-between; gap:12px;';
+              var col = document.createElement('div');
+              col.style.minWidth = '0';
+              var t1 = document.createElement('div');
+              t1.style.cssText = 'font-size:14px; font-weight:700; color:var(--text-primary,#111827);';
+              t1.textContent = inv.name || 'Selected item';
+              var t2 = document.createElement('div');
+              t2.style.cssText = 'font-size:12px; color:var(--text-secondary,#6b7280); margin-top:4px;';
+              t2.textContent = (inv.process_name ? inv.process_name + ' · ' : '') + fmtQty(inv);
+              col.appendChild(t1);
+              col.appendChild(t2);
+              rowTop.appendChild(col);
+              if (reason) {
+                var chip = document.createElement('div');
+                chip.className = 'exec-picker-chip exec-picker-chip--warn';
+                chip.style.flexShrink = '0';
+                chip.textContent = reason;
+                rowTop.appendChild(chip);
+              }
+              selectedCardEl.appendChild(rowTop);
               var batchAny = inv.supplier_batch_number || inv.batch_number || inv.lot_number || '';
-              if (batchAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Batch</span><div style="font-weight:600;">' + escapeHtml(batchAny) + '</div></div>');
               var operatorAny = inv.operator_name || inv.operator || '';
-              if (operatorAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Operator</span><div style="font-weight:600;">' + escapeHtml(operatorAny) + '</div></div>');
               var createdByAny = inv.created_by_name || inv.created_by || '';
-              if (createdByAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created by</span><div style="font-weight:600;">' + escapeHtml(createdByAny) + '</div></div>');
-              if (inv.purchase_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Purchase date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.purchase_date)) + '</div></div>');
-              if (inv.expiry_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Expiry date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.expiry_date)) + '</div></div>');
-              if (inv.ready_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Ready date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.ready_date)) + '</div></div>');
-              if (inv.created_at) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.created_at)) + '</div></div>');
-              selectedCardEl.innerHTML =
-                '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">' +
-                  '<div style="min-width:0;">' +
-                    '<div style="font-size:14px; font-weight:700; color:var(--text-primary,#111827);">' + escapeHtml(inv.name || 'Selected item') + '</div>' +
-                    '<div style="font-size:12px; color:var(--text-secondary,#6b7280); margin-top:4px;">' + escapeHtml((inv.process_name ? (inv.process_name + ' · ') : '') + fmtQty(inv)) + '</div>' +
-                  '</div>' +
-                  (reason ? ('<div class="exec-picker-chip exec-picker-chip--warn" style="flex-shrink:0;">' + escapeHtml(reason) + '</div>') : '') +
-                '</div>' +
-                (meta.length ? ('<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:12px;">' + meta.join('') + '</div>') : '');
+              if (inv.supplier || batchAny || operatorAny || createdByAny || inv.purchase_date || inv.expiry_date || inv.ready_date || inv.created_at) {
+                var grid = document.createElement('div');
+                grid.style.cssText =
+                  'display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:12px;';
+                addMetaCell(grid, 'Supplier', inv.supplier);
+                addMetaCell(grid, 'Batch', batchAny);
+                addMetaCell(grid, 'Operator', operatorAny);
+                addMetaCell(grid, 'Created by', createdByAny);
+                if (inv.purchase_date) addMetaCell(grid, 'Purchase date', fmtDate(inv.purchase_date));
+                if (inv.expiry_date) addMetaCell(grid, 'Expiry date', fmtDate(inv.expiry_date));
+                if (inv.ready_date) addMetaCell(grid, 'Ready date', fmtDate(inv.ready_date));
+                if (inv.created_at) addMetaCell(grid, 'Created', fmtDate(inv.created_at));
+                selectedCardEl.appendChild(grid);
+              }
               selectedCardEl.style.display = 'block';
             }
             if (qtyPane) qtyPane.style.display = 'block';
@@ -1005,7 +1238,7 @@
           if (!invId) return 'Select inventory item...';
           const inv = inventoryById.get(String(invId));
           if (!inv) return 'Select inventory item...';
-          const productName = inv.process_name ? escapeHtml(inv.process_name) + ' - ' + escapeHtml(inv.name) : escapeHtml(inv.name);
+          const productName = inv.process_name ? String(inv.process_name) + ' - ' + String(inv.name || '') : String(inv.name || '');
           return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
         }
 
@@ -1264,9 +1497,8 @@
           });
         }
 
-        var addAnotherBtn = inputSection.querySelector('.execute-add-another-input-btn');
-        if (addAnotherBtn) {
-          addAnotherBtn.addEventListener('click', function() {
+        if (execAddAnotherButton) {
+          execAddAnotherButton.addEventListener('click', function() {
             var newRow = createInputRow(false);
             rowsContainer.appendChild(newRow);
             newRow.addEventListener('click', function() { setActiveRow(newRow); });
@@ -1328,12 +1560,11 @@
 
   /**
    * Variable inputs that do not use inventory: confirm quantity + unit at execution.
-   * @param {{ inputsContainer: HTMLElement | null, confirmInputs: Array<unknown>, escapeHtml: (s: string) => string }} ctx
+   * @param {{ inputsContainer: HTMLElement | null, confirmInputs: Array<unknown> }} ctx
    */
   function renderConfirmExecutionInputs(ctx) {
     var inputsContainer = ctx.inputsContainer;
     var confirmInputs = ctx.confirmInputs;
-    var escapeHtml = ctx.escapeHtml;
     if (!confirmInputs || !confirmInputs.length || !inputsContainer) return;
     confirmInputs.forEach(function (input) {
       const inputSection = document.createElement('div');
@@ -1341,28 +1572,79 @@
       inputSection.style.cssText =
         'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
 
-      inputSection.innerHTML = `
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-              ${escapeHtml(input.name)} 
-              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${escapeHtml(String(input.quantity != null ? input.quantity : '0'))} ${escapeHtml(input.unit || '')})</span>
-              <span style="color: var(--error, #ef4444);">*</span>
-            </label>
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity <span style="color: var(--error, #ef4444);">*</span></label>
-            <input type="number" class="spa-inp execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" placeholder="${escapeHtml(String(input.quantity != null ? input.quantity : '0'))}" value="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" step="0.01" min="0">
-          </div>
-          <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit <span style="color: var(--error, #ef4444);">*</span></label>
-            <select class="spa-inp execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true">
-              <option value="">Select unit...</option>
-              ${['kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in', 'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers'].map((unit) => `
-                <option value="${unit}" ${input.unit === unit ? 'selected' : ''}>${unit}</option>
-              `).join('')}
-            </select>
-          </div>
-        `;
+      var rowHead = document.createElement('div');
+      rowHead.style.marginBottom = '12px';
+      var lblHead = document.createElement('label');
+      lblHead.style.cssText =
+        'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;';
+      lblHead.appendChild(document.createTextNode(input.name || ''));
+      lblHead.appendChild(document.createTextNode(' '));
+      var expSp = document.createElement('span');
+      expSp.style.cssText = 'color: var(--text-secondary); font-weight: normal;';
+      expSp.textContent =
+        '(Expected: ' + String(input.quantity != null ? input.quantity : '0') + ' ' + (input.unit || '') + ')';
+      lblHead.appendChild(expSp);
+      lblHead.appendChild(document.createTextNode(' '));
+      var ast1 = document.createElement('span');
+      ast1.style.color = 'var(--error, #ef4444)';
+      ast1.textContent = '*';
+      lblHead.appendChild(ast1);
+      rowHead.appendChild(lblHead);
+      inputSection.appendChild(rowHead);
+
+      var qtyRow = document.createElement('div');
+      qtyRow.style.marginBottom = '12px';
+      var qtyLbl = document.createElement('label');
+      qtyLbl.style.cssText =
+        'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;';
+      qtyLbl.appendChild(document.createTextNode('Quantity '));
+      var ast2 = document.createElement('span');
+      ast2.style.color = 'var(--error, #ef4444)';
+      ast2.textContent = '*';
+      qtyLbl.appendChild(ast2);
+      qtyRow.appendChild(qtyLbl);
+      var qtyInputEl = document.createElement('input');
+      qtyInputEl.type = 'number';
+      qtyInputEl.className = 'spa-inp execute-confirm-quantity-input';
+      qtyInputEl.dataset.inputName = input.name || '';
+      qtyInputEl.dataset.required = 'true';
+      qtyInputEl.placeholder = String(input.quantity != null ? input.quantity : '0');
+      qtyInputEl.value = input.quantity != null ? String(input.quantity) : '';
+      qtyInputEl.step = '0.01';
+      qtyInputEl.min = '0';
+      qtyRow.appendChild(qtyInputEl);
+      inputSection.appendChild(qtyRow);
+
+      var unitRow = document.createElement('div');
+      var unitLbl = document.createElement('label');
+      unitLbl.style.cssText =
+        'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;';
+      unitLbl.appendChild(document.createTextNode('Unit '));
+      var ast3 = document.createElement('span');
+      ast3.style.color = 'var(--error, #ef4444)';
+      ast3.textContent = '*';
+      unitLbl.appendChild(ast3);
+      unitRow.appendChild(unitLbl);
+      var unitSel = document.createElement('select');
+      unitSel.className = 'spa-inp execute-confirm-unit-input';
+      unitSel.dataset.inputName = input.name || '';
+      unitSel.dataset.required = 'true';
+      var opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = 'Select unit...';
+      unitSel.appendChild(opt0);
+      [
+        'kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in',
+        'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers',
+      ].forEach(function(unit) {
+        var op = document.createElement('option');
+        op.value = unit;
+        op.textContent = unit;
+        if (input.unit === unit) op.selected = true;
+        unitSel.appendChild(op);
+      });
+      unitRow.appendChild(unitSel);
+      inputSection.appendChild(unitRow);
 
       const quantityInput = inputSection.querySelector('.execute-confirm-quantity-input');
       const unitSelect = inputSection.querySelector('.execute-confirm-unit-input');

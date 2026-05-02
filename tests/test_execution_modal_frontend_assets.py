@@ -75,6 +75,7 @@ def test_batch_start_loads_session_before_execution_modal():
     i_doc_overlay = text.find("execution-doc-overlay.js")
     i_docs = text.find("execution-render-docs.js")
     i_prompts = text.find("execution-render-prompts.js")
+    i_inv_utils = text.find("inventory-type-utils.js")
     i_inputs = text.find("execution-render-inputs.js")
     i_outputs = text.find("execution-render-outputs.js")
     i_submit = text.find("execution-submit.js")
@@ -88,6 +89,7 @@ def test_batch_start_loads_session_before_execution_modal():
         < i_doc_overlay
         < i_docs
         < i_prompts
+        < i_inv_utils
         < i_inputs
         < i_outputs
         < i_submit
