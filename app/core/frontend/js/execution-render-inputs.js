@@ -22,6 +22,23 @@
     throw new Error("execution-inventory-row-renderer.js must load before execution-render-inputs.js");
   }
 
+  /** Max inventory rows for which we reuse picker card DOM (see flows-and-batches-review cache guidance). */
+  var PICKER_CARD_CACHE_MAX_ROWS = 400;
+
+  function clearInventoryPickerCardCaches(rootEl) {
+    var root = rootEl || document;
+    if (!root || typeof root.querySelectorAll !== "function") return;
+    var sections = root.querySelectorAll(".execute-input-section");
+    for (var i = 0; i < sections.length; i++) {
+      var sec = sections[i];
+      try {
+        if (sec._execPickerCardElCache instanceof Map) {
+          sec._execPickerCardElCache.clear();
+        }
+      } catch (e) {}
+    }
+  }
+
   function renderVariableInventoryInputs(ctx) {
     var modal = ctx.modal;
     var ses = ctx.ses;
@@ -270,10 +287,17 @@
 
           /**
            * Reuse picker card DOM nodes across filter/tab/search rerenders (same inventory row objects).
+           * Beyond PICKER_CARD_CACHE_MAX_ROWS visible rows, skip reuse to cap retained DOM / Map entries.
            */
+          var usePickerCardCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS;
           var pickerCardCache =
             inputSection._execPickerCardElCache ||
             (inputSection._execPickerCardElCache = new Map());
+          if (!usePickerCardCache) {
+            try {
+              pickerCardCache.clear();
+            } catch (e) {}
+          }
 
           var pickerCardCtx = {
             getExpiredReason: getExpiredReason,
@@ -308,18 +332,29 @@
             seenIds.add(rawId);
             var payload = computeExecPickerCardPayload(inv);
             var isPending = pendingId && pendingId === rawId;
-            var card = pickerCardCache.get(rawId);
-            if (card) {
-              syncExecPickerCard(card, inv, payload, isPending, rawId);
+            var card = null;
+            if (usePickerCardCache) {
+              card = pickerCardCache.get(rawId);
+              if (card) {
+                syncExecPickerCard(card, inv, payload, isPending, rawId);
+              } else {
+                card = assembleExecPickerCard(inv, payload, isPending, rawId);
+                pickerCardCache.set(rawId, card);
+              }
             } else {
               card = assembleExecPickerCard(inv, payload, isPending, rawId);
-              pickerCardCache.set(rawId, card);
             }
             pickerFrag.appendChild(card);
           });
-          pickerCardCache.forEach(function(_el, id) {
-            if (!seenIds.has(id)) pickerCardCache.delete(id);
-          });
+          if (usePickerCardCache) {
+            pickerCardCache.forEach(function(_el, id) {
+              if (!seenIds.has(id)) pickerCardCache.delete(id);
+            });
+          } else {
+            try {
+              pickerCardCache.clear();
+            } catch (e) {}
+          }
           pickerCards.replaceChildren(pickerFrag);
         }
 
@@ -1215,5 +1250,7 @@
   root.ExecutionRenderInputs = {
     renderVariableInventoryInputs: renderVariableInventoryInputs,
     renderConfirmExecutionInputs: renderConfirmExecutionInputs,
+    clearInventoryPickerCardCaches: clearInventoryPickerCardCaches,
+    PICKER_CARD_CACHE_MAX_ROWS: PICKER_CARD_CACHE_MAX_ROWS
   };
 })(typeof window !== "undefined" ? window : this);

@@ -225,6 +225,19 @@ def test_execution_render_inputs_module_exists():
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderInputs" in body and "renderVariableInventoryInputs" in body
     assert "renderConfirmExecutionInputs" in body
+    assert "clearInventoryPickerCardCaches" in body and "PICKER_CARD_CACHE_MAX_ROWS" in body
+
+
+def test_inventory_refresh_clears_picker_card_cache_hook():
+    secondary = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal-secondary.js"
+    text = secondary.read_text(encoding="utf-8")
+    assert "clearInventoryPickerCardCaches" in text
+
+
+def test_open_step_clears_picker_card_cache_before_inputs_reset():
+    open_step = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-open-step.js"
+    text = open_step.read_text(encoding="utf-8")
+    assert "clearInventoryPickerCardCaches" in text
 
 
 def test_execution_modal_calls_render_inputs_api():

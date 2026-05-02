@@ -2,6 +2,10 @@
  * Execution modal inventory picker: card payload + DOM assembly.
  * Details panel uses DOM APIs (no innerHTML on .exec-picker-card__details).
  * Load after inventory-display.js; before execution-render-inputs.js.
+ *
+ * Security contract: user- and server-supplied strings in details (notes, audit labels/values,
+ * prompts, unknown expiry JSON) must stay on textContent / plain-text branches — never switch these
+ * to innerHTML without a dedicated sanitization policy.
  */
 (function (root) {
   'use strict';
@@ -54,6 +58,7 @@
       el.textContent = parts2.join(' · ');
       return;
     }
+    // Unknown schema: plain JSON text only (no HTML). Prefer tightening backend shapes vs rendering rich HTML here.
     try {
       el.textContent = JSON.stringify(obj);
     } catch (e) {}
@@ -120,6 +125,7 @@
       if (secProd) frag.appendChild(secProd);
 
       if (notes && notes.trim()) {
+        // extra_data.notes: treat as plain text forever (XSS-safe). Do not refactor to innerHTML.
         var notesDiv = doc.createElement('div');
         notesDiv.style.cssText =
           'font-size: 13px; color: var(--text-primary,#111827); line-height: 1.5; white-space: pre-line;';
@@ -277,6 +283,7 @@
       }
     }
 
+    // inventory_audit_history: render as text-only kv cells (same contract as notes).
     try {
       var hist = inv.extra_data && inv.extra_data.inventory_audit_history ? inv.extra_data.inventory_audit_history : [];
       if (Array.isArray(hist) && hist.length) {

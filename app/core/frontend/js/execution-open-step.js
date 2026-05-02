@@ -70,7 +70,12 @@
       const outputsContainer = modal.querySelector('#execute-outputs-container');
       const docsContainer = modal.querySelector('#execute-docs-container');
       const docsSection = modal.querySelector('#execute-docs-section');
-      if (inputsContainer) inputsContainer.innerHTML = '';
+      if (inputsContainer) {
+        if (window.ExecutionRenderInputs && typeof window.ExecutionRenderInputs.clearInventoryPickerCardCaches === 'function') {
+          window.ExecutionRenderInputs.clearInventoryPickerCardCaches(inputsContainer);
+        }
+        inputsContainer.innerHTML = '';
+      }
       if (promptsContainer) promptsContainer.innerHTML = '';
       if (outputsContainer) outputsContainer.innerHTML = '';
       if (docsContainer) docsContainer.innerHTML = '';

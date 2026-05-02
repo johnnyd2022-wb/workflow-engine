@@ -249,6 +249,10 @@
     var allInventory = inventoryData.inventory_items || [];
     var currentExecutionId = modal.dataset.executionId;
 
+    if (window.ExecutionRenderInputs && typeof window.ExecutionRenderInputs.clearInventoryPickerCardCaches === 'function') {
+      window.ExecutionRenderInputs.clearInventoryPickerCardCaches(modal);
+    }
+
     var selects = modal.querySelectorAll('.execute-inventory-select');
     for (var i = 0; i < selects.length; i++) {
       var hiddenInput = selects[i];

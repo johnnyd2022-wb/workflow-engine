@@ -1,240 +1,185 @@
-You’ve essentially refactored this in the right direction, but there are a few subtle correctness + architecture issues hiding in here that will matter in production.
+1. Security review (front-end only)
+✅ Good (no immediate vulnerabilities)
+✔ No innerHTML usage in sensitive paths
+execution-inventory-picker-view.js correctly uses:
+textContent
+DOM APIs only
 
-I’ll break this down into security/robustness, data consistency, and frontend architecture/maintainability.
+This eliminates the usual XSS injection class from inventory metadata.
 
-1. safeInventoryManualReturnTo — good improvement, but still has a blind spot
-What you fixed well
-Moving from string prefix checks → new URL() parsing is a real security upgrade
-Properly enforcing:
-same origin
-/core/ path restriction
-Handling query string preservation correctly
-Remaining issue (important)
+✔ No unsafe URL navigation / injection
+No dynamic URL construction
+No window.location mutation based on inventory data
+✔ No eval / Function constructor / script injection
 
-You are still allowing path traversal style abuse via base resolution behavior:
+Clean.
 
-new URL(s, loc.origin);
+✔ Proper escaping strategy is consistent
 
-If s = "/../something" or encoded variants, URL normalization will resolve it before your regex check.
+Where HTML strings exist (legacy dropdown subtitle in other module), they are still passed through escapeHtml.
 
-Fix
+⚠️ Minor security considerations (not blockers)
+1. notes field rendered as plain text (good) but high trust assumption exists
+notesDiv.textContent = notes;
 
-You should normalize after URL resolution:
+This is safe, but:
 
-var path = url.pathname.replace(/\/+/g, '/');
+You are trusting backend-provided text to remain non-structured
+If later someone switches this to innerHTML, it becomes a latent XSS risk
 
-And then validate strictly:
+Status: safe, but fragile contract
 
-if (!path.startsWith('/core/')) return '';
-if (path.includes('/../')) return '';
+2. JSON.stringify(obj) fallback for expiry
+el.textContent = JSON.stringify(obj);
 
-Even though browsers usually collapse ../, this closes edge cases and keeps intent explicit.
+This is safe, but:
 
-2. Duplicate logic removal (good refactor, but partial)
+Could expose sensitive metadata unintentionally (debug leakage surface)
+Not a security risk, but a data exposure concern
+3. dataset usage is safe
 
-You introduced:
+All dataset assignments are stringified explicitly → no injection vector.
 
-formatExecutionInventoryTriggerLabel(inv)
+2. Performance review
+✅ Strong improvements
+✔ Search performance optimized (important win)
+inv._inventorySearchHayLower
 
-and correctly removed duplication in:
+This is a material optimization:
 
-triggerLabel.textContent = formatExecutionInventoryTriggerLabel(inv);
-Issue
+removes repeated allocations per keystroke
+reduces .toLowerCase() + .join() churn
 
-You only partially removed duplication.
+This matters if:
 
-There are still multiple implicit formatting contracts in the codebase:
+inventory > 500–2000 items
+user is actively typing
+✔ DOM reuse cache introduced correctly
+pickerCardCache.set(rawId, card);
 
-Example elsewhere:
+Combined with:
 
-return productName + ' - ' + quantity + ' ' + unit;
+syncCard() update path
+seenIds cleanup
 
-This is now inconsistent with:
+This is a pseudo-virtual DOM pattern, and it’s efficient.
 
-process_name - name - qty unit
-Recommendation
+✔ DocumentFragment usage everywhere appropriate
+buildPayload → fragments
+renderPickerCards → fragment batching
 
-You now have 3 competing label formats:
+This avoids layout thrashing.
 
-picker card
-trigger label
-selected card header
+⚠️ Performance risks (non-blocking but worth noting)
+1. Card cache can grow unbounded
+Map<id, DOMNode>
 
-These should be unified into:
+If inventory is:
 
-InventoryDisplay.format(inv, mode)
-
-Where mode is:
-
-compact
-detailed
-trigger
-
-Right now, you’ve only standardized one surface.
-
-3. Picker search performance — unnecessary WeakMap complexity
-
-You added:
-
-var invSearchHayCache = new WeakMap();
-Problem
-
-WeakMap provides no benefit here because:
-
-inv objects are reused but not guaranteed stable identity across renders
-you are iterating fresh arrays frequently
-GC pressure is not the real bottleneck here
-Better option
-
-Use a simple derived field once:
-
-inv._searchHay ??= buildSearchHay(inv);
-
-or precompute:
-
-allInventory = allInventory.map(inv => ({
-  ...inv,
-  _searchHay: ...
-}));
+frequently changing
+large (>2–5k items over session lifecycle)
 
 Then:
 
-return inv._searchHay.includes(q);
+memory usage grows
+DOM nodes are retained even if not visible
 
-This is significantly cheaper and more predictable.
+Not urgent, but long-lived sessions may need:
 
-4. Redundant DOM churn in picker rendering (biggest real issue)
+eviction strategy (LRU or max size)
+or reset on full dataset reload
+2. buildDetailsFragment() is moderately heavy
 
-You rebuild full card DOM every render:
+It:
 
-pickerFrag.appendChild(buildExecPickerCard(inv));
+walks multiple optional nested structures
+creates many DOM nodes conditionally
+processes audit history in reverse order
 
-That function:
+This is fine because it is:
 
-creates many nodes
-assigns attributes
-injects innerHTML twice (chips, metaBlock)
-Problem
-
-This will become a performance bottleneck at scale (100–1000 items).
-
-Improvement direction
-
-Either:
-
-switch to incremental DOM updates, OR
-memoize cards per inv.id
-
-Example:
-
-if (cardCache.has(inv.id)) return cardCache.get(inv.id);
-
-Even basic caching will reduce churn significantly.
-
-5. Inconsistent type normalization boundaries
-
-You now correctly centralized:
-
-InventoryTypeUtils.normalizeInventoryTabType
+only executed on render/sync
+not per keystroke
 
 But:
 
-Problem
+if inventory list is large and filter refresh is frequent, this becomes the main cost center
 
-You still duplicate logic in multiple places:
+3. Filtering pipeline is double-pass
+.filter(matchesInventoryTab)
+.filter(matchesSearch)
 
-picker filtering
-expected tab hint
-legacy inline comparisons
+Not expensive, but:
 
-Example:
+could be fused into single pass if needed later
 
-if (t === 'intermediate' || t === 'work_in_progress' || t === 'wip')
+Right now it’s fine.
 
-and later:
-
-if (selected === 'all') return true;
-Issue
+3. Correctness / behavioural risks
+⚠️ Minor logic duplication risk
 
 You now have:
 
-canonical normalization module
-but still scattered rule knowledge
+computeExecPickerCardPayload(inv) always recomputed per render cycle
+
+Even with cache, payload is recomputed whenever card is re-used.
+
+This is fine but:
+
+no memoization at payload level
+sync still rebuilds some DOM fragments indirectly
+
+Not a bug, just architecture note.
+
+⚠️ Subtle state coupling (row renderer + picker)
+
+Row system depends on:
+
+stateKey
+ses.inputStateByKey
+
+Picker depends on:
+
+selectedIds
+pendingId
+
+These are fine but:
+
+state is distributed across 3 systems without a central store
+
+This is maintainable now, but debugging complexity increases over time.
+
+4. Test coverage
+
+Good signal:
+
+validates module existence
+validates function exports
+validates search helpers
+validates picker view contract
+
+This is exactly what you want for a DOM-heavy vanilla system.
+
+No gaps visible at this level.
+
+Final verdict
+✔ Security: SAFE
+No XSS vectors introduced
+No unsafe DOM patterns
+No injection surfaces in new code
+✔ Performance: GOOD
+Search optimization is a net gain
+DOM reuse system is correct and efficient
+Fragment batching prevents layout thrash
+⚠️ Risks (manageable)
+Unbounded DOM cache growth over long sessions
+Payload rebuild overhead in sync path
+Distributed state complexity (not a runtime issue yet)
 Recommendation
 
-Make InventoryTypeUtils the only source of truth:
+You can merge safely.
 
-InventoryTypeUtils.isType(inv, selectedType)
-InventoryTypeUtils.matchesSearch(inv, q)
+If you want a minimal hardening step before merging (optional, not required):
 
-Right now, logic duplication will drift again within 2–3 features.
-
-6. UI structure: picker panel is doing too much
-
-This block is becoming a mini-application inside a modal:
-
-segmented control
-search
-cards
-selection state
-add missing flow
-add another input flow
-warnings
-Risk
-
-This will eventually:
-
-become untestable
-require fragile event wiring
-break across refactors
-Architectural suggestion
-
-Split into:
-
-InventoryPickerController
-InventoryPickerView
-InventoryRowRenderer
-
-Even a lightweight separation (not full framework) would help.
-
-7. Minor correctness issues
-A. Typo bug
-"Finals products"
-
-Should be:
-
-"Final products"
-
-This will show in UI.
-
-B. Potential undefined dataset coercions
-if (input.producing_process_name)
-
-but elsewhere:
-
-String(input.producing_process_name)
-
-You’re inconsistent about normalization safety.
-
-C. Hidden input initialization
-hiddenInput.dataset.quantity = "";
-hiddenInput.dataset.unit = "";
-
-This may mask bugs later because:
-
-empty string ≠ null state
-downstream logic likely assumes presence means valid selection
-
-Better:
-
-delete hiddenInput.dataset.quantity;
-delete hiddenInput.dataset.unit;
-Bottom line
-
-You’ve improved:
-
-security posture (URL handling)
-UI readability (label function extraction)
-type normalization (partial centralization)
-
-But the system is now at a stage where the main risk is no longer correctness—it’s accumulating UI + logic duplication across the execution modal ecosystem.
+Add a soft cap or reset hook for pickerCardCache
+Ensure extra_data.notes and audit history remain strictly textContent-only (no future refactor to innerHTML)
