@@ -1,230 +1,287 @@
 🔴 CRITICAL
-1. ⚠️ Recursive sanitisation is correct directionally, but still not a true security boundary
-What you implemented
-def _strip_trace_keys_recursive(obj: Any, depth: int = 0)
+1. ⚠️ In-memory counters are process-local → misleading in multi-worker environments
+What you built
+_counts: dict[str, int] = {}
 
-✔ Handles nested dict/list
-✔ Depth guard prevents pathological recursion
-✔ Eliminates previous bypass vector (nested trace keys)
+Thread-safe ✔
+Low overhead ✔
 
-Remaining issue (important nuance)
+Problem
 
-This is still blacklist-based sanitisation.
+This is not process-safe, only thread-safe.
 
-That means:
+In production (very likely):
+Gunicorn / uWSGI / ECS → multiple workers
+each worker has its own _counts
+Result
 
-unknown keys still pass through
-structure is still unbounded
-types are still unconstrained
-Real risk class
+Your /metrics endpoint:
 
-Not spoofing anymore — now it’s:
+returns partial, per-process view
+not representative of system state
+misleading for debugging incidents
+Why this is critical
 
-data contract drift + injection into downstream logic
+You are now relying on these counters for:
 
-Examples:
+hydration failures
+ready date parsing failures
+strip truncation signals
 
-extremely large nested payloads → memory pressure
-unexpected structures → break assumptions in _split_execution_data
-subtle poisoning of analytics/audit layers
-Recommendation (next step, not optional long-term)
+If they’re inaccurate → you lose trust in observability.
 
-You’ve reached the limit of what sanitisation can safely do.
+Recommendation
 
-Move to:
+Short-term (minimal change):
 
-schema validation (Pydantic or equivalent) at the boundary
-or at minimum:
-max payload size enforcement
-key count / nesting limits
+explicitly label them:
+
+"operational_counters": {"scope": "process-local", ...}
+
+Better:
+
+push increments to:
+StatsD / Datadog
+Prometheus counter
+or aggregate via shared store (Redis)
+🟠 HIGH
+2. ⚠️ Dual enforcement paths can drift (Pydantic vs runtime strip limits)
+
+You now have:
+
+Validation layer
+validate_json_blob(...)
+Runtime sanitisation
+_strip_trace_keys_recursive(...)
+
+Both enforce:
+
+depth
+breadth
+list size
+Risk
+
+These constants are shared but enforced differently:
+
+Layer	Behaviour
+Validation	rejects request (400)
+Strip	truncates + counts
+Problem
+
+If a future change modifies:
+
+_STRIP_MAX_* OR
+validation constants
+
+You can get:
+
+accepted → truncated silently
+
+Recommendation
+
+Enforce invariant:
+
+validation limits MUST be ≤ strip limits
+
+or better:
+
+strip should assume validated input only
+remove truncation fallback entirely (fail fast)
 
 Right now:
 
-secure enough for internal APIs, not fully hardened SaaS boundary.
+you have two different behaviours for same constraint
 
-🟠 HIGH
-2. Query strategy: reverting to JOIN is the correct trade-off (good call)
+3. ⚠️ approximate_json_value_size can be abused for CPU amplification
+len(json.dumps(value, default=str))
+Risk class
 
-You moved back to:
+This is a CPU-expensive fallback path.
 
-.join(Execution, ExecutionStep.execution_id == Execution.id)
-.filter(Execution.org_id == org_id)
-This is the right choice 👍
+Attack scenario
 
-Why:
+Client sends:
 
-avoids subquery planner ambiguity
-enables index usage on Execution.org_id
-bounded by step_ids (critical constraint)
-Remaining nuance
+deeply nested or wide object
+no Content-Length header
 
-You still rely on planner doing:
+You:
 
-ExecutionStep.id IN (...) → index lookup first
-
-If step_ids grows large (e.g. 1k+):
-
-planner may switch to hash strategy
-join cost increases
-Recommendation (future scale guard)
-
-If inventory grows large:
-
-chunk step_ids (e.g. 500–1000)
-or paginate inventory earlier
-
-Not urgent, but worth noting.
-
-3. ⚠️ Logging is now correctly downgraded — but you’ve removed signal entirely
-
-You moved everything to:
-
-logger.debug(...)
-This fixes
-
-✔ log spam
-✔ noisy alerting
-
-But introduces a new blind spot
-
-Now:
-
-all hydration failures are invisible in production unless debug logging enabled
-Risk
-silent degradation returns
-especially dangerous for:
-ready_date_display
-producing_step resolution
-Recommendation (balanced approach)
-
-Keep debug logs, but add cheap aggregate signal:
-
-counter metric:
-inventory_hydration_failures
-ready_date_compute_failures
-
-This gives:
-
-zero log noise
-full observability
-🟡 MEDIUM
-4. Depth limiter is good — but not symmetric with payload size
-if depth > _MAX_EXECUTION_DATA_STRIP_DEPTH:
-    return obj
-Issue
-
-You cap depth, but:
-
-do not cap breadth
-do not cap total size
-Risk
-
-Client can send:
-
-massive wide objects (e.g. 10k keys at depth 1)
-large lists
+fully parse JSON ✔
+then re-serialize it ❌
 Impact
-CPU cost during recursion
-memory overhead
-JSON serialization cost later
+double CPU cost
+potential DoS vector at scale
 Recommendation
 
-Add one of:
+Safer approach:
 
-max key count per dict
-max list length
-or global payload size guard (preferred)
-5. Ready date parsing: now well-behaved but still silent failure mode
-_log.debug("ready_date_actual string did not parse")
-Current behaviour
-invalid string → ignored → fallback path
-only visible in debug logs
+rely on raw_bytes length only
+or cap approximate_json_value_size recursion
+
+At minimum:
+
+short-circuit for large structures early
+4. ⚠️ Truncation strategy introduces silent data corruption class
+items = list(obj.items())[:_STRIP_MAX_DICT_KEYS]
+
+and
+
+obj = obj[:_STRIP_MAX_LIST_LEN]
+Problem
+
+You are:
+
+mutating payload shape
+without signaling upstream (except counter)
 Risk
-data inconsistency across tenants
-hard-to-debug UI discrepancies
+business logic operates on incomplete data
+extremely hard to debug
+violates principle of least surprise
 Recommendation
 
-You already hinted at it:
+For SaaS correctness:
 
-ready_date_parse_failures metric
+prefer reject over truncate
 
-Do that. That’s the correct SaaS-grade solution.
+Only truncate if:
 
-6. Minor: redundant if dt: check pattern
-dt = _normalize_dt(...)
-if dt:
-    return dt
+field is explicitly "best effort" (logs, metadata)
 
-If _normalize_dt guarantees:
+For execution_data:
+→ this is borderline business data → rejection is safer
 
-None | datetime
+🟡 MEDIUM
+5. ✔ Counter instrumentation is well placed (this is a strong improvement)
 
-Then this is fine.
+You added:
 
-If not:
+ready_date_parse_failures
+inventory_hydration_failures
+etc.
 
-falsy datetime edge cases (unlikely but sloppy contract)
+This is exactly the right level of:
 
-Not critical, just tighten contract if possible.
+low cardinality
+high signal
+Small improvement
 
-🟢 WHAT IS NOW SOLID
+Add:
 
-This is worth calling out clearly.
+rate (per request or per minute)
+not just cumulative count
+6. ⚠️ validate_json_blob recursion cost is still unbounded per request
 
-✔ N+1 class issues: resolved properly
-batched ExecutionStep loading
-no hidden ORM re-fetches
-no ready-date per-item query
-✔ Query shape: now stable and predictable
-JOIN-based org scoping
-bounded by step_ids
-✔ Logging discipline improved
-no more warning spam
-intentional debug-only for hot paths
-✔ Security posture improved meaningfully
-recursive stripping closes obvious bypass
-trust boundary now explicit in code
+Even with limits:
+
+depth: 8
+keys: 200
+list: 500
+
+Worst-case nodes:
+
+200^8 → capped by depth traversal but still large
+
+Realistically safe, but:
+
+Risk
+pathological payloads near limits
+CPU spikes
+Recommendation
+
+Optional but strong:
+
+add node visit counter cap
+e.g. max 10k nodes
+7. ⚠️ JSON decoding happens before validation (necessary but worth noting)
+raw_body = json.loads(...)
+Reality
+
+You must parse JSON before validating shape, so this is fine.
+
+But:
+large payload → already parsed before rejection
+
+You mitigated via:
+
+raw_bytes size checks ✔
+
+So this is acceptable.
+
+🟢 WHAT IS NOW EXCELLENT
+
+This is where the code is genuinely strong.
+
+✔ Proper request boundary enforcement
+strict Pydantic model (extra="forbid")
+JSON shape validation
+size limits
+type enforcement
+
+This is SaaS-grade input hygiene.
+
+✔ Observability is now intentional
+
+You moved from:
+
+silent failure ❌
+to:
+debug logs + counters ✔
+
+This is exactly how high-throughput systems should behave.
+
+✔ Sanitisation is now structurally sound
+recursive stripping
+depth + breadth limits
+counters for truncation
+
+This closes:
+
+nested injection vectors
+previous trust-boundary gaps
+✔ Inventory endpoint now stable
+no N+1
+predictable query shape
+bounded execution
+
+This is production-safe.
+
 🧾 FINAL VERDICT
 
-You’ve moved this code to:
+You’ve moved the system into:
 
-“Production-ready for typical SaaS load, with controlled and understood edge risks”
+“Production-grade, with controlled and observable failure modes”
 
-Remaining real risks (in order)
-🔴 Must address (next phase)
-Replace blacklist sanitisation with schema validation (or enforce payload constraints)
+Remaining real risks (ranked)
+🔴 Must fix (observability correctness)
+Process-local counters misleading in multi-worker environments
 🟠 Should address
-Add metrics for silent failures (hydration + ready-date parsing)
-Consider payload size / breadth limits
-🟡 Nice-to-have
-Chunk large step_ids if inventory scales significantly
-Tighten _normalize_dt contract
+Truncation vs validation inconsistency (silent data mutation risk)
+CPU amplification via approximate_json_value_size
+🟡 Optional hardening
+Node-count cap in JSON validation
+metric rate calculation
+clearer contract: reject vs truncate
 Bottom line
 
-You’re no longer dealing with:
+This is no longer a “risky backend”:
 
-query explosions
-silent data corruption
-obvious security gaps
+Input boundary → strong ✔
+Query behaviour → stable ✔
+Observability → meaningful ✔
 
-Now you’re in:
+What remains is:
 
-“mature system concerns: observability, contracts, and scale predictability”
-
-That’s exactly where you want to be for a production SaaS backend.
+operational polish and scaling correctness, not architectural flaws.
 
 ---
 
-## Round-3 acknowledgment (document state)
+## Round-4 follow-up (implemented)
 
-| Priority | Item | Status |
-|----------|------|--------|
-| **Must** | Pydantic + size at `complete_step` | **Done** — `CompleteStepRequestBody` (`extra="forbid"`), raw body **768 KiB** cap, `validate_json_blob` (depth/keys/list/string), tests in `tests/test_complete_step_payload.py`. |
-| **Should** | Counters | **Done** — `app/core/utils/internal_counters.py`; increments for `inventory_hydration_failures`, `inventory_producing_step_failures`, `inventory_producing_step_name_fallback_failures`, `ready_date_compute_failures`, `ready_date_parse_failures`, `execution_data_strip_breadth_truncated`; exposed on **`GET /api/core/metrics`** as `operational_counters`. |
-| **Should** | Payload breadth | **Done** — shared limits in `complete_step_payload.py`; defensive truncation in `_strip_trace_keys_recursive` + counter. |
-| **Nice** | Chunk large `step_ids` | **Deferred** |
-| **Nice** | `_normalize_dt` contract | **Deferred** |
-
-**Still separate initiative:** `complete-step-transaction-refactor-plan.md` (atomic `complete_step` transaction).
-
-**Frontend fix:** `execution-step-spa.js` now sends `actual_inputs`, `actual_outputs`, `execution_data` (was incorrect keys).
+| Finding | Change |
+|---------|--------|
+| Process-local counters misleading | **`GET /api/core/metrics`** → `operational_counters.scope` = **`process-local`**, plus **`note`** about multi-worker aggregation. |
+| Dual enforcement / silent truncation | **`_strip_trace_keys_recursive`** no longer truncates dicts/lists; validation **rejects** oversize. Removed **`execution_data_strip_breadth_truncated`** increments. |
+| **`approximate_json_value_size` CPU / DoS** | **Removed**; body size enforced only via **`len(raw_bytes)`** (already parsed JSON must fit prior read). |
+| Unbounded recursion cost | **`validate_json_blob`** now uses **`MAX_JSON_NODES`** (10k) shared counter across each top-level validate call. |
+| Rate metrics | **Deferred** (needs external time-series); cumulative counters remain. |

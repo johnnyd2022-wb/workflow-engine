@@ -18,11 +18,8 @@ from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
-    MAX_DICT_KEYS_PER_LEVEL as _STRIP_MAX_DICT_KEYS,
     MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
-    MAX_LIST_LENGTH as _STRIP_MAX_LIST_LEN,
     CompleteStepRequestBody,
-    approximate_json_value_size,
     validate_json_blob,
 )
 from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
@@ -395,24 +392,19 @@ _EXECUTION_DATA_TRACE_KEYS = {
 
 
 def _strip_trace_keys_recursive(obj: Any, depth: int = 0) -> Any:
-    """Remove trace keys at any depth. Breadth/depth align with complete_step ``validate_json_blob`` when request was validated first."""
+    """
+    Remove trace keys at any depth. Assumes ``validate_json_blob`` already ran for HTTP requests
+    (no silent truncation — reject vs mutate is handled in validation).
+    """
     if depth > _STRIP_MAX_DEPTH:
         return obj
     if isinstance(obj, dict):
-        if len(obj) > _STRIP_MAX_DICT_KEYS:
-            inc_counter("execution_data_strip_breadth_truncated")
-            items = list(obj.items())[: _STRIP_MAX_DICT_KEYS]
-        else:
-            items = list(obj.items())
         return {
             k: _strip_trace_keys_recursive(v, depth + 1)
-            for k, v in items
+            for k, v in obj.items()
             if k not in _EXECUTION_DATA_TRACE_KEYS
         }
     if isinstance(obj, list):
-        if len(obj) > _STRIP_MAX_LIST_LEN:
-            inc_counter("execution_data_strip_breadth_truncated")
-            obj = obj[: _STRIP_MAX_LIST_LEN]
         return [_strip_trace_keys_recursive(x, depth + 1) for x in obj]
     return obj
 
@@ -1770,9 +1762,6 @@ def complete_step(execution_id: str, execution_step_id: str):
             return jsonify({"error": "Invalid JSON"}), 400
         if not isinstance(raw_body, dict):
             return jsonify({"error": "Invalid request body", "details": ["JSON root must be an object"]}), 400
-
-    if content_length is None and approximate_json_value_size(raw_body) > MAX_COMPLETE_STEP_CONTENT_LENGTH:
-        return jsonify({"error": "Request body too large"}), 413
 
     try:
         parsed_body = CompleteStepRequestBody.model_validate(raw_body)
@@ -3801,7 +3790,11 @@ def get_metrics():
                     "work_in_progress": len(wip),
                     "final_products": len(final_products),
                 },
-                "operational_counters": get_counter_snapshot(),
+                "operational_counters": {
+                    "scope": "process-local",
+                    "note": "Counts are per web worker process; use an external sink to aggregate in multi-worker deployments.",
+                    "counts": get_counter_snapshot(),
+                },
             }
         ),
         200,
