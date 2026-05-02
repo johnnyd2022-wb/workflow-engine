@@ -408,11 +408,9 @@
                 ev.stopPropagation();
                 var rowCard = confirmBtn.closest('.execute-reconcile-untracked-card');
                 if (!rowCard || !cardsContainer.contains(rowCard)) return;
-                var uidAttr = confirmBtn.getAttribute('data-untracked-id');
-                var uid =
-                  uidAttr !== null
-                    ? normalizeReconcileId(uidAttr)
-                    : normalizeReconcileId(rowCard.dataset.untrackedId);
+                var uid = 'untrackedId' in confirmBtn.dataset
+                  ? normalizeReconcileId(confirmBtn.dataset.untrackedId)
+                  : normalizeReconcileId(rowCard.dataset.untrackedId);
                 if (uid === RECONCILE_NONE_ID) {
                   setReconcileState(false, RECONCILE_NONE_ID);
                 } else {
@@ -444,7 +442,7 @@
               '</div>' +
             '</div>';
           var noneConfirmBtn = noneCard.querySelector('.exec-reconcile-confirm-btn');
-          if (noneConfirmBtn) noneConfirmBtn.setAttribute('data-untracked-id', RECONCILE_NONE_ID);
+          if (noneConfirmBtn) noneConfirmBtn.dataset.untrackedId = RECONCILE_NONE_ID;
           var cardsFrag = document.createDocumentFragment();
           cardsFrag.appendChild(noneCard);
 
@@ -492,7 +490,7 @@
                 '</div>' +
               '</div>';
             var rowConfirmBtn = card.querySelector('.exec-reconcile-confirm-btn');
-            if (rowConfirmBtn) rowConfirmBtn.setAttribute('data-untracked-id', idNorm);
+            if (rowConfirmBtn) rowConfirmBtn.dataset.untrackedId = idNorm;
             cardsFrag.appendChild(card);
           });
 
