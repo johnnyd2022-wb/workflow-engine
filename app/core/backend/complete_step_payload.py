@@ -24,6 +24,20 @@ MAX_KEY_LENGTH = 256
 MAX_JSON_NODES = 10_000
 
 
+class _JsonNodeBudget:
+    """Mutable visit counter (clearer than list[int] sentinel)."""
+
+    __slots__ = ("n",)
+
+    def __init__(self) -> None:
+        self.n = 0
+
+    def visit(self, path: str) -> None:
+        self.n += 1
+        if self.n > MAX_JSON_NODES:
+            raise ValueError(f"{path}: JSON structure too large (max {MAX_JSON_NODES} nodes)")
+
+
 class CompleteStepRequestBody(BaseModel):
     """Strict top-level shape. Dynamic step prompts live inside execution_data as string values."""
 
@@ -40,17 +54,15 @@ def validate_json_blob(
     *,
     depth: int = 0,
     path: str = "$",
-    _visited: list[int] | None = None,
+    budget: _JsonNodeBudget | None = None,
 ) -> None:
     """
     Enforce depth, breadth, and JSON-serializable types for nested payloads.
     Raises ValueError with a stable message for 400 responses.
     """
-    if _visited is None:
-        _visited = [0]
-    _visited[0] += 1
-    if _visited[0] > MAX_JSON_NODES:
-        raise ValueError(f"{path}: JSON structure too large (max {MAX_JSON_NODES} nodes)")
+    if budget is None:
+        budget = _JsonNodeBudget()
+    budget.visit(path)
     if depth > MAX_JSON_DEPTH:
         raise ValueError(f"{path}: nesting exceeds maximum depth ({MAX_JSON_DEPTH})")
     if isinstance(obj, dict):
@@ -61,12 +73,12 @@ def validate_json_blob(
                 raise ValueError(f"{path}: object keys must be strings")
             if len(k) > MAX_KEY_LENGTH:
                 raise ValueError(f"{path}: key too long (max {MAX_KEY_LENGTH} chars)")
-            validate_json_blob(v, depth=depth + 1, path=f"{path}.{k[:48]}", _visited=_visited)
+            validate_json_blob(v, depth=depth + 1, path=f"{path}.{k[:48]}", budget=budget)
     elif isinstance(obj, list):
         if len(obj) > MAX_LIST_LENGTH:
             raise ValueError(f"{path}: list too long (max {MAX_LIST_LENGTH})")
         for i, item in enumerate(obj):
-            validate_json_blob(item, depth=depth + 1, path=f"{path}[{i}]", _visited=_visited)
+            validate_json_blob(item, depth=depth + 1, path=f"{path}[{i}]", budget=budget)
     elif isinstance(obj, str):
         if len(obj) > MAX_STRING_LENGTH:
             raise ValueError(f"{path}: string too long (max {MAX_STRING_LENGTH} chars)")

@@ -393,11 +393,16 @@ _EXECUTION_DATA_TRACE_KEYS = {
 
 def _strip_trace_keys_recursive(obj: Any, depth: int = 0) -> Any:
     """
-    Remove trace keys at any depth. Assumes ``validate_json_blob`` already ran for HTTP requests
-    (no silent truncation — reject vs mutate is handled in validation).
+    Remove trace keys at any depth.
+
+    **Contract:** Call only on trees that already passed ``validate_json_blob`` (same MAX_JSON_DEPTH).
+    If depth exceeds the guard, something bypassed validation — fail loudly rather than return partly stripped data.
     """
     if depth > _STRIP_MAX_DEPTH:
-        return obj
+        raise RuntimeError(
+            "_strip_trace_keys_recursive exceeded MAX_JSON_DEPTH; "
+            "execution_data must be validated with validate_json_blob before strip."
+        )
     if isinstance(obj, dict):
         return {
             k: _strip_trace_keys_recursive(v, depth + 1)
@@ -412,7 +417,8 @@ def _strip_trace_keys_recursive(obj: Any, depth: int = 0) -> Any:
 def _strip_incoming_execution_trace_keys(execution_data: dict | None) -> dict:
     """
     Remove audit/trace keys from the client JSON payload before merge/persist (recursive).
-    Server sets identity and validation messages. Unknown non-trace keys still pass through — full whitelist → Pydantic follow-up.
+
+    For HTTP: only call after ``validate_json_blob`` on the same object so depth/node invariants match.
     """
     if not execution_data:
         return {}
