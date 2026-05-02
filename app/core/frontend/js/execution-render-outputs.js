@@ -12,6 +12,12 @@
    */
   var reconcileCardsDelegationBound = new WeakSet();
 
+  /** Canonical reconcile id: trimmed string; null/undefined/whitespace-only → '' (none / no selection). */
+  function normalizeReconcileId(v) {
+    if (v == null) return '';
+    return String(v).trim();
+  }
+
   /**
    * Collapsible details for untracked reconciliation cards — aligns with inventory picker (audit, notes).
    */
@@ -310,6 +316,7 @@
           if (!cardsContainer || !hiddenInput) {
             console.warn('execute reconcile UI: missing cards container or hidden input');
           } else {
+          var defaultIdNorm = normalizeReconcileId(defaultId);
           /** Authoritative UI state; hidden input mirrors selectedId for form submit only (written from here each update). */
           var reconcileState = { locked: false, selectedId: '' };
           var reconcileCardById = {};
@@ -317,10 +324,9 @@
 
           function applyReconcileCardVisual(card) {
             if (!card) return;
-            var sel = reconcileState.selectedId;
             var lock = reconcileState.locked;
-            var cardId = card.dataset.untrackedId != null ? String(card.dataset.untrackedId).trim() : '';
-            var st = sel != null ? String(sel).trim() : '';
+            var st = normalizeReconcileId(reconcileState.selectedId);
+            var cardId = normalizeReconcileId(card.dataset.untrackedId);
             var selected = cardId === st;
             card.classList.toggle('execute-reconcile-card-selected', selected);
             if (!lock) {
@@ -344,9 +350,9 @@
 
           function setReconcileState(locked, selectedId) {
             var newLock = !!locked;
-            var newSel = selectedId != null ? String(selectedId).trim() : '';
+            var newSel = normalizeReconcileId(selectedId);
             var oldLock = reconcileState.locked;
-            var oldSel = reconcileState.selectedId != null ? String(reconcileState.selectedId).trim() : '';
+            var oldSel = normalizeReconcileId(reconcileState.selectedId);
             reconcileState.locked = newLock;
             reconcileState.selectedId = newSel;
             hiddenInput.value = newSel;
@@ -399,7 +405,7 @@
                 ev.stopPropagation();
                 var rowCard = confirmBtn.closest('.execute-reconcile-untracked-card');
                 if (!rowCard || !cardsContainer.contains(rowCard)) return;
-                var uid = (rowCard.dataset.untrackedId || '').trim();
+                var uid = normalizeReconcileId(rowCard.dataset.untrackedId);
                 if (uid === '') {
                   setReconcileState(false, '');
                 } else {
@@ -419,7 +425,7 @@
           }
 
           var noneCard = document.createElement('div');
-          noneCard.className = 'execute-reconcile-untracked-card' + (defaultId ? '' : ' execute-reconcile-card-selected');
+          noneCard.className = 'execute-reconcile-untracked-card' + (defaultIdNorm ? '' : ' execute-reconcile-card-selected');
           noneCard.dataset.untrackedId = '';
           noneCard.innerHTML =
             '<div style="padding: 12px 16px;">' +
@@ -436,7 +442,7 @@
           matchingUntracked.forEach(function(u) {
             var id = String(u.id);
             var card = document.createElement('div');
-            card.className = 'execute-reconcile-untracked-card card card-interactive' + (id === defaultId ? ' execute-reconcile-card-selected' : '');
+            card.className = 'execute-reconcile-untracked-card card card-interactive' + (normalizeReconcileId(id) === defaultIdNorm ? ' execute-reconcile-card-selected' : '');
             card.dataset.untrackedId = id;
             var unreconciledQty = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? String(u.remaining_balance_to_reconcile).trim() : null;
             var subtitleParts = [];
@@ -487,7 +493,7 @@
               console.warn('execute reconcile: card missing data-untracked-id');
               return;
             }
-            var key = String(c.dataset.untrackedId != null ? c.dataset.untrackedId : '').trim();
+            var key = normalizeReconcileId(c.dataset.untrackedId);
             if (Object.prototype.hasOwnProperty.call(reconcileCardById, key)) {
               console.warn('execute reconcile: duplicate data-untracked-id', key === '' ? '(none)' : key);
               return;
@@ -497,7 +503,7 @@
 
           bindReconcileCardsDelegation();
 
-          setReconcileState(false, defaultId != null ? String(defaultId).trim() : '');
+          setReconcileState(false, defaultId);
           }
         }
 

@@ -1,23 +1,28 @@
-# Execute-step reconcile UI — `execution-render-outputs.js`
+# Execute-step reconcile UI (`execution-render-outputs.js`)
 
-## Implemented model (single canonical id)
+## Canonical identity (single normalization)
 
-- **`''` (after trim) = no inventory row** — same value in `reconcileState.selectedId`, hidden input, and submit (`execution-submit.js`).
-- **Non-empty string = untracked id** — `data-untracked-id` on cards uses the same trimmed string as the map key.
-- **No `__none__` sentinel** — removed the translation layer (`reconcileMapKeyFromStateSel` / `reconcileCardMatchesSelection`); selection is **`cardId === stateId`** with both sides `.trim()`.
-- **None row** — `data-untracked-id=""` (empty). Only one such row; duplicate `''` keys are rejected at index time (first wins, second logs + skips).
+All reconcile ids pass through **`normalizeReconcileId(v)`** (`null`/`undefined`/whitespace-only → **`''`** = none / no selection). Used for:
 
-## Update paths
+- **`setReconcileState`** reads/writes
+- **`applyReconcileCardVisual`** (`dataset` vs `reconcileState.selectedId`)
+- **Click handler** (`uid` vs **`''`**)
+- **Index keys** (`reconcileCardById`)
+- **Initial selection** — **`defaultIdNorm`** vs **`normalizeReconcileId(id)`** for row CSS (avoids whitespace mismatch with **`defaultId`**)
 
-- **Delta** (lock unchanged, selection changed): look up `reconcileCardById[oldSel]` and `[newSel]`; if **both** exist, apply visuals to those two nodes only.
-- **Fallback**: if either lookup is missing → **`console.warn`** with context → **`sweepAllReconcileCards()`** so the UI never stays half-updated silently.
-- **Sweep**: bootstrap and **`locked` change** → full pass over the map (elements guarded).
+Hidden input and submit stay **`''`** or trimmed UUID strings (`execution-submit.js`).
 
-## Index build
+There is **no** `__none__` sentinel or map translation layer.
 
-- Keys: **`String(dataset.untrackedId).trim()`** — duplicate keys skip assignment + warn (`'(none)'` in message for empty).
+## Delta vs sweep
 
-## Remaining risks
+- **Both** `reconcileCardById[oldSel]` and `[newSel]` present → update those two nodes only.
+- **Either missing** → `console.warn` → **full sweep** (correctness over micro-optimisation).
 
-- Imperative UI / index rebuilt once per render (no dynamic card injection today).
-- Expand HTML still string-built; XSS boundary = **`escapeHtml`** (see `.cursor/rules/js-review.mdc`).
+## Remaining tradeoffs (by design)
+
+- **`''` means none** — same as “falsy” id; backend oddities (`"none"`, `"0"`) are **not** remapped (would need an explicit product rule).
+- **Index** built once per render; dynamic card injection would require a **reindex** (not used today).
+- **Expand HTML** still string-built; security = **`escapeHtml`** everywhere (`.cursor/rules/js-review.mdc`).
+
+The review text that referred to “three normalization sites” is **superseded** if it predates **`normalizeReconcileId`**.
