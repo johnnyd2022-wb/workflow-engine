@@ -312,29 +312,50 @@
           } else {
           /** Authoritative UI state; hidden input mirrors selectedId for form submit only (written from here each update). */
           var reconcileState = { locked: false, selectedId: '' };
+          var reconcileCardById = {};
+          var reconcileStateBootstrapped = false;
 
-          function setReconcileState(locked, selectedId) {
-            reconcileState.locked = !!locked;
-            reconcileState.selectedId = selectedId != null ? String(selectedId) : '';
-            hiddenInput.value = reconcileState.selectedId;
+          function applyReconcileCardVisual(card) {
+            if (!card) return;
             var sel = reconcileState.selectedId;
             var lock = reconcileState.locked;
-            /* Live NodeList scan — avoids stale refs if cards change; use .forEach on NodeList (no Array.from alloc). */
-            cardsContainer.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
-              var id = c.dataset.untrackedId || '';
-              var selected = id === sel;
-              c.classList.toggle('execute-reconcile-card-selected', selected);
-              if (!lock) {
-                c.style.display = '';
-              } else {
-                c.style.display = selected ? '' : 'none';
-              }
-              var btn = c.querySelector('.exec-reconcile-confirm-btn');
-              if (btn) {
-                btn.textContent = selected ? 'Reconciliation selected' : 'Confirm reconciliation';
-                btn.disabled = !!selected;
-              }
+            var id = card.dataset.untrackedId || '';
+            var selected = id === sel;
+            card.classList.toggle('execute-reconcile-card-selected', selected);
+            if (!lock) {
+              card.style.display = '';
+            } else {
+              card.style.display = selected ? '' : 'none';
+            }
+            var btn = card.querySelector('.exec-reconcile-confirm-btn');
+            if (btn) {
+              btn.textContent = selected ? 'Reconciliation selected' : 'Confirm reconciliation';
+              btn.disabled = !!selected;
+            }
+          }
+
+          function sweepAllReconcileCards() {
+            Object.keys(reconcileCardById).forEach(function(k) {
+              applyReconcileCardVisual(reconcileCardById[k]);
             });
+          }
+
+          function setReconcileState(locked, selectedId) {
+            var newLock = !!locked;
+            var newSel = selectedId != null ? String(selectedId) : '';
+            var oldLock = reconcileState.locked;
+            var oldSel = reconcileState.selectedId;
+            reconcileState.locked = newLock;
+            reconcileState.selectedId = newSel;
+            hiddenInput.value = newSel;
+            if (!reconcileStateBootstrapped || oldLock !== newLock) {
+              reconcileStateBootstrapped = true;
+              sweepAllReconcileCards();
+              return;
+            }
+            if (oldSel === newSel) return;
+            applyReconcileCardVisual(reconcileCardById[oldSel]);
+            applyReconcileCardVisual(reconcileCardById[newSel]);
           }
 
           function bindReconcileCardsDelegation() {
@@ -445,6 +466,10 @@
           });
 
           cardsContainer.appendChild(cardsFrag);
+
+          cardsContainer.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
+            reconcileCardById[c.dataset.untrackedId || ''] = c;
+          });
 
           bindReconcileCardsDelegation();
 
