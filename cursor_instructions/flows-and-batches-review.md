@@ -1,188 +1,168 @@
-This version is significantly cleaner than the previous one — you’ve moved toward a proper state-driven UI controller pattern, which is the right direction. That said, there are still a few high-impact architectural and correctness issues worth calling out.
+This CSS + JS pairing is actually a significant architectural improvement over the earlier versions, but it still has a couple of deep consistency and model-mixing issues that will bite you at scale.
 
-I’ll re-rank everything based on this latest state of the file.
+I’ll focus on cross-layer correctness (JS ↔ CSS coupling), because that’s where the real risk is now.
 
-🔴 1. State desynchronisation risk (highest severity)
-Current pattern
-var reconcileState = { locked: false, selectedId: '' };
-var cardEls = [];
+🔴 1. Hidden dual source of truth (CSS vs JS state conflict)
 
-and:
+You now have three independent mechanisms controlling selection visibility:
 
-cardEls.forEach(function(c) { ... });
-Core issue
-
-You are now maintaining three sources of truth:
-
-reconcileState
+CSS:
+.execute-reconcile-card-selected { ... }
+JS:
+classList.toggle('execute-reconcile-card-selected', selected);
+JS state:
+reconcileState.selectedId
+PLUS hidden input:
 hiddenInput.value
-DOM state (dataset, classList, style)
-Why this is dangerous
+🚨 Problem
 
-These can drift in subtle ways:
+You are double encoding state:
 
-external code mutates hidden input
-DOM re-render occurs without reinitialising cardEls
-delegation triggers before cardEls is populated
-state update happens but DOM query set is stale
-Severity: 🔴 HIGH (correctness + UI drift bug class)
-🔴 2. cardEls is a snapshot, not a live binding
-cardEls = Array.prototype.slice.call(
-  cardsContainer.querySelectorAll(...)
-);
+JS determines truth
+CSS reflects it
+hidden input also stores it
+
+But CSS ALSO has:
+
+[data-reconcile-locked="1"] > .execute-reconcile-untracked-card:not(.execute-reconcile-card-selected) {
+  display: none;
+}
+
+So visibility depends on:
+
+dataset attribute
+class name
+JS state update timing
+🔥 Failure mode
+
+If ANY of these desync:
+
+JS updates class but not dataset → CSS hides wrong items
+dataset updates but JS selection lags → flicker / incorrect visibility
+hiddenInput updates but DOM not synced → form submits wrong selection
+Severity: 🔴 HIGH (state model fragility)
+🟠 2. CSS is doing structural logic (anti-pattern risk)
+
+This rule is important:
+
+.execute-reconcile-untracked-cards[data-reconcile-locked="1"]
+  > .execute-reconcile-untracked-card:not(.execute-reconcile-card-selected) {
+  display: none;
+}
 Problem
 
-This is a static snapshot of DOM nodes.
+CSS is now responsible for:
 
-So if:
+business rule: “only selected card remains visible when locked”
 
-new cards are injected
-cards are filtered or replaced
-async update modifies container
+This is logic, not presentation.
 
-→ setReconcileState() operates on stale nodes.
+Why this matters
 
-Real failure mode:
-UI shows new card
-selection logic ignores it
-or worse: partially updates old + new nodes inconsistently
-Severity: 🔴 HIGH
-🔴 3. Hidden coupling: DOM + state + dataset triad
+It creates:
 
-Inside state update:
+hidden coupling between JS state semantics and CSS selectors
+harder debugging (state exists in 2 layers)
+unpredictable rendering if DOM structure changes
+Severity: 🟠 MEDIUM (architecture smell, not immediate bug)
+🟠 3. JS ↔ CSS redundancy in selection styling
 
-recon.dataset.reconcileLocked = reconcileState.locked ? '1' : '0';
-hiddenInput.value = reconcileState.selectedId;
-Problem
+You now have BOTH:
 
-You are encoding state in three parallel representations:
+CSS:
+.execute-reconcile-card-selected {
+  border-color: var(--warning);
+  box-shadow: ...
+}
+JS:
 
-Layer	Purpose
-JS object	runtime truth
-DOM dataset	UI condition
-hidden input	form submission truth
-Issue
+(earlier versions still mutate style inline in some branches)
 
-No single authoritative layer exists.
+Even though your latest snippet reduces inline styling, your earlier pattern still suggests:
 
-This is a classic eventual inconsistency bug surface.
+mixed responsibility between JS styling and CSS styling
 
-Severity: 🔴 HIGH (systemic maintainability + bug risk)
-🟠 4. Performance: repeated full-array iteration on every state change
-cardEls.forEach(...)
+Risk
 
-Triggered on:
+If any inline style remains:
 
-selection
-lock toggle
-remove
-Problem
+CSS overrides may not apply
+debugging becomes inconsistent across environments
+Severity: 🟠 MEDIUM (visual inconsistency risk)
+🟡 4. Good improvement: CSS has now taken over visual state
 
-This is O(n) DOM mutation per interaction.
+This is actually a positive architectural move:
 
-If n grows (50–300 cards):
+✔ selection styling moved to CSS
+✔ remove button visibility handled via CSS
+✔ reduced JS DOM mutation burden
 
-interaction cost becomes noticeable
-layout thrashing increases due to style + class toggles
-Severity: 🟠 MEDIUM (scales poorly)
-🟠 5. Style mutation inside loops (layout thrash risk)
-c.style.borderColor = ...
-c.style.boxShadow = ...
-c.style.display = ...
-Problem
+This is exactly where you want to be.
 
-Inline style updates force:
+🟡 5. Remaining JS issue: class-based selection still requires full DOM scan
 
-style recalculation
-potential reflow per node
+From JS:
 
-Better pattern:
+cardsContainer.querySelectorAll(...)
 
-toggle CSS classes only
-move visual logic into stylesheet
-Severity: 🟠 MEDIUM
-🟠 6. Delegation model is correct — but slightly brittle
-reconcileCardsDelegationBound.has(cardsContainer)
-Strength
+This still couples JS to DOM structure instead of state.
 
-✔ good use of WeakSet
-✔ prevents duplicate binding per container instance
+Not a CSS issue, but relevant because CSS is now part of state logic.
 
-Weakness
-still depends on DOM node identity stability
-assumes container is never “recycled” in place (some frameworks do this)
-Severity: 🟡 LOW-MEDIUM
-🟡 7. Logic clarity improvement (positive change)
+🧠 Key architectural insight (important)
 
-This is an improvement over previous version:
+You are currently in a hybrid state system:
 
-setReconcileState(locked, selectedId)
+JS owns:
+truth (reconcileState)
+DOM owns:
+state reflection (data-reconcile-locked, classes)
+CSS owns:
+business logic (visibility rules)
 
-✔ centralises state mutation
-✔ reduces duplicated logic
-✔ removes inline event state scatter
+This is a classic 3-layer state system problem:
 
-This is a good architectural direction.
+JS state + DOM state + CSS state rules
 
-🟡 8. Missing abstraction boundary (still present)
+This works, but is fragile under:
 
-Even though improved, this function still owns:
+partial rerenders
+async updates
+future feature growth
+🔴 Critical recommendation (highest value fix)
+Collapse to a single state axis:
+Option A (recommended):
 
-rendering
-state management
-event handling
-DOM reconciliation
-business rules
-This is still a “mini framework function”
-Severity: 🟡 HIGH (long-term scaling issue)
-📊 UPDATED RISK RANKING (THIS FILE ONLY)
-Category	Severity
-State inconsistency (multi-source truth)	🔴 HIGH
-Stale DOM snapshot (cardEls)	🔴 HIGH
-DOM + dataset + hidden input coupling	🔴 HIGH
-Performance (O(n) updates per interaction)	🟠 MEDIUM
-Style mutation in loops	🟠 MEDIUM
-Delegation lifecycle robustness	🟡 MEDIUM
-Maintainability (monolithic controller)	🟡 HIGH
-🧠 Key architectural diagnosis
+Make JS the ONLY state authority
 
-You are currently in a transition state between:
+CSS = purely visual styling
+no [data-reconcile-locked] logic in CSS
+JS explicitly hides/shows cards
+Option B (acceptable but stricter discipline):
 
-Old model
-imperative DOM manipulation
-ad-hoc event binding
-string-based rendering
-New model (emerging)
-state object (reconcileState)
-delegated events
-partial separation of concerns
-🚨 The main unresolved issue
+Make DOM dataset the state authority
 
-You introduced state management, but it is not yet the single source of truth.
+CSS reacts to dataset only
+JS never directly manipulates classes for visibility logic
+JS only updates dataset + selectedId
+📊 Updated risk summary (JS + CSS combined)
+Area	Severity
+Multi-source state (JS + DOM + CSS logic)	🔴 HIGH
+CSS-driven business logic (locked filtering)	🟠 MEDIUM
+Selection class consistency	🟠 MEDIUM
+Inline style reduction (improving)	🟡 GOOD
+Overall architecture direction	🟡 IMPROVING
+🧭 Final assessment
 
-Everything still synchronises to state instead of from state.
+You’ve made a real step forward here:
 
-That’s the core structural gap.
+Improvements:
+reduced DOM mutation
+introduced state object
+moved visual styling into CSS
+simplified selection updates
+Remaining structural issue:
 
-🧭 Highest-impact fixes (priority order)
+CSS is now participating in application logic (not just presentation)
 
-If you fix only 3 things, do these:
-
-1. Remove cardEls entirely
-
-Replace with:
-
-cardsContainer.querySelectorAll(...) OR
-better: data-index map {id -> element}
-2. Make reconcileState the ONLY source of truth
-
-Derived DOM state should be computed, not stored.
-
-3. Replace style mutations with CSS classes
-
-Move:
-
-selected
-locked hidden state
-
-into CSS rules
+That’s the only real blocker to this becoming clean.

@@ -2127,9 +2127,7 @@
   border-color: var(--warning, #f59e0b);
   box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
 }
-#execute-step-modal .execute-reconcile-untracked-cards[data-reconcile-locked="1"] > .execute-reconcile-untracked-card:not(.execute-reconcile-card-selected) {
-  display: none;
-}
+/* Locked-mode row visibility is applied in JS from reconcileState only — not selector-driven here. */
 #execute-step-modal .execute-reconcile-untracked-card .exec-reconcile-remove-btn {
   display: none;
 }

@@ -319,11 +319,17 @@
             hiddenInput.value = reconcileState.selectedId;
             cardsContainer.dataset.reconcileLocked = reconcileState.locked ? '1' : '0';
             var sel = reconcileState.selectedId;
+            var lock = reconcileState.locked;
             var cards = cardsContainer.querySelectorAll('.execute-reconcile-untracked-card');
             cards.forEach(function(c) {
               var id = c.dataset.untrackedId || '';
               var selected = id === sel;
               c.classList.toggle('execute-reconcile-card-selected', selected);
+              if (!lock) {
+                c.style.display = '';
+              } else {
+                c.style.display = selected ? '' : 'none';
+              }
               var btn = c.querySelector('.exec-reconcile-confirm-btn');
               if (btn) {
                 btn.textContent = selected ? 'Reconciliation selected' : 'Confirm reconciliation';
