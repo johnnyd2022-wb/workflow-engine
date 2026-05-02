@@ -17,6 +17,10 @@
             return String(x == null ? '' : x);
           };
     var showNotification = root.showNotification;
+    var IDisp = root.InventoryDisplay;
+    if (!IDisp || typeof IDisp.formatTriggerLabel !== 'function') {
+      throw new Error('inventory-display.js must load before execution-modal-secondary.js');
+    }
 
     /**
      * return_to for manual add inventory: same-origin, pathname must start with /core/.
@@ -29,25 +33,13 @@
         var loc = window.location;
         var url = new URL(s, loc.origin);
         if (url.origin !== loc.origin) return '';
-        var path = url.pathname || '';
-        if (!/^\/core\//i.test(path)) return '';
+        var path = (url.pathname || '').replace(/\/+/g, '/');
+        if (path.indexOf('/../') !== -1) return '';
+        if (!path.toLowerCase().startsWith('/core/')) return '';
         return path + (url.search || '');
       } catch (e) {
         return '';
       }
-    }
-
-    /** Plain-text label for picker trigger (keep innerHTML paths separate). */
-    function formatExecutionInventoryTriggerLabel(inv) {
-      if (!inv) return '';
-      return (
-        (inv.process_name ? String(inv.process_name) + ' - ' : '') +
-        String(inv.name || '') +
-        ' - ' +
-        (inv.quantity != null ? inv.quantity : '') +
-        ' ' +
-        (inv.unit || '')
-      );
     }
 
   // ============================================================
@@ -333,7 +325,7 @@
             hiddenInput.value = id;
             hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
             hiddenInput.dataset.unit = inv.unit || '';
-            if (triggerLabel) triggerLabel.textContent = formatExecutionInventoryTriggerLabel(inv);
+            if (triggerLabel) triggerLabel.textContent = IDisp.formatTriggerLabel(inv);
             var q = section.querySelector('.execute-quantity-input');
             var u = section.querySelector('.execute-quantity-unit-display');
             if (q && u) {
@@ -363,7 +355,7 @@
         hiddenInput.value = selectedId;
         hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
         hiddenInput.dataset.unit = inv.unit || '';
-        if (triggerLabel) triggerLabel.textContent = formatExecutionInventoryTriggerLabel(inv);
+        if (triggerLabel) triggerLabel.textContent = IDisp.formatTriggerLabel(inv);
         var qtyInput = section ? section.querySelector('.execute-quantity-input') : null;
         var unitDisplay = section ? section.querySelector('.execute-quantity-unit-display') : null;
         if (qtyInput && unitDisplay) {

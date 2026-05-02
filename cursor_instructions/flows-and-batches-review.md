@@ -1,223 +1,240 @@
-Here’s the security + performance review for the changes in these two files, ordered by severity and focusing only on critical/high risk.
+You’ve essentially refactored this in the right direction, but there are a few subtle correctness + architecture issues hiding in here that will matter in production.
 
-🔴 CRITICAL (security-impacting)
-1. execution-render-inputs.js — remaining DOM XSS surface via HTML attribute interpolation
-Risk: XSS (medium-to-high likelihood depending on escapeHtml correctness)
+I’ll break this down into security/robustness, data consistency, and frontend architecture/maintainability.
 
-You still have multiple instances like:
+1. safeInventoryManualReturnTo — good improvement, but still has a blind spot
+What you fixed well
+Moving from string prefix checks → new URL() parsing is a real security upgrade
+Properly enforcing:
+same origin
+/core/ path restriction
+Handling query string preservation correctly
+Remaining issue (important)
 
-data-input-name="${escapeHtml(input.name)}"
-data-safe-name="${safeInputName}"
+You are still allowing path traversal style abuse via base resolution behavior:
 
-and:
+new URL(s, loc.origin);
 
-<input ... data-input-name="${escapeHtml(input.name)}" ...>
-Why this is still risky
+If s = "/../something" or encoded variants, URL normalization will resolve it before your regex check.
 
-Even though escapeHtml() is used, this is not a safe guarantee for attribute contexts inside template literals.
+Fix
 
-If escapeHtml() is not explicitly attribute-safe (quotes, backticks, newlines), you can still get:
+You should normalize after URL resolution:
 
-attribute breakouts (", ')
-injection of synthetic attributes
-malformed DOM leading to script execution depending on downstream handlers
-Key issue:
+var path = url.pathname.replace(/\/+/g, '/');
 
-You are mixing:
+And then validate strictly:
 
-HTML string building
-attribute injection
-dynamic DOM parsing
+if (!path.startsWith('/core/')) return '';
+if (path.includes('/../')) return '';
 
-That combination is the classic DOM XSS pattern surface.
+Even though browsers usually collapse ../, this closes edge cases and keeps intent explicit.
 
-✔️ Fix (important)
+2. Duplicate logic removal (good refactor, but partial)
 
-Replace string-based DOM construction with:
+You introduced:
 
-const el = document.createElement('div');
-el.dataset.inputName = input.name || '';
-el.dataset.safeName = safeInputName;
+formatExecutionInventoryTriggerLabel(inv)
 
-This removes all parsing-based injection risk.
+and correctly removed duplication in:
 
-2. execution-render-inputs.js — inline HTML label injection (label + span blocks)
+triggerLabel.textContent = formatExecutionInventoryTriggerLabel(inv);
+Issue
 
-Example:
+You only partially removed duplication.
 
-<span> ${escapeHtml(String(input.quantity != null ? input.quantity : '0'))} ${escapeHtml(input.unit || '')}</span>
-Risk: low → medium (context dependent)
+There are still multiple implicit formatting contracts in the codebase:
 
-Why:
+Example elsewhere:
 
-still HTML string concatenation
-still dependent on escapeHtml correctness
-used in multiple UI entry points (execution flow)
-Impact:
+return productName + ' - ' + quantity + ' ' + unit;
 
-If bypass occurs here:
+This is now inconsistent with:
 
-UI spoofing of expected quantities
-misleading operator instructions
-potential workflow manipulation (not just visual)
-✔️ Fix:
+process_name - name - qty unit
+Recommendation
 
-Prefer DOM construction for labels:
+You now have 3 competing label formats:
 
-span.textContent = `${qty} ${unit}`;
-3. execution-modal-secondary.js — return_to sanitization is improved but still incomplete
-What you fixed:
+picker card
+trigger label
+selected card header
 
-Good improvement:
+These should be unified into:
 
-/^\/core\//i.test(s)
+InventoryDisplay.format(inv, mode)
 
-and:
+Where mode is:
 
-if (s.indexOf('//') === 0) return '';
-Remaining issue:
+compact
+detailed
+trigger
 
-You are not preventing:
+Right now, you’ve only standardized one surface.
 
-⚠️ URL encoding bypasses
+3. Picker search performance — unnecessary WeakMap complexity
 
-Examples still possible depending on server decode behavior:
+You added:
 
-/core/%2f%2fevil.com
-/core//evil.com (already partially blocked but ambiguous)
-/core/..%2fcore/...
-Risk:
-open redirect chaining
-phishing via return_to parameter
-session confusion in navigation flows
-✔️ Fix (recommended hardening)
+var invSearchHayCache = new WeakMap();
+Problem
 
-Use stricter parsing:
+WeakMap provides no benefit here because:
 
-const url = new URL(rt, window.location.origin);
-if (url.origin !== window.location.origin) return '';
-if (!url.pathname.startsWith('/core/')) return '';
-return url.pathname + url.search;
+inv objects are reused but not guaranteed stable identity across renders
+you are iterating fresh arrays frequently
+GC pressure is not the real bottleneck here
+Better option
 
-This eliminates:
+Use a simple derived field once:
 
-encoding tricks
-protocol-relative bypass attempts
-path traversal ambiguity
-🟠 HIGH (robustness / integrity risks)
-4. execution-render-inputs.js — duplicate normalization logic still spread across system
+inv._searchHay ??= buildSearchHay(inv);
 
-Even after improvements, you still have:
+or precompute:
 
-normalizeInventoryTabType
-pickDefaultInventoryTab
-inline normalization inside picker logic
-Risk:
-inconsistent classification between:
-modal
-SPA
-secondary execution modal
-Impact:
-inventory misclassification drift
-UI showing wrong tabs
-subtle workflow integrity issues (WIP vs final mismatches)
-✔️ Fix:
+allInventory = allInventory.map(inv => ({
+  ...inv,
+  _searchHay: ...
+}));
 
-Centralize:
+Then:
 
-inventory-type-utils.js
+return inv._searchHay.includes(q);
 
-Single source of truth for:
+This is significantly cheaper and more predictable.
 
-raw_material / work_in_progress / final_product mapping
-expected_inventory_type inference
-5. execution-render-inputs.js — dataset usage still a trust boundary leak
+4. Redundant DOM churn in picker rendering (biggest real issue)
+
+You rebuild full card DOM every render:
+
+pickerFrag.appendChild(buildExecPickerCard(inv));
+
+That function:
+
+creates many nodes
+assigns attributes
+injects innerHTML twice (chips, metaBlock)
+Problem
+
+This will become a performance bottleneck at scale (100–1000 items).
+
+Improvement direction
+
+Either:
+
+switch to incremental DOM updates, OR
+memoize cards per inv.id
 
 Example:
 
-data-input-name="${escapeHtml(input.name)}"
-data-step-unit="${escapeHtml(input.unit || '')}"
-Risk:
+if (cardCache.has(inv.id)) return cardCache.get(inv.id);
 
-Dataset is being used as:
+Even basic caching will reduce churn significantly.
 
-state carrier
-implicit backend truth substitute
-Problem:
-any DOM mutation or extension script can alter dataset
-no integrity guarantee
-Impact:
-inventory mismatch bugs
-potential bypass of expected inventory constraints
-✔️ Fix:
+5. Inconsistent type normalization boundaries
 
-Treat dataset as:
+You now correctly centralized:
 
-UI hint only, never authoritative state
+InventoryTypeUtils.normalizeInventoryTabType
 
-Ensure backend re-validates:
+But:
 
-expected_inventory_type
-source_output_id
-quantities
-6. execution-modal-secondary.js — DOM label composition risk
+Problem
+
+You still duplicate logic in multiple places:
+
+picker filtering
+expected tab hint
+legacy inline comparisons
 
 Example:
 
-triggerLabel.textContent =
-  (inv.process_name ? inv.process_name + ' - ' : '') +
-  inv.name + ' - ' + inv.quantity + ' ' + inv.unit;
-Risk: low but real injection surface if any upstream field escapes escaping rules elsewhere
+if (t === 'intermediate' || t === 'work_in_progress' || t === 'wip')
 
-You are safe because this is textContent, but:
+and later:
 
-inconsistent use vs other areas (string concatenation patterns elsewhere)
-introduces accidental future regressions (someone may switch to innerHTML)
-✔️ Recommendation:
+if (selected === 'all') return true;
+Issue
 
-Good pattern but standardize:
+You now have:
 
-triggerLabel.textContent = formatInventoryLabel(inv);
-🟡 MEDIUM (performance / architectural risk)
-7. execution-render-inputs.js — repeated string filtering on large inventory
+canonical normalization module
+but still scattered rule knowledge
+Recommendation
 
-Still present:
+Make InventoryTypeUtils the only source of truth:
 
-allInventory.filter(...)
+InventoryTypeUtils.isType(inv, selectedType)
+InventoryTypeUtils.matchesSearch(inv, q)
 
-inside picker rendering logic
+Right now, logic duplication will drift again within 2–3 features.
 
-Risk:
-O(n²) behavior under frequent re-renders
-UI lag with large inventories (500–5000+ items)
-✔️ Fix:
+6. UI structure: picker panel is doing too much
 
-Precompute indices:
+This block is becoming a mini-application inside a modal:
 
-Map(name → inventory[])
-Map(type → inventory[])
-memoized normalized names
-8. repeated normalization functions inside closures
+segmented control
+search
+cards
+selection state
+add missing flow
+add another input flow
+warnings
+Risk
 
-Example:
+This will eventually:
 
-function normalizeExpectedInventoryTabHint(i) { ... }
-function safeName(inv) { ... }
-Risk:
-repeated function allocation
-inconsistent logic across modules
-✔️ Fix:
+become untestable
+require fragile event wiring
+break across refactors
+Architectural suggestion
 
-Hoist to shared module scope
+Split into:
 
-🟢 SUMMARY (what actually matters)
-🚨 Must fix (security integrity)
-Replace string-based DOM construction with DOM APIs in execution-render-inputs
-Strengthen return_to using new URL() validation
-Remove reliance on escapeHtml for attribute injection contexts
-⚠️ Should fix (robustness)
-Centralize inventory type normalization logic
-Treat dataset as non-authoritative state only
-🟡 Improve (performance)
-Pre-index inventory instead of repeated filtering
-Hoist normalization utilities
+InventoryPickerController
+InventoryPickerView
+InventoryRowRenderer
+
+Even a lightweight separation (not full framework) would help.
+
+7. Minor correctness issues
+A. Typo bug
+"Finals products"
+
+Should be:
+
+"Final products"
+
+This will show in UI.
+
+B. Potential undefined dataset coercions
+if (input.producing_process_name)
+
+but elsewhere:
+
+String(input.producing_process_name)
+
+You’re inconsistent about normalization safety.
+
+C. Hidden input initialization
+hiddenInput.dataset.quantity = "";
+hiddenInput.dataset.unit = "";
+
+This may mask bugs later because:
+
+empty string ≠ null state
+downstream logic likely assumes presence means valid selection
+
+Better:
+
+delete hiddenInput.dataset.quantity;
+delete hiddenInput.dataset.unit;
+Bottom line
+
+You’ve improved:
+
+security posture (URL handling)
+UI readability (label function extraction)
+type normalization (partial centralization)
+
+But the system is now at a stage where the main risk is no longer correctness—it’s accumulating UI + logic duplication across the execution modal ecosystem.

@@ -76,6 +76,10 @@ def test_batch_start_loads_session_before_execution_modal():
     i_docs = text.find("execution-render-docs.js")
     i_prompts = text.find("execution-render-prompts.js")
     i_inv_utils = text.find("inventory-type-utils.js")
+    i_inv_display = text.find("inventory-display.js")
+    i_inv_picker = text.find("inventory-picker-controller.js")
+    i_inv_pick_view = text.find("execution-inventory-picker-view.js")
+    i_inv_row = text.find("execution-inventory-row-renderer.js")
     i_inputs = text.find("execution-render-inputs.js")
     i_outputs = text.find("execution-render-outputs.js")
     i_submit = text.find("execution-submit.js")
@@ -90,6 +94,10 @@ def test_batch_start_loads_session_before_execution_modal():
         < i_docs
         < i_prompts
         < i_inv_utils
+        < i_inv_display
+        < i_inv_picker
+        < i_inv_pick_view
+        < i_inv_row
         < i_inputs
         < i_outputs
         < i_submit
@@ -181,6 +189,34 @@ def test_execution_render_docs_module_exists():
     assert js_path.is_file()
     body = js_path.read_text(encoding="utf-8")
     assert "ExecutionRenderDocs" in body and "renderStepDocumentation" in body
+
+
+def test_inventory_type_utils_defines_matches_search():
+    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "inventory-type-utils.js"
+    body = js_path.read_text(encoding="utf-8")
+    assert "matchesSearch" in body and "buildInventorySearchHayLower" in body
+
+
+def test_inventory_picker_controller_module_exists():
+    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "inventory-picker-controller.js"
+    assert js_path.is_file()
+    body = js_path.read_text(encoding="utf-8")
+    assert "InventoryPickerController" in body and "create" in body
+
+
+def test_execution_inventory_picker_view_module_exists():
+    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-inventory-picker-view.js"
+    assert js_path.is_file()
+    body = js_path.read_text(encoding="utf-8")
+    assert "ExecutionInventoryPickerView" in body and "buildPayload" in body and "buildDetailsFragment" in body
+    assert "chipsFragment" in body and "metaGridEl" in body and "appendMetaGridCell" in body
+
+
+def test_execution_inventory_row_renderer_module_exists():
+    js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-inventory-row-renderer.js"
+    assert js_path.is_file()
+    body = js_path.read_text(encoding="utf-8")
+    assert "ExecutionInventoryRowRenderer" in body and "createInputRow" in body
 
 
 def test_execution_render_inputs_module_exists():

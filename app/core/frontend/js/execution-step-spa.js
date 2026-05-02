@@ -77,6 +77,8 @@
   }
 
   function invMatchesSearch(inv, q) {
+    var ITU = window.InventoryTypeUtils;
+    if (ITU && typeof ITU.matchesSearch === 'function') return ITU.matchesSearch(inv, q);
     q = (q || '').trim().toLowerCase();
     if (!q) return true;
     var hay = [inv && inv.name, inv && inv.unit, inv && inv.supplier, inv && inv.supplier_batch_number, inv && inv.process_name]

@@ -6,8 +6,20 @@
   "use strict";
 
   var ITU = root.InventoryTypeUtils;
-  if (!ITU || typeof ITU.normalizeInventoryTabType !== "function" || typeof ITU.normalizeExpectedInventoryTabHint !== "function") {
+  var IDisp = root.InventoryDisplay;
+  if (!ITU || typeof ITU.normalizeInventoryTabType !== "function" || typeof ITU.normalizeExpectedInventoryTabHint !== "function" || typeof ITU.matchesInventoryTab !== "function" || typeof ITU.matchesSearch !== "function") {
     throw new Error("inventory-type-utils.js must load before execution-render-inputs.js");
+  }
+  if (!IDisp || typeof IDisp.formatTriggerLabel !== "function" || typeof IDisp.quantityUnitLine !== "function") {
+    throw new Error("inventory-display.js must load before execution-render-inputs.js");
+  }
+  var ExecInvPickView = root.ExecutionInventoryPickerView;
+  if (!ExecInvPickView || typeof ExecInvPickView.buildPayload !== "function" || typeof ExecInvPickView.assembleCard !== "function" || typeof ExecInvPickView.syncCard !== "function") {
+    throw new Error("execution-inventory-picker-view.js must load before execution-render-inputs.js");
+  }
+  var EIRR = root.ExecutionInventoryRowRenderer;
+  if (!EIRR || typeof EIRR.createInputRow !== "function") {
+    throw new Error("execution-inventory-row-renderer.js must load before execution-render-inputs.js");
   }
 
   function renderVariableInventoryInputs(ctx) {
@@ -67,22 +79,6 @@
         const inventoryById = new Map();
         allInventory.forEach(function(inv) { inventoryById.set(String(inv.id), inv); });
 
-        var invSearchHayCache = new WeakMap();
-        function searchHayLower(inv) {
-          if (!inv) return "";
-          var c = invSearchHayCache.get(inv);
-          if (c != null) return c;
-          c = [
-            inv.name,
-            inv.unit,
-            inv.supplier,
-            inv.supplier_batch_number,
-            inv.process_name,
-          ].filter(Boolean).join(" ").toLowerCase();
-          invSearchHayCache.set(inv, c);
-          return c;
-        }
-
         var headerEl = document.createElement("div");
         headerEl.className = "execute-input-section-header";
         headerEl.style.marginBottom = "12px";
@@ -118,7 +114,7 @@
         seg.setAttribute("role", "group");
         seg.setAttribute("aria-label", "Inventory category");
         seg.style.marginBottom = "10px";
-        [["raw_material", "Raw materials", true], ["work_in_progress", "Intermediate", false], ["final_product", "Finals products", false]].forEach(function(spec) {
+        [["raw_material", "Raw materials", true], ["work_in_progress", "Intermediate", false], ["final_product", "Final products", false]].forEach(function(spec) {
           var b = document.createElement("button");
           b.type = "button";
           b.className = "flow-mode-segment" + (spec[2] ? " flow-mode-segment--active" : "");
@@ -228,25 +224,14 @@
         }
         const pickerTabs = Array.prototype.slice.call(inputSection.querySelectorAll('.flow-mode-segment'));
         let rowIndex = 0;
+        var rowInputApi = {};
         if (!ses.inputStateByKey) ses.inputStateByKey = new Map();
 
         function normalizeInventoryTabType(inv) {
           return ITU.normalizeInventoryTabType(inv);
         }
         function invMatchesType(inv, selected) {
-          if (!selected || selected === 'all') return true;
-          return normalizeInventoryTabType(inv) === selected;
-        }
-        function invMatchesSearch(inv, q) {
-          q = (q || '').trim().toLowerCase();
-          if (!q) return true;
-          return searchHayLower(inv).indexOf(q) !== -1;
-        }
-        function fmtQty(inv) {
-          if (!inv) return '';
-          var q = (inv.quantity != null) ? String(inv.quantity) : '';
-          var u = inv.unit || '';
-          return (q && u) ? (q + ' ' + u) : (q || u || '');
+          return ITU.matchesInventoryTab(inv, selected);
         }
         function renderPickerCards(activeType, q) {
           if (!pickerCards) return;
@@ -276,368 +261,39 @@
           var base = qTrim ? allInventorySorted : sortedInventory;
           var list = base
             .filter(function(inv) { return invMatchesType(inv, activeType); })
-            .filter(function(inv) { return invMatchesSearch(inv, qTrim); });
+            .filter(function(inv) { return ITU.matchesSearch(inv, qTrim); });
           list = list.filter(function(inv) {
             var id = String(inv.id);
             if (pendingId && id === pendingId) return true;
             return !selectedIds.has(id);
           });
 
-          function buildExecPickerCard(inv) {
-            var rawId = String(inv.id);
-            var chips = '';
-            if (inv.supplier) chips += '<span class="exec-picker-chip">' + escapeHtml(inv.supplier) + '</span>';
-            if (inv.supplier_batch_number) chips += '<span class="exec-picker-chip">Batch ' + escapeHtml(inv.supplier_batch_number) + '</span>';
-            var reason = getExpiredReason(inv.id);
-            if (reason) {
-              var cls = reason.toLowerCase().indexOf('untracked') !== -1 ? 'exec-picker-chip--danger'
-                : (reason.toLowerCase().indexOf('expired') !== -1 ? 'exec-picker-chip--danger' : 'exec-picker-chip--warn');
-              chips += '<span class="exec-picker-chip ' + cls + '">' + escapeHtml(reason) + '</span>';
-            }
-            var isPending = pendingId && pendingId === rawId;
-            function fmtDate(raw) {
-              if (!raw) return '';
-              try { return new Date(raw).toLocaleDateString(); } catch (e) { return String(raw); }
-            }
-            function addMeta(label, value) {
-              if (value == null) return '';
-              var s = String(value);
-              if (!s.trim()) return '';
-              return (
-                '<div style="min-width:0;">' +
-                  '<div style="font-size:11px; color: var(--text-tertiary, #9ca3af); line-height:1.2;">' + escapeHtml(label) + '</div>' +
-                  '<div style="font-size:12px; color: var(--text-primary, #111827); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(s) + '</div>' +
-                '</div>'
-              );
-            }
-            var metaBits = '';
-            // Core production identifiers
-            metaBits += addMeta('Process', inv.process_name || '');
-            metaBits += addMeta('Supplier', inv.supplier || '');
-            metaBits += addMeta('Batch', inv.supplier_batch_number || inv.batch_number || inv.lot_number || '');
-            metaBits += addMeta('Barcode', inv.barcode || '');
-            metaBits += addMeta('Source step', inv.source_step_name || '');
-            // Dates (if present)
-            metaBits += addMeta('Purchase', inv.purchase_date ? fmtDate(inv.purchase_date) : '');
-            metaBits += addMeta('Expiry', inv.expiry_date ? fmtDate(inv.expiry_date) : '');
-            metaBits += addMeta('Ready', inv.ready_date ? fmtDate(inv.ready_date) : '');
-            metaBits += addMeta('Created', inv.created_at ? fmtDate(inv.created_at) : '');
-            // Provenance (if present)
-            metaBits += addMeta('Operator', inv.operator_name || inv.operator || '');
-            metaBits += addMeta('Created by', inv.created_by_name || inv.created_by || '');
+          /**
+           * Reuse picker card DOM nodes across filter/tab/search rerenders (same inventory row objects).
+           */
+          var pickerCardCache =
+            inputSection._execPickerCardElCache ||
+            (inputSection._execPickerCardElCache = new Map());
 
-            // Extra metadata (bounded): show up to 8 keys, include small objects with "name"/"email".
-            // Notes are important but can be long; show them in Details instead of the top meta grid.
-            var extraBits = '';
-            try {
-              var extra = inv.extra_data;
-              if (extra && typeof extra === 'object') {
-                var keys = Object.keys(extra);
-                var shown = 0;
-                for (var k = 0; k < keys.length; k++) {
-                  if (shown >= 8) break;
-                  var key = keys[k];
-                  if (key === 'execution_prompts') continue; // handled elsewhere / too verbose
-                  if (key === 'variable_output') continue; // same as card title / subtitle; omit from meta grid
-                  if (key === 'remaining_balance_to_reconcile') continue; // internal reconciliation counter
-                  if (key === 'notes') continue;
-                  // These are used for manual untracked association; show them in Details (not the card's top meta grid).
-                  if (key === 'producing_process_id') continue;
-                  if (key === 'producing_process_name') continue;
-                  if (key === 'producing_step_name') continue;
-                  var val = extra[key];
-                  if (val == null) continue;
-                  var vv = '';
-                  if (typeof val === 'object') {
-                    if (val && (val.name || val.email)) vv = String(val.name || val.email);
-                    else continue;
-                  } else {
-                    vv = String(val);
-                  }
-                  if (!vv.trim()) continue;
-                  // Prefer showing common production keys early.
-                  var label = key;
-                  if (/batch|lot/i.test(key)) label = 'Batch';
-                  if (/operator/i.test(key)) label = 'Operator';
-                  if (/created_by|creator|made_by/i.test(key)) label = 'Created by';
-                  extraBits += addMeta(label, vv);
-                  shown++;
-                }
-              }
-            } catch (e) {}
+          var pickerCardCtx = {
+            getExpiredReason: getExpiredReason,
+            escapeHtml: escapeHtml,
+            prettyLabel: prettyLabel,
+            orgUsersMap: orgUsersMap
+          };
 
-            var metaBlock = '';
-            var combined = (metaBits || '') + (extraBits || '');
-            if (combined) {
-              metaBlock =
-                '<div class="exec-picker-card__meta-grid" style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">' +
-                  combined +
-                '</div>';
-            }
-
-            // Audit history (extra_data.inventory_audit_history): show human-friendly operator + cleaned labels.
-            var auditHtml = '';
-            try {
-              var hist = (inv.extra_data && inv.extra_data.inventory_audit_history) ? inv.extra_data.inventory_audit_history : [];
-              if (Array.isArray(hist) && hist.length) {
-                var rows = hist.slice().reverse().map(function(h) {
-                  var when = h.timestamp_utc || h.timestamp || h.created_at || '';
-                  var src = h.source_method || h.source || '';
-                  var opLabel = h.operator_name || h.operator_email || '';
-                  if (!opLabel) {
-                    var opId = h.user_id || h.operator_id || h.user || '';
-                    opLabel = opId && orgUsersMap && typeof orgUsersMap.get === 'function'
-                      ? (orgUsersMap.get(String(opId)) || String(opId))
-                      : String(opId || '');
-                  }
-                  // Never leak raw UUIDs in the UI; show a friendly fallback.
-                  try {
-                    var uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-                    if (!opLabel || uuidLike.test(String(opLabel).trim())) opLabel = 'Unknown operator';
-                  } catch (e) {
-                    if (!opLabel) opLabel = 'Unknown operator';
-                  }
-                  // Action isn't logged yet for raw materials; use a sensible default for now.
-                  var action = h.action || h.event || '';
-                  if (!action) action = 'inventory item added';
-                  return (
-                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('action')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(prettyLabel(action)) + '</div>' +
-                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('timestamp_utc')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(when || '—')) + '</div>' +
-                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('operator')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(opLabel || '—')) + '</div>' +
-                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('source_method')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(prettyLabel(src) || '—') + '</div>'
-                  );
-                }).join('');
-                auditHtml =
-                  '<div style="margin-top: 12px;">' +
-                    '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">Audit history</div>' +
-                    '<div class="exec-picker-kv">' + rows + '</div>' +
-                  '</div>';
-              }
-            } catch (e) {}
-
-            var isRawMaterial = String(inv.inventory_type || 'raw_material') === 'raw_material';
-
-            function section(title, innerHtml) {
-              if (!innerHtml || !String(innerHtml).trim()) return '';
-              return (
-                '<div style="margin-top: 12px;">' +
-                  '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">' +
-                    escapeHtml(title) +
-                  '</div>' +
-                  innerHtml +
-                '</div>'
-              );
-            }
-            function li(text) {
-              return '<li style="margin: 0 0 6px 0; font-size: 13px; color: var(--text-primary, #111827); line-height: 1.35;">' + text + '</li>';
-            }
-            function fmtIso(iso) {
-              if (!iso) return '';
-              try { return new Date(iso).toISOString().replace('.000Z','Z'); } catch (e) { return String(iso); }
-            }
-            function fmtCustomExpiry(obj) {
-              if (!obj || typeof obj !== 'object') return '';
-              var mode = (obj.mode || '').toString();
-              if (mode === 'duration') {
-                var dv = obj.duration_value != null ? String(obj.duration_value) : '';
-                var du = obj.duration_unit != null ? String(obj.duration_unit).replace(/_/g, ' ') : '';
-                var wv = obj.warning_value != null ? String(obj.warning_value) : '';
-                var wu = obj.warning_unit != null ? String(obj.warning_unit).replace(/_/g, ' ') : '';
-                var base = (dv && du) ? ('Expiry: ' + escapeHtml(dv + ' ' + du)) : '';
-                var warn = (wv && wu) ? ('Warning: ' + escapeHtml(wv + ' ' + wu)) : '';
-                return [base, warn].filter(Boolean).join(' · ');
-              }
-              if (mode === 'datetime') {
-                var exp = obj.expiry_at || obj.expiryAt || '';
-                var warnAt = obj.warning_at || obj.warn_at || obj.warningAt || '';
-                var base2 = exp ? ('Expiry at (UTC): ' + escapeHtml(fmtIso(exp))) : '';
-                var warn2 = warnAt ? ('Warning at (UTC): ' + escapeHtml(fmtIso(warnAt))) : '';
-                return [base2, warn2].filter(Boolean).join(' · ');
-              }
-              // Unknown schema
-              try { return escapeHtml(JSON.stringify(obj)); } catch (e) { return ''; }
-            }
-
-            var humanDetails = '';
-            if (!isRawMaterial) {
-              // Traceability summary for intermediate/final products.
-              var trace = (inv.extra_data && inv.extra_data.execution_trace) ? inv.extra_data.execution_trace : {};
-              var prompts = (inv.extra_data && inv.extra_data.execution_prompts) ? inv.extra_data.execution_prompts : null;
-              var vInputs = (inv.extra_data && inv.extra_data.variable_inputs) ? inv.extra_data.variable_inputs : null;
-              var vOut = (inv.extra_data && inv.extra_data.variable_output) ? inv.extra_data.variable_output : null;
-              var notes = (inv.extra_data && inv.extra_data.notes) ? String(inv.extra_data.notes) : '';
-              var producingProcessName =
-                (inv.extra_data && inv.extra_data.producing_process_name) ? String(inv.extra_data.producing_process_name) : '';
-              var producingStepName =
-                (inv.producing_step_name != null && String(inv.producing_step_name).trim())
-                  ? String(inv.producing_step_name)
-                  : ((inv.extra_data && inv.extra_data.producing_step_name) ? String(inv.extra_data.producing_step_name) : '');
-
-              var top = '';
-              var topRows = '';
-              if (inv.process_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Process name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.process_name)) + '</div>';
-              // Manual-untracked association: keep these in Details only (not the top meta grid).
-              if (producingProcessName && (!inv.process_name || String(inv.process_name) !== String(producingProcessName))) {
-                topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Producing process') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(producingProcessName)) + '</div>';
-              }
-              if (inv.source_step_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Source step name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.source_step_name)) + '</div>';
-              if (producingStepName) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Producing step') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(producingStepName)) + '</div>';
-              if (topRows) top = '<div class="exec-picker-kv">' + topRows + '</div>';
-              humanDetails += section('Production', top);
-              if (notes && notes.trim()) {
-                humanDetails += section('Notes', '<div style="font-size: 13px; color: var(--text-primary,#111827); line-height: 1.5; white-space: pre-line;">' + escapeHtml(notes) + '</div>');
-              }
-
-              // Custom expiry (differentiate inputs)
-              var ceActual = (inv.extra_data && inv.extra_data.custom_expiry_actual) ? inv.extra_data.custom_expiry_actual : null;
-              var ceInput = vOut && vOut.custom_expiry_input ? vOut.custom_expiry_input : (inv.extra_data && inv.extra_data.custom_expiry_input ? inv.extra_data.custom_expiry_input : null);
-              var ceBits = '';
-              if (ceActual) ceBits += '<div class="exec-picker-kv">' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Custom expiry (applied)') + '</div><div class="exec-picker-kv__v">' + fmtCustomExpiry(ceActual) + '</div>' +
-              '</div>';
-              if (ceInput) ceBits += '<div class="exec-picker-kv" style="margin-top:6px;">' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Custom expiry (entered)') + '</div><div class="exec-picker-kv__v">' + fmtCustomExpiry(ceInput) + '</div>' +
-              '</div>';
-              humanDetails += section('Custom expiry', ceBits);
-
-              // Execution prompts
-              if (prompts && typeof prompts === 'object') {
-                var entries = Object.entries(prompts);
-                if (entries.length) {
-                  var ul = '<ul style="margin: 0; padding-left: 18px;">' +
-                    entries.map(function(e, idx) {
-                      var k = e[0];
-                      var v = e[1];
-                      return li('<span style="font-weight:600;">Prompt ' + (idx + 1) + '</span>' +
-                        ' <span style="color: var(--text-secondary,#6b7280); font-weight:500;">(' + escapeHtml(prettyLabel(k)) + ')</span>' +
-                        ': <span style="font-weight:400;">' + escapeHtml(String(v)) + '</span>');
-                    }).join('') +
-                  '</ul>';
-                  humanDetails += section('Custom prompts', ul);
-                }
-              }
-
-              // Inputs (variable_inputs)
-              if (Array.isArray(vInputs) && vInputs.length) {
-                var ul2 = '<ul style="margin: 0; padding-left: 18px;">' +
-                  vInputs.map(function(x) {
-                    var nm = (x && (x.name || x.input_name || x.inputName)) ? String(x.name || x.input_name || x.inputName) : 'Input';
-                    var q = (x && (x.quantity != null ? x.quantity : x.input_quantity)) != null ? String(x.quantity != null ? x.quantity : x.input_quantity) : '';
-                    var u = (x && (x.unit || x.input_unit)) ? String(x.unit || x.input_unit) : '';
-                    return li('<span style="font-weight:400;">' + escapeHtml(nm) + '</span>' +
-                      (q ? (' <span style="color: var(--text-secondary,#6b7280); font-weight:400;">— ' + escapeHtml(String(q)) + (u ? (' ' + escapeHtml(u)) : '') + '</span>') : ''));
-                  }).join('') +
-                '</ul>';
-                humanDetails += section('Inputs', ul2);
-              }
-
-              // variable_output: name matches card title; qty/unit are shown in the card subtitle — omit duplicate "Output" block.
-
-              // Execution trace (audit-like, human labels). If we have real audit history entries, prefer those
-              // (avoid duplicate "Audit history" blocks where the trace lacks operator/source method).
-              var hasAuditHistory =
-                !!(inv.extra_data &&
-                   inv.extra_data.inventory_audit_history &&
-                   Array.isArray(inv.extra_data.inventory_audit_history) &&
-                   inv.extra_data.inventory_audit_history.length);
-              if (!hasAuditHistory) {
-                var auditBits = '';
-                var ts = inv.created_at || (trace && trace.completed_at) || '';
-                // Operator: prefer completed_by label; else map completed_by_user_id to org user display; else email.
-                var op = (trace && (trace.completed_by || trace.completed_by_email)) || inv.operator_name || inv.created_by_name || '';
-                if (!op) {
-                  var uid = trace && (trace.completed_by_user_id || trace.completed_by_user || trace.user_id);
-                  if (uid && orgUsersMap && typeof orgUsersMap.get === 'function') {
-                    op = orgUsersMap.get(String(uid)) || '';
-                  }
-                }
-                var srcMethod = (trace && trace.source_method) || '';
-                if (!srcMethod && inv.source_execution_step_id) srcMethod = 'completed step';
-                auditBits += '<div class="exec-picker-kv">' +
-                  '<div class="exec-picker-kv__k">' + escapeHtml('Action') + '</div><div class="exec-picker-kv__v">' + escapeHtml('Inventory item created') + '</div>' +
-                  '<div class="exec-picker-kv__k">' + escapeHtml('Timestamp UTC') + '</div><div class="exec-picker-kv__v">' + escapeHtml(ts ? fmtIso(ts) : '—') + '</div>' +
-                  '<div class="exec-picker-kv__k">' + escapeHtml('Operator') + '</div><div class="exec-picker-kv__v">' + escapeHtml(op || '—') + '</div>' +
-                  '<div class="exec-picker-kv__k">' + escapeHtml('Source method') + '</div><div class="exec-picker-kv__v">' + escapeHtml(srcMethod ? prettyLabel(srcMethod) : '—') + '</div>' +
-                '</div>';
-                humanDetails += section('Audit history', auditBits);
-              }
-            }
-
-            var detailsInnerHtml = humanDetails + auditHtml;
-
-            var card = document.createElement('div');
-            card.className = 'exec-picker-card';
-            card.setAttribute('role', 'button');
-            card.tabIndex = 0;
-            card.dataset.invId = rawId;
-            card.setAttribute('aria-pressed', isPending ? 'true' : 'false');
-            card.dataset.expanded = 'false';
-
-            var topOuter = document.createElement('div');
-            topOuter.className = 'exec-picker-card__top';
-            var leftCol = document.createElement('div');
-            leftCol.style.minWidth = '0';
-            var titleP = document.createElement('p');
-            titleP.className = 'exec-picker-card__title';
-            titleP.textContent = inv.name || 'Unnamed';
-            var subP = document.createElement('p');
-            subP.className = 'exec-picker-card__sub';
-            subP.textContent = fmtQty(inv);
-            leftCol.appendChild(titleP);
-            leftCol.appendChild(subP);
-            var toggleBtn = document.createElement('button');
-            toggleBtn.type = 'button';
-            toggleBtn.className = 'exec-picker-card__toggle';
-            toggleBtn.setAttribute('data-action', 'toggle-details');
-            toggleBtn.dataset.invId = rawId;
-            toggleBtn.textContent = 'Details';
-            topOuter.appendChild(leftCol);
-            topOuter.appendChild(toggleBtn);
-            card.appendChild(topOuter);
-
-            if (chips) {
-              var chipHolder = document.createElement('div');
-              chipHolder.className = 'exec-picker-card__meta';
-              chipHolder.innerHTML = chips;
-              card.appendChild(chipHolder);
-            }
-            if (metaBlock) {
-              var metaTmp = document.createElement('div');
-              metaTmp.innerHTML = metaBlock;
-              while (metaTmp.firstChild) {
-                card.appendChild(metaTmp.firstChild);
-              }
-            }
-
-            var spacerEl = document.createElement('div');
-            spacerEl.className = 'exec-picker-card__spacer';
-            card.appendChild(spacerEl);
-
-            if (isPending) {
-              var actDiv = document.createElement('div');
-              actDiv.className = 'exec-picker-card__actions';
-              actDiv.style.justifyContent = 'flex-start';
-              var cBtn = document.createElement('button');
-              cBtn.type = 'button';
-              cBtn.className = 'btn btn-secondary btn-sm exec-picker-confirm-btn';
-              cBtn.setAttribute('data-action', 'confirm-input');
-              cBtn.dataset.invId = rawId;
-              var strongEl = document.createElement('strong');
-              strongEl.textContent = 'Confirm input';
-              cBtn.appendChild(strongEl);
-              actDiv.appendChild(cBtn);
-              card.appendChild(actDiv);
-            }
-
-            var detailsEl = document.createElement('div');
-            detailsEl.className = 'exec-picker-card__details';
-            detailsEl.innerHTML = detailsInnerHtml;
-            card.appendChild(detailsEl);
-
-            return card;
+          function computeExecPickerCardPayload(inv) {
+            return ExecInvPickView.buildPayload(inv, pickerCardCtx);
+          }
+          function assembleExecPickerCard(inv, payload, isPending, rawId) {
+            return ExecInvPickView.assembleCard(inv, payload, isPending, rawId, IDisp);
+          }
+          function syncExecPickerCard(card, inv, payload, isPending, rawId) {
+            ExecInvPickView.syncCard(card, inv, payload, isPending, rawId, IDisp);
           }
 
           if (!list.length) {
+            pickerCardCache.clear();
             pickerCards.replaceChildren();
             var emptyP = document.createElement('p');
             emptyP.style.cssText = 'margin: 0; font-size: 13px; color: var(--text-secondary); padding: 6px 2px;';
@@ -646,8 +302,23 @@
             return;
           }
           var pickerFrag = document.createDocumentFragment();
+          var seenIds = new Set();
           list.forEach(function(inv) {
-            pickerFrag.appendChild(buildExecPickerCard(inv));
+            var rawId = String(inv.id);
+            seenIds.add(rawId);
+            var payload = computeExecPickerCardPayload(inv);
+            var isPending = pendingId && pendingId === rawId;
+            var card = pickerCardCache.get(rawId);
+            if (card) {
+              syncExecPickerCard(card, inv, payload, isPending, rawId);
+            } else {
+              card = assembleExecPickerCard(inv, payload, isPending, rawId);
+              pickerCardCache.set(rawId, card);
+            }
+            pickerFrag.appendChild(card);
+          });
+          pickerCardCache.forEach(function(_el, id) {
+            if (!seenIds.has(id)) pickerCardCache.delete(id);
           });
           pickerCards.replaceChildren(pickerFrag);
         }
@@ -754,38 +425,24 @@
         }
 
         var defaultPickerType = pickDefaultPickerType();
-        var pickerState = { activeType: defaultPickerType, q: '' };
-        function syncTabState(next) {
-          pickerState.activeType = next;
-          try {
-            inputSection.dataset.activePickerType = String(next || '');
-          } catch (e) {}
-          pickerTabs.forEach(function(t) {
-            var isOn = t.getAttribute('data-exec-type') === next;
-            t.setAttribute('aria-pressed', isOn ? 'true' : 'false');
-            t.classList.toggle('flow-mode-segment--active', isOn);
-          });
-          renderPickerCards(pickerState.activeType, pickerState.q);
+        var IPC = root.InventoryPickerController;
+        if (!IPC || typeof IPC.create !== "function") {
+          throw new Error("inventory-picker-controller.js must load before execution-render-inputs.js");
         }
-        pickerTabs.forEach(function(btn) {
-          btn.addEventListener('click', function() {
-            syncTabState(btn.getAttribute('data-exec-type') || 'all');
-          });
+        var pickerCtl = IPC.create({
+          inputSection: inputSection,
+          pickerTabs: pickerTabs,
+          pickerSearch: pickerSearch,
+          defaultActiveType: defaultPickerType,
+          onFilterChange: function (activeType, q) {
+            renderPickerCards(activeType, q);
+          },
+          searchDebounceMs: 300
         });
-        if (pickerSearch) {
-          var searchDebounceTimer = null;
-          pickerSearch.addEventListener('input', function() {
-            var v = pickerSearch.value || '';
-            if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = setTimeout(function() {
-              searchDebounceTimer = null;
-              pickerState.q = v;
-              renderPickerCards(pickerState.activeType, pickerState.q);
-            }, 300);
-          });
-        }
+        var pickerState = pickerCtl.state;
+        var syncTabState = pickerCtl.syncTabState;
+        pickerCtl.bind();
         if (pickerPanel) {
-          // initial render (ensure correct default tab is active)
           syncTabState(defaultPickerType);
         }
 
@@ -839,133 +496,17 @@
         }
 
         function createInputRow(isFirst) {
-          const rowId = 'execute-input-row-' + safeInputName + '-' + rowIndex++;
-          const stateKey = safeInputName + '::' + rowId;
-          const row = document.createElement('div');
-          row.className = 'execute-input-row';
-          row.id = rowId;
-          row.dataset.inputName = input.name;
-          row.dataset.stateKey = stateKey;
-          // Ensure rows naturally stack in the document flow.
-          row.style.display = 'block';
-          row.style.width = '100%';
-          row.style.position = 'relative';
-          if (!ses.inputStateByKey.has(stateKey)) {
-            ses.inputStateByKey.set(stateKey, {
-              input_name: input.name,
-              inventory_item_id: '',
-              quantity: input.quantity != null ? Number(input.quantity) : 0,
-              unit: input.unit || '',
-              expired_reason: '',
-            });
-          }
-          var hidInv = document.createElement("input");
-          hidInv.type = "hidden";
-          hidInv.className = "execute-inventory-select";
-          hidInv.dataset.inputName = input.name || "";
-          hidInv.dataset.quantity = "";
-          hidInv.dataset.unit = "";
-          hidInv.dataset.expiredReason = "";
-          hidInv.value = "";
-          row.appendChild(hidInv);
-
-          var rmWrap = document.createElement("div");
-          rmWrap.style.cssText = "display:flex; justify-content:flex-end; margin-bottom: 10px;";
-          var rmBtn = document.createElement("button");
-          rmBtn.type = "button";
-          rmBtn.className = "execute-remove-input-row-btn btn btn-secondary btn-sm";
-          rmBtn.style.fontSize = "12px";
-          rmBtn.textContent = "Remove input";
-          rmWrap.appendChild(rmBtn);
-          row.appendChild(rmWrap);
-
-          var selCard = document.createElement("div");
-          selCard.className = "execute-selected-inv-card";
-          selCard.style.cssText =
-            "display:none; padding: 12px 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); background: var(--bg-card, #fff);";
-          row.appendChild(selCard);
-
-          var expWarn = document.createElement("div");
-          expWarn.className = "execute-input-expired-warning";
-          expWarn.dataset.inputName = input.name || "";
-          expWarn.style.cssText =
-            "display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;";
-          expWarn.setAttribute("role", "alert");
-          row.appendChild(expWarn);
-
-          var rowUnexp = document.createElement("div");
-          rowUnexp.className = "execute-input-unexpected-row-warning";
-          rowUnexp.dataset.inputName = input.name || "";
-          rowUnexp.style.cssText =
-            "display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;";
-          rowUnexp.setAttribute("role", "status");
-          row.appendChild(rowUnexp);
-
-          var qtyPane = document.createElement("div");
-          qtyPane.className = "execute-qty-pane";
-          qtyPane.style.cssText = "display:none; margin-top: 12px;";
-          var qtyLbl = document.createElement("label");
-          qtyLbl.className = "spa-field-label";
-          qtyLbl.textContent = "Quantity to consume";
-          qtyPane.appendChild(qtyLbl);
-          var qtyRow = document.createElement("div");
-          qtyRow.style.cssText = "display: flex; align-items: center; gap: 8px;";
-          var qtyInput = document.createElement("input");
-          qtyInput.type = "number";
-          qtyInput.className = "spa-inp execute-quantity-input";
-          qtyInput.dataset.inputName = input.name || "";
-          qtyInput.dataset.stepUnit = input.unit || "";
-          qtyInput.dataset.originalQuantity =
-            input.quantity != null ? String(input.quantity) : "";
-          qtyInput.placeholder = String(input.quantity != null ? input.quantity : "0");
-          qtyInput.value = input.quantity != null ? String(input.quantity) : "";
-          qtyInput.step = "0.01";
-          qtyInput.min = "0";
-          qtyInput.style.flex = "1";
-          qtyRow.appendChild(qtyInput);
-          var unitDisp = document.createElement("span");
-          unitDisp.className = "execute-quantity-unit-display";
-          unitDisp.style.cssText =
-            "font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;";
-          unitDisp.textContent = input.unit || "";
-          qtyRow.appendChild(unitDisp);
-          qtyPane.appendChild(qtyRow);
-          row.appendChild(qtyPane);
-          if (qtyInput) {
-            // Ensure we start from a neutral border (avoid stale inline styles / bfcache).
-            qtyInput.style.border = '1px solid var(--border-default, #e5e7eb)';
-            qtyInput.addEventListener('input', function() {
-              var st = ses.inputStateByKey.get(stateKey);
-              if (!st) return;
-              var q = parseFloat(qtyInput.value);
-              st.quantity = isNaN(q) ? 0 : q;
-            });
-          }
-
-          // Remove input: if it's the only row, clear selection + unlock; otherwise remove the row.
-          var removeBtn = row.querySelector('.execute-remove-input-row-btn');
-          if (removeBtn) {
-            removeBtn.addEventListener('click', function(e) {
-              if (e) { e.preventDefault(); e.stopPropagation(); }
-              row.setAttribute('data-pending-inv-id', '');
-              row.setAttribute('data-selection-locked', 'false');
-              if (!rowsContainer) return;
-              var rowCount = rowsContainer.querySelectorAll('.execute-input-row').length;
-              if (rowCount <= 1) {
-                setRowSelection(row, '');
-                setActiveRow(row);
-              } else {
-                var stateKey = row.dataset.stateKey || '';
-                if (stateKey && ses.inputStateByKey) ses.inputStateByKey.delete(stateKey);
-                row.remove();
-                // Ensure active row points to a remaining row.
-                var next = rowsContainer.querySelector('.execute-input-row');
-                if (next) setActiveRow(next);
-              }
-              renderPickerCards(pickerState.activeType, pickerState.q);
-            });
-          }
-          return row;
+          return EIRR.createInputRow({
+            isFirst: isFirst,
+            safeInputName: safeInputName,
+            bumpRowIndex: function () {
+              return rowIndex++;
+            },
+            ses: ses,
+            input: input,
+            rowsContainer: rowsContainer,
+            api: rowInputApi
+          });
         }
 
         function nameMatchesExact(invName) {
@@ -1097,9 +638,9 @@
           var stateKey = rowEl.dataset.stateKey || '';
           var st = stateKey ? ses.inputStateByKey.get(stateKey) : null;
           hiddenInput.value = invId || '';
-          hiddenInput.dataset.quantity = '';
-          hiddenInput.dataset.unit = '';
-          hiddenInput.dataset.expiredReason = '';
+          delete hiddenInput.dataset.quantity;
+          delete hiddenInput.dataset.unit;
+          delete hiddenInput.dataset.expiredReason;
 
           // Always clear warning when changing selection; only show if the selected item needs it.
           if (expiredWarningEl) { expiredWarningEl.style.display = 'none'; expiredWarningEl.textContent = ''; }
@@ -1187,7 +728,7 @@
               t1.textContent = inv.name || 'Selected item';
               var t2 = document.createElement('div');
               t2.style.cssText = 'font-size:12px; color:var(--text-secondary,#6b7280); margin-top:4px;';
-              t2.textContent = (inv.process_name ? inv.process_name + ' · ' : '') + fmtQty(inv);
+              t2.textContent = IDisp.formatSelectedRowSubtitle(inv);
               col.appendChild(t1);
               col.appendChild(t2);
               rowTop.appendChild(col);
@@ -1225,6 +766,8 @@
           updateUnexpectedMaterialWarning();
         }
 
+        rowInputApi.setRowSelection = setRowSelection;
+
         const firstRow = createInputRow(true);
         rowsContainer.appendChild(firstRow);
 
@@ -1236,10 +779,9 @@
 
         function getInventorySelectionLabel(invId) {
           if (!invId) return 'Select inventory item...';
-          const inv = inventoryById.get(String(invId));
+          var inv = inventoryById.get(String(invId));
           if (!inv) return 'Select inventory item...';
-          const productName = inv.process_name ? String(inv.process_name) + ' - ' + String(inv.name || '') : String(inv.name || '');
-          return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+          return IDisp.formatTriggerLabel(inv);
         }
 
         // Always-on card picker: clicking a row makes it active; clicking a card assigns selection to the active row.
@@ -1258,6 +800,11 @@
             if (pickerPanel) pickerPanel.style.display = (locked && hasSel) ? 'none' : 'block';
           } catch (e) {}
         }
+        rowInputApi.setActiveRow = setActiveRow;
+        rowInputApi.refreshPicker = function () {
+          renderPickerCards(pickerState.activeType, pickerState.q);
+        };
+
         function getSelectedInventoryIdsExcludingRow(excludeRowEl) {
           var ids = new Set();
           inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
@@ -1279,10 +826,7 @@
           if (inv.created_at) {
             try { createdStr = new Date(inv.created_at).toLocaleDateString(); } catch (e) {}
           }
-          var subtitleParts = [];
-          subtitleParts.push(escapeHtml(inv.quantity != null ? String(inv.quantity) : '0') + ' ' + escapeHtml(inv.unit || ''));
-          if (inv.process_name) subtitleParts.push(escapeHtml(inv.process_name));
-          var subtitleLine = subtitleParts.join(' · ');
+          var subtitleLine = escapeHtml(IDisp.formatDropdownCardSubtitle(inv));
           var detailsParts = [];
           if (inv.quantity != null) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Quantity</span> ' + escapeHtml(String(inv.quantity)) + ' ' + escapeHtml(inv.unit || '') + '</p>');
           if (inv.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(inv.process_name) + '</p>');
@@ -1464,8 +1008,7 @@
         }
 
         // Picker is always visible; keep tab/search predictable once on init.
-        if (pickerSearch) pickerSearch.value = '';
-        pickerState.q = '';
+        pickerCtl.resetSearchUiAndQuery();
         syncTabState(defaultPickerType);
 
         function toggleInventoryCardDetails(cardId) {
