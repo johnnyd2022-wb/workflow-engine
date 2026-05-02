@@ -1,193 +1,136 @@
-🟠 HIGH — FINAL EDGE CONSIDERATIONS
-1. ⚠️ RuntimeError vs ValueError consistency
+🔴 execution-render-outputs.js — Criticality Review
+1. 🔴 Security (Highest priority)
+1.1 DOM XSS surface area (mitigated but structurally risky)
 
-You now have:
+You are generally using escapeHtml(), which is good, but the code still relies heavily on manual HTML string concatenation + innerHTML injection, which is inherently high-risk.
 
-validate_json_blob → raises ValueError
-_strip_trace_keys_recursive → raises RuntimeError
+Key hotspots:
+
+card.innerHTML = ... + expandInner + ...
+buildUntrackedReconcileExpandHtml() returns raw HTML strings built from multiple nested sources
+JSON.stringify(h) injected into HTML (escaped, but still risky if escapeHtml ever misses a path)
+prompts rendering uses raw string interpolation into HTML list structure
 Why this matters
 
-In your request pipeline:
+Even though escapeHtml() is used, the attack surface is:
 
-ValueError → handled → returns 400
-RuntimeError → falls into generic exception → returns 500
-Current behaviour
+any missed field in extra_data
+any future developer bypassing escapeHtml
+nested HTML builders (multiple layers of string composition)
 
-If invariant is violated:
+Risk level: MEDIUM-HIGH (architectural), LOW (current implementation correctness)
 
-client gets 500 (server error)
-Is that correct?
+Recommendation
+Move to DOM APIs (createElement, textContent) for all dynamic sections OR
+Introduce a strict HTML templating layer (not ad-hoc string concat)
+2. 🔴 Performance (High impact in large datasets)
+2.1 Repeated DOM queries inside loops
 
-Yes, mostly. Because:
+Inside matchingUntracked.forEach:
 
-this indicates a programming error or contract violation
-not a client mistake
-But subtle risk
+multiple querySelector calls per card
+repeated .closest() and .querySelector() usage in event handlers
 
-If this ever gets triggered by:
+This becomes expensive when:
 
-misordered validation
-future refactor
-internal API reuse
+many reconciliation items exist (50–500+ cards)
+modal opens/closes frequently
 
-You’ll surface:
+Problem pattern:
 
-noisy 500s
-harder debugging during incidents
-Recommendation (refinement)
+card.querySelector(...)
+rowCard.querySelector(...)
+2.2 Heavy string concatenation loops
 
-Wrap at boundary:
+Examples:
 
-try:
-    execution_data = _strip_incoming_execution_trace_keys(...)
-except RuntimeError:
-    logger.exception("execution_data invariant violation")
-    return jsonify({"error": "Invalid request body"}), 400
+reconciliation history .map().join('')
+audit history .map().join('')
+prompts .map().join('')
 
-This keeps:
+This is fine at small scale, but combined with DOM injection = expensive reflows.
 
-fail-fast internally ✔
-clean client contract ✔
-2. ⚠️ Contract is now strong but only documented, not enforced at call sites
+Risk level: MEDIUM (scales poorly, not immediate bug)
 
-You added:
+3. 🟠 Event handling & DOM binding complexity
+3.1 Per-card event listeners
 
-"Call only on trees that already passed validate_json_blob"
+Each card binds:
 
-This is good documentation, but…
+confirm click
+remove click
 
-The function itself:
+This creates O(n) listeners per render cycle, instead of event delegation.
 
-does not verify validation actually occurred
-only detects depth mismatch
-Residual risk
+Better pattern:
 
-A caller could:
+Single delegated handler on cardsContainer.
 
-pass unvalidated data within depth limit
-still violate:
-node budget
-key length
-list limits
-Recommendation (optional but robust)
+3.2 Mixed delegation + direct binding inconsistency
 
-If you want full safety:
+You partially use delegation here:
 
-Option A:
+cardsContainer.addEventListener('click', ...)
 
-rename function to:
+But still mix in per-element listeners → inconsistent model.
 
-_strip_trace_keys_recursive_validated
+Risk: MEDIUM (maintainability + memory overhead)
 
-Option B:
+4. 🟠 Memory / lifecycle concerns
+4.1 Mutation-based state stored on DOM nodes
+cardsContainer._execReconcileDetailsClickBound = true;
 
-add lightweight marker (e.g. wrapper object) post-validation
+This is:
 
-Option C (best long-term):
+implicit state on DOM
+hard to trace/debug
+leaks abstraction boundaries
 
-eliminate need entirely via typed schema
-3. ⚠️ Node budget is now correct and clear (good), but not externally visible
-budget.visit(path)
-What you gained
+Better: closure-scoped flag or module-level WeakMap.
 
-✔ clarity
-✔ correctness
-✔ no mutation hacks
+Risk: LOW-MEDIUM
 
-Remaining gap
+5. 🟡 Maintainability / Complexity
+5.1 buildUntrackedReconcileExpandHtml is doing too much
 
-You do not expose:
+It mixes:
 
-how often node limits are hit
-which payloads are near limits
-Recommendation (optional observability)
+formatting logic
+data normalization
+HTML generation
+business rules (inventory, audit, reconciliation)
 
-Add:
+This is effectively a mini rendering engine inside a function.
 
-inc_counter("execution_data_node_budget_exceeded")
+Risk: HIGH (long-term technical debt)
 
-inside the exception path.
+5.2 Inline style proliferation
+dozens of inline styles
+duplicated design tokens (var(--text-secondary,#6b7280) patterns)
 
-This gives:
+This makes:
 
-early signal of clients pushing limits
-avoids silent boundary pressure
-🟡 MEDIUM
-4. ✔ Budget object implementation is clean and production-ready
-class _JsonNodeBudget:
-    __slots__ = ("n",)
-This is good engineering:
-avoids dynamic attribute overhead ✔
-minimal memory footprint ✔
-clear intent ✔
+theming harder
+UI consistency fragile
+refactoring expensive
+6. 🟡 UI/logic edge cases
+6.1 Cursor override bug
+card.style.cursor = 'default';
 
-No changes needed.
+But earlier:
 
-5. ⚠️ Path string construction still allocates heavily (acceptable)
-path=f"{path}.{k[:48]}"
-Cost
-string creation per node
-but bounded by:
-depth
-node limit
-Verdict
+cursor: pointer
 
-This is acceptable for:
+This inconsistency likely breaks affordance.
 
-debugging clarity
-stable error messages
-
-Only optimise if:
-
-you hit CPU limits under heavy load
-🟢 WHAT IS NOW EXCELLENT
-✔ Full boundary enforcement chain is now consistent
-
-You now have:
-
-Raw size guard
-JSON parse
-Pydantic shape validation
-Structural validation (depth, breadth, node count)
-Trace key stripping (with enforced invariant)
-
-This is a complete and robust ingestion pipeline.
-
-✔ No silent failure classes remain
-
-You eliminated:
-
-truncation
-partial sanitisation
-hidden fallbacks
-
-Everything is now:
-
-explicit accept or explicit reject
-
-✔ Code communicates intent clearly
-docstrings are precise
-invariants are enforced, not implied
-naming is improving toward correctness
-🧾 FINAL VERDICT
-
-This is now:
-
-Production-grade, correctness-first backend code with strong invariants and predictable behaviour
-
-Remaining (very minor) improvements
-🟠 Optional hardening
-Normalize exception handling (RuntimeError → controlled 400 at boundary)
-Add metric for node budget breaches
-🟡 Optional clarity
-Rename strip function or enforce validated-type contract
-
----
-
-## Round-6 follow-up (implemented)
-
-| Finding | Change |
-|---------|--------|
-| **RuntimeError** from strip → **500** | **`complete_step`** wraps **`_strip_incoming_execution_trace_keys`** in **`try/except RuntimeError`**: **`logger.exception`**, **`inc_counter("execution_data_strip_invariant_violations")`**, returns **400** with stable **`details`**. |
-| Node budget breaches invisible | **`_JsonNodeBudget.visit`** calls **`inc_counter("execution_data_node_budget_exceeded")`** before raising **`ValueError`** (still mapped to **400** by existing handler). |
-| Rename strip / validated wrapper | **Deferred** — contract documented + boundary handling above. |
+6.2 Hidden state coupling
+hiddenInput.value drives selection state
+DOM + JS state can drift if external mutation occurs
+📊 Summary (this file)
+Category	Severity
+XSS surface (architectural)	🔴 High
+Performance (DOM + loops)	🔴 High
+Event model complexity	🟠 Medium
+Memory/state coupling	🟠 Medium
+Maintainability	🟠 High
+UI consistency issues	🟡 Low

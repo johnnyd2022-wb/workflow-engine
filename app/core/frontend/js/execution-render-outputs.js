@@ -6,6 +6,11 @@
 (function (root) {
   'use strict';
 
+  /** Tracks containers that already have the delegated reconcile click handler (avoids DOM property mutation). */
+  var reconcileCardsDelegationBound =
+    typeof WeakSet !== 'undefined' ? new WeakSet() : null;
+  var reconcileCardsDelegationFallback = [];
+
   /**
    * Collapsible details for untracked reconciliation cards — aligns with inventory picker (audit, notes).
    */
@@ -179,6 +184,7 @@
     // Fetch matching untracked per output from backend (includes qty>0 and qty 0 consumed in this execution).
     // Do not pass process_id so untracked items without source_execution (e.g. manually added) are included.
     let matchingUntrackedPerOutput = [];
+    var matchingUntrackedFetchFailed = false;
     const currentExecutionId = modal.dataset.executionId;
     if (CoreAPI && variableOutputs.length > 0 && currentExecutionId && typeof CoreAPI.getMatchingUntracked === 'function') {
       try {
@@ -192,11 +198,21 @@
         matchingUntrackedPerOutput = results.map(function(r) { return (r && r.matching_untracked) ? r.matching_untracked : []; });
       } catch (e) {
         if (e && e.name === 'AbortError') throw e;
+        matchingUntrackedFetchFailed = true;
         console.warn('Could not fetch matching untracked per output', e);
       }
     }
 
     if (variableOutputs.length > 0 && outputsContainer) {
+      if (matchingUntrackedFetchFailed) {
+        var fetchWarn = document.createElement('div');
+        fetchWarn.setAttribute('role', 'alert');
+        fetchWarn.style.cssText =
+          'margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;';
+        fetchWarn.textContent =
+          'Could not load the latest untracked inventory matches. Using the list from this page if available.';
+        outputsContainer.appendChild(fetchWarn);
+      }
       variableOutputs.forEach((output, index) => {
         const outputSection = document.createElement('div');
         outputSection.className = 'execute-output-section';
@@ -290,14 +306,18 @@
           var cardsContainer = recon.querySelector('.execute-reconcile-untracked-cards');
           var hiddenInput = outputSection.querySelector('.execute-reconcile-untracked-value');
 
+          if (!cardsContainer || !hiddenInput) {
+            console.warn('execute reconcile UI: missing cards container or hidden input');
+          } else {
           function setLocked(locked) {
             recon.dataset.reconcileLocked = locked ? '1' : '0';
           }
 
-          function applyVisibility() {
+          function applyVisibility(cards) {
             var locked = recon.dataset.reconcileLocked === '1';
             var selectedId = (hiddenInput.value || '').trim();
-            recon.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
+            var list = cards || recon.querySelectorAll('.execute-reconcile-untracked-card');
+            list.forEach(function(c) {
               if (!locked) {
                 c.style.display = '';
                 return;
@@ -309,7 +329,8 @@
 
           function setSelection(selectedId) {
             hiddenInput.value = selectedId || '';
-            recon.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
+            var cards = recon.querySelectorAll('.execute-reconcile-untracked-card');
+            cards.forEach(function(c) {
               var id = c.dataset.untrackedId || '';
               var selected = id === selectedId;
               c.classList.toggle('execute-reconcile-card-selected', selected);
@@ -325,7 +346,61 @@
                 removeBtn.style.display = selected ? '' : 'none';
               }
             });
-            applyVisibility();
+            applyVisibility(cards);
+          }
+
+          function bindReconcileCardsDelegation() {
+            if (reconcileCardsDelegationBound) {
+              if (reconcileCardsDelegationBound.has(cardsContainer)) return;
+              reconcileCardsDelegationBound.add(cardsContainer);
+            } else {
+              if (reconcileCardsDelegationFallback.indexOf(cardsContainer) !== -1) return;
+              reconcileCardsDelegationFallback.push(cardsContainer);
+            }
+            cardsContainer.addEventListener('click', function(ev) {
+              var target = ev.target;
+              var detailBtn = target && target.closest
+                ? target.closest('[data-action="toggle-reconcile-details"]')
+                : null;
+              if (detailBtn && cardsContainer.contains(detailBtn)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                var rowForDetail = detailBtn.closest('.execute-reconcile-untracked-card');
+                var panel = rowForDetail && rowForDetail.querySelector('.exec-reconcile-details-panel');
+                if (!panel) return;
+                var isOpen = panel.style.display === 'block';
+                panel.style.display = isOpen ? 'none' : 'block';
+                detailBtn.textContent = isOpen ? 'Details' : 'Hide details';
+                return;
+              }
+              var confirmBtn = target && target.closest
+                ? target.closest('.exec-reconcile-confirm-btn')
+                : null;
+              if (confirmBtn && cardsContainer.contains(confirmBtn)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                var rowCard = confirmBtn.closest('.execute-reconcile-untracked-card');
+                if (!rowCard || !cardsContainer.contains(rowCard)) return;
+                var uid = (rowCard.dataset.untrackedId || '').trim();
+                if (uid === '') {
+                  setLocked(false);
+                  setSelection('');
+                } else {
+                  setLocked(true);
+                  setSelection(uid);
+                }
+                return;
+              }
+              var removeBtn = target && target.closest
+                ? target.closest('.exec-reconcile-remove-btn')
+                : null;
+              if (removeBtn && cardsContainer.contains(removeBtn)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                setLocked(false);
+                setSelection('');
+              }
+            });
           }
 
           var noneCard = document.createElement('div');
@@ -341,13 +416,8 @@
                 '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-confirm-btn" style="font-size: 12px; font-weight: 700;">Confirm reconciliation</button>' +
               '</div>' +
             '</div>';
-          noneCard.querySelector('.exec-reconcile-confirm-btn').addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            setLocked(false);
-            setSelection('');
-          });
-          cardsContainer.appendChild(noneCard);
+          var cardsFrag = document.createDocumentFragment();
+          cardsFrag.appendChild(noneCard);
 
           matchingUntracked.forEach(function(u) {
             var id = String(u.id);
@@ -370,7 +440,6 @@
             if (u.source_step_completed_by) subtitleParts.push('Completed by: ' + escapeHtml(u.source_step_completed_by));
             var subtitleLine = subtitleParts.join(' · ');
             var expandInner = buildUntrackedReconcileExpandHtml(u, escapeHtml, prettyLabel, orgUsersMap);
-            card.style.cursor = 'default';
             card.innerHTML =
               '<div style="padding: 12px 16px;">' +
                 '<div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px;">' +
@@ -394,39 +463,16 @@
                   '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-remove-btn" style="font-size: 12px; display:none;">Remove reconciliation</button>' +
                 '</div>' +
               '</div>';
-            card.querySelector('.exec-reconcile-confirm-btn').addEventListener('click', function(e) {
-              e.preventDefault();
-              e.stopPropagation();
-              setLocked(true);
-              setSelection(id);
-            });
-            card.querySelector('.exec-reconcile-remove-btn').addEventListener('click', function(e) {
-              e.preventDefault();
-              e.stopPropagation();
-              setLocked(false);
-              setSelection('');
-            });
-            cardsContainer.appendChild(card);
+            cardsFrag.appendChild(card);
           });
 
-          if (!cardsContainer._execReconcileDetailsClickBound) {
-            cardsContainer._execReconcileDetailsClickBound = true;
-            cardsContainer.addEventListener('click', function(ev) {
-              var btn = ev.target && ev.target.closest ? ev.target.closest('[data-action="toggle-reconcile-details"]') : null;
-              if (!btn || !cardsContainer.contains(btn)) return;
-              ev.preventDefault();
-              ev.stopPropagation();
-              var rowCard = btn.closest('.execute-reconcile-untracked-card');
-              var panel = rowCard && rowCard.querySelector('.exec-reconcile-details-panel');
-              if (!panel) return;
-              var isOpen = panel.style.display === 'block';
-              panel.style.display = isOpen ? 'none' : 'block';
-              btn.textContent = isOpen ? 'Details' : 'Hide details';
-            });
-          }
+          cardsContainer.appendChild(cardsFrag);
+
+          bindReconcileCardsDelegation();
 
           setLocked(false);
           setSelection(defaultId);
+          }
         }
 
         // Wire expiry input toggle (set_at_execution)
