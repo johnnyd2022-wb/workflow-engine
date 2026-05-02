@@ -16,15 +16,17 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
+from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
-    MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
     CompleteStepRequestBody,
     validate_json_blob,
 )
-from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
+from app.core.backend.complete_step_payload import (
+    MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
+)
 from app.core.backend.evidence import evidence_routes
-from app.core.backend.evidence.evidence_service import list_evidence_for_execution
+from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import SessionLocal, db_session
@@ -47,6 +49,7 @@ from app.core.domain.inventory_quantity_guard import (
     allow_inventory_quantity_write,
 )
 from app.core.security.permissions import requires_auth
+from app.core.utils.internal_counters import get_counter_snapshot, inc_counter
 from app.core.utils.inventory_quantity import (
     assert_movement_unit_matches_item_canonical,
     coerce_stored_quantity,
@@ -58,7 +61,6 @@ from app.core.utils.inventory_wastage_quantity import (
     parse_wastage_unit_field,
     wastage_entries_payload_hash,
 )
-from app.core.utils.internal_counters import get_counter_snapshot, inc_counter
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
@@ -90,6 +92,7 @@ def _bound_inventory_extra_data_for_list_response(extra_data: dict) -> dict:
     if isinstance(rh, list) and len(rh) > LIST_INVENTORY_MAX_RECONCILIATION_HISTORY:
         out["reconciliation_history"] = rh[:LIST_INVENTORY_MAX_RECONCILIATION_HISTORY]
     return out
+
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -427,9 +430,7 @@ def _strip_trace_keys_recursive(obj: Any, depth: int = 0) -> Any:
         )
     if isinstance(obj, dict):
         return {
-            k: _strip_trace_keys_recursive(v, depth + 1)
-            for k, v in obj.items()
-            if k not in _EXECUTION_DATA_TRACE_KEYS
+            k: _strip_trace_keys_recursive(v, depth + 1) for k, v in obj.items() if k not in _EXECUTION_DATA_TRACE_KEYS
         }
     if isinstance(obj, list):
         return [_strip_trace_keys_recursive(x, depth + 1) for x in obj]
@@ -1579,9 +1580,12 @@ def list_executions():
     repo = ExecutionRepository(db_session)
     executions = repo.list_executions(org_id=org_id, process_id=process_id, status=status)
 
+    # Batch-fetch all evidence for all executions in a single query
+    executions_by_id = {str(e.id): e for e in executions}
+    evidence_by_execution = list_evidence_for_executions_batch([e.id for e in executions], org_id, executions_by_id)
+
     result = []
     for execution in executions:
-        # Get current step info
         execution_steps = execution.execution_steps if execution.execution_steps else []
         execution_steps_sorted = sorted(execution_steps, key=lambda es: es.step_number)
         current_step = None
@@ -1601,10 +1605,26 @@ def list_executions():
                 "name": next_step.step.name if next_step.step else None,
             }
 
-        # Calculate progress using snapshot total_steps to avoid division by zero and ensure consistency
-        # Progress should not change if steps are added or reordered later
         total_steps = execution.total_steps or len(execution_steps) if execution_steps else 0
         progress = (len(completed_steps) / total_steps * 100) if total_steps > 0 else 0
+
+        steps_payload = [
+            {
+                "id": str(es.id),
+                "step_id": str(es.step_id),
+                "step_number": es.step_number,
+                "status": es.status.value,
+                "actual_inputs": es.actual_inputs or [],
+                "actual_outputs": es.actual_outputs or [],
+                "execution_data": es.execution_data or {},
+                "started_at": es.started_at.isoformat() if es.started_at else None,
+                "completed_at": es.completed_at.isoformat() if es.completed_at else None,
+                "step_name": es.step.name if es.step else None,
+                "step_inputs": es.step.inputs or [] if es.step else [],
+                "step_outputs": es.step.outputs or [] if es.step else [],
+            }
+            for es in execution_steps_sorted
+        ]
 
         result.append(
             {
@@ -1616,6 +1636,8 @@ def list_executions():
                 "current_step": current_step,
                 "progress": progress,
                 "total_steps": total_steps,
+                "execution_steps": steps_payload,
+                "evidence": evidence_by_execution.get(str(execution.id), []),
             }
         )
 
@@ -1656,7 +1678,7 @@ def get_execution(execution_id: str):
             }
         )
 
-    evidence_list = list_evidence_for_execution(execution_uuid, org_id)
+    evidence_list = list_evidence_for_execution(execution_uuid, org_id, execution=execution)
 
     return (
         jsonify(
@@ -2714,9 +2736,7 @@ def list_inventory():
                     producing_step_name = str(tagged_step)
             except Exception:
                 inc_counter("inventory_producing_step_name_fallback_failures")
-                logger.debug(
-                    "list_inventory producing_step_name fallback failed item_id=%s", item.id, exc_info=True
-                )
+                logger.debug("list_inventory producing_step_name fallback failed item_id=%s", item.id, exc_info=True)
 
         # Single operator-facing ready instant (set_at_execution date or fixed-duration from step completion)
         ready_date_display = None

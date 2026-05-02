@@ -92,7 +92,11 @@ class ExecutionRepository:
         self, org_id: UUID, process_id: UUID | None = None, status: ExecutionStatus | None = None
     ) -> list[Execution]:
         """List executions for an organisation, optionally filtered by process or status"""
-        query = self.db.query(Execution).filter(Execution.org_id == org_id)
+        query = (
+            self.db.query(Execution)
+            .options(joinedload(Execution.execution_steps).joinedload(ExecutionStep.step))
+            .filter(Execution.org_id == org_id)
+        )
         if process_id:
             query = query.filter(Execution.process_id == process_id)
         if status:

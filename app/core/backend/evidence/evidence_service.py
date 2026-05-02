@@ -159,16 +159,18 @@ def upload_evidence_from_temp(
     )
 
 
-def list_evidence_for_execution(execution_id: UUID, org_id: UUID) -> list[dict]:
+def list_evidence_for_execution(execution_id: UUID, org_id: UUID, execution=None) -> list[dict]:
     """
     Return list of evidence metadata for an execution (org-scoped).
     Each item includes step_definition_id (steps.id) and execution_step_id (execution_steps.id)
     so the frontend can filter without duplicating step-id resolution logic.
+    Pass execution if already loaded to avoid a redundant DB query.
     """
     evidence_repo = EvidenceRepository(db_session)
     records = evidence_repo.list_by_execution(execution_id, org_id)
-    exec_repo = ExecutionRepository(db_session)
-    execution = exec_repo.get_execution_with_steps(execution_id, org_id)
+    if execution is None:
+        exec_repo = ExecutionRepository(db_session)
+        execution = exec_repo.get_execution_with_steps(execution_id, org_id)
     step_id_to_exec_step_id = {}
     if execution and execution.execution_steps:
         for es in execution.execution_steps:
@@ -196,6 +198,50 @@ def list_evidence_for_execution(execution_id: UUID, org_id: UUID) -> list[dict]:
             }
         )
     return out
+
+
+def list_evidence_for_executions_batch(
+    execution_ids: list[UUID], org_id: UUID, executions_by_id: dict
+) -> dict[str, list[dict]]:
+    """
+    Fetch evidence for multiple executions in one DB query.
+    executions_by_id: {str(execution_id): Execution ORM object (with execution_steps loaded)}
+    Returns: {str(execution_id): [evidence_dicts]}
+    """
+    evidence_repo = EvidenceRepository(db_session)
+    records = evidence_repo.list_by_executions(execution_ids, org_id)
+
+    step_mappings: dict[str, dict[str, str]] = {}
+    for exec_id_str, execution in executions_by_id.items():
+        mapping: dict[str, str] = {}
+        if execution and execution.execution_steps:
+            for es in execution.execution_steps:
+                if es.step_id:
+                    mapping[str(es.step_id)] = str(es.id)
+        step_mappings[exec_id_str] = mapping
+
+    result: dict[str, list[dict]] = {str(eid): [] for eid in execution_ids}
+    for r in records:
+        exec_id_str = str(r.execution_id)
+        if exec_id_str not in result:
+            continue
+        step_definition_id = str(r.step_id) if r.step_id else None
+        mapping = step_mappings.get(exec_id_str, {})
+        execution_step_id = mapping.get(step_definition_id) if step_definition_id else None
+        result[exec_id_str].append(
+            {
+                "id": str(r.id),
+                "file_name": r.file_name,
+                "mime_type": r.mime_type,
+                "file_size": r.file_size,
+                "step_definition_id": step_definition_id,
+                "execution_step_id": execution_step_id,
+                "execution_id": exec_id_str,
+                "step_id": step_definition_id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
+    return result
 
 
 def get_evidence_for_download(

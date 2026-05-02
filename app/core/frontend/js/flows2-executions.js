@@ -449,13 +449,11 @@
           p.textContent = 'No active executions';
           activeContainer.appendChild(p);
         } else {
-          for (const execution of active) {
-            const card = await createExecutionCard(execution, 'active');
-            activeContainer.appendChild(card);
-          }
+          const cards = await Promise.all(active.map(e => createExecutionCard(e, 'active')));
+          cards.forEach(card => activeContainer.appendChild(card));
         }
       }
-      
+
       if (completedContainer) {
         completedContainer.replaceChildren();
         if (completed.length === 0) {
@@ -464,10 +462,8 @@
           p.textContent = 'No completed executions';
           completedContainer.appendChild(p);
         } else {
-          for (const execution of completed) {
-            const card = await createExecutionCard(execution, 'completed');
-            completedContainer.appendChild(card);
-          }
+          const cards = await Promise.all(completed.map(e => createExecutionCard(e, 'completed')));
+          cards.forEach(card => completedContainer.appendChild(card));
         }
       }
     }
@@ -543,45 +539,40 @@
         nextStepBtnWrap.appendChild(btn);
       }
       
-      // Fetch execution details once for completed steps, evidence, and next-step header
+      // Use execution_steps and evidence already included in the list response (no extra request needed)
       let executionEvidenceEl = null;
       let completedStepsSectionEl = null;
       let nextStepHeaderEl = null;
-      if (status === 'active' || status === 'completed') {
-        try {
-          const executionData = await CoreAPI.getExecution(executionId);
-          const executionSteps = executionData.execution_steps || [];
-          const evidenceList = executionData.evidence || [];
-          if (evidenceList.length > 0) {
-            executionEvidenceEl = flows2BuildExecutionEvidenceSectionDOM(evidenceList);
-          }
-          
-          const completedSteps = executionSteps
-            .filter((es) => es.status === 'completed' || es.status === 'COMPLETED')
-            .sort((a, b) => a.step_number - b.step_number);
-          
-          if (completedSteps.length > 0) {
-            const completedStepsCapped = completedSteps.slice(0, FLOWS2_MAX_COMPLETED_EXECUTION_STEPS);
-            completedStepsSectionEl = flows2BuildCompletedStepsSectionDOM(
-              executionId,
-              status,
-              completedSteps,
-              completedStepsCapped
-            );
-          }
-          
-          if (!isTerminalStep) {
-            const readySteps = executionSteps.filter((es) => es.status === 'ready' || es.status === 'READY');
-            if (readySteps.length > 0) {
-              const nextReadyStep = readySteps[0];
-              const stepDetails = currentProcess?.steps?.find((s) => s.id === nextReadyStep.step_id);
-              if (stepDetails) {
-                nextStepHeaderEl = flows2BuildNextStepSectionDOM(stepDetails, true);
-              }
+      {
+        const executionSteps = execution.execution_steps || [];
+        const evidenceList = execution.evidence || [];
+        if (evidenceList.length > 0) {
+          executionEvidenceEl = flows2BuildExecutionEvidenceSectionDOM(evidenceList);
+        }
+
+        const completedSteps = executionSteps
+          .filter((es) => es.status === 'completed' || es.status === 'COMPLETED')
+          .sort((a, b) => a.step_number - b.step_number);
+
+        if (completedSteps.length > 0) {
+          const completedStepsCapped = completedSteps.slice(0, FLOWS2_MAX_COMPLETED_EXECUTION_STEPS);
+          completedStepsSectionEl = flows2BuildCompletedStepsSectionDOM(
+            executionId,
+            status,
+            completedSteps,
+            completedStepsCapped
+          );
+        }
+
+        if (!isTerminalStep) {
+          const readySteps = executionSteps.filter((es) => es.status === 'ready' || es.status === 'READY');
+          if (readySteps.length > 0) {
+            const nextReadyStep = readySteps[0];
+            const stepDetails = currentProcess?.steps?.find((s) => s.id === nextReadyStep.step_id);
+            if (stepDetails) {
+              nextStepHeaderEl = flows2BuildNextStepSectionDOM(stepDetails, true);
             }
           }
-        } catch (error) {
-          console.error('Failed to fetch execution details:', error);
         }
       }
       
