@@ -319,8 +319,8 @@
             hiddenInput.value = reconcileState.selectedId;
             var sel = reconcileState.selectedId;
             var lock = reconcileState.locked;
-            /* Live query: avoids stale refs if cards are ever inserted/removed after initial render. */
-            Array.from(cardsContainer.querySelectorAll('.execute-reconcile-untracked-card')).forEach(function(c) {
+            /* Live NodeList scan — avoids stale refs if cards change; use .forEach on NodeList (no Array.from alloc). */
+            cardsContainer.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
               var id = c.dataset.untrackedId || '';
               var selected = id === sel;
               c.classList.toggle('execute-reconcile-card-selected', selected);
