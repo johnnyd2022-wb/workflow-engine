@@ -1,19 +1,16 @@
 # Execute-step reconcile — `execution-render-outputs.js`
 
-## Behaviour
+## Current behaviour
 
-- **`normalizeReconcileId`** — single string form for comparisons and map keys (`''` = no inventory row).
-- **`RECONCILE_NONE_ID`** — named alias for that submit value (still `''` for `hiddenInput` / `execution-submit.js`).
-- **`setReconcileState(false, defaultIdNorm)`** — initial state uses the same id as selection styling.
-- **Confirm buttons** — **`dataset.untrackedId`** is set after innerHTML on None / inventory confirm buttons (`RECONCILE_NONE_ID` or **`idNorm`**). **Reads use `confirmBtn.dataset` only**, with **row `dataset` fallback** only if the button has no `untrackedId` (defensive).
-- **Inventory cards** — **`idNorm = normalizeReconcileId(u.id)`** once per row; **`card.dataset.untrackedId = idNorm`**.
-- **Fragment** — cards appended via **`DocumentFragment`** then single insert.
+- **`normalizeReconcileId`** — canonical id strings (`''` = no inventory selection).
+- **`RECONCILE_NONE_ID`** — named alias for submit/hidden empty id (`''`).
+- **Buttons** — **`dataset.untrackedId`** set after innerHTML (`RECONCILE_NONE_ID` or **`idNorm`**).
+- **Confirm `uid`** — **`normalizeReconcileId(confirmBtn.dataset.untrackedId ?? rowCard.dataset.untrackedId)`** — `??` preserves **`''`** on the none button (nullish only), avoids redundant **`in`** checks.
+- **Fragment** — cards batched with **`DocumentFragment`**.
 
-## Review topics
+## Risks / follow-ups
 
-| Topic | Status |
-|-------|--------|
-| **`innerHTML` / XSS** | Dynamic fields use **`escapeHtml`** where interpolated; full **`createElement`/`textContent`** refactor is optional hardening (`.cursor/rules/js-review.mdc`). |
-| **Dual getAttribute vs dataset** | Addressed: **write/read via `dataset`** on confirm buttons. |
-| **`''` vs `null` sentinel** | Kept **`''`** to match submit pipeline; switching to **`null`** would need submit boundary changes. |
-| **`closest` on confirm** | Still used for **container/row validation**; id comes from **`dataset` on the button**. |
+| Area | Note |
+|------|------|
+| **`innerHTML`** on cards / expand | XSS posture = **`escapeHtml`** on interpolated fields (`.cursor/rules/js-review.mdc`); DOM/`textContent` build is optional hardening. |
+| **Button vs row id** | Buttons carry id first; **`??`** falls back to row when unset — keeps one expression without drifting `getAttribute`/`dataset`. |

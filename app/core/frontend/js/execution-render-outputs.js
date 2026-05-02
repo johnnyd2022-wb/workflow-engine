@@ -408,9 +408,9 @@
                 ev.stopPropagation();
                 var rowCard = confirmBtn.closest('.execute-reconcile-untracked-card');
                 if (!rowCard || !cardsContainer.contains(rowCard)) return;
-                var uid = 'untrackedId' in confirmBtn.dataset
-                  ? normalizeReconcileId(confirmBtn.dataset.untrackedId)
-                  : normalizeReconcileId(rowCard.dataset.untrackedId);
+                var uid = normalizeReconcileId(
+                  confirmBtn.dataset.untrackedId ?? rowCard.dataset.untrackedId
+                );
                 if (uid === RECONCILE_NONE_ID) {
                   setReconcileState(false, RECONCILE_NONE_ID);
                 } else {
