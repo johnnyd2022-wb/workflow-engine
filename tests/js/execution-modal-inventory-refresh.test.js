@@ -25,6 +25,8 @@ test('refreshExecutionModalInventory clears picker caches before querying .execu
   const previousAddInvCtx = global.addInventoryContext;
   const previousExecRI = global.ExecutionRenderInputs;
   const previousLocation = global.location;
+  const previousExecModalSecondary = global.ExecutionModalSecondary;
+  const previousInventoryDisplay = global.InventoryDisplay;
 
   try {
     global.window = global;
@@ -70,15 +72,17 @@ test('refreshExecutionModalInventory clears picker caches before querying .execu
       },
     };
 
+    // The module IIFE binds to root = global.window = global, so exports land on
+    // global rather than module.exports. Access them via global, not the require result.
     delete require.cache[require.resolve(secondaryPath)];
-    const secondaryMod = require(secondaryPath);
-    secondaryMod.InventoryDisplay = {
+    require(secondaryPath);
+    global.InventoryDisplay = {
       formatTriggerLabel: function () {
         return '';
       },
     };
 
-    secondaryMod.ExecutionModalSecondary.install({
+    global.ExecutionModalSecondary.install({
       CoreAPI: {
         getInventory: async function () {
           return { inventory_items: [] };
@@ -98,6 +102,8 @@ test('refreshExecutionModalInventory clears picker caches before querying .execu
     global.addInventoryContext = previousAddInvCtx;
     global.ExecutionRenderInputs = previousExecRI;
     global.location = previousLocation;
+    global.ExecutionModalSecondary = previousExecModalSecondary;
+    global.InventoryDisplay = previousInventoryDisplay;
     delete require.cache[require.resolve(secondaryPath)];
   }
 });
