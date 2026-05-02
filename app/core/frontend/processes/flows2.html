@@ -81,6 +81,80 @@
       50% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.5), 0 0 0 1px rgba(239, 68, 68, 0.4); }
     }
 
+    /* Flows2 inventory: sub-type tabs + full-width cards (replaces 3-column category grid) */
+    .flows2-inventory-submode {
+      margin-top: 14px;
+    }
+    .flows2-inventory-submode .flow-mode-segmented {
+      flex-wrap: wrap;
+    }
+    #flows2-panel-inventory .execution-list {
+      width: 100%;
+    }
+    #flows2-panel-inventory .execution-card {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .flows2-inv-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px 14px;
+      font-size: 13px;
+    }
+    .flows2-inv-meta-label {
+      color: var(--text-secondary, #6b7280);
+      font-size: 11px;
+      margin: 0 0 2px 0;
+    }
+    .flows2-inv-meta-value {
+      color: var(--text-primary, #111827);
+      font-weight: 500;
+      margin: 0;
+      word-break: break-word;
+    }
+    .flows2-inv-detail-section {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .flows2-inv-detail-section > h4,
+    .flows2-inv-detail-section h4 {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-secondary, #6b7280);
+      margin: 0 0 8px 0;
+    }
+    .flows2-inv-kv {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+      gap: 4px 10px;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .flows2-inv-empty {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-secondary, #6b7280);
+    }
+    .flows2-inv-pre {
+      margin: 0;
+      padding: 10px 12px;
+      background: var(--bg-secondary, #f9fafb);
+      border: 1px solid var(--border-light, #e5e7eb);
+      border-radius: 8px;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 280px;
+      overflow: auto;
+    }
+    @media (max-width: 520px) {
+      .flows2-inv-kv { grid-template-columns: 1fr; }
+    }
+
     /* Process hero: borderless, modern header + metric strip */
     .flows2-process-head {
       margin-bottom: 4px;
@@ -1054,8 +1128,15 @@
                 Add to Inventory
               </button>
             </div>
-            <div class="inventory-category-grid" id="inventory-container" style="margin-top: 16px;">
-              <!-- Inventory will be loaded dynamically -->
+            <div class="flows2-mode flows2-inventory-submode" id="flows2-inventory-type-tabs" aria-hidden="false">
+              <div class="flow-mode-segmented" role="tablist" aria-label="Inventory category">
+                <button type="button" class="flow-mode-segment flow-mode-segment--active" role="tab" aria-selected="true" data-flows2-inv-type="raw_material">Raw materials</button>
+                <button type="button" class="flow-mode-segment" role="tab" aria-selected="false" data-flows2-inv-type="work_in_progress">Intermediate</button>
+                <button type="button" class="flow-mode-segment" role="tab" aria-selected="false" data-flows2-inv-type="final_product">Final products</button>
+              </div>
+            </div>
+            <div class="execution-list" id="inventory-container" style="margin-top: 16px;">
+              <!-- Inventory cards loaded dynamically -->
             </div>
           </div>
 
@@ -1131,6 +1212,30 @@
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
       else bind();
       window.setFlows2ActivePanel = setActive;
+    })();
+
+    // Inventory sub-tabs (Raw / Intermediate / Final) — uses flows2RerenderInventory after load
+    (function () {
+      function setInvFilter(type) {
+        window.flows2InventoryFilter = type || 'raw_material';
+        var buttons = document.querySelectorAll('[data-flows2-inv-type]');
+        buttons.forEach(function (b) {
+          var t = b.getAttribute('data-flows2-inv-type');
+          var active = t === window.flows2InventoryFilter;
+          b.classList.toggle('flow-mode-segment--active', active);
+          b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        if (typeof flows2RerenderInventory === 'function') flows2RerenderInventory();
+      }
+      function onClick(e) {
+        var btn = e.target && e.target.closest ? e.target.closest('[data-flows2-inv-type]') : null;
+        if (!btn) return;
+        e.preventDefault();
+        var type = btn.getAttribute('data-flows2-inv-type');
+        if (!type) return;
+        setInvFilter(type);
+      }
+      document.addEventListener('click', onClick);
     })();
 
     // Manage menu (sticky bar)
@@ -1418,6 +1523,8 @@
     
     let currentProcess = null;
     let currentUser = null;
+    let flows2InventoryItemsCache = [];
+    window.flows2InventoryFilter = 'raw_material';
     
     // ============================================================
     // GET CURRENT USER
@@ -2476,280 +2583,676 @@
       await completeCurrentStep(executionId);
     };
     
-    // Load inventory
+    function flows2InventoryTypeLabel(invType) {
+      const map = {
+        raw_material: 'Raw material',
+        work_in_progress: 'Intermediate',
+        final_product: 'Final product',
+      };
+      return map[invType] || invType || '';
+    }
+
+    function flows2InvFormatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString();
+      } catch {
+        return String(dateStr);
+      }
+    }
+
+    function flows2InvFormatQty(qtyStr) {
+      if (qtyStr === undefined || qtyStr === null || qtyStr === '') return '0';
+      try {
+        const q = parseFloat(qtyStr);
+        if (Number.isNaN(q)) return String(qtyStr);
+        return parseFloat(q.toFixed(4)).toString();
+      } catch {
+        return String(qtyStr);
+      }
+    }
+
+    function flows2SerializeForDisplay(val) {
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'object') {
+        try {
+          return JSON.stringify(val, null, 2);
+        } catch {
+          return String(val);
+        }
+      }
+      return String(val);
+    }
+
+    /** Same rules as execution-shared-utils.prettyLabel (batch/start picker Details). */
+    function flows2PrettyLabel(s) {
+      if (!s) return '';
+      return String(s)
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+
+    function flows2FmtIsoAudit(iso) {
+      if (!iso) return '';
+      try {
+        return new Date(iso).toISOString().replace('.000Z', 'Z');
+      } catch {
+        return String(iso);
+      }
+    }
+
+    /** Operator-facing date/time (locale). API may send ISO via ready_date_display or raw input. */
+    function flows2FormatReadyDateOperatorFacing(rawIsoOrStr) {
+      if (!rawIsoOrStr || !String(rawIsoOrStr).trim()) return '—';
+      return flows2InvFormatDate(String(rawIsoOrStr));
+    }
+
+    /** Single ready row: prefer execution-time input; else server-ready_date_display (set_at_execution or fixed duration). */
+    function flows2InventorySingleReadyDate(item) {
+      const ex = item.extra_data || {};
+      const vOut = ex.variable_output || {};
+      const inp = vOut.ready_date_input;
+      if (inp && typeof inp === 'object' && inp.date != null && String(inp.date).trim() !== '') {
+        return flows2FormatReadyDateOperatorFacing(String(inp.date));
+      }
+      if (item.ready_date_display && String(item.ready_date_display).trim()) {
+        return flows2FormatReadyDateOperatorFacing(String(item.ready_date_display));
+      }
+      return null;
+    }
+
+    /** Labels for variable_output / merged Output section (inventory item). */
+    function flows2InventoryOutputFieldLabel(key) {
+      const map = {
+        custom_expiry_input: 'Custom expiry entered',
+        custom_expiry_actual: 'Custom expiry applied',
+        name: 'Name',
+        quantity: 'Quantity',
+        unit: 'Unit',
+      };
+      if (map[key]) return map[key];
+      return flows2HumanFieldLabel(key);
+    }
+
+    function flows2FormatCustomExpiryObj(obj) {
+      if (!obj || typeof obj !== 'object') return '';
+      const mode = String(obj.mode || '');
+      if (mode === 'duration') {
+        const dv = obj.duration_value != null ? String(obj.duration_value) : '';
+        const du = obj.duration_unit != null ? String(obj.duration_unit).replace(/_/g, ' ') : '';
+        const wv = obj.warning_value != null ? String(obj.warning_value) : '';
+        const wu = obj.warning_unit != null ? String(obj.warning_unit).replace(/_/g, ' ') : '';
+        const parts = [];
+        if (dv && du) parts.push(`${dv} ${du}`);
+        if (wv && wu) parts.push(`warning ${wv} ${wu}`);
+        return parts.join(' · ') || flows2SerializeForDisplay(obj);
+      }
+      if (mode === 'datetime') {
+        const exp = obj.expiry_at || obj.expiryAt || '';
+        const warnAt = obj.warning_at || obj.warn_at || obj.warningAt || '';
+        const bits = [];
+        if (exp) bits.push(`Expiry at (UTC): ${flows2FmtIsoAudit(exp)}`);
+        if (warnAt) bits.push(`Warning at (UTC): ${flows2FmtIsoAudit(warnAt)}`);
+        return bits.join(' · ') || flows2SerializeForDisplay(obj);
+      }
+      try {
+        return flows2SerializeForDisplay(obj);
+      } catch {
+        return '';
+      }
+    }
+
+    function flows2FormatInventoryOutputValue(key, v) {
+      if (v === null || v === undefined) return '—';
+      if (typeof v === 'object' && !Array.isArray(v)) {
+        if (Object.keys(v).length === 0) return '—';
+        const ks = String(key || '');
+        if (ks === 'ready_date_input' || ks.includes('ready_date')) {
+          if (v.date != null && v.date !== '') {
+            try {
+              return flows2FmtIsoAudit(String(v.date));
+            } catch {
+              return String(v.date);
+            }
+          }
+          return flows2SerializeForDisplay(v);
+        }
+        if (ks.includes('custom_expiry')) return flows2FormatCustomExpiryObj(v);
+        return flows2SerializeForDisplay(v);
+      }
+      return String(v);
+    }
+
+    function flows2HumanFieldLabel(key) {
+      const map = {
+        operator_email: 'Operator email',
+        operator_name: 'Operator name',
+        timestamp_utc: 'Time',
+        timestamp: 'Time',
+        source_method: 'Source',
+        quantity_added: 'Quantity added',
+        supplier: 'Supplier',
+        purchase_date: 'Purchase date',
+        expiry_date: 'Expiry date',
+        supplier_batch_number: 'Supplier batch',
+        csv_row_index: 'CSV row',
+        user_email: 'User email',
+        quantity_reconciled: 'Quantity reconciled',
+        surplus_to_live: 'Surplus to live inventory',
+        reconciliation_amount: 'Reconciliation amount',
+        surplus_from_reconciliation: 'Surplus from reconciliation',
+        reconciled_amount: 'Reconciled amount',
+      };
+      if (map[key]) return map[key];
+      return String(key)
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+
+    function flows2HumanSourceMethod(m) {
+      const map = {
+        manual: 'Manual',
+        csv_upload: 'CSV upload',
+        barcode_scan: 'Barcode scan',
+      };
+      return map[m] || flows2HumanFieldLabel(String(m));
+    }
+
+    function flows2HumanReconciliationMethod(m) {
+      const map = {
+        add_to_inventory: 'Add to inventory',
+        map_to_execution: 'Map to execution',
+        map_to_untracked_at_completion: 'Map to untracked at completion',
+      };
+      return map[m] || String(m).replace(/_/g, ' ');
+    }
+
+    function flows2FormatPlainFieldValue(key, val) {
+      if (val === null || val === undefined || val === '') return '';
+      const s = String(val);
+      if (key === 'timestamp_utc' || key === 'timestamp') return flows2InvFormatDate(s);
+      if (key === 'purchase_date' || key === 'expiry_date') {
+        try {
+          return new Date(s).toLocaleDateString();
+        } catch {
+          return s;
+        }
+      }
+      if (key === 'source_method') return flows2HumanSourceMethod(s);
+      if (key === 'method') return flows2HumanReconciliationMethod(s);
+      return s;
+    }
+
+    function flows2SystemFindingPlainMessage(f) {
+      if (!f || typeof f !== 'object') return 'Something needs attention';
+      const reason = (f.reason && String(f.reason).trim()) || '';
+      if (reason) return reason;
+      const checkId = String(f.check_id || '');
+      const byCheck = {
+        untracked_items: 'Untracked inventory item',
+        expired_materials: 'Expiry or ingredient chain issue',
+        output_expiry: 'Output expiry',
+        output_ready_date: 'Output not yet ready',
+      };
+      return byCheck[checkId] || 'Something needs attention';
+    }
+
+    function flows2HasUntrackedSystemFinding(item) {
+      const findings = item.system_findings || [];
+      return findings.some((f) => f && String(f.check_id || '') === 'untracked_items');
+    }
+
+    function flows2RenderKvRowsFromObject(entry, options) {
+      const skip = options.skipKeys || new Set(['user_id']);
+      const preferred = options.preferredKeys || [];
+      const keys = [];
+      preferred.forEach((k) => {
+        if (!skip.has(k) && Object.prototype.hasOwnProperty.call(entry, k)) {
+          const v = entry[k];
+          if (v !== undefined && v !== null && v !== '') keys.push(k);
+        }
+      });
+      Object.keys(entry).forEach((k) => {
+        if (skip.has(k) || keys.includes(k)) return;
+        const v = entry[k];
+        if (v === undefined || v === null || v === '') return;
+        keys.push(k);
+      });
+      return keys
+        .map((k) => {
+          const raw = entry[k];
+          const label = flows2HumanFieldLabel(k);
+          let display = flows2FormatPlainFieldValue(k, raw);
+          if (typeof raw === 'object' && raw !== null) display = flows2SerializeForDisplay(raw);
+          if (!display) return '';
+          return `<div class="flows2-inv-kv"><span style="color:var(--text-secondary);">${escapeHtml(label)}</span><span>${escapeHtml(display)}</span></div>`;
+        })
+        .filter(Boolean)
+        .join('');
+    }
+
+    /** Audit rows only — batch/start picker parity (execution-modal.css .exec-picker-kv). */
+    function flows2FormatAuditHistoryEntries(history) {
+      if (!Array.isArray(history) || !history.length) return '';
+      const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return history
+        .slice()
+        .reverse()
+        .map((h) => {
+          if (!h || typeof h !== 'object') return '';
+          const when = h.timestamp_utc || h.timestamp || h.created_at || '';
+          const src = h.source_method || h.source || '';
+          let nameDisp = (h.operator_name && String(h.operator_name).trim()) || '';
+          let emailDisp = (h.operator_email && String(h.operator_email).trim()) || '';
+          if (nameDisp && uuidLike.test(nameDisp)) nameDisp = '';
+          if (emailDisp && uuidLike.test(emailDisp)) emailDisp = '';
+          if (!nameDisp && !emailDisp) {
+            const opId = h.user_id || h.operator_id || h.user || '';
+            if (opId && !uuidLike.test(String(opId).trim())) nameDisp = String(opId);
+          }
+          if (!nameDisp && !emailDisp) nameDisp = 'Unknown operator';
+          const nameOut = nameDisp || '—';
+          const emailOut = emailDisp || '—';
+          let action = h.action || h.event || '';
+          if (!action) action = 'inventory item added';
+          const whenDisp = when ? flows2FmtIsoAudit(when) : '—';
+          const srcDisp = src ? flows2PrettyLabel(String(src)) : '—';
+          return (
+            `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('action'))}</div><div class="exec-picker-kv__v">${escapeHtml(flows2PrettyLabel(action))}</div>` +
+            `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('timestamp_utc'))}</div><div class="exec-picker-kv__v">${escapeHtml(whenDisp)}</div>` +
+            `<div class="exec-picker-kv__k">${escapeHtml('Operator name')}</div><div class="exec-picker-kv__v">${escapeHtml(nameOut)}</div>` +
+            `<div class="exec-picker-kv__k">${escapeHtml('Operator email')}</div><div class="exec-picker-kv__v">${escapeHtml(emailOut)}</div>` +
+            `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('source_method'))}</div><div class="exec-picker-kv__v">${escapeHtml(srcDisp)}</div>`
+          );
+        })
+        .join('');
+    }
+
+    /** When inventory_audit_history is empty but execution_trace exists (typical for produced items). Mirrors execution-render-inputs fallback. */
+    function flows2RenderSyntheticAuditFromTrace(item, trace) {
+      const ts = item.created_at || trace.completed_at || '';
+      let opName = '';
+      let opEmail = '';
+      const cbe = trace.completed_by_email ? String(trace.completed_by_email).trim() : '';
+      if (cbe) opEmail = cbe;
+      const cb = trace.completed_by;
+      if (cb != null && cb !== '') {
+        if (typeof cb === 'object') {
+          opName = flows2SerializeForDisplay(cb);
+        } else {
+          const s = String(cb).trim();
+          if (s.includes('@')) {
+            if (!opEmail) opEmail = s;
+          } else {
+            opName = s;
+          }
+        }
+      }
+      if (opName && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(opName.trim())) opName = '';
+      let srcMethod = trace.source_method ? String(trace.source_method) : '';
+      if (!srcMethod && item.source_execution_step_id) srcMethod = 'completed step';
+      const rows =
+        `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('action'))}</div><div class="exec-picker-kv__v">${escapeHtml('Inventory item created')}</div>` +
+        `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('timestamp_utc'))}</div><div class="exec-picker-kv__v">${escapeHtml(ts ? flows2FmtIsoAudit(ts) : '—')}</div>` +
+        `<div class="exec-picker-kv__k">${escapeHtml('Operator name')}</div><div class="exec-picker-kv__v">${escapeHtml(opName || '—')}</div>` +
+        `<div class="exec-picker-kv__k">${escapeHtml('Operator email')}</div><div class="exec-picker-kv__v">${escapeHtml(opEmail || '—')}</div>` +
+        `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('source_method'))}</div><div class="exec-picker-kv__v">${escapeHtml(srcMethod ? flows2PrettyLabel(srcMethod) : '—')}</div>`;
+      return `<div class="exec-picker-kv">${rows}</div>`;
+    }
+
+    /** Always render audit block: persisted history → else synthetic from trace → else empty copy. */
+    function flows2RenderInventoryAuditSection(item) {
+      const ex = item.extra_data || {};
+      const audit = ex.inventory_audit_history;
+      const auditArr = Array.isArray(audit) ? audit : [];
+      const persisted = flows2FormatAuditHistoryEntries(auditArr);
+      if (persisted) {
+        return `<div class="flows2-inv-detail-section"><h4>Audit history</h4><div class="exec-picker-kv">${persisted}</div></div>`;
+      }
+      const trace = ex.execution_trace;
+      if (trace && typeof trace === 'object' && Object.keys(trace).length) {
+        return `<div class="flows2-inv-detail-section"><h4>Audit history</h4>${flows2RenderSyntheticAuditFromTrace(item, trace)}</div>`;
+      }
+      return (
+        `<div class="flows2-inv-detail-section"><h4>Audit history</h4>` +
+        `<p style="margin:0;font-size:13px;color:var(--text-secondary,#6b7280);">No audit entries recorded for this item.</p></div>`
+      );
+    }
+
+    /**
+     * System findings messages plus, only when check_id untracked_items is present: remaining to reconcile
+     * and reconciliation activity. No reconciliation UI when that finding is absent.
+     */
+    function flows2RenderInventorySystemFindingsSection(item) {
+      const ex = item.extra_data || {};
+      const findings = item.system_findings;
+      const hasUntracked = flows2HasUntrackedSystemFinding(item);
+
+      let messagesHtml = '';
+      if (findings && findings.length) {
+        const messages = [];
+        findings.forEach((f) => {
+          const msg = flows2SystemFindingPlainMessage(f);
+          if (msg && !messages.includes(msg)) messages.push(msg);
+        });
+        if (messages.length) {
+          messagesHtml = messages
+            .map(
+              (m) =>
+                `<div style="margin:0 0 10px 0;font-size:13px;line-height:1.4;color:var(--text-primary,#111827);">${escapeHtml(m)}</div>`
+            )
+            .join('');
+        }
+      }
+
+      let untrackedHtml = '';
+      if (hasUntracked) {
+        const remainingBal = ex.remaining_balance_to_reconcile;
+        const hasRemaining =
+          remainingBal !== undefined && remainingBal !== null && String(remainingBal).trim() !== '';
+
+        const history = ex.reconciliation_history;
+        const arr = Array.isArray(history) ? history : [];
+        const preferred = [
+          'timestamp',
+          'user_email',
+          'method',
+          'quantity_reconciled',
+          'surplus_to_live',
+          'reconciliation_amount',
+          'surplus_from_reconciliation',
+        ];
+        const blocks = arr
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object') return '';
+            const rows = flows2RenderKvRowsFromObject(entry, {
+              preferredKeys: preferred,
+              skipKeys: new Set(['user_id']),
+            });
+            if (!rows) return '';
+            return `<div style="padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);">${rows}</div>`;
+          })
+          .filter(Boolean)
+          .join('');
+
+        const extras = [];
+        if (hasRemaining) {
+          extras.push(
+            `<div class="exec-picker-kv"><div class="exec-picker-kv__k">${escapeHtml('Remaining to reconcile')}</div><div class="exec-picker-kv__v">${escapeHtml(String(remainingBal))}</div></div>`
+          );
+        }
+        if (blocks) {
+          const recTop = hasRemaining ? 'margin-top:14px;' : '';
+          extras.push(
+            `<div style="${recTop}margin-bottom:10px;font-size:12px;font-weight:600;color:var(--text-secondary,#6b7280);letter-spacing:0.03em;text-transform:uppercase;">Reconciliation activity</div>${blocks}`
+          );
+        }
+        if (extras.length) {
+          const sep =
+            messagesHtml !== ''
+              ? 'margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light,#e5e7eb);'
+              : '';
+          untrackedHtml = `<div style="${sep}">${extras.join('')}</div>`;
+        }
+      }
+
+      const body = messagesHtml + untrackedHtml;
+      if (!body.trim()) return '';
+      return `<div class="flows2-inv-detail-section"><h4>System findings</h4>${body}</div>`;
+    }
+
+    /** Output: variable_output (minus ready-date technical keys) + one Ready date row + custom_expiry_actual (same grid as Production / audit). */
+    function flows2RenderInventoryOutputSection(item) {
+      const ex = item.extra_data || {};
+      const vOut = ex.variable_output;
+      const pairs = [];
+      const skipOutKeys = new Set(['ready_date_input', 'ready_date_actual']);
+
+      if (vOut && typeof vOut === 'object') {
+        Object.keys(vOut).forEach((k) => {
+          if (skipOutKeys.has(k)) return;
+          const v = vOut[k];
+          const label = flows2InventoryOutputFieldLabel(k);
+          const display = flows2FormatInventoryOutputValue(k, v);
+          pairs.push([label, display]);
+        });
+      }
+
+      const readyOne = flows2InventorySingleReadyDate(item);
+      if (readyOne) {
+        pairs.unshift(['Ready date', readyOne]);
+      }
+
+      const vOutHas = (key) =>
+        vOut && typeof vOut === 'object' && Object.prototype.hasOwnProperty.call(vOut, key);
+
+      const cea = ex.custom_expiry_actual;
+      if (
+        !vOutHas('custom_expiry_actual') &&
+        cea &&
+        typeof cea === 'object' &&
+        Object.keys(cea).length > 0
+      ) {
+        pairs.push(['Custom expiry applied', flows2FormatCustomExpiryObj(cea) || '—']);
+      }
+
+      if (!pairs.length) return '';
+
+      const rows = pairs
+        .map(
+          ([lab, val]) =>
+            `<div class="exec-picker-kv__k">${escapeHtml(lab)}</div><div class="exec-picker-kv__v">${escapeHtml(val)}</div>`
+        )
+        .join('');
+      return `<div class="flows2-inv-detail-section"><h4>Output</h4><div class="exec-picker-kv">${rows}</div></div>`;
+    }
+
+    function flows2RenderInventoryProductionBlock(item) {
+      const ex = item.extra_data || {};
+      const producingProcessName = ex.producing_process_name ? String(ex.producing_process_name).trim() : '';
+      let rows = '';
+      if (item.process_name) {
+        rows += `<div class="exec-picker-kv__k">${escapeHtml('Process')}</div><div class="exec-picker-kv__v">${escapeHtml(String(item.process_name))}</div>`;
+      }
+      if (
+        producingProcessName &&
+        (!item.process_name || String(item.process_name) !== producingProcessName)
+      ) {
+        rows += `<div class="exec-picker-kv__k">${escapeHtml('Producing process')}</div><div class="exec-picker-kv__v">${escapeHtml(producingProcessName)}</div>`;
+      }
+      const stepName =
+        (item.producing_step_name && String(item.producing_step_name).trim()) ||
+        (ex.producing_step_name && String(ex.producing_step_name).trim()) ||
+        '';
+      if (stepName) {
+        rows += `<div class="exec-picker-kv__k">${escapeHtml('Producing step')}</div><div class="exec-picker-kv__v">${escapeHtml(stepName)}</div>`;
+      }
+      if (!rows) return '';
+      return (
+        `<div style="margin-top: 0;">` +
+        `<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">Production</div>` +
+        `<div class="exec-picker-kv">${rows}</div>` +
+        `</div>`
+      );
+    }
+
+    function buildFlows2InventoryDetailsSection(item) {
+      const ex = item.extra_data || {};
+      const fq = flows2InvFormatQty;
+      const fd = flows2InvFormatDate;
+      let html = flows2RenderInventoryProductionBlock(item);
+
+      html += flows2RenderInventorySystemFindingsSection(item);
+
+      const prompts = ex.execution_prompts;
+      if (prompts && typeof prompts === 'object' && Object.keys(prompts).length) {
+        const rows = Object.entries(prompts)
+          .map(
+            ([k, v]) =>
+              `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel(k))}</div><div class="exec-picker-kv__v">${escapeHtml(flows2SerializeForDisplay(v))}</div>`
+          )
+          .join('');
+        html += `<div class="flows2-inv-detail-section"><h4>Custom prompts</h4><div class="exec-picker-kv">${rows}</div></div>`;
+      }
+
+      const vInputs = ex.variable_inputs;
+      if (Array.isArray(vInputs) && vInputs.length) {
+        const blocks = vInputs
+          .map((input) => {
+            return `<div style="padding:10px;background:var(--bg-secondary,#f9fafb);border-radius:8px;border:1px solid var(--border-light,#e5e7eb);margin-bottom:8px;">
+              <p style="margin:0 0 4px;font-weight:600;">${escapeHtml(input.name || 'Input')}</p>
+              <p style="margin:4px 0 0;font-size:12px;color:var(--text-secondary);">${escapeHtml(fq(input.quantity))} ${escapeHtml(input.unit || '')}</p>
+            </div>`;
+          })
+          .join('');
+        html += `<div class="flows2-inv-detail-section"><h4>Variable inputs (this step)</h4>${blocks}</div>`;
+      }
+
+      html += flows2RenderInventoryOutputSection(item);
+
+      const prevSteps = ex.previous_steps_data;
+      if (Array.isArray(prevSteps) && prevSteps.length) {
+        const blocks = prevSteps
+          .map((step, idx) => {
+            const sn = step.step_name || 'Step';
+            const snum = step.step_number != null ? `#${step.step_number}` : '';
+            let inner = `<p style="margin:0 0 8px;font-weight:600;">${escapeHtml(sn)} ${escapeHtml(snum)}</p>`;
+            if (step.completed_at) inner += `<p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary);">Completed: ${escapeHtml(fd(step.completed_at))}</p>`;
+            if (step.input_name)
+              inner += `<p style="margin:0 0 4px;font-size:12px;">Consumed: ${escapeHtml(step.input_name)} — ${escapeHtml(fq(step.input_quantity))} ${escapeHtml(step.input_unit || '')}</p>`;
+            const sp = step.execution_prompts;
+            if (sp && typeof sp === 'object' && Object.keys(sp).length) {
+              inner += `<p style="margin:8px 0 4px;font-size:11px;font-weight:600;color:var(--text-secondary);">Prompts in chain</p>`;
+              inner += Object.entries(sp)
+                .map(
+                  ([k, v]) =>
+                    `<div class="flows2-inv-kv"><span>${escapeHtml(k)}</span><span>${escapeHtml(flows2SerializeForDisplay(v))}</span></div>`
+                )
+                .join('');
+            }
+            if (step.completed_by) inner += `<div class="flows2-inv-kv"><span>Completed by</span><span>${escapeHtml(flows2SerializeForDisplay(step.completed_by))}</span></div>`;
+            if (step.execution_errors)
+              inner += `<p style="margin:8px 0 0;font-size:12px;color:var(--error,#b91c1c);">${escapeHtml(flows2SerializeForDisplay(step.execution_errors))}</p>`;
+            if (step.execution_warnings)
+              inner += `<p style="margin:4px 0 0;font-size:12px;color:var(--warning,#b45309);">${escapeHtml(flows2SerializeForDisplay(step.execution_warnings))}</p>`;
+            return `<div style="padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);">${inner}</div>`;
+          })
+          .join('');
+        html += `<div class="flows2-inv-detail-section"><h4>Upstream steps & inputs (trace)</h4>${blocks}</div>`;
+      }
+
+      const notes = (ex.notes && String(ex.notes).trim()) || '';
+      if (notes) {
+        html += `<div class="flows2-inv-detail-section"><h4>Notes</h4><p style="margin:0;white-space:pre-wrap;font-size:13px;">${escapeHtml(notes)}</p></div>`;
+      }
+
+      html += flows2RenderInventoryAuditSection(item);
+
+      return html;
+    }
+
+    function createInventoryItemCardFlows(item) {
+      const isUntracked = item.extra_data && item.extra_data.untracked === true;
+      const card = document.createElement('div');
+      card.className = 'execution-card' + (isUntracked ? ' inventory-card-untracked' : '');
+      card.dataset.inventoryId = item.id;
+      card.dataset.isExpanded = 'false';
+
+      const fq = flows2InvFormatQty;
+      const formattedQuantity = fq(item.quantity);
+      const typeBadge = flows2InventoryTypeLabel(item.inventory_type);
+
+      function hdrRow(label, value) {
+        if (value === undefined || value === null || value === '') return '';
+        return `<div class="execution-detail">
+          <span class="execution-detail-label">${escapeHtml(label)}</span>
+          <span class="execution-detail-value">${escapeHtml(String(value))}</span>
+        </div>`;
+      }
+
+      const headerDetailRows = [
+        hdrRow('Available quantity', `${formattedQuantity} ${item.unit || ''}`.trim()),
+        item.created_at ? hdrRow('Created', flows2InvFormatDate(item.created_at)) : '',
+      ].join('');
+
+      const untrackedReasonBlock = isUntracked
+        ? `<div style="margin-bottom: 0; padding: 10px 12px; background: hsl(0, 93%, 94%); border-bottom: 1px solid var(--border-light); color: #b91c1c; font-size: 12px; font-weight: 500;">Untracked item — reconciliation may be required</div>`
+        : '';
+
+      const detailsHtml = buildFlows2InventoryDetailsSection(item);
+
+      card.innerHTML = `
+        ${untrackedReasonBlock}
+        <div class="execution-header" style="display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);" onclick="toggleInventoryItemDetailsFlows('${item.id}')">
+          <div style="flex: 1; min-width: 0;">
+            <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px; word-wrap: break-word;">${escapeHtml(item.name)}</div>
+            <div class="execution-details" style="margin-top: 8px; gap: 1rem;">
+              ${headerDetailRows}
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+            <span class="badge badge-accent" style="flex-shrink: 0;">${escapeHtml(typeBadge)}</span>
+            <div class="execution-toggle" id="arrow-flows-${item.id}" style="transition: transform 0.2s; transform: rotate(0deg);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="execution-content" id="details-flows-${item.id}" style="display: none; padding: 12px;">
+          ${detailsHtml}
+        </div>
+      `;
+      return card;
+    }
+
+    function flows2RenderInventoryList(items) {
+      const container = document.getElementById('inventory-container');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      if (!flows2InventoryItemsCache.length) {
+        container.innerHTML =
+          '<div class="flows2-inv-empty"><p>No inventory items for this process.</p></div>';
+        return;
+      }
+
+      if (!items.length) {
+        container.innerHTML =
+          '<div class="flows2-inv-empty"><p>No items in this category.</p></div>';
+        return;
+      }
+
+      items.forEach((item) => {
+        container.appendChild(createInventoryItemCardFlows(item));
+      });
+    }
+
+    function flows2RerenderInventory() {
+      const filter = window.flows2InventoryFilter || 'raw_material';
+      const items = (flows2InventoryItemsCache || []).filter(
+        (i) => (i.inventory_type || 'raw_material') === filter
+      );
+      flows2RenderInventoryList(items);
+    }
+
     async function loadInventory() {
       if (!processId) return;
-      
+
       try {
         const inventoryData = await CoreAPI.getInventory(null, processId);
         const items = inventoryData.inventory_items || [];
-        
-        renderInventory(items);
-        
+        flows2InventoryItemsCache = items;
+        flows2RerenderInventory();
       } catch (error) {
         console.error('Failed to load inventory:', error);
         showNotification('error', 'Failed to Load Inventory', error.message || 'Failed to load inventory');
       }
     }
-    
-    // Render inventory (same expand/collapse layout as core2.html)
-    function renderInventory(items) {
-      const container = document.getElementById('inventory-container');
-      if (!container) return;
-      
-      container.innerHTML = '';
-      
-      if (items.length === 0) {
-        container.innerHTML = `
-          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
-            <p style="color: var(--text-secondary);">No inventory items for this process</p>
-          </div>
-        `;
-        return;
-      }
-      
-      const grouped = {
-        raw_material: [],
-        work_in_progress: [],
-        final_product: []
-      };
-      items.forEach(item => {
-        const type = item.inventory_type || 'raw_material';
-        if (grouped[type]) grouped[type].push(item);
-      });
-      
-      if (grouped.raw_material.length > 0) {
-        container.appendChild(createInventoryCategoryCard('raw', grouped.raw_material));
-      }
-      if (grouped.work_in_progress.length > 0) {
-        container.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
-      }
-      if (grouped.final_product.length > 0) {
-        container.appendChild(createInventoryCategoryCard('final', grouped.final_product));
-      }
-    }
-    
-    function createInventoryCategoryCard(type, items) {
-      const card = document.createElement('div');
-      card.className = `inventory-category-card ${type}`;
-      
-      let iconSvg = '';
-      if (type === 'raw') {
-        iconSvg = '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>';
-      } else if (type === 'intermediate') {
-        iconSvg = '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>';
-      } else {
-        iconSvg = '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>';
-      }
-      const categoryTitle = type === 'raw' ? 'Raw Materials' : type === 'intermediate' ? 'Intermediate' : 'Final Products';
-      
-      const itemsContainer = document.createElement('div');
-      itemsContainer.className = 'inventory-category-items';
-      itemsContainer.style.display = 'flex';
-      itemsContainer.style.flexDirection = 'column';
-      itemsContainer.style.gap = '12px';
-      
-      const scrollContainer = document.createElement('div');
-      scrollContainer.className = 'inventory-items-scroll-container';
-      scrollContainer.style.overflowX = 'hidden';
-      
-      if (items.length > 0) {
-        items.forEach(item => {
-          itemsContainer.appendChild(createInventoryItemCardFlows(item));
-        });
-      } else {
-        const emptyMessage = document.createElement('div');
-        emptyMessage.style.padding = '16px';
-        emptyMessage.style.textAlign = 'center';
-        emptyMessage.style.color = 'var(--text-secondary, #6b7280)';
-        emptyMessage.style.fontSize = '14px';
-        emptyMessage.textContent = type === 'intermediate' ? 'Work in progress products will appear here until all process steps are completed' : type === 'final' ? 'Final products in stock will appear here when all process steps are completed' : 'No items yet';
-        itemsContainer.appendChild(emptyMessage);
-      }
-      
-      const hasMoreThanThree = items.length > 3;
-      const typeIndex = { raw: 0, intermediate: 1, final: 2 }[type];
-      const categoryId = `flows-category-${type}-${typeIndex}`;
-      scrollContainer.id = `scroll-${categoryId}`;
-      if (!hasMoreThanThree) {
-        scrollContainer.classList.add('expanded');
-      }
-      scrollContainer.appendChild(itemsContainer);
-      
-      const headerDiv = document.createElement('div');
-      headerDiv.className = 'inventory-category-header';
-      headerDiv.innerHTML = `
-        <svg class="inventory-category-icon ${type}" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconSvg}</svg>
-        <span class="inventory-category-title">${categoryTitle}</span>
-      `;
-      const countP = document.createElement('p');
-      countP.className = 'inventory-category-count';
-      countP.textContent = `${items.length} items`;
-      
-      card.innerHTML = '';
-      card.appendChild(headerDiv);
-      card.appendChild(countP);
-      card.appendChild(scrollContainer);
-      card.dataset.categoryId = categoryId;
-      card.dataset.isExpanded = 'false';
-      
-      if (hasMoreThanThree) {
-        const expandButton = document.createElement('button');
-        expandButton.className = 'btn btn-secondary btn-sm';
-        expandButton.id = `toggle-${categoryId}`;
-        expandButton.setAttribute('role', 'button');
-        expandButton.setAttribute('aria-expanded', 'false');
-        expandButton.setAttribute('aria-controls', `scroll-${categoryId}`);
-        expandButton.style.cssText = 'margin-top: 12px; width: 100%; padding: 8px; font-size: 12px;';
-        expandButton.onclick = () => toggleInventoryCategory(categoryId);
-        expandButton.innerHTML = `
-          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-          Show ${items.length - 3} more
-        `;
-        card.appendChild(expandButton);
-      }
-      return card;
-    }
-    
-    function createInventoryItemCardFlows(item) {
-      const isUntracked = item.extra_data && item.extra_data.untracked === true;
-      const card = document.createElement('div');
-      card.className = 'card card-interactive process-card inventory-card-collapsed' + (isUntracked ? ' inventory-card-untracked' : '');
-      card.dataset.inventoryId = item.id;
-      card.dataset.isExpanded = 'false';
-      card.style.marginBottom = '0';
-      card.style.wordWrap = 'break-word';
-      card.style.overflowWrap = 'break-word';
-      card.style.display = 'flex';
-      card.style.flexDirection = 'column';
-      card.style.padding = '12px 24px';
-      
-      const formatDate = (dateStr) => {
-        if (!dateStr) return 'N/A';
-        try {
-          const date = new Date(dateStr);
-          return date.toLocaleDateString();
-        } catch {
-          return dateStr;
-        }
-      };
-      const formatQuantity = (qtyStr) => {
-        if (!qtyStr) return '0';
-        try {
-          const qty = parseFloat(qtyStr);
-          if (isNaN(qty)) return qtyStr;
-          return parseFloat(qty.toFixed(4)).toString();
-        } catch {
-          return qtyStr;
-        }
-      };
-      const formattedQuantity = formatQuantity(item.quantity);
-      const titleContent = item.process_name
-        ? `<span style="color: var(--text-secondary); font-size: 12px; font-weight: 500;">Process: ${escapeHtml(item.process_name)}</span><br><span style="color: var(--text-primary);">${escapeHtml(item.name)}</span>`
-        : escapeHtml(item.name);
-      const untrackedReasonBlock = isUntracked
-        ? `<div style="margin-bottom: 8px; padding: 8px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 12px; font-weight: 500;" title="Reconcile when completing an execution that produces this output (Reconcile untracked output in the execution modal).">Check reason: Untracked item — reconciliation required</div>`
-        : '';
-      card.innerHTML = `
-        ${untrackedReasonBlock}
-        <div class="process-card-header" style="word-wrap: break-word; overflow-wrap: break-word; flex: 1; min-height: 0; margin-bottom: 4px;">
-          <div class="process-card-header-content" style="flex: 1; cursor: pointer; word-wrap: break-word; overflow-wrap: break-word; min-width: 0;" onclick="toggleInventoryItemDetailsFlows('${item.id}')">
-            <h3 class="process-title" style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 15px; line-height: 1.2; font-weight: 600;">${titleContent}</h3>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-            <svg class="process-card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" onclick="toggleInventoryItemDetailsFlows('${item.id}')" id="arrow-flows-${item.id}">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-              <polyline points="12 5 19 12 12 19"/>
-            </svg>
-          </div>
-        </div>
-        <div style="padding: 4px 24px; margin-top: 0; flex-shrink: 0; border-top: 1px solid var(--border-default, #e5e7eb);">
-          <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
-        </div>
-        <div class="inventory-item-details" id="details-flows-${item.id}" style="display: none; padding: 16px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 8px; word-wrap: break-word; overflow-wrap: break-word;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
-            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Quantity</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formattedQuantity} ${item.unit || ''}</p>
-            </div>
-            ${item.supplier ? `
-            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Supplier</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${escapeHtml(item.supplier)}</p>
-            </div>
-            ` : ''}
-            ${item.purchase_date ? `
-            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Purchase Date</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.purchase_date)}</p>
-            </div>
-            ` : ''}
-            ${item.supplier_batch_number ? `
-            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Batch Number</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${escapeHtml(item.supplier_batch_number)}</p>
-            </div>
-            ` : ''}
-            ${item.expiry_date ? `
-            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Expiry Date</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.expiry_date)}</p>
-            </div>
-            ` : ''}
-            ${item.created_at ? `
-            <div style="word-wrap: break-word; overflow-wrap: break-word; min-width: 0;">
-              <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 12px;">Created</p>
-              <p style="color: var(--text-primary); margin: 0; font-weight: 500;">${formatDate(item.created_at)}</p>
-            </div>
-            ` : ''}
-          </div>
-          ${item.extra_data && (item.extra_data.execution_prompts || item.extra_data.variable_inputs) ? `
-          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb);">
-            <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px 0;">Execution Metadata</h4>
-            ${item.extra_data.execution_prompts && Object.keys(item.extra_data.execution_prompts).length > 0 ? `
-            <div style="margin-bottom: 12px;">
-              <div style="display: flex; flex-direction: column; gap: 8px;">
-                ${Object.entries(item.extra_data.execution_prompts).map(([key, value]) => `
-                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
-                    <p style="color: var(--text-secondary); margin: 0 0 4px 0; font-size: 11px; font-weight: 500;">${escapeHtml(key)}</p>
-                    <p style="color: var(--text-primary); margin: 0; font-size: 13px; font-weight: 500;">${escapeHtml(String(value))}</p>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-            ` : ''}
-            ${item.extra_data.variable_inputs && item.extra_data.variable_inputs.length > 0 ? `
-            <div style="margin-bottom: 12px;">
-              <p style="color: var(--text-secondary); margin: 0 0 8px 0; font-size: 12px; font-weight: 500;">Variable Inputs Used</p>
-              <div style="display: flex; flex-direction: column; gap: 6px;">
-                ${item.extra_data.variable_inputs.map(input => {
-                  const inputFormattedQty = formatQuantity(input.quantity);
-                  return `
-                  <div style="padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb); word-wrap: break-word; overflow-wrap: break-word;">
-                    <p style="color: var(--text-primary); margin: 0 0 4px 0; font-size: 13px; font-weight: 500;">${escapeHtml(input.name || 'Unknown')}</p>
-                    <p style="color: var(--text-secondary); margin: 0; font-size: 12px;">${inputFormattedQty} ${input.unit || ''}</p>
-                  </div>
-                `;
-                }).join('')}
-              </div>
-            </div>
-            ` : ''}
-          </div>
-          ` : ''}
-        </div>
-      `;
-      return card;
-    }
-    
-    function updateScrollContainerState(categoryCard) {
-      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
-      if (!scrollContainer) return;
-      const isCategoryExpanded = categoryCard.dataset.isExpanded === 'true';
-      scrollContainer.classList.toggle('expanded', isCategoryExpanded);
-    }
-    
+
     function toggleInventoryItemDetailsFlows(itemId) {
       const card = document.querySelector(`[data-inventory-id="${itemId}"]`);
       if (!card) return;
@@ -2757,67 +3260,16 @@
       const arrow = document.getElementById(`arrow-flows-${itemId}`);
       if (!details || !arrow) return;
       const isExpanded = card.dataset.isExpanded === 'true';
-      const scrollContainer = card.closest('.inventory-items-scroll-container');
-      const categoryCard = scrollContainer && scrollContainer.closest('.inventory-category-card');
-      
+
       if (isExpanded) {
         details.style.display = 'none';
         arrow.style.transform = 'rotate(0deg)';
-        card.classList.remove('inventory-card-expanded');
-        card.classList.add('inventory-card-collapsed');
         card.dataset.isExpanded = 'false';
-        if (categoryCard) updateScrollContainerState(categoryCard);
       } else {
-        if (categoryCard && categoryCard.dataset.isExpanded !== 'true') {
-          categoryCard.dataset.isExpanded = 'true';
-          const categoryId = categoryCard.dataset.categoryId;
-          const toggleButton = document.getElementById(`toggle-${categoryId}`);
-          if (toggleButton) {
-            toggleButton.setAttribute('aria-expanded', 'true');
-            toggleButton.innerHTML = `
-              <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-              Show less
-            `;
-          }
-          updateScrollContainerState(categoryCard);
-        }
         details.style.display = 'block';
-        arrow.style.transform = 'rotate(90deg)';
-        card.classList.remove('inventory-card-collapsed');
-        card.classList.add('inventory-card-expanded');
+        arrow.style.transform = 'rotate(180deg)';
         card.dataset.isExpanded = 'true';
-        if (scrollContainer) card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-      }
-    }
-    
-    function toggleInventoryCategory(categoryId) {
-      const categoryCard = document.querySelector(`[data-category-id="${categoryId}"]`);
-      if (!categoryCard) return;
-      const scrollContainer = categoryCard.querySelector('.inventory-items-scroll-container');
-      const toggleButton = document.getElementById(`toggle-${categoryId}`);
-      const isExpanded = categoryCard.dataset.isExpanded === 'true';
-      if (isExpanded) {
-        categoryCard.dataset.isExpanded = 'false';
-        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'false');
-        updateScrollContainerState(categoryCard);
-        toggleButton.innerHTML = `
-          <svg class="inventory-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-          Show ${Math.max(0, parseInt(categoryCard.querySelector('.inventory-category-count').textContent, 10) - 3)} more
-        `;
-      } else {
-        categoryCard.dataset.isExpanded = 'true';
-        if (toggleButton) toggleButton.setAttribute('aria-expanded', 'true');
-        updateScrollContainerState(categoryCard);
-        toggleButton.innerHTML = `
-          <svg class="inventory-toggle-icon expanded" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="toggle-icon-${categoryId}">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-          Show less
-        `;
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
       }
     }
     

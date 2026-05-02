@@ -406,6 +406,8 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
     trace = {}
     if execution_data.get("completed_by") is not None:
         trace["completed_by"] = execution_data["completed_by"]
+    if execution_data.get("completed_by_email") is not None:
+        trace["completed_by_email"] = execution_data["completed_by_email"]
     completed_ts = execution_data.get("completed_at")
     if completed_ts is not None:
         trace["completed_at"] = _to_iso_timestamp(completed_ts)
@@ -2297,6 +2299,7 @@ def list_inventory():
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
 
     # Import ExecutionStep and InventoryItem models for lookups
+    from app.core.backend.checks.output_ready_date_check import get_operator_ready_instant_for_item
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
 
@@ -2590,6 +2593,15 @@ def list_inventory():
             except Exception:
                 pass
 
+        # Single operator-facing ready instant (set_at_execution date or fixed-duration from step completion)
+        ready_date_display = None
+        try:
+            rdt = get_operator_ready_instant_for_item(db_session, item)
+            if rdt:
+                ready_date_display = rdt.isoformat()
+        except Exception:
+            pass
+
         result.append(
             {
                 "id": str(item.id),
@@ -2614,6 +2626,7 @@ def list_inventory():
                 "created_at": item.created_at.isoformat() if item.created_at else None,
                 "extra_data": extra_data,
                 "system_findings": findings_by_id.get(str(item.id), []),
+                "ready_date_display": ready_date_display,
             }
         )
 

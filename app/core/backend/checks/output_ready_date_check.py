@@ -199,6 +199,42 @@ def is_inventory_item_ready_for_consumption(
     return (True, None)
 
 
+def get_operator_ready_instant_for_item(session: Session, item: InventoryItem) -> datetime | None:
+    """When the item becomes usable under ready-date rules: stored date (set_at_execution) or computed fixed-duration instant."""
+    extra = (item.extra_data or {}) if isinstance(item.extra_data, dict) else {}
+    actual = extra.get("ready_date_actual")
+    if isinstance(actual, dict) and actual.get("date"):
+        return _normalize_dt(actual.get("date"))
+
+    step_id = getattr(item, "source_execution_step_id", None)
+    if not step_id:
+        return None
+    execution_step = (
+        session.query(ExecutionStep).filter(ExecutionStep.id == step_id).options(joinedload(ExecutionStep.step)).first()
+    )
+    if not execution_step or not execution_step.step or not execution_step.completed_at:
+        return None
+    step_outputs = getattr(execution_step.step, "outputs", None) or []
+    completed_dt = _normalize_dt(execution_step.completed_at)
+    if not completed_dt:
+        return None
+    item_name_norm = _normalize(item.name or "")
+    item_unit = (item.unit or "").strip()
+    for out_def in step_outputs:
+        if not isinstance(out_def, dict):
+            continue
+        if _normalize(out_def.get("name") or "") != item_name_norm:
+            continue
+        if (out_def.get("unit") or "").strip() != item_unit:
+            continue
+        config = _get_ready_date_config(out_def)
+        if not config:
+            return None
+        ready_dt, _ = _compute_ready_and_warn(config, completed_dt, item)
+        return ready_dt
+    return None
+
+
 def _compute_ready_and_warn(
     config: dict, completed_dt: datetime, item: InventoryItem
 ) -> tuple[datetime | None, datetime | None]:
