@@ -197,4 +197,10 @@
       window.initExecutionStepScreen();
     }
   });
+
+  // When this script is re-executed by an HTMX swap, DOMContentLoaded and htmx:afterSettle
+  // have already fired. Call init immediately if the DOM is ready.
+  if (document.readyState !== 'loading') {
+    window.initExecutionStepScreen();
+  }
 })();
