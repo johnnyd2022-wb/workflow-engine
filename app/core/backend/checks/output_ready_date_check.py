@@ -225,6 +225,7 @@ def get_operator_ready_instant_for_item(
         dt = _normalize_dt(raw_s)
         if dt:
             return dt
+        # Per-item: keep DEBUG; aggregate observability via metric ready_date_parse_failures if needed.
         _log.debug(
             "ready_date_actual string did not parse (expect ISO-8601): %.120s",
             raw_s,

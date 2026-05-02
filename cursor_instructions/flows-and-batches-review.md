@@ -1,234 +1,265 @@
+This is now much closer to production-grade. The remaining issues are no longer “obvious bugs” but tight edges around correctness, query planning, and data-contract enforcement.
+
+I’ll focus strictly on what changed.
+
 🔴 CRITICAL FINDINGS
-1. ⚠️ Residual hidden N+1 risk via _split_execution_data + step_outputs dependency chain
-What’s improved
-ExecutionStep hydration is now batched ✔
-joinedload(ExecutionStep.step) ✔
-ready-date per-item query removed ✔
-Remaining risk
+1. ⚠️ ExecutionStep filtering via Execution.id IN subquery is logically correct but can silently degrade query plans
+What you changed
+org_execution_ids = db_session.query(Execution.id).filter(Execution.org_id == org_id)
 
-Inside:
-
-step_outputs = getattr(es.step, "outputs", None) or []
-
-You are now relying on ORM-loaded relationship completeness.
-
+ExecutionStep.execution_id.in_(org_execution_ids)
 Why this is still critical
 
-Even with joinedload, you now have a dependency chain:
+This pattern is correlated subquery without materialization guarantee.
 
-ExecutionStep → step → outputs
+On Postgres, depending on planner state:
 
-If outputs is:
-
-lazy-loaded relationship
-or secondary join not included in options
-
-👉 you silently reintroduce per-row lazy load
-
-Impact
-
-Under realistic inventory sizes:
-
-200 items → potentially 200 additional SELECTs (silent regression)
-Fix
-
-You must explicitly guarantee full eager graph:
-
-.options(
-    joinedload(ExecutionStep.step)
-    .joinedload(Step.outputs)
-)
-
-If outputs is JSON, this is fine — but if ORM relationship, this is still a latent N+1.
-
-2. ⚠️ CRITICAL — Transaction safety still not fully resolved
-
-You acknowledged this was deferred, but current system still has:
-
-multiple manual exception branches
-partial logic execution before rollback points
-hydration + side-effect logic inside same function
-Why this still matters
-
-Even with batching fixed, this pattern is still dangerous:
-
-execution_step = repo.complete_step(..., commit=False)
-db_session.flush()
-...
-if execution_errors:
-    db_session.rollback()
-Problem class
-
-This is still a partial commit window architecture, meaning:
-
-flush occurs before validation completes
-rollback does not guarantee undo of external side effects (inventory creation, etc.)
-logic is not truly atomic
-Production risk
-double-write scenarios under concurrency
-phantom inventory items
-inconsistent audit trail between execution + inventory
-Correct model (still required)
-
-You want:
-
-with db_session.begin():
-    repo.complete_step(...)
-    validate(...)
-    create_inventory(...)
-
-Anything else is still logically unsafe under failure injection.
-
-3. ⚠️ HIGH — Trust boundary comment is still partially incorrect in security model terms
-
-You wrote:
-
-spoofing risk is about who may write execution_data, not about splitting for read APIs
-
-This is directionally correct but incomplete
-Real issue class
-
-Even if completed_by_email is set server-side in normal flow:
-
-You still allow:
-
-execution_data persistence from multiple code paths
-replay or rehydration into audit layer
-trace reconstruction assumes integrity of stored JSON
-Key gap
-
-Nothing enforces:
-
-“execution_data is server-owned after persistence”
-
-So the risk is not just write path, it's:
-
-future service changes
-backfills
-admin tools
-migrations
+it may re-evaluate subquery per row
+or fail to use index-only scan on execution_id
+or produce a hash semi-join (good) OR nested loop (bad under scale)
+Risk in production
+inventory endpoint latency spikes under large Execution tables
+unpredictable query plans across environments (dev vs prod drift)
+worst-case: O(n × m) planner fallback
 Recommendation (important)
 
-Add invariant at persistence boundary:
+Force materialisation:
 
-schema validation OR
-overwrite protection OR
-field whitelist at DB layer write
+org_execution_ids = [
+    id for (id,) in db_session.query(Execution.id)
+    .filter(Execution.org_id == org_id)
+]
 
-Otherwise audit integrity is “best effort”, not enforced.
+Yes—it looks less “clever”, but:
+
+guarantees stable plan
+removes planner ambiguity
+converts to indexed IN list
+
+OR (better long-term):
+
+denormalise org_id onto ExecutionStep
+2. ⚠️ CRITICAL — _strip_incoming_execution_trace_keys now creates a false sense of security boundary
+What improved
+
+Good:
+
+explicit removal of trace keys from client payload
+centralised sanitisation
+Subtle remaining issue
+return {k: v for k, v in execution_data.items() if k not in _EXECUTION_DATA_TRACE_KEYS}
+Problem class
+
+This assumes:
+
+“if key is removed, system is safe”
+
+But downstream:
+
+execution_data is still merged elsewhere
+unknown keys are still fully accepted
+nested structures are not sanitized
+Real risk
+
+A malicious or buggy client can still:
+
+inject unexpected nested audit fields
+pollute downstream _split_execution_data
+bypass assumptions by nesting (execution_data["meta"]["completed_by"])
+Recommendation
+
+If this is a SaaS boundary:
+
+You need schema enforcement, not key filtering:
+
+Pydantic model OR
+explicit whitelist, not blacklist
+or recursive sanitisation
+
+Blacklist is always bypassable in evolving JSON APIs.
 
 🟠 HIGH FINDINGS
-4. ⚠️ Performance: batch query still has hidden inefficiency
-.join(Execution, ExecutionStep.execution_id == Execution.id)
-Issue
+3. ⚠️ Logging upgrade is correct but changes failure semantics
 
-You are now doing:
+You changed:
 
-batch IN query
-plus join to Execution for org scoping
+logger.warning(...)
 
-But ExecutionStep already has org context via ExecutionStep.execution_id → Execution
+from silent pass
 
+Improvement
+
+✔ good — you now have observability
+
+But subtle issue
+
+You are now logging at WARNING for:
+
+per-item hydration failures
+per-item producing step failures
+per-item fallback failures
 Risk
 
-This join can:
+At scale:
 
-block index-only scan paths
-degrade planner choice depending on DB (Postgres especially)
-Better pattern
-
-Prefer one of:
-
-pre-filter ExecutionStep IDs via subquery on Execution
-or denormalise org_id into ExecutionStep (common SaaS optimisation)
-5. ⚠️ MEDIUM — Exception handling still masks structural errors
-
-You improved logging:
-
-logger.debug(..., exc_info=True)
-
-Good improvement, but:
-
-Issue
-
-You still swallow exceptions in:
-
-producing_step fallback (still pass)
-outer inventory loops (partial visibility only)
-Risk
-silent data drift
-missing production alerts
-hard-to-reproduce UI inconsistencies
+inventory endpoint becomes log-saturated
+Datadog / logging backend noise spike
+real alerts get buried
 Recommendation
 
-At minimum:
+Split log levels:
 
-emit structured metrics (inventory_hydration_failure_count)
-or escalate unexpected exceptions to warning level
-6. ⚠️ MEDIUM — execution_step_by_id memory scaling risk
-execution_step_by_id = {es.id: es for es in loaded_steps}
+debug: expected missing data
+warning: truly unexpected schema corruption
+error: DB/ORM failure
+
+Right now everything is warning, which is too coarse.
+
+4. ⚠️ MEDIUM — _normalize_dt fallback behaviour still drives silent data divergence
+
+You now added:
+
+if dt:
+    return dt
+_log.debug("ready_date_actual string did not parse")
 Issue
 
-Fine for typical loads, but:
+You are now:
 
-inventory endpoint = potentially large fanout
-step graph may include heavy relationships (step.outputs, execution_data)
+silently downgrading bad data to None
+logging only debug
 Risk
 
-Memory bloat in:
+In production:
 
-large tenants
-batch exports
-admin views
-Mitigation
-
-If this endpoint grows further:
-
-consider paginated hydration
-or selective column load (load_only)
-🟡 LOW / STRUCTURAL NOTES
-7. Better: execution_step reuse is correct and clean
-
-This is a strong improvement:
-
-src_step = execution_step_by_id.get(...)
-
-✔ removes per-row DB access
-✔ improves cache locality
-✔ reduces DB pressure significantly
-
-This is now aligned with proper data-assembly architecture.
-
-8. Small inconsistency risk: ready-date fallback contract widened
-
-You added:
-
-dict | str | None
-Benefit
-
-More flexible ingestion
-
-Risk
-silent misparsing if invalid string formats creep in
-inconsistent timezone interpretation across inputs
+bad data silently propagates as "no ready date"
+UI inconsistencies appear without alerting system owners
 Recommendation
 
-If this field is externally writable:
+For SaaS correctness:
 
-enforce ISO-8601 only
-reject ambiguous formats early
+emit metric counter (ready_date_parse_failures)
+or escalate malformed ISO strings to warning level
+5. ⚠️ HIGH — execution_step.execution_id.in_(...) still double filters org ownership
+
+You now enforce:
+
+ExecutionStep.execution_id.in_(org_execution_ids),
+ExecutionStep.id.in_(step_ids)
+Issue
+
+This is redundant constraint duplication:
+
+ExecutionStep already belongs to Execution
+Execution already scoped to org
+Risk
+query planner overconstrained → worse index selection
+unnecessary join elimination complexity
+Recommendation
+
+Pick ONE enforcement layer:
+
+Best options:
+
+ExecutionStep has org_id → fastest
+OR join Execution only once, no subquery IN
+
+Current approach is safe but not optimal.
+
+🟡 MEDIUM FINDINGS
+6. ⚠️ ready_date_display still hides failure signal
+except Exception:
+    logger.warning(...)
+Issue
+
+You are now suppressing all failure modes into:
+
+warning log
+empty UI field
+Risk
+
+If logic breaks:
+
+users see missing ready dates
+no API-level signal
+Recommendation
+
+Consider returning structured fallback:
+
+ready_date_error = "parse_failed"
+
+This matters for SaaS observability.
+
+7. ⚠️ _strip_incoming_execution_trace_keys is not applied recursively
+Risk class
+
+If payload evolves:
+
+{
+  "execution_data": {
+    "meta": {
+      "completed_by_email": "fake"
+    }
+  }
+}
+
+Your filter does nothing.
+
+Recommendation
+
+Either:
+
+recursive sanitizer
+or schema validation (preferred)
+8. ⚠️ Query planning still depends heavily on ORM join behavior
+.options(joinedload(ExecutionStep.step))
+Issue
+
+You assume:
+
+step is cheap
+outputs are embedded JSON
+
+But if this ever becomes:
+
+relationship → table
+or expands metadata
+
+You silently reintroduce N+1.
+
+Recommendation
+
+Lock model contract:
+
+explicitly document step.outputs is JSONB
+or enforce DTO projection at repo layer
+🟢 POSITIVE CHANGES (important)
+
+These are strong improvements:
+
+✔ N+1 fully resolved (correctly this time)
+batch ExecutionStep load
+map-based hydration
+removed per-item DB access
+✔ Logging visibility improved (major operational gain)
+✔ Query scoping improved
+org-level enforcement tightened
+reduced accidental cross-org leakage risk
+✔ Separation of concerns improved
+sanitisation moved into explicit function
+split logic clarified with documentation
 
 ---
 
-## Resolution notes (implementation tracking)
+## Round-2 follow-up (addressed in code)
 
-| # | Finding | Action |
-|---|---------|--------|
-| **1** | `ExecutionStep → step → outputs` lazy N+1 | **No ORM chain:** `steps.outputs` is **JSONB** on `Step`, not a relationship. Loading `Step` loads `outputs` with the row. Documented in code next to batch query. No `joinedload(Step.outputs)` needed. |
-| **2** | Transaction safety / `flush` + manual `rollback` | **Deferred** — tracked in `cursor_instructions/complete-step-transaction-refactor-plan.md`. Requires dedicated refactor + integration tests. |
-| **3** | Trust boundary / server-owned `execution_data` | **`_strip_incoming_execution_trace_keys`** removes all `_EXECUTION_DATA_TRACE_KEYS` from the client payload before `complete_step`; server then sets identity and later warnings/errors. |
-| **4** | Batch query `JOIN Execution` | Replaced with **`execution_id IN (SELECT executions.id WHERE org_id = …)`** — avoids join in outer query; keeps org isolation. |
-| **5** | Swallowed exceptions | **`list_inventory`:** hydrate + ready-date + producing-step failures log at **`warning`** with `exc_info` (was `debug` / silent). Metrics (`inventory_hydration_failure_count`) still optional for a later observability pass. |
-| **6** | `execution_step_by_id` memory | **Documented only** in batch-query comment; pagination / `load_only` remains a future endpoint-scale change. |
-| **7** | (positive) | Acknowledged — kept as-is. |
-| **8** | `ready_date_actual` string formats | **Debug log** when a non-empty string fails to parse (truncated), so silent bad strings are visible in logs; persistence contract remains ISO-oriented via `_normalize_dt`. |
+| # | Topic | What we did |
+|---|--------|----------------|
+| **1** | IN subquery / plan instability | **Reverted to a single `JOIN Execution` + `Execution.org_id` + `ExecutionStep.id.in_(step_ids)`** — work is bounded by inventory `step_ids`, not by materializing all execution PKs for the org (which would not scale). |
+| **2** | Blacklist “false security” + nested `meta` | **`_strip_trace_keys_recursive`**: removes `_EXECUTION_DATA_TRACE_KEYS` at **any depth** in dicts/lists (capped depth 8). Docstring notes that a **stricter Pydantic whitelist** is the long-term SaaS contract. |
+| **3** | WARNING log saturation | Per-item paths (`hydrate`, `producing_step`, `ready_date_display`, `producing_step_name` fallback) back to **`logger.debug(..., exc_info=True)`** so production log sinks are not flooded. |
+| **4** | `ready_date` parse / metrics | **Comment** in `output_ready_date_check` that a **`ready_date_parse_failures` metric** can be added; per-row remains DEBUG. |
+| **5** | “Double filter” / join vs IN | **Single join** is the one enforcement layer for org + step id filter in this query. |
+| **6–8** | UI/API signals, schema, model drift | **Recursive strip** covers nested injection; **Step** model comment locks **`outputs` as JSONB column** contract for inventory loading. API field `ready_date_error` deferred — would require FE contract. |
+
+**Still deferred:** full **`complete_step` atomic transaction refactor** (`complete-step-transaction-refactor-plan.md`), strict **Pydantic** `execution_data` schema, **`ExecutionStep.org_id`** denormalization, **`ready_date_parse_failures` metric** wiring.

@@ -6,6 +6,7 @@ import logging
 import os
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
 from uuid import UUID
 
 from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
@@ -382,14 +383,33 @@ _EXECUTION_DATA_TRACE_KEYS = {
 }
 
 
+_MAX_EXECUTION_DATA_STRIP_DEPTH = 8
+
+
+def _strip_trace_keys_recursive(obj: Any, depth: int = 0) -> Any:
+    """Remove trace keys at any depth (dict/list nesting). Not a full schema — prefer Pydantic later for strict SaaS contracts."""
+    if depth > _MAX_EXECUTION_DATA_STRIP_DEPTH:
+        return obj
+    if isinstance(obj, dict):
+        return {
+            k: _strip_trace_keys_recursive(v, depth + 1)
+            for k, v in obj.items()
+            if k not in _EXECUTION_DATA_TRACE_KEYS
+        }
+    if isinstance(obj, list):
+        return [_strip_trace_keys_recursive(x, depth + 1) for x in obj]
+    return obj
+
+
 def _strip_incoming_execution_trace_keys(execution_data: dict | None) -> dict:
     """
-    Remove audit/trace keys from the client JSON payload before merge/persist.
-    Server code sets these (identity from auth, warnings/errors during validation) — clients must not supply them.
+    Remove audit/trace keys from the client JSON payload before merge/persist (recursive).
+    Server sets identity and validation messages. Unknown non-trace keys still pass through — full whitelist → Pydantic follow-up.
     """
     if not execution_data:
         return {}
-    return {k: v for k, v in execution_data.items() if k not in _EXECUTION_DATA_TRACE_KEYS}
+    cleaned = _strip_trace_keys_recursive(execution_data, 0)
+    return cleaned if isinstance(cleaned, dict) else {}
 
 
 def _to_iso_timestamp(ts) -> str | None:
@@ -2320,18 +2340,16 @@ def list_inventory():
     from app.core.db.models.inventory_item import InventoryItem
 
     # One query for all producing steps (avoids N+1 hydration + ready-date lookups).
-    # Scope to org via IN (subquery) instead of JOIN — tends to plan better on Postgres for pk lookups.
-    # Step.outputs is JSONB on `steps` (not a relationship); joinedload(ExecutionStep.step) loads the row once — no lazy chain N+1 for outputs.
+    # JOIN Execution + filter org_id: bounded by step_ids (inventory row count), no materialized list of all org executions.
+    # Step.outputs is JSONB on `steps` (see Step model); joinedload(ExecutionStep.step) loads one row per step — no relationship N+1 for outputs.
     step_ids = {i.source_execution_step_id for i in items if i.source_execution_step_id}
     execution_step_by_id: dict = {}
     if step_ids:
-        org_execution_ids = db_session.query(Execution.id).filter(Execution.org_id == org_id)
         loaded_steps = (
             db_session.query(ExecutionStep)
-            .filter(
-                ExecutionStep.id.in_(step_ids),
-                ExecutionStep.execution_id.in_(org_execution_ids),
-            )
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .filter(Execution.org_id == org_id)
+            .filter(ExecutionStep.id.in_(step_ids))
             .options(joinedload(ExecutionStep.step))
             .all()
         )
@@ -2378,7 +2396,8 @@ def list_inventory():
                     if matching_output:
                         extra_data["variable_output"] = matching_output
             except Exception:
-                logger.warning("list_inventory hydrate extra_data failed item_id=%s", item.id, exc_info=True)
+                # DEBUG: per-item on hot path — avoid WARNING spam in prod aggregators (see flows-and-batches-review.md)
+                logger.debug("list_inventory hydrate extra_data failed item_id=%s", item.id, exc_info=True)
 
         # Look up previous steps data for intermediate products AND final products
         # DAG TRAVERSAL PERFORMANCE WARNING:
@@ -2607,7 +2626,7 @@ def list_inventory():
                             if es_untracked.step:
                                 producing_step_name = es_untracked.step.name
             except Exception:
-                logger.warning(
+                logger.debug(
                     "list_inventory producing_step resolution failed item_id=%s",
                     item.id,
                     exc_info=True,
@@ -2618,7 +2637,9 @@ def list_inventory():
                 if tagged_step:
                     producing_step_name = str(tagged_step)
             except Exception:
-                logger.warning("list_inventory producing_step_name fallback failed item_id=%s", item.id, exc_info=True)
+                logger.debug(
+                    "list_inventory producing_step_name fallback failed item_id=%s", item.id, exc_info=True
+                )
 
         # Single operator-facing ready instant (set_at_execution date or fixed-duration from step completion)
         ready_date_display = None
@@ -2627,7 +2648,7 @@ def list_inventory():
             if rdt:
                 ready_date_display = rdt.isoformat()
         except Exception:
-            logger.warning("list_inventory ready_date_display failed item_id=%s", item.id, exc_info=True)
+            logger.debug("list_inventory ready_date_display failed item_id=%s", item.id, exc_info=True)
 
         result.append(
             {
