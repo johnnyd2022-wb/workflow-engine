@@ -3,7 +3,7 @@ description: Security, performance, and correctness review for JavaScript files 
 globs:
   - "**/*.js"
   - "**/*.ts"
-alwaysApply: false
+alwaysApply: true
 ---
 
 # JavaScript Review: Security, Performance & Correctness

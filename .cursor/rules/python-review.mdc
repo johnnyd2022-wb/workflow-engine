@@ -2,7 +2,7 @@
 description: Security, performance, and edge case review for Python files in this multi-tenant Flask/SQLAlchemy app
 globs:
   - "**/*.py"
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Python Review: Security, Performance & Edge Cases

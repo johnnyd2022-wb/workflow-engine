@@ -2,7 +2,7 @@
 description: Structure, security, and design-system review for Jinja2 HTML templates
 globs:
   - "**/*.html"
-alwaysApply: false
+alwaysApply: true
 ---
 
 # HTML / Jinja2 Review: Structure, Security & Design System
