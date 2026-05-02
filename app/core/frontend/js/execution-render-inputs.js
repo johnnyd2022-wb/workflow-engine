@@ -66,7 +66,7 @@
           <div class="execute-input-section-header" style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               ${escapeHtml(input.name)} 
-              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${input.quantity || '0'} ${input.unit || ''})</span>
+              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${escapeHtml(String(input.quantity != null ? input.quantity : '0'))} ${escapeHtml(input.unit || '')})</span>
             </label>
           </div>
           <div class="execute-input-rows-container" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}"></div>
@@ -280,43 +280,6 @@
                 '</div>';
             }
 
-            // Full metadata (expand/collapse): show every scalar key on inv + full JSON for extra_data.
-            function safeString(v) {
-              if (v == null) return '';
-              if (typeof v === 'string') return v;
-              if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-              return '';
-            }
-            var kv = [];
-            try {
-              Object.keys(inv || {}).forEach(function(k) {
-                if (k === 'extra_data') return;
-                if (k === 'remaining_balance_to_reconcile') return;
-                var v = inv[k];
-                if (v == null) return;
-                if (typeof v === 'object') return;
-                var s = safeString(v);
-                if (!s || !String(s).trim()) return;
-                kv.push([k, s]);
-              });
-            } catch (e) {}
-            kv.sort(function(a, b) { return a[0].localeCompare(b[0]); });
-            var kvHtml = kv.map(function(p) {
-              return '<div class="exec-picker-kv__k">' + escapeHtml(p[0]) + '</div><div class="exec-picker-kv__v">' + escapeHtml(p[1]) + '</div>';
-            }).join('');
-            var extraJson = '';
-            try {
-              if (inv.extra_data && typeof inv.extra_data === 'object') {
-                var extraCopy = inv.extra_data;
-                try {
-                  if (extraCopy && Object.prototype.hasOwnProperty.call(extraCopy, 'remaining_balance_to_reconcile')) {
-                    extraCopy = Object.assign({}, extraCopy);
-                    delete extraCopy.remaining_balance_to_reconcile;
-                  }
-                } catch (eDel) {}
-                extraJson = JSON.stringify(extraCopy, null, 2);
-              }
-            } catch (e) {}
             // Audit history (extra_data.inventory_audit_history): show human-friendly operator + cleaned labels.
             var auditHtml = '';
             try {
@@ -760,8 +723,8 @@
             <div class="execute-qty-pane" style="display:none; margin-top: 12px;">
               <label class="spa-field-label">Quantity to consume</label>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="number" class="spa-inp execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="flex: 1;">
-                <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
+                <input type="number" class="spa-inp execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" placeholder="${escapeHtml(String(input.quantity != null ? input.quantity : '0'))}" value="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" step="0.01" min="0" style="flex: 1;">
+                <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${escapeHtml(input.unit || '')}</span>
               </div>
             </div>
           `;
@@ -1382,13 +1345,13 @@
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               ${escapeHtml(input.name)} 
-              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${input.quantity || '0'} ${input.unit || ''})</span>
+              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${escapeHtml(String(input.quantity != null ? input.quantity : '0'))} ${escapeHtml(input.unit || '')})</span>
               <span style="color: var(--error, #ef4444);">*</span>
             </label>
           </div>
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity <span style="color: var(--error, #ef4444);">*</span></label>
-            <input type="number" class="spa-inp execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0">
+            <input type="number" class="spa-inp execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" placeholder="${escapeHtml(String(input.quantity != null ? input.quantity : '0'))}" value="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" step="0.01" min="0">
           </div>
           <div>
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit <span style="color: var(--error, #ef4444);">*</span></label>

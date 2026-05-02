@@ -18,6 +18,20 @@
           };
     var showNotification = root.showNotification;
 
+    /** Same-origin path under /core/ only; blocks protocol-relative //… redirects. */
+    function safeInventoryManualReturnTo(rt) {
+      try {
+        var s = String(rt || '').trim();
+        if (!s) return '';
+        if (s.indexOf('//') === 0) return '';
+        if (s.charAt(0) !== '/') return '';
+        if (!/^\/core\//i.test(s)) return '';
+        return s;
+      } catch (e) {
+        return '';
+      }
+    }
+
   // ============================================================
   // ADD MISSING ITEM (in-flow raw material)
   // ============================================================
@@ -40,8 +54,8 @@
       if (prefill.producing_process_name) paramsWip.set('producing_process_name', String(prefill.producing_process_name));
       if (prefill.producing_step_name) paramsWip.set('producing_step_name', String(prefill.producing_step_name));
       try {
-        var rtw = window.location.pathname + window.location.search;
-        if (rtw && rtw.charAt(0) === '/') paramsWip.set('return_to', rtw);
+        var rtw = safeInventoryManualReturnTo(window.location.pathname + window.location.search);
+        if (rtw) paramsWip.set('return_to', rtw);
       } catch (eW) {}
       window.location.href = '/core/inventory/add/manual?' + paramsWip.toString();
       return;
@@ -56,8 +70,8 @@
       if (prefill.unit) params.set('unit', String(prefill.unit));
       params.set('inventory_type', 'raw_material');
       try {
-        var rt = window.location.pathname + window.location.search;
-        if (rt && rt.charAt(0) === '/') params.set('return_to', rt);
+        var rt = safeInventoryManualReturnTo(window.location.pathname + window.location.search);
+        if (rt) params.set('return_to', rt);
       } catch (e0) {}
       window.location.href = '/core/inventory/add/manual?' + params.toString();
       return;
@@ -301,7 +315,7 @@
             hiddenInput.value = id;
             hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
             hiddenInput.dataset.unit = inv.unit || '';
-            if (triggerLabel) triggerLabel.textContent = (inv.process_name ? escapeHtml(inv.process_name) + ' - ' : '') + escapeHtml(inv.name) + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+            if (triggerLabel) triggerLabel.textContent = (inv.process_name ? String(inv.process_name) + ' - ' : '') + String(inv.name || '') + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
             var q = section.querySelector('.execute-quantity-input');
             var u = section.querySelector('.execute-quantity-unit-display');
             if (q && u) {
@@ -331,7 +345,7 @@
         hiddenInput.value = selectedId;
         hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
         hiddenInput.dataset.unit = inv.unit || '';
-        if (triggerLabel) triggerLabel.textContent = (inv.process_name ? escapeHtml(inv.process_name) + ' - ' : '') + escapeHtml(inv.name) + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+        if (triggerLabel) triggerLabel.textContent = (inv.process_name ? String(inv.process_name) + ' - ' : '') + String(inv.name || '') + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
         var qtyInput = section ? section.querySelector('.execute-quantity-input') : null;
         var unitDisplay = section ? section.querySelector('.execute-quantity-unit-display') : null;
         if (qtyInput && unitDisplay) {
