@@ -2592,6 +2592,12 @@
       return map[invType] || invType || '';
     }
 
+    /** Intermediate and final products are produced by a step; raw materials are not. */
+    function flows2InventoryIsProducedItem(item) {
+      const t = item.inventory_type || 'raw_material';
+      return t === 'work_in_progress' || t === 'final_product';
+    }
+
     function flows2InvFormatDate(dateStr) {
       if (!dateStr) return 'N/A';
       try {
@@ -3078,12 +3084,71 @@
       );
     }
 
-    function buildFlows2InventoryDetailsSection(item) {
+    /** Inputs consumed on the step that created this item (same section for intermediate + final). */
+    function flows2RenderInventoryInputsSection(item) {
+      if (!flows2InventoryIsProducedItem(item)) return '';
+      const ex = item.extra_data || {};
+      const fq = flows2InvFormatQty;
+      const vInputs = ex.variable_inputs;
+      const blocks =
+        Array.isArray(vInputs) && vInputs.length
+          ? vInputs
+              .map((input) => {
+                return `<div style="padding:10px;background:var(--bg-secondary,#f9fafb);border-radius:8px;border:1px solid var(--border-light,#e5e7eb);margin-bottom:8px;">
+              <p style="margin:0 0 4px;font-weight:600;">${escapeHtml(input.name || 'Input')}</p>
+              <p style="margin:4px 0 0;font-size:12px;color:var(--text-secondary);">${escapeHtml(fq(input.quantity))} ${escapeHtml(input.unit || '')}</p>
+            </div>`;
+              })
+              .join('')
+          : `<p style="margin:0;font-size:13px;color:var(--text-secondary,#6b7280);">No inputs recorded for this step.</p>`;
+      return `<div class="flows2-inv-detail-section"><h4>Inputs</h4>${blocks}</div>`;
+    }
+
+    /** Prior steps that fed this item’s inputs (intermediate + final when trace was computed). */
+    function flows2RenderInventoryUpstreamSection(item) {
       const ex = item.extra_data || {};
       const fq = flows2InvFormatQty;
       const fd = flows2InvFormatDate;
-      let html = flows2RenderInventoryProductionBlock(item);
+      const prevSteps = ex.previous_steps_data;
+      if (!Array.isArray(prevSteps) || !prevSteps.length) return '';
+      const blocks = prevSteps
+        .map((step) => {
+          const sn = step.step_name || 'Step';
+          const snum = step.step_number != null ? `#${step.step_number}` : '';
+          let inner = `<p style="margin:0 0 8px;font-weight:600;">${escapeHtml(sn)} ${escapeHtml(snum)}</p>`;
+          if (step.completed_at) inner += `<p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary);">Completed: ${escapeHtml(fd(step.completed_at))}</p>`;
+          if (step.input_name)
+            inner += `<p style="margin:0 0 4px;font-size:12px;">Consumed: ${escapeHtml(step.input_name)} — ${escapeHtml(fq(step.input_quantity))} ${escapeHtml(step.input_unit || '')}</p>`;
+          const sp = step.execution_prompts;
+          if (sp && typeof sp === 'object' && Object.keys(sp).length) {
+            inner += `<p style="margin:8px 0 4px;font-size:11px;font-weight:600;color:var(--text-secondary);">Prompts in chain</p>`;
+            inner += Object.entries(sp)
+              .map(
+                ([k, v]) =>
+                  `<div class="flows2-inv-kv"><span>${escapeHtml(k)}</span><span>${escapeHtml(flows2SerializeForDisplay(v))}</span></div>`
+              )
+              .join('');
+          }
+          if (step.completed_by) inner += `<div class="flows2-inv-kv"><span>Completed by</span><span>${escapeHtml(flows2SerializeForDisplay(step.completed_by))}</span></div>`;
+          if (step.execution_errors)
+            inner += `<p style="margin:8px 0 0;font-size:12px;color:var(--error,#b91c1c);">${escapeHtml(flows2SerializeForDisplay(step.execution_errors))}</p>`;
+          if (step.execution_warnings)
+            inner += `<p style="margin:4px 0 0;font-size:12px;color:var(--warning,#b45309);">${escapeHtml(flows2SerializeForDisplay(step.execution_warnings))}</p>`;
+          return `<div style="padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);">${inner}</div>`;
+        })
+        .join('');
+      return `<div class="flows2-inv-detail-section"><h4>Upstream chain</h4>${blocks}</div>`;
+    }
 
+    /**
+     * Single expand layout for all inventory types: same section order; each block adds content only when applicable
+     * (Inputs always for produced items; Audit always rendered by flows2RenderInventoryAuditSection).
+     */
+    function buildFlows2InventoryDetailsSection(item) {
+      const ex = item.extra_data || {};
+      let html = '';
+
+      html += flows2RenderInventoryProductionBlock(item);
       html += flows2RenderInventorySystemFindingsSection(item);
 
       const prompts = ex.execution_prompts;
@@ -3097,51 +3162,9 @@
         html += `<div class="flows2-inv-detail-section"><h4>Custom prompts</h4><div class="exec-picker-kv">${rows}</div></div>`;
       }
 
-      const vInputs = ex.variable_inputs;
-      if (Array.isArray(vInputs) && vInputs.length) {
-        const blocks = vInputs
-          .map((input) => {
-            return `<div style="padding:10px;background:var(--bg-secondary,#f9fafb);border-radius:8px;border:1px solid var(--border-light,#e5e7eb);margin-bottom:8px;">
-              <p style="margin:0 0 4px;font-weight:600;">${escapeHtml(input.name || 'Input')}</p>
-              <p style="margin:4px 0 0;font-size:12px;color:var(--text-secondary);">${escapeHtml(fq(input.quantity))} ${escapeHtml(input.unit || '')}</p>
-            </div>`;
-          })
-          .join('');
-        html += `<div class="flows2-inv-detail-section"><h4>Variable inputs (this step)</h4>${blocks}</div>`;
-      }
-
+      html += flows2RenderInventoryInputsSection(item);
       html += flows2RenderInventoryOutputSection(item);
-
-      const prevSteps = ex.previous_steps_data;
-      if (Array.isArray(prevSteps) && prevSteps.length) {
-        const blocks = prevSteps
-          .map((step, idx) => {
-            const sn = step.step_name || 'Step';
-            const snum = step.step_number != null ? `#${step.step_number}` : '';
-            let inner = `<p style="margin:0 0 8px;font-weight:600;">${escapeHtml(sn)} ${escapeHtml(snum)}</p>`;
-            if (step.completed_at) inner += `<p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary);">Completed: ${escapeHtml(fd(step.completed_at))}</p>`;
-            if (step.input_name)
-              inner += `<p style="margin:0 0 4px;font-size:12px;">Consumed: ${escapeHtml(step.input_name)} — ${escapeHtml(fq(step.input_quantity))} ${escapeHtml(step.input_unit || '')}</p>`;
-            const sp = step.execution_prompts;
-            if (sp && typeof sp === 'object' && Object.keys(sp).length) {
-              inner += `<p style="margin:8px 0 4px;font-size:11px;font-weight:600;color:var(--text-secondary);">Prompts in chain</p>`;
-              inner += Object.entries(sp)
-                .map(
-                  ([k, v]) =>
-                    `<div class="flows2-inv-kv"><span>${escapeHtml(k)}</span><span>${escapeHtml(flows2SerializeForDisplay(v))}</span></div>`
-                )
-                .join('');
-            }
-            if (step.completed_by) inner += `<div class="flows2-inv-kv"><span>Completed by</span><span>${escapeHtml(flows2SerializeForDisplay(step.completed_by))}</span></div>`;
-            if (step.execution_errors)
-              inner += `<p style="margin:8px 0 0;font-size:12px;color:var(--error,#b91c1c);">${escapeHtml(flows2SerializeForDisplay(step.execution_errors))}</p>`;
-            if (step.execution_warnings)
-              inner += `<p style="margin:4px 0 0;font-size:12px;color:var(--warning,#b45309);">${escapeHtml(flows2SerializeForDisplay(step.execution_warnings))}</p>`;
-            return `<div style="padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);">${inner}</div>`;
-          })
-          .join('');
-        html += `<div class="flows2-inv-detail-section"><h4>Upstream steps & inputs (trace)</h4>${blocks}</div>`;
-      }
+      html += flows2RenderInventoryUpstreamSection(item);
 
       const notes = (ex.notes && String(ex.notes).trim()) || '';
       if (notes) {

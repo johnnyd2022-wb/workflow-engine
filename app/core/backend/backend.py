@@ -2316,33 +2316,32 @@ def list_inventory():
             # If quantity is not a valid number, skip this item
             continue
 
-        # If extra_data doesn't exist but source_execution_step_id does, look up execution_data from DB
-        # This allows existing inventory items to show metadata
-        extra_data = item.extra_data if item.extra_data else {}
-        if not extra_data.get("execution_prompts") and item.source_execution_step_id:
+        # Hydrate extra_data from the producing ExecutionStep when needed (shallow copy so we don't mutate ORM JSON in place).
+        # Prompts, trace, inputs, and output are filled independently — previously inputs were only loaded when
+        # execution_prompts was missing, which hid variable_inputs on many intermediate/final items.
+        extra_data = {**(item.extra_data or {})}
+        if item.source_execution_step_id:
             try:
                 execution_step = (
                     db_session.query(ExecutionStep).filter(ExecutionStep.id == item.source_execution_step_id).first()
                 )
-                if execution_step and execution_step.execution_data:
-                    execution_prompts, execution_trace = _split_execution_data(
-                        execution_step.execution_data, completed_at=execution_step.completed_at
-                    )
-                    if execution_prompts:
-                        extra_data["execution_prompts"] = execution_prompts
-                    if execution_trace:
-                        extra_data["execution_trace"] = execution_trace
+                if execution_step:
+                    if execution_step.execution_data:
+                        execution_prompts, execution_trace = _split_execution_data(
+                            execution_step.execution_data, completed_at=execution_step.completed_at
+                        )
+                        if not extra_data.get("execution_prompts"):
+                            extra_data["execution_prompts"] = execution_prompts or {}
+                        if not extra_data.get("execution_trace"):
+                            extra_data["execution_trace"] = execution_trace or {}
 
-                    # Also include variable inputs and outputs if not already in extra_data
-                    # This is important for existing items that may not have variable_inputs populated
                     if not extra_data.get("variable_inputs"):
                         if execution_step.actual_inputs:
                             extra_data["variable_inputs"] = execution_step.actual_inputs
                         else:
-                            # Ensure variable_inputs exists as empty list if not present
                             extra_data["variable_inputs"] = []
+
                     if not extra_data.get("variable_output") and execution_step.actual_outputs:
-                        # Find matching output
                         output_name = item.name
                         matching_output = next(
                             (o for o in execution_step.actual_outputs if o.get("name") == output_name), None
@@ -2350,7 +2349,6 @@ def list_inventory():
                         if matching_output:
                             extra_data["variable_output"] = matching_output
             except Exception:
-                # If lookup fails, just use existing extra_data
                 pass
 
         # Look up previous steps data for intermediate products AND final products
