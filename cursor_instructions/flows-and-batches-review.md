@@ -1,289 +1,152 @@
-Below is a security + performance + maintainability review across the reconciliation system changes you’ve shown, ordered by criticality per file and then cross-file systemic issues.
+Here’s the targeted review of just these changes, focusing on correctness, performance, and risk regression.
 
-I’m focusing on: DOM injection risk, state consistency, event handling correctness, O(n²) DOM patterns, CSS/JS coupling, and hidden-input trust boundaries.
+🔴 Critical Issues
+1. reconcileCardRefs becomes stale silently (real bug risk)
 
-🔴 CRITICAL (Highest Risk)
-1. app/core/frontend/js/execution-render-outputs.js
-🚨 1.1 InnerHTML construction with mixed escaped + unescaped paths (XSS surface)
+You are doing:
 
-You mostly use escapeHtml(), which is good — but there are two weak points:
+reconcileCardRefs = Array.prototype.slice.call(
+  cardsContainer.querySelectorAll('.execute-reconcile-untracked-card')
+);
+Problem
 
-⚠️ Risk areas:
-expandInner = buildUntrackedReconcileExpandHtml(...)
-This returns raw HTML string composed of multiple dynamic branches
+This snapshot is only valid at render time.
 
-prompts rendering:
+If anything happens later:
 
-'<span ...>' + escapeHtml(String(e[1])) + '</span>'
+cards are added/removed dynamically
+DOM is re-rendered partially
+reconciliation list is refreshed async
 
-safe individually, BUT:
+👉 reconcileCardRefs becomes incorrect without any invalidation
 
-JSON.stringify(h) fallback in reconciliation history:
+Impact
+UI state updates stop applying to new cards
+ghost UI elements remain interactive but unstyled
+selection logic diverges from DOM reality
+Severity: 🔴 High (state desync bug)
+Fix direction
 
-escapeHtml(JSON.stringify(h))
+Prefer live query or container-based query, e.g.:
 
-→ safe, but large uncontrolled objects can still cause performance + log injection issues
+cardsContainer.querySelectorAll(...) inside setReconcileState
+OR maintain a MutationObserver sync (heavier but correct)
+OR update refs incrementally on DOM changes
+2. Hidden input is treated as authoritative but is not
+hiddenInput.value = reconcileState.selectedId;
+Problem
 
-🧠 Core issue
+You explicitly state:
 
-You are mixing:
+“mirrors selectedId for form submit only”
 
-DOM-safe escaping
-string-built HTML templates
-deeply nested object rendering
+But in practice:
 
-This is fragile against future regressions (someone will eventually forget escaping in one branch).
+hidden input can be externally mutated (browser devtools, form resets, re-renders)
+JS does not re-hydrate state from it
+Risk pattern
 
-✔ Fix recommendation
+This creates a one-way binding only, but UI assumes bidirectional consistency.
 
-Move reconciliation card rendering to:
+Impact
+form submit may diverge from UI state
+debugging mismatch between UI vs submitted payload
+Severity: 🟠 Medium-high (data integrity risk)
+🟠 Medium Issues
+3. Repeated full DOM traversal per state update
+reconcileCardRefs.forEach(...)
 
-DOM APIs (createElement)
-or a small templating helper that enforces escaping centrally
-🚨 1.2 DOM XSS risk via extra_data freeform fields
+This is fine if stable, but combined with stale snapshot risk it becomes:
 
-These are risky:
+either inefficient (if large list)
+or incorrect (if DOM changed)
 
-var noteStr = extra.notes || u.notes
+Better pattern is:
 
-Even though you escape later, the data source is untrusted backend JSON, and:
+update only changed nodes (diffing selectedId)
+or mark previous selection and only update 2 nodes
+4. dataset used as state storage (ok, but redundant)
 
-extra_data is a free-form JSON blob
-no schema enforcement shown
-likely user or external system influenced
+You now have:
 
-✔ This is fine only because escapeHtml is applied, but:
-
-This pattern is a recurring “escape later” model → high regression risk.
-
-🚨 1.3 Inline style + dynamic DOM manipulation = CSP bypass fragility
-
-You rely heavily on:
-
-style="..."
-c.style.display = ...
-c.style.borderColor = ...
-Risk:
-
-If CSP is tightened later (e.g. unsafe-inline removed for styles), this entire system breaks.
-
-🔴 1.4 Event delegation duplication risk (logic drift bug class)
-
-You currently have:
-
-one version using WeakSet
-another using manual querySelectorAll caching
-another version using reconcileState
-another using inline per-card listeners (earlier version)
-Problem:
-
-You now have 3 competing interaction models:
-
-Direct event listeners per card
-Delegated listener per container
-Hybrid state-driven UI refresh
-
-This creates:
-
-double-firing risk
-stale DOM assumptions
-memory leaks in older paths
-inconsistent behavior between render cycles
-🔴 1.5 State split-brain bug risk
-
-You maintain state in 3 places:
-
+reconcileState.locked
+reconcileState.selectedId
 hiddenInput.value
 cardsContainer.dataset.reconcileLocked
-reconcileState (JS object)
-Problem:
+Problem
 
-These can drift.
+Still multiple sources of truth exist.
 
-Example failure:
+Even though you improved it, dataset is still duplicating state
 
-dataset updated
-reconcileState not updated (or vice versa)
-hidden input overwritten externally
+Risk
+CSS depends on dataset
+JS depends on reconcileState
+form depends on hidden input
 
-This is a classic state desynchronization bug vector
+👉 still 3-state system
 
-🔴 1.6 O(n²) DOM querying inside loops
+🟡 Low Issues
+5. Array conversion is unnecessary in modern code
+Array.prototype.slice.call(...)
 
-This pattern exists repeatedly:
+Better:
 
-cardsContainer.querySelectorAll(...)
+Array.from(...)
 
-inside:
+No behavioral difference, but:
 
-setSelection()
-setReconcileState()
-Impact:
+clearer intent
+slightly faster in modern engines
+🟡 6. Missing null guard on container mutation
 
-For many outputs/cards:
+If cardsContainer is ever re-rendered or replaced:
 
-repeated full DOM scans per interaction
-unnecessary layout work
-can degrade badly with large reconciliations
-🟠 HIGH
-2. app/core/frontend/css/styles2.css
-🟠 2.1 Logic leakage into CSS
+reconcileCardRefs will reference orphan DOM nodes
+🧠 Architectural Observation (important but not urgent)
 
-This rule:
+You are moving toward a state-driven UI model, but it is still:
 
-[data-reconcile-locked="1"] > .execute-reconcile-untracked-card:not(.execute-reconcile-card-selected) {
-  display: none;
-}
-Issue:
+“manual DOM snapshot + imperative updates”
 
-You explicitly note in JS:
+Instead of:
 
-/* Locked-mode row visibility is applied in JS from reconcileState only — not selector-driven here. */
+“single source state → derived render”
 
-But CSS still contains it → conflicting source of truth
+Right now you're halfway there:
 
-Risk:
-JS and CSS diverge → inconsistent behavior between:
-server render
-client update
-rehydration
+good: reconcileState
+risky: DOM snapshots (reconcileCardRefs)
+risky: dataset + hidden input coupling
+🟢 What you did improve (important)
 
-✔ Recommendation:
-Pick ONE:
+These are actually solid improvements:
 
-either CSS-driven visibility
-or JS-driven visibility
+✔ 1. Centralised state object
+var reconcileState = { locked: false, selectedId: '' };
 
-Right now it's hybrid → brittle.
+Good step toward predictability.
 
-🟠 2.2 State-driven styling duplicated in JS AND CSS
+✔ 2. Separation of UI state vs form state
 
-You duplicate:
+Hidden input explicitly becomes:
 
-.execute-reconcile-card-selected styling in CSS
+“submit-only mirror”
 
-JS also sets:
+This is correct design direction.
 
-c.style.borderColor
-c.style.boxShadow
-Problem:
-CSS says one thing
-JS overrides it inline
+✔ 3. Reduced selector churn vs previous version
 
-This is:
+Moving from repeated querySelectorAll inside loops → snapshot is an optimization attempt.
 
-hard to maintain
-unpredictable under theme changes
-
-✔ Recommendation:
-Move ALL visual state to CSS classes only.
-
-🟡 MEDIUM
-3. Performance concerns (system-wide)
-🟡 3.1 Large HTML string generation per card
-
-Each reconciliation card builds:
-
-summary section
-inventory section
-audit section
-history section
-prompts section
-
-This is effectively:
-
-mini server-side templating in the browser
-
-Risk:
-slow rendering on large datasets
-GC pressure from string concatenation
-layout thrashing when inserted
-🟡 3.2 Reverse + map chains on arrays
-rh.slice().reverse().map(...)
-
-Repeated pattern in:
-
-reconciliation history
-audit history
-
-This creates:
-
-extra array copy
-unnecessary allocation
-🟡 3.3 Repeated querySelectorAll inside state updates
-
-Every toggle does:
-
-cardsContainer.querySelectorAll(...)
-
-Instead of cached node list.
-
-🟡 3.4 WeakSet fallback redundancy
-WeakSet ? new WeakSet() : []
-
-Then fallback uses .indexOf
-
-Problem:
-inconsistent API shape
-dual-path logic branches
-harder to reason about correctness
-🟢 LOW
-4. execution-render-outputs.js readability + structure
-Issues:
-very large function (renderVariableOutputs)
-mixed responsibilities:
-fetching
-rendering
-event binding
-UI state management
-This is effectively:
-
-Controller + View + Data layer merged
-
-🧠 CROSS-FILE ARCHITECTURE ISSUES
-1. No single source of truth for reconcile state
-
-Spread across:
-
-JS object
-dataset attribute
-hidden input
-CSS selector
-
-👉 This is the largest structural risk in the system
-
-2. Mixed rendering paradigms
-
-You use:
-
-string HTML building
-DOM API construction
-delegated event handling
-inline event handlers
-
-This is a hybrid imperative renderer, which will scale poorly.
-
-3. Tight coupling between:
-inventory model (u)
-UI representation
-backend structure (extra_data)
-
-No abstraction layer exists.
-
-🧾 PRIORITY FIX ORDER
-🔴 P0 (Fix immediately)
-Remove duplicate reconcile state sources → single JS state object
-Remove JS inline style overrides → CSS-only state styling
-Standardize event handling → ONLY delegated system OR per-card system (not both)
-Ensure all HTML generation goes through consistent escaping boundary
-🟠 P1 (High value stability)
-Replace repeated querySelectorAll with cached node lists
-Remove CSS-driven lock visibility OR JS-driven visibility (pick one)
-Reduce reconciliation history DOM churn (use document fragments consistently)
-🟡 P2 (Performance / cleanliness)
-Split renderVariableOutputs into:
-fetch layer
-render layer
-interaction layer
-Avoid .slice().reverse() patterns in hot paths
-Introduce minimal templating helper for cards
+🚨 Priority fixes (ranked)
+P0 (must fix)
+Replace reconcileCardRefs snapshot with DOM-resilient lookup strategy
+→ otherwise you will get silent UI desync bugs
+P1
+Decide whether dataset is:
+derived from state (recommended), OR
+part of state (then reconcileState is redundant)
+P2
+Replace slice.call → Array.from
+Reduce triple-state system (state vs dataset vs hidden input)

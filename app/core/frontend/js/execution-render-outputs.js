@@ -312,7 +312,6 @@
           } else {
           /** Authoritative UI state; hidden input mirrors selectedId for form submit only (written from here each update). */
           var reconcileState = { locked: false, selectedId: '' };
-          var reconcileCardRefs = [];
 
           function setReconcileState(locked, selectedId) {
             reconcileState.locked = !!locked;
@@ -320,7 +319,8 @@
             hiddenInput.value = reconcileState.selectedId;
             var sel = reconcileState.selectedId;
             var lock = reconcileState.locked;
-            reconcileCardRefs.forEach(function(c) {
+            /* Live query: avoids stale refs if cards are ever inserted/removed after initial render. */
+            Array.from(cardsContainer.querySelectorAll('.execute-reconcile-untracked-card')).forEach(function(c) {
               var id = c.dataset.untrackedId || '';
               var selected = id === sel;
               c.classList.toggle('execute-reconcile-card-selected', selected);
@@ -445,10 +445,6 @@
           });
 
           cardsContainer.appendChild(cardsFrag);
-
-          reconcileCardRefs = Array.prototype.slice.call(
-            cardsContainer.querySelectorAll('.execute-reconcile-untracked-card')
-          );
 
           bindReconcileCardsDelegation();
 
