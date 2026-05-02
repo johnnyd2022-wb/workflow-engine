@@ -310,18 +310,17 @@
           if (!cardsContainer || !hiddenInput) {
             console.warn('execute reconcile UI: missing cards container or hidden input');
           } else {
-          /** Authoritative reconcile UI state; hidden input + data-reconcile-locked are derived on each update only. */
+          /** Authoritative UI state; hidden input mirrors selectedId for form submit only (written from here each update). */
           var reconcileState = { locked: false, selectedId: '' };
+          var reconcileCardRefs = [];
 
           function setReconcileState(locked, selectedId) {
             reconcileState.locked = !!locked;
             reconcileState.selectedId = selectedId != null ? String(selectedId) : '';
             hiddenInput.value = reconcileState.selectedId;
-            cardsContainer.dataset.reconcileLocked = reconcileState.locked ? '1' : '0';
             var sel = reconcileState.selectedId;
             var lock = reconcileState.locked;
-            var cards = cardsContainer.querySelectorAll('.execute-reconcile-untracked-card');
-            cards.forEach(function(c) {
+            reconcileCardRefs.forEach(function(c) {
               var id = c.dataset.untrackedId || '';
               var selected = id === sel;
               c.classList.toggle('execute-reconcile-card-selected', selected);
@@ -446,6 +445,10 @@
           });
 
           cardsContainer.appendChild(cardsFrag);
+
+          reconcileCardRefs = Array.prototype.slice.call(
+            cardsContainer.querySelectorAll('.execute-reconcile-untracked-card')
+          );
 
           bindReconcileCardsDelegation();
 

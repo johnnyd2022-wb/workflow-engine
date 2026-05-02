@@ -2111,7 +2111,7 @@
   }
 }
 
-/* Execute-step modal: untracked reconciliation cards — state from data-reconcile-locked + BEM-style selection class */
+/* Execute-step modal: untracked reconciliation cards — selection chrome + remove button; row visibility when locked is set in JS only */
 #execute-step-modal .execute-reconcile-untracked-card {
   margin-bottom: 0;
   border-radius: var(--radius-md);
