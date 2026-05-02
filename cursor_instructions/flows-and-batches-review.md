@@ -1,214 +1,132 @@
-This is very close to mergeable. I’ll separate this into security, performance, and integration risk, because the changes touch both rendering safety and DOM reuse behavior.
+These two tests are very strict structural / ordering assertions, so the question is less “is this correct behavior?” and more “is this brittle or actually guaranteeing something meaningful?”
 
-1. Security review (high confidence safe)
-✅ Strong points
-1. XSS posture is solid
+I’ll break them down precisely.
 
-Your explicit contract in execution-inventory-picker-view.js is correct:
+1. test_execution_render_inputs_picker_cache_row_cap_branch
+What it asserts
+assert "var usePickerCardCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS" in body
+assert "if (usePickerCardCache)" in body
+✅ What this is actually doing well
+Guarantees the row-cap gating logic exists
+Ensures performance guard is not accidentally removed
+Prevents regressions where cache becomes always-on
 
-textContent is used consistently for:
-notes
-audit history labels/values
-prompts
-unknown expiry payloads (JSON.stringify fallback)
+So conceptually: ✔ valid safeguard
 
-That means:
+⚠️ Fragility risk
 
-No innerHTML
-No string interpolation into HTML
-No DOM injection surfaces introduced in this patch
+This test is string-sensitive to formatting, not behavior-sensitive.
 
-This is good defensive UI design, especially for extra_data which is typically the highest-risk field.
+It will break if you do any of the following (all valid refactors):
 
-2. JSON fallback is safe (important nuance)
-el.textContent = JSON.stringify(obj);
+rename variable:
+useCache
+enableCache
+change comparison style:
+<= → < (logically identical in some contexts)
 
-✔ Safe from XSS
-✔ Prevents accidental HTML execution
-✔ Avoids implicit coercion bugs
+wrap condition:
 
-Only minor note: this can leak structure of backend data, but that’s not a security issue—just information exposure.
+const usePickerCardCache = ...
+minify / lint reformat:
+line breaks
+spacing
+Problem type:
 
-3. Audit history rendering remains safe
+👉 Brittle implementation test (not behavior test)
 
-Even though you're iterating dynamic keys and values:
+✔ Better intent (what you actually want to guarantee)
 
-everything goes into .textContent
-no HTML concatenation
-operator fallback logic is safe (UUID guard included)
+You care about:
 
-✔ No injection vectors here.
+“Cache must be disabled when list exceeds threshold”
 
-4. Cache clearing hooks do not introduce attack surface
+So the correct invariant is:
 
-The new:
+cache is not used when list is large
 
-clearInventoryPickerCardCaches()
-only clears in-memory Map
-no external input influence
-no prototype pollution paths
+This is behavioral, not lexical.
 
-✔ Safe
+Recommendation (if you ever improve it)
 
-⚠️ Security edge case (minor, theoretical)
+Replace with something like:
 
-This line:
+AST parse (babel / acorn)
 
-inv._inventorySearchHayLower
+or regex loosened:
 
-From inventory-type-utils.js:
+assert "usePickerCardCache" in body
+assert "PICKER_CARD_CACHE_MAX_ROWS" in body
 
-You are mutating inventory objects with a cached field.
+But I won’t block merge on this—this is a test quality issue, not production risk.
 
-This is not a security issue, but:
+2. test_inventory_refresh_clears_picker_cache_before_row_updates
+This is more interesting
+i_clear = text.find(clear_call)
+i_selects = text.find(selects_loop)
+assert 0 < i_clear < i_selects
+What this enforces
 
-If inventory objects are ever shared across contexts (rare but possible in global SPA stores), this is a non-enumerable mutation risk
-No injection, but potential state leakage across views
+It guarantees:
 
-➡️ Mitigation (optional hardening):
-Use a WeakMap instead of mutating the object.
+cache clear happens before row selection logic executes
 
-Not required for merge.
+So you’re enforcing ordering in source code, not runtime behavior.
 
-2. Performance review (this is where most value is)
-✅ Major improvement: conditional picker cache
+👍 Why this is actually valuable
 
-This is the most important change:
+This does matter because:
 
-var usePickerCardCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS;
-What you fixed correctly:
-Prevents Map growth explosion
-Prevents DOM retention at scale
-Adds deterministic cutoff behavior
-Clears cache when threshold exceeded
+picker cache is shared UI state
+row rebuild depends on fresh inventory state
+stale cache → incorrect inventory binding or ghost DOM reuse
 
-✔ This is a very good pattern for SPA list rendering
+So this ordering constraint is:
+✔ meaningful for correctness
+✔ not just cosmetic
 
-⚠️ One performance concern
-Cache invalidation asymmetry
+⚠️ Risk: still brittle, but less than test #1
 
-You now have:
+It breaks if:
 
-if (!usePickerCardCache) pickerCardCache.clear();
+code is rearranged but behavior unchanged
+querySelectorAll moved into helper function
+refactor introduces intermediate variable
 
-and later:
+Example safe refactor that would break test:
 
-else pickerCardCache.clear();
+ExecutionRenderInputs.clearInventoryPickerCardCaches(modal);
+...
+const selects = modal.querySelectorAll(...)
 
-This is fine, but subtle issue:
+Even though behavior is identical.
 
-When toggling between small ↔ large lists rapidly:
-Map is repeatedly cleared
-Cards are repeatedly recreated
+Stronger interpretation
 
-This is expected, but means:
+What you really want is:
 
-no warm cache benefit across large/small transitions
+“cache invalidation must occur before any DOM selection/state rebuild begins”
 
-Not a bug—just trade-off.
+That’s a phase ordering invariant, not string ordering.
 
-⚠️ DOM churn still exists (expected)
+3. Security / correctness impact of these tests
+Good news
 
-Even with caching:
+These tests do not introduce security risk.
 
-pickerCards.replaceChildren(pickerFrag);
+They only:
 
-This means:
+enforce execution order
+enforce presence of cache gating logic
 
-full reflow per filter/search
-cached nodes only reduce rebuild cost, not DOM replacement cost
+No injection, no unsafe assumptions.
 
-That’s acceptable for:
+4. Performance relevance
 
-inventory picker UI scale (< ~400 items threshold already enforced)
-⚠️ Micro inefficiency (very minor)
+These tests indirectly protect:
 
-Inside loop:
+DOM churn control
+Map growth control
+picker rendering efficiency
 
-pickerCardCache.forEach(...)
-
-This runs after every render.
-
-At high frequency filtering:
-
-O(n) map scan per render
-
-But:
-
-bounded by <= 400
-negligible in real usage
-3. Integration / architectural review
-👍 Good decoupling improvements
-1. Picker view is now cleanly isolated
-
-ExecutionInventoryPickerView now:
-
-builds payload
-assembles DOM
-syncs updates
-
-✔ No controller leakage
-✔ Good separation from execution-render-inputs.js
-
-2. Row renderer API injection is correct
-api: rowInputApi
-
-and later:
-
-setRowSelection
-setActiveRow
-refreshPicker
-
-✔ This is clean dependency inversion
-✔ Avoids circular imports
-
-3. Cache lifecycle is now properly controlled externally
-
-You added:
-
-clearInventoryPickerCardCaches
-invoked in:
-modal reset
-open step reset
-
-✔ Correct lifecycle ownership (UI teardown responsibility)
-
-⚠️ Small architectural smell
-
-This pattern:
-
-inputSection._execPickerCardElCache = new Map();
-
-is still:
-
-DOM mutation as state container
-
-Not dangerous, but:
-
-makes debugging harder
-couples lifecycle to DOM nodes
-
-Better long-term:
-
-move to controller-owned WeakMap keyed by section
-
-Not blocking.
-
-4. Test coverage review
-
-You added:
-
-module existence checks
-ordering constraints
-function existence assertions
-
-✔ Good “load order safety net”
-
-But missing:
-
-Missing test coverage (recommended)
-cache cutoff behavior (> 400)
-cache clearing after refresh
-ensure no duplicate DOM nodes when reuse occurs
-
-Not required for merge, but would reduce regression risk.
+So they are performance regression guards, not just unit tests.

@@ -3,6 +3,7 @@
 Avoids browser automation; asserts shipped assets still contain expected anchors.
 """
 
+import re
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -241,22 +242,35 @@ def test_open_step_clears_picker_card_cache_before_inputs_reset():
 
 
 def test_execution_render_inputs_picker_cache_row_cap_branch():
-    """Guards optional review item: cache disabled when list exceeds PICKER_CARD_CACHE_MAX_ROWS."""
+    """Cache reuse gated by filtered list length vs PICKER_CARD_CACHE_MAX_ROWS (behavioral anchor, not exact formatting)."""
     js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-inputs.js"
     body = js_path.read_text(encoding="utf-8")
-    assert "var usePickerCardCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS" in body
-    assert "if (usePickerCardCache)" in body
+    assert "usePickerCardCache" in body
+    assert "PICKER_CARD_CACHE_MAX_ROWS" in body
+    assert re.search(
+        r"(?:var|const)\s+usePickerCardCache\s*=\s*list\.length\s*<=\s*PICKER_CARD_CACHE_MAX_ROWS",
+        body,
+    ), "expected row-cap: usePickerCardCache from list.length vs PICKER_CARD_CACHE_MAX_ROWS"
+    assert re.search(r"if\s*\(\s*usePickerCardCache\s*\)", body)
 
 
 def test_inventory_refresh_clears_picker_cache_before_row_updates():
-    """Refresh must drop picker Maps before rebuilding dropdown rows (integration order)."""
+    """
+    Phase invariant inside refreshExecutionModalInventory only: invalidate picker Maps before
+    querying rows (see flows-and-batches-review.md). Scoped slice avoids brittle global line order.
+    """
     secondary = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal-secondary.js"
     text = secondary.read_text(encoding="utf-8")
+    marker = "window.refreshExecutionModalInventory = async function"
+    start = text.find(marker)
+    assert start != -1
+    window = text[start : start + 12000]
     clear_call = "ExecutionRenderInputs.clearInventoryPickerCardCaches(modal)"
     selects_loop = "var selects = modal.querySelectorAll('.execute-inventory-select')"
-    i_clear = text.find(clear_call)
-    i_selects = text.find(selects_loop)
-    assert 0 < i_clear < i_selects
+    i_clear = window.find(clear_call)
+    i_selects = window.find(selects_loop)
+    assert i_clear != -1 and i_selects != -1
+    assert i_clear < i_selects
 
 
 def test_execution_modal_calls_render_inputs_api():
