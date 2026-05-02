@@ -18,6 +18,9 @@
     return String(v).trim();
   }
 
+  /** Sentinel value for hidden input / submit when no untracked row is chosen (matches backend expectation). */
+  var RECONCILE_NONE_ID = '';
+
   /**
    * Collapsible details for untracked reconciliation cards — aligns with inventory picker (audit, notes).
    */
@@ -405,9 +408,13 @@
                 ev.stopPropagation();
                 var rowCard = confirmBtn.closest('.execute-reconcile-untracked-card');
                 if (!rowCard || !cardsContainer.contains(rowCard)) return;
-                var uid = normalizeReconcileId(rowCard.dataset.untrackedId);
-                if (uid === '') {
-                  setReconcileState(false, '');
+                var uidAttr = confirmBtn.getAttribute('data-untracked-id');
+                var uid =
+                  uidAttr !== null
+                    ? normalizeReconcileId(uidAttr)
+                    : normalizeReconcileId(rowCard.dataset.untrackedId);
+                if (uid === RECONCILE_NONE_ID) {
+                  setReconcileState(false, RECONCILE_NONE_ID);
                 } else {
                   setReconcileState(true, uid);
                 }
@@ -419,7 +426,7 @@
               if (removeBtn && cardsContainer.contains(removeBtn)) {
                 ev.preventDefault();
                 ev.stopPropagation();
-                setReconcileState(false, '');
+                setReconcileState(false, RECONCILE_NONE_ID);
               }
             });
           }
@@ -436,14 +443,16 @@
                 '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-confirm-btn" style="font-size: 12px; font-weight: 700;">Confirm reconciliation</button>' +
               '</div>' +
             '</div>';
+          var noneConfirmBtn = noneCard.querySelector('.exec-reconcile-confirm-btn');
+          if (noneConfirmBtn) noneConfirmBtn.setAttribute('data-untracked-id', RECONCILE_NONE_ID);
           var cardsFrag = document.createDocumentFragment();
           cardsFrag.appendChild(noneCard);
 
           matchingUntracked.forEach(function(u) {
-            var id = String(u.id);
+            var idNorm = normalizeReconcileId(u.id);
             var card = document.createElement('div');
-            card.className = 'execute-reconcile-untracked-card card card-interactive' + (normalizeReconcileId(id) === defaultIdNorm ? ' execute-reconcile-card-selected' : '');
-            card.dataset.untrackedId = id;
+            card.className = 'execute-reconcile-untracked-card card card-interactive' + (idNorm === defaultIdNorm ? ' execute-reconcile-card-selected' : '');
+            card.dataset.untrackedId = idNorm;
             var unreconciledQty = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? String(u.remaining_balance_to_reconcile).trim() : null;
             var subtitleParts = [];
             if (unreconciledQty !== null) {
@@ -482,6 +491,8 @@
                   '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-remove-btn" style="font-size: 12px;">Remove reconciliation</button>' +
                 '</div>' +
               '</div>';
+            var rowConfirmBtn = card.querySelector('.exec-reconcile-confirm-btn');
+            if (rowConfirmBtn) rowConfirmBtn.setAttribute('data-untracked-id', idNorm);
             cardsFrag.appendChild(card);
           });
 
@@ -503,7 +514,7 @@
 
           bindReconcileCardsDelegation();
 
-          setReconcileState(false, defaultId);
+          setReconcileState(false, defaultIdNorm);
           }
         }
 
