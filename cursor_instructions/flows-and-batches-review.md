@@ -1,126 +1,216 @@
-This change is good and directionally correct, but there are still a few important performance and correctness nuances worth calling out.
+This is a significant architectural step forward. You’ve moved from “DOM sweep rendering” to a semi-diffed state model with indexed lookup, which is exactly the direction this UI needed. That said, there are still a few non-obvious correctness traps and one serious scaling hazard left.
 
-🟢 What improved
-✔ 1. Removed unnecessary allocation (Array.from)
+I’ll break it down precisely.
 
-You correctly replaced:
+🟢 What you improved (this is good)
+✔ 1. Introduced indexed DOM lookup (reconcileCardById)
+var reconcileCardById = {};
+Why this matters
 
-Array.from(cardsContainer.querySelectorAll(...))
+You’ve moved from:
 
-with:
+querySelectorAll every update (O(n))
 
-cardsContainer.querySelectorAll(...).forEach(...)
-Why this is better
-NodeList.forEach avoids creating a new array
-reduces GC pressure on frequent state updates
-slightly faster in hot UI paths
+to:
 
-This is a clean micro-optimization that actually matters in UI-heavy flows like this.
+direct lookup (O(1))
 
-✔ 2. Still correctly avoids stale cached refs
+This is a real architectural improvement, not a micro-optimisation.
 
-You kept the key fix:
+✔ 2. Split “visual application” into a pure function
+applyReconcileCardVisual(card)
+Why this is good
+isolates rendering logic
+makes state application deterministic
+reduces duplicated logic
 
-no reconcileCardRefs
-no external snapshot state
+This is essentially:
 
-So correctness under dynamic DOM remains solid.
+a primitive component renderer without framework overhead
 
-🟠 Remaining issues
-1. You are still doing full DOM traversal per state update
+✔ 3. Optimised update path (delta updates)
+
+This is the most important improvement:
+
+applyReconcileCardVisual(reconcileCardById[oldSel]);
+applyReconcileCardVisual(reconcileCardById[newSel]);
+Effect:
+
+Instead of O(n), you're now doing:
+
+O(1) updates for selection changes
+
+This is a major performance win.
+
+✔ 4. Bootstrap sweep concept
+if (!reconcileStateBootstrapped || oldLock !== newLock)
+
+This is correct:
+
+full sweep only when necessary
+avoids repeated full DOM updates
+🟠 Remaining issues (important)
+1. ❗ Silent bug: reconcileCardById keys include ''
+
+You do:
+
+reconcileCardById[c.dataset.untrackedId || ''] = c;
+Problem
+
+If multiple cards have:
+
+missing dataset.untrackedId
+or empty string fallback
+
+👉 they will overwrite each other:
+
+reconcileCardById[""] = last card wins
+Impact
+broken selection updates
+hidden UI mismatch bugs
+“random card updates” symptom
+Severity: 🔴 High (data integrity bug)
+Fix
+
+Never default to ''. Instead:
+
+skip if invalid id
+or generate stable fallback key
+2. ⚠️ Bootstrap sweep is incomplete for dynamic DOM changes
+
+You only index cards once:
+
 cardsContainer.querySelectorAll(...).forEach(...)
 Problem
 
-Every setReconcileState() now costs:
+If cards are:
 
-full subtree query
-iteration over all cards
-class toggles on every node
-Why this matters
+added later
+re-rendered partially
+replaced via DOM patch
 
-Even though this is “correct”, it scales poorly:
+👉 reconcileCardById becomes stale
 
-20 cards → fine
-200 cards → noticeable jank under repeated toggles
-future live updates → compounded cost
-Root issue
+Result:
+visual updates silently fail for new cards
+“ghost state” bugs reappear in different form
+Severity: 🟠 Medium-high
+3. ⚠️ Lock state still triggers full sweep (expected but expensive)
+if (!reconcileStateBootstrapped || oldLock !== newLock)
 
-You are doing:
+Then:
 
-full reconciliation sweep instead of targeted diff
+sweepAllReconcileCards();
+Problem
 
-2. Redundant variables (sel, lock) not fully used
-var sel = reconcileState.selectedId;
-var lock = reconcileState.locked;
-Observation
-sel is used
-lock is not used in the shown snippet
+Lock toggles cause full O(n) traversal.
 
-If lock logic was previously tied to visibility or styling and got removed elsewhere, this becomes:
+If lock toggles often (UX pattern: select → deselect → adjust):
 
-dead state
-or incomplete refactor artifact
+performance spikes
+layout thrashing risk increases
+4. ⚠️ Hidden coupling between DOM state and JS state
 
-👉 Worth verifying whether lock is still applied elsewhere (CSS or JS)
+You now have:
 
-3. Still no “diff-based update” (core structural inefficiency)
-
-Current model:
-
-every state change → recompute entire node list → apply same checks repeatedly
-
-Better model:
-
-track previous selectedId
-update only:
-previously selected node
-newly selected node
-
-That reduces work from:
-
-O(n) → O(1)
-
-4. Hidden coupling risk (CSS + JS + dataset)
-
-Even though not shown here, this system still likely depends on:
-
-.execute-reconcile-card-selected
-data-reconcile-locked
+reconcileState
+reconcileCardById
+DOM dataset (data-untracked-id)
 hidden input
 
-So state is still spread across 3 layers:
+Still 4 implicit sources of truth.
 
-JS state
-DOM attributes
-form value
+Risk
 
-This is still not single-source-of-truth, just “central-ish”.
+Future bugs will come from:
 
-🟡 Minor note
-NodeList.forEach is fine, but not universally safe historically
+DOM replaced but map not updated
+state updated but DOM not present
+dataset mismatch
+5. Minor: Object.keys(...).forEach in hot path
+Object.keys(reconcileCardById).forEach(...)
 
-Modern browsers (which you target) are fine, but if this ever runs in:
+Not critical, but:
 
-older embedded WebViews
-legacy enterprise environments
+allocates array
+unnecessary if you track keys separately or store values list
+🧠 Architectural assessment (important)
 
-querySelectorAll(...).forEach can break.
+You are now at a hybrid state model:
 
-Not a current concern unless your runtime is constrained.
+Before:
 
-🧠 Overall assessment
-What you’ve achieved:
-removed stale reference class of bugs ✔
-reduced memory allocation ✔
-simplified update loop ✔
-What still remains:
-full DOM sweep per state update (scaling cost)
-partial state duplication concerns
-no diff-based rendering
-🔴 Priority takeaway
+brute-force DOM sweep renderer (React-0)
 
-This is now no longer a correctness problem.
+Now:
 
-It is now purely:
+indexed DOM cache + partial diff updates (React-lite)
 
-“scaling and rendering efficiency architecture”
+This is actually a very good direction.
+
+But you're missing one key constraint:
+
+❗ You still don’t have lifecycle correctness
+
+You currently have:
+
+“create cards”
+“index cards once”
+“mutate them forever”
+
+But no:
+
+remove lifecycle
+update lifecycle
+reindex lifecycle
+
+That is the gap that will eventually break this system.
+
+🔴 Priority fixes
+P0 (must fix)
+1. Fix empty-string key bug
+if (c.dataset.untrackedId) {
+  reconcileCardById[c.dataset.untrackedId] = c;
+}
+
+This alone prevents subtle corruption.
+
+P1 (correctness under dynamic DOM)
+2. Add reindex strategy when DOM changes
+
+Options:
+
+rebuild index on render
+or MutationObserver
+or “reset index on append”
+
+Right now this is the biggest hidden fragility.
+
+P2 (performance polish)
+3. Avoid full sweep on lock toggle
+
+Instead:
+
+only apply visibility change to all cards if needed
+or compute per-card lazily
+P3 (cleanup)
+ensure applyReconcileCardVisual is idempotent-safe
+consider separating:
+selection render
+lock render
+button render
+🟢 Bottom line
+
+You’ve moved this system from:
+
+“expensive DOM scanning renderer”
+
+to:
+
+“indexed incremental UI state system”
+
+That is a real architectural upgrade.
+
+But the remaining risk is no longer performance — it is:
+
+index correctness over time (lifecycle drift)

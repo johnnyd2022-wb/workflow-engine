@@ -467,8 +467,21 @@
 
           cardsContainer.appendChild(cardsFrag);
 
+          /* One index per render; '' is valid for the “None” row only — duplicates would corrupt lookups. */
           cardsContainer.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
-            reconcileCardById[c.dataset.untrackedId || ''] = c;
+            if (!Object.prototype.hasOwnProperty.call(c.dataset, 'untrackedId')) {
+              console.warn('execute reconcile: card missing data-untracked-id');
+              return;
+            }
+            var key = String(c.dataset.untrackedId);
+            if (Object.prototype.hasOwnProperty.call(reconcileCardById, key)) {
+              console.warn(
+                'execute reconcile: duplicate data-untracked-id',
+                key === '' ? '(empty)' : key
+              );
+              return;
+            }
+            reconcileCardById[key] = c;
           });
 
           bindReconcileCardsDelegation();
