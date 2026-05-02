@@ -12,21 +12,6 @@
    */
   var reconcileCardsDelegationBound = new WeakSet();
 
-  /** DOM + lookup-map key for the “None” row; hidden input still uses '' for submit (execution-submit.js). */
-  var RECONCILE_CARD_NONE_KEY = '__none__';
-
-  function reconcileMapKeyFromStateSel(sel) {
-    var s = sel != null ? String(sel).trim() : '';
-    return s === '' ? RECONCILE_CARD_NONE_KEY : s;
-  }
-
-  function reconcileCardMatchesSelection(card, stateSelectedId) {
-    var raw = card.dataset.untrackedId != null ? String(card.dataset.untrackedId).trim() : '';
-    var domAsSubmit = raw === RECONCILE_CARD_NONE_KEY ? '' : raw;
-    var st = stateSelectedId != null ? String(stateSelectedId).trim() : '';
-    return domAsSubmit === st;
-  }
-
   /**
    * Collapsible details for untracked reconciliation cards — aligns with inventory picker (audit, notes).
    */
@@ -334,7 +319,9 @@
             if (!card) return;
             var sel = reconcileState.selectedId;
             var lock = reconcileState.locked;
-            var selected = reconcileCardMatchesSelection(card, sel);
+            var cardId = card.dataset.untrackedId != null ? String(card.dataset.untrackedId).trim() : '';
+            var st = sel != null ? String(sel).trim() : '';
+            var selected = cardId === st;
             card.classList.toggle('execute-reconcile-card-selected', selected);
             if (!lock) {
               card.style.display = '';
@@ -350,15 +337,16 @@
 
           function sweepAllReconcileCards() {
             Object.keys(reconcileCardById).forEach(function(k) {
-              applyReconcileCardVisual(reconcileCardById[k]);
+              var el = reconcileCardById[k];
+              if (el) applyReconcileCardVisual(el);
             });
           }
 
           function setReconcileState(locked, selectedId) {
             var newLock = !!locked;
-            var newSel = selectedId != null ? String(selectedId) : '';
+            var newSel = selectedId != null ? String(selectedId).trim() : '';
             var oldLock = reconcileState.locked;
-            var oldSel = reconcileState.selectedId;
+            var oldSel = reconcileState.selectedId != null ? String(reconcileState.selectedId).trim() : '';
             reconcileState.locked = newLock;
             reconcileState.selectedId = newSel;
             hiddenInput.value = newSel;
@@ -368,8 +356,20 @@
               return;
             }
             if (oldSel === newSel) return;
-            applyReconcileCardVisual(reconcileCardById[reconcileMapKeyFromStateSel(oldSel)]);
-            applyReconcileCardVisual(reconcileCardById[reconcileMapKeyFromStateSel(newSel)]);
+            var cPrev = reconcileCardById[oldSel];
+            var cNext = reconcileCardById[newSel];
+            if (cPrev && cNext) {
+              applyReconcileCardVisual(cPrev);
+              applyReconcileCardVisual(cNext);
+              return;
+            }
+            console.warn('execute reconcile: delta targets missing; sweeping', {
+              oldSel: oldSel,
+              newSel: newSel,
+              hadPrev: !!cPrev,
+              hadNext: !!cNext,
+            });
+            sweepAllReconcileCards();
           }
 
           function bindReconcileCardsDelegation() {
@@ -400,7 +400,7 @@
                 var rowCard = confirmBtn.closest('.execute-reconcile-untracked-card');
                 if (!rowCard || !cardsContainer.contains(rowCard)) return;
                 var uid = (rowCard.dataset.untrackedId || '').trim();
-                if (uid === '' || uid === RECONCILE_CARD_NONE_KEY) {
+                if (uid === '') {
                   setReconcileState(false, '');
                 } else {
                   setReconcileState(true, uid);
@@ -420,7 +420,7 @@
 
           var noneCard = document.createElement('div');
           noneCard.className = 'execute-reconcile-untracked-card' + (defaultId ? '' : ' execute-reconcile-card-selected');
-          noneCard.dataset.untrackedId = RECONCILE_CARD_NONE_KEY;
+          noneCard.dataset.untrackedId = '';
           noneCard.innerHTML =
             '<div style="padding: 12px 16px;">' +
               '<div style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">— None —</div>' +
@@ -481,15 +481,15 @@
 
           cardsContainer.appendChild(cardsFrag);
 
-          /* One index per render; None row uses RECONCILE_CARD_NONE_KEY (not '') to avoid plain-object key ambiguity. */
+          /* One index per render; '' is only for the None row (single row). Keys match submit ids (trimmed). */
           cardsContainer.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
             if (!('untrackedId' in c.dataset)) {
               console.warn('execute reconcile: card missing data-untracked-id');
               return;
             }
-            var key = String(c.dataset.untrackedId);
+            var key = String(c.dataset.untrackedId != null ? c.dataset.untrackedId : '').trim();
             if (Object.prototype.hasOwnProperty.call(reconcileCardById, key)) {
-              console.warn('execute reconcile: duplicate data-untracked-id', key);
+              console.warn('execute reconcile: duplicate data-untracked-id', key === '' ? '(none)' : key);
               return;
             }
             reconcileCardById[key] = c;
@@ -497,7 +497,7 @@
 
           bindReconcileCardsDelegation();
 
-          setReconcileState(false, defaultId);
+          setReconcileState(false, defaultId != null ? String(defaultId).trim() : '');
           }
         }
 
