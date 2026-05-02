@@ -149,10 +149,15 @@ def is_inventory_item_ready_for_consumption(
     if now is None:
         now = datetime.now(timezone.utc)
     extra = (item.extra_data or {}) if isinstance(item.extra_data, dict) else {}
-    # Set-at-execution: ready date stored on item
+    # Set-at-execution: ready date stored on item (dict with date, or ISO string)
     actual = extra.get("ready_date_actual")
     if isinstance(actual, dict) and actual.get("date"):
         ready_dt = _normalize_dt(actual.get("date"))
+    elif isinstance(actual, str) and actual.strip():
+        ready_dt = _normalize_dt(actual.strip())
+    else:
+        ready_dt = None
+    if ready_dt is not None:
         # now < ready_dt → not ready; now >= ready_dt → ready (inclusive)
         if ready_dt and now < ready_dt:
             return (
@@ -199,23 +204,42 @@ def is_inventory_item_ready_for_consumption(
     return (True, None)
 
 
-def get_operator_ready_instant_for_item(session: Session, item: InventoryItem) -> datetime | None:
-    """When the item becomes usable under ready-date rules: stored date (set_at_execution) or computed fixed-duration instant."""
+def get_operator_ready_instant_for_item(
+    session: Session,
+    item: InventoryItem,
+    *,
+    execution_step: ExecutionStep | None = None,
+) -> datetime | None:
+    """When the item becomes usable under ready-date rules: stored date (set_at_execution) or computed fixed-duration instant.
+
+    Pass ``execution_step`` when already loaded (e.g. batch inventory API) to avoid per-item queries.
+    """
     extra = (item.extra_data or {}) if isinstance(item.extra_data, dict) else {}
     actual = extra.get("ready_date_actual")
     if isinstance(actual, dict) and actual.get("date"):
-        return _normalize_dt(actual.get("date"))
+        dt = _normalize_dt(actual.get("date"))
+        if dt:
+            return dt
+    if isinstance(actual, str) and actual.strip():
+        dt = _normalize_dt(actual.strip())
+        if dt:
+            return dt
 
     step_id = getattr(item, "source_execution_step_id", None)
     if not step_id:
         return None
-    execution_step = (
-        session.query(ExecutionStep).filter(ExecutionStep.id == step_id).options(joinedload(ExecutionStep.step)).first()
-    )
-    if not execution_step or not execution_step.step or not execution_step.completed_at:
+    es = execution_step
+    if es is None:
+        es = (
+            session.query(ExecutionStep)
+            .filter(ExecutionStep.id == step_id)
+            .options(joinedload(ExecutionStep.step))
+            .first()
+        )
+    if not es or not es.step or not es.completed_at:
         return None
-    step_outputs = getattr(execution_step.step, "outputs", None) or []
-    completed_dt = _normalize_dt(execution_step.completed_at)
+    step_outputs = getattr(es.step, "outputs", None) or []
+    completed_dt = _normalize_dt(es.completed_at)
     if not completed_dt:
         return None
     item_name_norm = _normalize(item.name or "")

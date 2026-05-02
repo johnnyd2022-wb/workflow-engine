@@ -397,6 +397,11 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
     """
     Split execution_data into user prompts and system trace. Single place for prompt/trace split logic.
     Returns (prompts_dict, trace_dict). Use for extra_data.execution_prompts and extra_data.execution_trace.
+
+    Audit keys (completed_by, completed_by_email, …) are mirrored from persisted execution_data. Identity for
+    steps completed via the API is set server-side in ``complete_step`` from the authenticated session before save;
+    this function does not reinterpret or validate them—callers that persist execution_data outside that path
+    must enforce trust boundaries themselves.
     """
     if not execution_data:
         return {}, {}
@@ -2298,10 +2303,26 @@ def list_inventory():
     # System findings per item (all checks) for UI: red border + reasons in dropdown
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
 
-    # Import ExecutionStep and InventoryItem models for lookups
+    from sqlalchemy.orm import joinedload
+
     from app.core.backend.checks.output_ready_date_check import get_operator_ready_instant_for_item
+    from app.core.db.models.execution import Execution
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
+
+    # One query for all producing steps (avoids N+1 hydration + ready-date lookups). Scoped by org via Execution.
+    step_ids = {i.source_execution_step_id for i in items if i.source_execution_step_id}
+    execution_step_by_id: dict = {}
+    if step_ids:
+        loaded_steps = (
+            db_session.query(ExecutionStep)
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .filter(Execution.org_id == org_id)
+            .filter(ExecutionStep.id.in_(step_ids))
+            .options(joinedload(ExecutionStep.step))
+            .all()
+        )
+        execution_step_by_id = {es.id: es for es in loaded_steps}
 
     result = []
     for item in items:
@@ -2320,36 +2341,31 @@ def list_inventory():
         # Prompts, trace, inputs, and output are filled independently — previously inputs were only loaded when
         # execution_prompts was missing, which hid variable_inputs on many intermediate/final items.
         extra_data = {**(item.extra_data or {})}
-        if item.source_execution_step_id:
+        src_step = execution_step_by_id.get(item.source_execution_step_id) if item.source_execution_step_id else None
+        if src_step:
             try:
-                execution_step = (
-                    db_session.query(ExecutionStep).filter(ExecutionStep.id == item.source_execution_step_id).first()
-                )
-                if execution_step:
-                    if execution_step.execution_data:
-                        execution_prompts, execution_trace = _split_execution_data(
-                            execution_step.execution_data, completed_at=execution_step.completed_at
-                        )
-                        if not extra_data.get("execution_prompts"):
-                            extra_data["execution_prompts"] = execution_prompts or {}
-                        if not extra_data.get("execution_trace"):
-                            extra_data["execution_trace"] = execution_trace or {}
+                if src_step.execution_data:
+                    execution_prompts, execution_trace = _split_execution_data(
+                        src_step.execution_data, completed_at=src_step.completed_at
+                    )
+                    if not extra_data.get("execution_prompts"):
+                        extra_data["execution_prompts"] = execution_prompts or {}
+                    if not extra_data.get("execution_trace"):
+                        extra_data["execution_trace"] = execution_trace or {}
 
-                    if not extra_data.get("variable_inputs"):
-                        if execution_step.actual_inputs:
-                            extra_data["variable_inputs"] = execution_step.actual_inputs
-                        else:
-                            extra_data["variable_inputs"] = []
+                if not extra_data.get("variable_inputs"):
+                    if src_step.actual_inputs:
+                        extra_data["variable_inputs"] = src_step.actual_inputs
+                    else:
+                        extra_data["variable_inputs"] = []
 
-                    if not extra_data.get("variable_output") and execution_step.actual_outputs:
-                        output_name = item.name
-                        matching_output = next(
-                            (o for o in execution_step.actual_outputs if o.get("name") == output_name), None
-                        )
-                        if matching_output:
-                            extra_data["variable_output"] = matching_output
+                if not extra_data.get("variable_output") and src_step.actual_outputs:
+                    output_name = item.name
+                    matching_output = next((o for o in src_step.actual_outputs if o.get("name") == output_name), None)
+                    if matching_output:
+                        extra_data["variable_output"] = matching_output
             except Exception:
-                pass
+                logger.debug("list_inventory hydrate extra_data failed item_id=%s", item.id, exc_info=True)
 
         # Look up previous steps data for intermediate products AND final products
         # DAG TRAVERSAL PERFORMANCE WARNING:
@@ -2572,15 +2588,11 @@ def list_inventory():
                         )
                     # Fallback: if no output match (e.g. name/unit mismatch), use the step where item was added
                     if not producing_step_id and item.source_execution_step_id:
-                        execution_step = (
-                            db_session.query(ExecutionStep)
-                            .filter(ExecutionStep.id == item.source_execution_step_id)
-                            .first()
-                        )
-                        if execution_step:
-                            producing_step_id = execution_step.step_id
-                            if execution_step.step:
-                                producing_step_name = execution_step.step.name
+                        es_untracked = execution_step_by_id.get(item.source_execution_step_id)
+                        if es_untracked:
+                            producing_step_id = es_untracked.step_id
+                            if es_untracked.step:
+                                producing_step_name = es_untracked.step.name
             except Exception:
                 pass
         if not producing_step_name:
@@ -2594,11 +2606,11 @@ def list_inventory():
         # Single operator-facing ready instant (set_at_execution date or fixed-duration from step completion)
         ready_date_display = None
         try:
-            rdt = get_operator_ready_instant_for_item(db_session, item)
+            rdt = get_operator_ready_instant_for_item(db_session, item, execution_step=src_step)
             if rdt:
                 ready_date_display = rdt.isoformat()
         except Exception:
-            pass
+            logger.debug("list_inventory ready_date_display failed item_id=%s", item.id, exc_info=True)
 
         result.append(
             {
