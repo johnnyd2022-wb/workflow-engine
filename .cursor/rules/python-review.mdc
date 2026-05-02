@@ -1,0 +1,17 @@
+---
+description: Security, performance, and edge case review for Python files in this multi-tenant Flask/SQLAlchemy app
+globs:
+  - "**/*.py"
+alwaysApply: false
+---
+
+When writing or modifying Python code, apply the review skill at `.agents/skills/python.md`.
+
+Work through its checklist before finalising any implementation. Fix violations inline — do not leave them for the user.
+
+Non-negotiable items:
+1. Every query on a tenant-owned table must include `org_id` — missing this leaks cross-tenant data
+2. Every new route needs `@requires_auth` and `@requires_org_scope`
+3. No client-supplied ID fetched without `org_id` re-check (IDOR)
+4. No N+1 queries — use `joinedload` or batch fetch
+5. No unbounded `.all()` — paginate large result sets

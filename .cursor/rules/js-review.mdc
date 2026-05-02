@@ -1,0 +1,18 @@
+---
+description: Security, performance, and correctness review for JavaScript files and script blocks
+globs:
+  - "**/*.js"
+  - "**/*.ts"
+alwaysApply: false
+---
+
+When writing or modifying JavaScript, apply the review skill at `.agents/skills/js.md`.
+
+Work through its checklist before finalising any implementation. Fix violations inline — do not leave them for the user.
+
+Non-negotiable items:
+1. All mutating API calls must use `CoreAPI.request()` — raw `fetch()` skips CSRF and error handling
+2. Never use `innerHTML` with user-supplied data — use `textContent` or DOM node creation (XSS)
+3. Every async function needs `try/catch` with visible user feedback
+4. Search/filter inputs must be debounced — no request per keystroke
+5. No sensitive values in `localStorage` or `sessionStorage`

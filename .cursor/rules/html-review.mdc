@@ -1,0 +1,17 @@
+---
+description: Structure, security, and design-system review for Jinja2 HTML templates
+globs:
+  - "**/*.html"
+alwaysApply: false
+---
+
+When writing or modifying HTML templates, apply the review skill at `.agents/skills/html.md`.
+
+Work through its checklist before finalising any implementation. Fix violations inline — do not leave them for the user.
+
+Non-negotiable items:
+1. New pages must extend `shared/base_spa.html` — never standalone `<!DOCTYPE html>`
+2. Use existing shared partials/macros (`page_header`, `primary_card`, `delete-doc-confirm-modal`, etc.) — don't reimplement them
+3. Never use `| safe` on user-controlled Jinja2 values — XSS
+4. No sensitive data in `data-*` attributes or `<input type="hidden">`
+5. HTMX swaps must target `#page-content`; cross-blueprint links use `hx-boost="false"`
