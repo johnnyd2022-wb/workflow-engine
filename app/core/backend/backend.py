@@ -1783,7 +1783,17 @@ def complete_step(execution_id: str, execution_step_id: str):
 
     actual_inputs = parsed_body.actual_inputs
     actual_outputs = parsed_body.actual_outputs
-    execution_data = _strip_incoming_execution_trace_keys(parsed_body.execution_data)
+    try:
+        execution_data = _strip_incoming_execution_trace_keys(parsed_body.execution_data)
+    except RuntimeError:
+        logger.exception("execution_data trace-strip invariant violated (should follow validate_json_blob)")
+        inc_counter("execution_data_strip_invariant_violations")
+        return jsonify(
+            {
+                "error": "Invalid request body",
+                "details": ["Payload failed sanitisation invariants"],
+            }
+        ), 400
     allow_consumption_override = parsed_body.allow_consumption_override
 
     # Get current user from Flask g and always store in execution_data for accuracy

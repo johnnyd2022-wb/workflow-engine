@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.utils.internal_counters import inc_counter
+
 # Request body: stay below common proxy limits; large prompts should still fit.
 MAX_COMPLETE_STEP_CONTENT_LENGTH = 768 * 1024
 
@@ -35,6 +37,7 @@ class _JsonNodeBudget:
     def visit(self, path: str) -> None:
         self.n += 1
         if self.n > MAX_JSON_NODES:
+            inc_counter("execution_data_node_budget_exceeded")
             raise ValueError(f"{path}: JSON structure too large (max {MAX_JSON_NODES} nodes)")
 
 

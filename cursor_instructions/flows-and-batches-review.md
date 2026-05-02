@@ -1,187 +1,193 @@
-🔴 CRITICAL
-1. ⚠️ Depth guard in _strip_trace_keys_recursive is now asymmetric with validation
-if depth > _STRIP_MAX_DEPTH:
-    return obj
-Context
-validate_json_blob enforces MAX_JSON_DEPTH → rejects if exceeded
-_strip_trace_keys_recursive assumes validated input
-Subtle issue
+🟠 HIGH — FINAL EDGE CONSIDERATIONS
+1. ⚠️ RuntimeError vs ValueError consistency
 
-If _strip_incoming_execution_trace_keys is ever used outside the validated HTTP path (e.g. internal jobs, migrations, admin tools):
+You now have:
 
-deep payloads will not be fully traversed
-trace keys beyond depth limit won’t be stripped
-Risk
-reintroduces trace key injection via non-HTTP paths
-inconsistent behaviour across ingestion paths
-Recommendation
+validate_json_blob → raises ValueError
+_strip_trace_keys_recursive → raises RuntimeError
+Why this matters
 
-Make intent explicit:
+In your request pipeline:
 
-Option A (preferred)
-
-assert depth <= _STRIP_MAX_DEPTH
-
-Option B
-
-document clearly: “must only be used post-validation” (stronger than current docstring)
-
-Right now this is implicitly safe, not enforced safe.
-
-🟠 HIGH
-2. ⚠️ Node budget implementation is correct but slightly inefficient
-_visited: list[int] | None = None
-What’s good
-avoids global state ✔
-avoids recursion return overhead ✔
-works correctly ✔
-Minor issue
-
-Using a list as a mutable counter:
-
-slightly non-obvious
-allocates per call
-less readable for future maintainers
-Recommendation (optional but cleaner)
-class _Counter:
-    def __init__(self): self.n = 0
-
-or even:
-
-def validate_json_blob(..., _visited: int = 0):
-
-But this is low priority—your current approach is functionally sound.
-
-3. ⚠️ Node budget is global but not weighted by cost
-MAX_JSON_NODES = 10_000
+ValueError → handled → returns 400
+RuntimeError → falls into generic exception → returns 500
 Current behaviour
 
-Each node counts equally:
+If invariant is violated:
 
-dict
-list
-scalar
-Subtle risk
+client gets 500 (server error)
+Is that correct?
 
-A payload like:
+Yes, mostly. Because:
 
-{ "a": ["very large strings..."] }
-passes node limit easily
-but still expensive in:
-memory
-serialization
-downstream processing
-Mitigation already present
+this indicates a programming error or contract violation
+not a client mistake
+But subtle risk
 
-You already enforce:
+If this ever gets triggered by:
 
-MAX_STRING_LENGTH
-MAX_LIST_LENGTH
+misordered validation
+future refactor
+internal API reuse
 
-So this is not a bug, just a note:
+You’ll surface:
 
-Node count ≠ computational cost
+noisy 500s
+harder debugging during incidents
+Recommendation (refinement)
 
-No change required unless you hit scale issues.
+Wrap at boundary:
 
+try:
+    execution_data = _strip_incoming_execution_trace_keys(...)
+except RuntimeError:
+    logger.exception("execution_data invariant violation")
+    return jsonify({"error": "Invalid request body"}), 400
+
+This keeps:
+
+fail-fast internally ✔
+clean client contract ✔
+2. ⚠️ Contract is now strong but only documented, not enforced at call sites
+
+You added:
+
+"Call only on trees that already passed validate_json_blob"
+
+This is good documentation, but…
+
+The function itself:
+
+does not verify validation actually occurred
+only detects depth mismatch
+Residual risk
+
+A caller could:
+
+pass unvalidated data within depth limit
+still violate:
+node budget
+key length
+list limits
+Recommendation (optional but robust)
+
+If you want full safety:
+
+Option A:
+
+rename function to:
+
+_strip_trace_keys_recursive_validated
+
+Option B:
+
+add lightweight marker (e.g. wrapper object) post-validation
+
+Option C (best long-term):
+
+eliminate need entirely via typed schema
+3. ⚠️ Node budget is now correct and clear (good), but not externally visible
+budget.visit(path)
+What you gained
+
+✔ clarity
+✔ correctness
+✔ no mutation hacks
+
+Remaining gap
+
+You do not expose:
+
+how often node limits are hit
+which payloads are near limits
+Recommendation (optional observability)
+
+Add:
+
+inc_counter("execution_data_node_budget_exceeded")
+
+inside the exception path.
+
+This gives:
+
+early signal of clients pushing limits
+avoids silent boundary pressure
 🟡 MEDIUM
-4. ✔ Removal of truncation = correct call (important)
+4. ✔ Budget object implementation is clean and production-ready
+class _JsonNodeBudget:
+    __slots__ = ("n",)
+This is good engineering:
+avoids dynamic attribute overhead ✔
+minimal memory footprint ✔
+clear intent ✔
 
-You moved from:
+No changes needed.
 
-truncate + counter ❌
+5. ⚠️ Path string construction still allocates heavily (acceptable)
+path=f"{path}.{k[:48]}"
+Cost
+string creation per node
+but bounded by:
+depth
+node limit
+Verdict
 
-to:
+This is acceptable for:
 
-validate + reject ✔
+debugging clarity
+stable error messages
 
-This eliminates an entire class of:
+Only optimise if:
 
-silent data corruption
-debugging nightmares
-
-This is exactly the right trade-off for SaaS.
-
-5. ⚠️ get_metrics() exposure: counters are now correctly labelled but still operationally weak
-"scope": "process-local"
-Good
-
-✔ explicit
-✔ honest
-
-Remaining issue
-still not actionable for real incidents in multi-worker setups
-Recommendation (next step, not urgent)
-emit counters to external sink (Datadog / Prometheus)
-keep endpoint as debug view only
-6. ⚠️ JSON parsing still happens before full rejection (acceptable, but bounded)
-raw_body = json.loads(...)
-
-You mitigated:
-
-raw byte size ✔
-approximate size removed ✔
-
-This is now safe enough.
-
+you hit CPU limits under heavy load
 🟢 WHAT IS NOW EXCELLENT
+✔ Full boundary enforcement chain is now consistent
 
-This is worth calling out clearly—this is strong engineering.
+You now have:
 
-✔ Input boundary is now SaaS-grade
+Raw size guard
+JSON parse
+Pydantic shape validation
+Structural validation (depth, breadth, node count)
+Trace key stripping (with enforced invariant)
 
-You have:
+This is a complete and robust ingestion pipeline.
 
-Pydantic model (extra="forbid")
-JSON structural validation
-depth + breadth + node limits
-type enforcement
-explicit rejection strategy
-
-This is exactly how mature APIs are built.
-
-✔ No more silent mutation
+✔ No silent failure classes remain
 
 You eliminated:
 
 truncation
-hidden data loss
-inconsistent downstream behaviour
+partial sanitisation
+hidden fallbacks
 
-This is a major correctness win.
+Everything is now:
 
-✔ Observability is intentional and low-noise
-counters instead of logs ✔
-debug logs retained ✔
-metrics endpoint exposes state ✔
+explicit accept or explicit reject
 
-This is well balanced.
-
-✔ Inventory path is stable and efficient
-no N+1
-bounded query shape
-predictable scaling
+✔ Code communicates intent clearly
+docstrings are precise
+invariants are enforced, not implied
+naming is improving toward correctness
 🧾 FINAL VERDICT
 
-You’ve moved this system into:
+This is now:
 
-“Production-ready, correctness-focused, and operationally observable”
+Production-grade, correctness-first backend code with strong invariants and predictable behaviour
 
-Remaining real risks (in order)
-🔴 Minor but real
-_strip_trace_keys_recursive safety depends on upstream validation (not enforced)
-🟠 Nice-to-improve
-Node counter implementation clarity
-External aggregation for counters
-🟡 Optional
-Future-proof against cost-heavy payloads (only if needed at scale)
+Remaining (very minor) improvements
+🟠 Optional hardening
+Normalize exception handling (RuntimeError → controlled 400 at boundary)
+Add metric for node budget breaches
+🟡 Optional clarity
+Rename strip function or enforce validated-type contract
 
 ---
 
-## Round-5 follow-up (implemented)
+## Round-6 follow-up (implemented)
 
 | Finding | Change |
 |---------|--------|
-| **CRITICAL** — depth guard in strip left deep trace keys unstripped | **`_strip_trace_keys_recursive`** now **`raise RuntimeError`** if depth exceeds **`MAX_JSON_DEPTH`** instead of returning raw subtrees. Call contract documented: strip only after **`validate_json_blob`** on the same tree. |
-| **HIGH** — list counter readability | **`_JsonNodeBudget`** + **`visit(path)`** replaces mutable **`list[int]`** in **`validate_json_blob`**. |
-| External metrics aggregation | Still **deferred** (operational_counters remain process-local + labelled). |
+| **RuntimeError** from strip → **500** | **`complete_step`** wraps **`_strip_incoming_execution_trace_keys`** in **`try/except RuntimeError`**: **`logger.exception`**, **`inc_counter("execution_data_strip_invariant_violations")`**, returns **400** with stable **`details`**. |
+| Node budget breaches invisible | **`_JsonNodeBudget.visit`** calls **`inc_counter("execution_data_node_budget_exceeded")`** before raising **`ValueError`** (still mapped to **400** by existing handler). |
+| Rename strip / validated wrapper | **Deferred** — contract documented + boundary handling above. |
