@@ -508,7 +508,7 @@
       if (!processId) return;
       try {
         await CoreAPI.deleteProcess(processId);
-        window.location.href = '/core/processes';
+        flows2Navigate('/core/processes');
       } catch (e) {
         console.error(e);
         if (typeof showNotification === 'function') {
@@ -543,11 +543,20 @@
           `&id=${encodeURIComponent(processId)}` +
           `&step_id=${encodeURIComponent(stepDefinition.id)}` +
           `&return_to=${encodeURIComponent(returnTo)}`;
-        window.location.href = url;
+        flows2Navigate(url);
       } catch (error) {
         console.error('Failed to open execution modal:', error);
         showNotification('error', 'Failed to Start Execution', error.message || 'Failed to open step. Please try again.');
       }
+    }
+
+    // HTMX-aware navigation: triggers boost on a temporary anchor so sidebar/topbar don't reload.
+    function flows2Navigate(url) {
+      var a = document.createElement('a');
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     // startExecutionSpa removed: startExecution() routes to the dedicated execution-step screen.
