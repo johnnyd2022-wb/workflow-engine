@@ -525,9 +525,9 @@
         });
 
         await CoreAPI.completeStep(executionId, readyStep.id, {
-          inputs: actualInputs,
-          outputs: actualOutputs,
-          execution_prompts: promptPayload,
+          actual_inputs: actualInputs,
+          actual_outputs: actualOutputs,
+          execution_data: promptPayload,
         });
 
         if (typeof ctx.onDone === 'function') ctx.onDone({ executionId: executionId, completed: true });

@@ -28,6 +28,7 @@ from app.core.domain.ready_date_rules import (
     VALID_READY_DATE_UNITS,
     duration_to_timedelta,
 )
+from app.core.utils.internal_counters import inc_counter
 
 _log = logging.getLogger(__name__)
 
@@ -225,7 +226,7 @@ def get_operator_ready_instant_for_item(
         dt = _normalize_dt(raw_s)
         if dt:
             return dt
-        # Per-item: keep DEBUG; aggregate observability via metric ready_date_parse_failures if needed.
+        inc_counter("ready_date_parse_failures")
         _log.debug(
             "ready_date_actual string did not parse (expect ISO-8601): %.120s",
             raw_s,

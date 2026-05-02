@@ -10,11 +10,21 @@ from typing import Any
 from uuid import UUID
 
 from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
+from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
+from app.core.backend.complete_step_payload import (
+    MAX_COMPLETE_STEP_CONTENT_LENGTH,
+    MAX_DICT_KEYS_PER_LEVEL as _STRIP_MAX_DICT_KEYS,
+    MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
+    MAX_LIST_LENGTH as _STRIP_MAX_LIST_LEN,
+    CompleteStepRequestBody,
+    approximate_json_value_size,
+    validate_json_blob,
+)
 from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution
@@ -51,6 +61,7 @@ from app.core.utils.inventory_wastage_quantity import (
     parse_wastage_unit_field,
     wastage_entries_payload_hash,
 )
+from app.core.utils.internal_counters import get_counter_snapshot, inc_counter
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
@@ -383,20 +394,25 @@ _EXECUTION_DATA_TRACE_KEYS = {
 }
 
 
-_MAX_EXECUTION_DATA_STRIP_DEPTH = 8
-
-
 def _strip_trace_keys_recursive(obj: Any, depth: int = 0) -> Any:
-    """Remove trace keys at any depth (dict/list nesting). Not a full schema — prefer Pydantic later for strict SaaS contracts."""
-    if depth > _MAX_EXECUTION_DATA_STRIP_DEPTH:
+    """Remove trace keys at any depth. Breadth/depth align with complete_step ``validate_json_blob`` when request was validated first."""
+    if depth > _STRIP_MAX_DEPTH:
         return obj
     if isinstance(obj, dict):
+        if len(obj) > _STRIP_MAX_DICT_KEYS:
+            inc_counter("execution_data_strip_breadth_truncated")
+            items = list(obj.items())[: _STRIP_MAX_DICT_KEYS]
+        else:
+            items = list(obj.items())
         return {
             k: _strip_trace_keys_recursive(v, depth + 1)
-            for k, v in obj.items()
+            for k, v in items
             if k not in _EXECUTION_DATA_TRACE_KEYS
         }
     if isinstance(obj, list):
+        if len(obj) > _STRIP_MAX_LIST_LEN:
+            inc_counter("execution_data_strip_breadth_truncated")
+            obj = obj[: _STRIP_MAX_LIST_LEN]
         return [_strip_trace_keys_recursive(x, depth + 1) for x in obj]
     return obj
 
@@ -1738,11 +1754,42 @@ def complete_step(execution_id: str, execution_step_id: str):
     except ValueError:
         return jsonify({"error": "Invalid execution or step ID"}), 400
 
-    data = request.get_json() or {}
-    actual_inputs = data.get("actual_inputs", [])
-    actual_outputs = data.get("actual_outputs", [])
-    execution_data = _strip_incoming_execution_trace_keys(data.get("execution_data") or {})
-    allow_consumption_override = data.get("allow_consumption_override") is True
+    content_length = request.content_length
+    if content_length is not None and content_length > MAX_COMPLETE_STEP_CONTENT_LENGTH:
+        return jsonify({"error": "Request body too large"}), 413
+
+    raw_bytes = request.get_data(cache=True, as_text=False) or b""
+    if len(raw_bytes) > MAX_COMPLETE_STEP_CONTENT_LENGTH:
+        return jsonify({"error": "Request body too large"}), 413
+    if not raw_bytes.strip():
+        raw_body = {}
+    else:
+        try:
+            raw_body = json.loads(raw_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            return jsonify({"error": "Invalid JSON"}), 400
+        if not isinstance(raw_body, dict):
+            return jsonify({"error": "Invalid request body", "details": ["JSON root must be an object"]}), 400
+
+    if content_length is None and approximate_json_value_size(raw_body) > MAX_COMPLETE_STEP_CONTENT_LENGTH:
+        return jsonify({"error": "Request body too large"}), 413
+
+    try:
+        parsed_body = CompleteStepRequestBody.model_validate(raw_body)
+    except ValidationError as e:
+        return jsonify({"error": "Invalid request body", "details": e.errors()}), 400
+
+    try:
+        validate_json_blob(parsed_body.actual_inputs, path="$.actual_inputs")
+        validate_json_blob(parsed_body.actual_outputs, path="$.actual_outputs")
+        validate_json_blob(parsed_body.execution_data, path="$.execution_data")
+    except ValueError as e:
+        return jsonify({"error": "Invalid request body", "details": [str(e)]}), 400
+
+    actual_inputs = parsed_body.actual_inputs
+    actual_outputs = parsed_body.actual_outputs
+    execution_data = _strip_incoming_execution_trace_keys(parsed_body.execution_data)
+    allow_consumption_override = parsed_body.allow_consumption_override
 
     # Get current user from Flask g and always store in execution_data for accuracy
     # TODO: execution_data is becoming a structured contract with known fields:
@@ -2396,7 +2443,8 @@ def list_inventory():
                     if matching_output:
                         extra_data["variable_output"] = matching_output
             except Exception:
-                # DEBUG: per-item on hot path — avoid WARNING spam in prod aggregators (see flows-and-batches-review.md)
+                inc_counter("inventory_hydration_failures")
+                # DEBUG: per-item on hot path — use internal_counters for dashboards
                 logger.debug("list_inventory hydrate extra_data failed item_id=%s", item.id, exc_info=True)
 
         # Look up previous steps data for intermediate products AND final products
@@ -2626,6 +2674,7 @@ def list_inventory():
                             if es_untracked.step:
                                 producing_step_name = es_untracked.step.name
             except Exception:
+                inc_counter("inventory_producing_step_failures")
                 logger.debug(
                     "list_inventory producing_step resolution failed item_id=%s",
                     item.id,
@@ -2637,6 +2686,7 @@ def list_inventory():
                 if tagged_step:
                     producing_step_name = str(tagged_step)
             except Exception:
+                inc_counter("inventory_producing_step_name_fallback_failures")
                 logger.debug(
                     "list_inventory producing_step_name fallback failed item_id=%s", item.id, exc_info=True
                 )
@@ -2648,6 +2698,7 @@ def list_inventory():
             if rdt:
                 ready_date_display = rdt.isoformat()
         except Exception:
+            inc_counter("ready_date_compute_failures")
             logger.debug("list_inventory ready_date_display failed item_id=%s", item.id, exc_info=True)
 
         result.append(
@@ -3750,6 +3801,7 @@ def get_metrics():
                     "work_in_progress": len(wip),
                     "final_products": len(final_products),
                 },
+                "operational_counters": get_counter_snapshot(),
             }
         ),
         200,
