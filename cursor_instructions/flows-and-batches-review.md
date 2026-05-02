@@ -1,132 +1,137 @@
-These two tests are very strict structural / ordering assertions, so the question is less “is this correct behavior?” and more “is this brittle or actually guaranteeing something meaningful?”
+This revision is materially better than the previous version—you’ve moved both tests from brittle string-position assertions to semi-structural invariants, which is the right direction.
 
-I’ll break them down precisely.
+Here’s a precise review.
 
 1. test_execution_render_inputs_picker_cache_row_cap_branch
-What it asserts
-assert "var usePickerCardCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS" in body
-assert "if (usePickerCardCache)" in body
-✅ What this is actually doing well
-Guarantees the row-cap gating logic exists
-Ensures performance guard is not accidentally removed
-Prevents regressions where cache becomes always-on
+✅ What improved
+1. Regex-based validation
 
-So conceptually: ✔ valid safeguard
+You replaced exact string matching with:
 
-⚠️ Fragility risk
+re.search(r"(?:var|const)\s+usePickerCardCache\s*=\s*list\.length\s*<=\s*PICKER_CARD_CACHE_MAX_ROWS", body)
 
-This test is string-sensitive to formatting, not behavior-sensitive.
+✔ This is a real upgrade
 
-It will break if you do any of the following (all valid refactors):
-
-rename variable:
-useCache
-enableCache
-change comparison style:
-<= → < (logically identical in some contexts)
-
-wrap condition:
-
-const usePickerCardCache = ...
-minify / lint reformat:
-line breaks
-spacing
-Problem type:
-
-👉 Brittle implementation test (not behavior test)
-
-✔ Better intent (what you actually want to guarantee)
-
-You care about:
-
-“Cache must be disabled when list exceeds threshold”
-
-So the correct invariant is:
-
-cache is not used when list is large
-
-This is behavioral, not lexical.
-
-Recommendation (if you ever improve it)
-
-Replace with something like:
-
-AST parse (babel / acorn)
-
-or regex loosened:
-
+tolerates whitespace
+tolerates var/const
+still enforces threshold logic
+2. You added dual signal validation
 assert "usePickerCardCache" in body
 assert "PICKER_CARD_CACHE_MAX_ROWS" in body
 
-But I won’t block merge on this—this is a test quality issue, not production risk.
+✔ Good redundancy:
 
+ensures feature presence
+ensures configuration is still wired
+⚠️ Remaining fragility (minor)
+
+Your regex still assumes:
+
+variable name is exactly usePickerCardCache
+comparison structure is exactly inline list.length <= ...
+
+This will still break on harmless refactors like:
+
+const shouldUseCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS;
+
+or:
+
+const usePickerCardCache = shouldUseCache(list);
+But importantly:
+
+👉 this is now a deliberate architectural constraint test, not just formatting
+
+So brittleness is now acceptable, not accidental.
+
+✔ Verdict for test #1
+✔ improved from brittle → semi-structural
+⚠ still implementation-coupled (but intentionally so)
+🟢 acceptable
 2. test_inventory_refresh_clears_picker_cache_before_row_updates
-This is more interesting
-i_clear = text.find(clear_call)
-i_selects = text.find(selects_loop)
-assert 0 < i_clear < i_selects
-What this enforces
 
-It guarantees:
+This is the more interesting one.
 
-cache clear happens before row selection logic executes
+✅ What you improved significantly
+1. Scoped analysis window
+window = text[start : start + 12000]
 
-So you’re enforcing ordering in source code, not runtime behavior.
+✔ This is a big quality improvement
 
-👍 Why this is actually valuable
+avoids global ordering noise
+reduces false positives from other functions
+makes test intent clearer: only refresh function matters
+2. Still enforces real invariant
+assert i_clear < i_selects
 
-This does matter because:
+Meaning:
 
-picker cache is shared UI state
-row rebuild depends on fresh inventory state
-stale cache → incorrect inventory binding or ghost DOM reuse
+cache invalidation must occur before DOM row selection rebuild
 
-So this ordering constraint is:
-✔ meaningful for correctness
-✔ not just cosmetic
+✔ This is a legitimate lifecycle invariant
 
-⚠️ Risk: still brittle, but less than test #1
+⚠️ Remaining risk
+1. String-based ordering still fragile
 
-It breaks if:
+This still breaks if:
 
-code is rearranged but behavior unchanged
-querySelectorAll moved into helper function
-refactor introduces intermediate variable
+function is split:
+invalidateCache()
+rebuildRows()
+code is rearranged into helpers
+modal logic is refactored into class methods
 
-Example safe refactor that would break test:
+Even if runtime order remains identical.
 
-ExecutionRenderInputs.clearInventoryPickerCardCaches(modal);
-...
-const selects = modal.querySelectorAll(...)
+2. Magic slice length
++12000
 
-Even though behavior is identical.
+This is implicitly assuming:
 
-Stronger interpretation
+function is always small enough
+logic stays in one block
 
-What you really want is:
+This is okay now, but will silently break later.
 
-“cache invalidation must occur before any DOM selection/state rebuild begins”
+✔ Better framing (important)
 
-That’s a phase ordering invariant, not string ordering.
+This test is actually asserting:
 
-3. Security / correctness impact of these tests
-Good news
+“cache invalidation must occur before DOM-dependent state reconstruction in refresh path”
 
-These tests do not introduce security risk.
+That is a semantic lifecycle rule, not a lexical rule.
 
-They only:
+✔ Verdict for test #2
+✔ strong improvement over previous version
+✔ scoped correctly
+⚠ still tied to source layout
+🟡 acceptable but not future-proof
+Overall assessment
+🟢 Merge decision: SAFE
+Why this is now acceptable:
+Area	Status
+Security impact	✅ none
+Runtime correctness	✅ reinforced
+Performance invariants	✅ protected
+Test design	🟡 improved but still structural
+Refactor resistance	🟡 moderate
+Key engineering takeaway
 
-enforce execution order
-enforce presence of cache gating logic
+You’ve now reached a useful middle ground:
 
-No injection, no unsafe assumptions.
+Before:
+brittle string position tests ❌
+After:
+semi-structural regex + scoped ordering tests ✔
+Ideal next step (optional, not required):
 
-4. Performance relevance
+If you ever want to harden further, the real upgrade is:
 
-These tests indirectly protect:
+stop testing source order
+start testing behavioral lifecycle hooks
 
-DOM churn control
-Map growth control
-picker rendering efficiency
+Example:
 
-So they are performance regression guards, not just unit tests.
+mock clearInventoryPickerCardCaches
+assert it is called before renderPickerCards
+
+That removes all brittleness.
