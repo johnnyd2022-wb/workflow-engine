@@ -369,8 +369,8 @@
     /* Mobile: same tall header when menu is open (avoid slim desktop height + broken dropdown anchor). */
     @media (max-width: 767px) {
       .main-header.bee-menu-open {
-        height: var(--spa-mobile-topbar-height, 72px) !important;
-        min-height: var(--spa-mobile-topbar-height, 72px) !important;
+        height: var(--spa-mobile-topbar-height, 66px) !important;
+        min-height: var(--spa-mobile-topbar-height, 66px) !important;
       }
     }
 
@@ -632,10 +632,10 @@
     /* Mobile: compact chrome vs page CTAs (.btn ~14px + padding; flows2 Manage / Start new batch stay visually primary) */
     @media (max-width: 767px) {
       .bee-topbar-wrap {
-        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 72px) - 30px));
+        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 66px) - 30px));
       }
       .bee-profile {
-        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 72px) - 30px));
+        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 66px) - 30px));
       }
       .spa-banner-back svg {
         width: 20px;
@@ -814,12 +814,12 @@
       .bee-menu {
         border-radius: 0 0 var(--radius-xl, 14px) var(--radius-xl, 14px);
         /* Anchor under the sticky top bar instead of overlapping the viewport top */
-        top: calc(env(safe-area-inset-top, 0px) + var(--spa-mobile-topbar-height, 72px));
+        top: calc(env(safe-area-inset-top, 0px) + var(--spa-mobile-topbar-height, 66px));
         max-height: calc(
-          100vh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 72px) - env(safe-area-inset-bottom, 0px)
+          100vh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 66px) - env(safe-area-inset-bottom, 0px)
         );
         max-height: calc(
-          100dvh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 72px) - env(safe-area-inset-bottom, 0px)
+          100dvh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 66px) - env(safe-area-inset-bottom, 0px)
         );
       }
     }

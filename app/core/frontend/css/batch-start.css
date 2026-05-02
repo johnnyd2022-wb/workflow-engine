@@ -207,7 +207,7 @@ body.batch-start-spa #page-content.page-content {
 }
 @media (max-width: 767px) {
   body.batch-start-spa #page-content.page-content {
-    padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 69px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 66px) + 69px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -236,7 +236,9 @@ html[data-spa-theme="dark"] .batch-start-record-bar {
 }
 @media (max-width: 767px) {
   .batch-start-record-bar {
-    bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--spa-mobile-bottom-tab-height, 66px) + env(safe-area-inset-bottom, 0px));
+    /* Allow primary button glow to paint above the bar edge */
+    overflow: visible;
   }
 }
 
@@ -253,6 +255,29 @@ html[data-spa-theme="dark"] .batch-start-record-bar {
     align-items: center;
     padding: 12px 32px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Mobile: softer halo + a touch more top padding so glow isn’t clipped at the bar seam */
+@media (max-width: 767px) {
+  .batch-start-record-bar__inner {
+    padding-top: 14px;
+  }
+  #page-content .batch-start-record-bar .batch-start-record-bar__btn.btn-primary {
+    box-shadow: 0 3px 12px hsla(210, 100%, 50%, 0.18);
+  }
+  #page-content .batch-start-record-bar .batch-start-record-bar__btn.btn-primary:hover {
+    box-shadow: 0 5px 16px hsla(210, 100%, 50%, 0.24);
+  }
+  html[data-spa-theme="dark"] #page-content .batch-start-record-bar .batch-start-record-bar__btn.btn-primary {
+    box-shadow:
+      0 6px 18px rgba(0, 0, 0, 0.26),
+      0 0 0 1px rgba(255, 225, 120, 0.12);
+  }
+  html[data-spa-theme="dark"] #page-content .batch-start-record-bar .batch-start-record-bar__btn.btn-primary:hover {
+    box-shadow:
+      0 8px 22px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 225, 120, 0.17);
   }
 }
 

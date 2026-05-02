@@ -109,7 +109,8 @@
   /* Mobile chrome: bottom icon tab + matched top strip height (see @media max-width 767px .sidebar) */
   @media (max-width: 767px) {
     :root {
-      --spa-mobile-bottom-tab-height: 72px;
+      /* Tighter icon–label stack so fixed rails (batches/start, flows2) clear the real tab height */
+      --spa-mobile-bottom-tab-height: 66px;
       --spa-mobile-topbar-height: var(--spa-mobile-bottom-tab-height);
     }
   }
@@ -491,7 +492,7 @@
       bottom: 0;
       height: auto;
       width: 100%;
-      min-height: var(--spa-mobile-bottom-tab-height, 72px);
+      min-height: var(--spa-mobile-bottom-tab-height, 66px);
       flex-direction: row;
       border-right: none;
       border-top: 1px solid var(--sidebar-border);
@@ -513,7 +514,7 @@
       flex-direction: row;
       align-items: center;
       justify-content: space-around;
-      padding: 8px 0;
+      padding: 6px 0;
       margin: 0;
     }
     .sidebar .nav-label {
@@ -534,9 +535,10 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      padding: 8px 4px;
-      min-height: 48px;
+      /* Slightly tighter than default 2px; negative margin on wrapper does most of the work */
+      gap: 5px;
+      padding: 6px 4px;
+      min-height: 44px;
       /* Avoid iOS/Safari nudging the main column after tap so the nav stays “pinned” visually */
       scroll-margin: 0;
       scroll-margin-block: 0;
@@ -553,12 +555,55 @@
       display: none;
     }
     .sidebar .nav-link-icon-wrapper {
-      padding: 6px;
+      padding: 5px;
+      margin-bottom: -2px;
     }
 
     .sidebar .nav-link-icon {
       width: 24px;
       height: 24px;
+      display: block;
+    }
+
+    /* Selected tab: small circular halo behind icon only (not full-row rectangle) */
+    .sidebar .nav-link.active {
+      background: transparent;
+      box-shadow: none;
+    }
+    .sidebar .nav-link.active .nav-link-text,
+    .sidebar .nav-link.active .nav-link-icon {
+      color: var(--sidebar-text-active);
+    }
+    /* Circle halo on ::before so layout matches inactive tabs (no flex box / fixed size lift) */
+    .sidebar .nav-link.active .nav-link-icon-wrapper {
+      position: relative;
+      padding: 5px;
+      margin-bottom: -2px;
+      background: transparent;
+      box-shadow: none;
+    }
+    .sidebar .nav-link.active .nav-link-icon-wrapper::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(45, 212, 191, 0.18);
+      z-index: 0;
+      pointer-events: none;
+    }
+    .sidebar .nav-link.active .nav-link-icon {
+      position: relative;
+      z-index: 1;
+    }
+    .sidebar .nav-link.active:hover {
+      background: transparent;
+    }
+    .sidebar .nav-link.active:hover .nav-link-icon-wrapper::before {
+      background: rgba(45, 212, 191, 0.26);
     }
 
     /* Bottom tab: subtler hover than full desktop row tint */
@@ -573,7 +618,7 @@
     .main-content {
       margin-left: 0;
       /* Bottom tab + home indicator inset */
-      padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px));
+      padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 66px) + env(safe-area-inset-bottom, 0px));
     }
   }
 
@@ -646,8 +691,8 @@
   @media (max-width: 767px) {
     .main-header {
       /* Same visual height as mobile bottom icon bar */
-      height: var(--spa-mobile-topbar-height, 72px);
-      min-height: var(--spa-mobile-topbar-height, 72px);
+      height: var(--spa-mobile-topbar-height, 66px);
+      min-height: var(--spa-mobile-topbar-height, 66px);
     }
   }
 

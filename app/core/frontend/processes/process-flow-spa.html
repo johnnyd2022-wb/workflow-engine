@@ -284,7 +284,7 @@
     }
     @media (max-width: 767px) {
       .process-flow-spa .spa-fixed-action-bar {
-        bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px));
+        bottom: calc(var(--spa-mobile-bottom-tab-height, 66px) + env(safe-area-inset-bottom, 0px));
       }
     }
     /* Horizontal inset only here; vertical padding from shared .spa-fixed-action-bar__inner (matches metric rows). */
@@ -321,7 +321,7 @@
     @media (max-width: 767px) {
       .process-flow-spa .create-process-step:has(.spa-fixed-action-bar) {
         /* Tab + fixed rail: keep last field above both stacked layers */
-        padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 72px) + 72px);
+        padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 66px) + 72px);
       }
     }
 
