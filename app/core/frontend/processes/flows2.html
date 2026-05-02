@@ -1347,6 +1347,55 @@
   <script>
     // Global variable for notification timeout
     let notificationTimeout = null;
+
+    function flows2SvgNotificationSuccess24() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '24');
+      svg.setAttribute('height', '24');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      p.setAttribute('d', 'M22 11.08V12a10 10 0 1 1-5.93-9.14');
+      const pl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      pl.setAttribute('points', '22 4 12 14.01 9 11.01');
+      svg.appendChild(p);
+      svg.appendChild(pl);
+      return svg;
+    }
+
+    function flows2SvgNotificationError24() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '24');
+      svg.setAttribute('height', '24');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', '12');
+      c.setAttribute('cy', '12');
+      c.setAttribute('r', '10');
+      const l1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l1.setAttribute('x1', '12');
+      l1.setAttribute('y1', '8');
+      l1.setAttribute('x2', '12');
+      l1.setAttribute('y2', '12');
+      const l2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l2.setAttribute('x1', '12');
+      l2.setAttribute('y1', '16');
+      l2.setAttribute('x2', '12.01');
+      l2.setAttribute('y2', '16');
+      svg.appendChild(c);
+      svg.appendChild(l1);
+      svg.appendChild(l2);
+      return svg;
+    }
     
     // Define showNotification FIRST so overrides can use it immediately
     // Auto-dismissing toast notification
@@ -1369,21 +1418,10 @@
       
       // Set icon and colors based on type
       if (type === 'success' && iconEl) {
-        iconEl.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-        `;
+        iconEl.replaceChildren(flows2SvgNotificationSuccess24());
         iconEl.style.color = 'var(--success, #10b981)';
       } else if (type === 'error' && iconEl) {
-        iconEl.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-        `;
+        iconEl.replaceChildren(flows2SvgNotificationError24());
         iconEl.style.color = 'var(--error, #ef4444)';
       }
       
@@ -1426,37 +1464,87 @@
         modal.id = 'static-input-warning-modal';
         modal.className = 'modal-overlay';
         modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;';
-        modal.innerHTML = `
-          <div class="modal-content" style="background: var(--bg-card, #ffffff); border-radius: var(--radius-lg, 12px); padding: 24px; max-width: 500px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
-              <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--warning-bg, #fef3c7); display: flex; align-items: center; justify-content: center;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--warning, #f59e0b);">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-              </div>
-              <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">Changing to Static Input</h2>
-            </div>
-            <div style="margin-bottom: 24px;">
-              <p style="font-size: 14px; color: var(--text-primary); margin: 0 0 16px 0; line-height: 1.6;">
-                Outputs from previous steps are stored in inventory, which allows the system to:
-              </p>
-              <ul style="font-size: 14px; color: var(--text-primary); margin: 0 0 16px 0; padding-left: 20px; line-height: 1.8;">
-                <li>Track live stock levels dynamically</li>
-                <li>Update inventory automatically when steps complete</li>
-                <li>See which physical items are being used</li>
-              </ul>
-              <p style="font-size: 14px; color: var(--text-primary); margin: 0; line-height: 1.6; font-weight: 500;">
-                Using "Select inventory at execution" is recommended for outputs.
-              </p>
-            </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end;">
-              <button type="button" class="btn btn-secondary" id="static-warning-cancel" style="padding: 10px 20px;">Cancel</button>
-              <button type="button" class="btn btn-primary" id="static-warning-continue" style="padding: 10px 20px; background: var(--warning, #f59e0b); border-color: var(--warning, #f59e0b);">Continue with Static</button>
-            </div>
-          </div>
-        `;
+        const shell = document.createElement('div');
+        shell.className = 'modal-content';
+        shell.style.cssText =
+          'background: var(--bg-card, #ffffff); border-radius: var(--radius-lg, 12px); padding: 24px; max-width: 500px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);';
+        const headerRow = document.createElement('div');
+        headerRow.style.cssText = 'display: flex; align-items: center; gap: 12px; margin-bottom: 20px;';
+        const iconWrap = document.createElement('div');
+        iconWrap.style.cssText =
+          'flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--warning-bg, #fef3c7); display: flex; align-items: center; justify-content: center;';
+        const warnSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        warnSvg.setAttribute('width', '24');
+        warnSvg.setAttribute('height', '24');
+        warnSvg.setAttribute('viewBox', '0 0 24 24');
+        warnSvg.setAttribute('fill', 'none');
+        warnSvg.setAttribute('stroke', 'currentColor');
+        warnSvg.setAttribute('stroke-width', '2');
+        warnSvg.setAttribute('stroke-linecap', 'round');
+        warnSvg.setAttribute('stroke-linejoin', 'round');
+        warnSvg.style.color = 'var(--warning, #f59e0b)';
+        const wPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        wPath.setAttribute('d', 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z');
+        const wL1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        wL1.setAttribute('x1', '12');
+        wL1.setAttribute('y1', '9');
+        wL1.setAttribute('x2', '12');
+        wL1.setAttribute('y2', '13');
+        const wL2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        wL2.setAttribute('x1', '12');
+        wL2.setAttribute('y1', '17');
+        wL2.setAttribute('x2', '12.01');
+        wL2.setAttribute('y2', '17');
+        warnSvg.appendChild(wPath);
+        warnSvg.appendChild(wL1);
+        warnSvg.appendChild(wL2);
+        iconWrap.appendChild(warnSvg);
+        const h2 = document.createElement('h2');
+        h2.style.cssText = 'font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;';
+        h2.textContent = 'Changing to Static Input';
+        headerRow.appendChild(iconWrap);
+        headerRow.appendChild(h2);
+        const bodyBlock = document.createElement('div');
+        bodyBlock.style.marginBottom = '24px';
+        const p1 = document.createElement('p');
+        p1.style.cssText = 'font-size: 14px; color: var(--text-primary); margin: 0 0 16px 0; line-height: 1.6;';
+        p1.textContent =
+          'Outputs from previous steps are stored in inventory, which allows the system to:';
+        const ul = document.createElement('ul');
+        ul.style.cssText = 'font-size: 14px; color: var(--text-primary); margin: 0 0 16px 0; padding-left: 20px; line-height: 1.8;';
+        ['Track live stock levels dynamically', 'Update inventory automatically when steps complete', 'See which physical items are being used'].forEach(
+          (t) => {
+            const li = document.createElement('li');
+            li.textContent = t;
+            ul.appendChild(li);
+          }
+        );
+        const p2 = document.createElement('p');
+        p2.style.cssText = 'font-size: 14px; color: var(--text-primary); margin: 0; line-height: 1.6; font-weight: 500;';
+        p2.textContent = 'Using "Select inventory at execution" is recommended for outputs.';
+        bodyBlock.appendChild(p1);
+        bodyBlock.appendChild(ul);
+        bodyBlock.appendChild(p2);
+        const footer = document.createElement('div');
+        footer.style.cssText = 'display: flex; gap: 12px; justify-content: flex-end;';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.id = 'static-warning-cancel';
+        cancelBtn.style.padding = '10px 20px';
+        cancelBtn.textContent = 'Cancel';
+        const contBtn = document.createElement('button');
+        contBtn.type = 'button';
+        contBtn.className = 'btn btn-primary';
+        contBtn.id = 'static-warning-continue';
+        contBtn.style.cssText = 'padding: 10px 20px; background: var(--warning, #f59e0b); border-color: var(--warning, #f59e0b);';
+        contBtn.textContent = 'Continue with Static';
+        footer.appendChild(cancelBtn);
+        footer.appendChild(contBtn);
+        shell.appendChild(headerRow);
+        shell.appendChild(bodyBlock);
+        shell.appendChild(footer);
+        modal.appendChild(shell);
         document.body.appendChild(modal);
         
         // Close on overlay click - DISABLED to prevent accidental closes
@@ -1528,8 +1616,17 @@
     /** Bound serialized JSON / strings from API objects shown in the UI (DoS / huge stringify). */
     const FLOWS2_MAX_JSON_DISPLAY_CHARS = 65536;
 
-    let flows2InventoryFetchController = null;
-    let flows2InventoryLoadGeneration = 0;
+    /** In-flight inventory fetch + generation counter (avoid stale overwrites). */
+    const Flows2InvLoad = {
+      controller: null,
+      generation: 0,
+      begin() {
+        if (this.controller) this.controller.abort();
+        this.controller = new AbortController();
+        this.generation += 1;
+        return { signal: this.controller.signal, gen: this.generation };
+      },
+    };
 
     /** Own enumerable keys only; drop prototype-pollution-prone names. */
     function flows2SafeKeys(obj) {
@@ -1591,12 +1688,22 @@
       return flows2Inventory.itemsByType[f] || [];
     }
 
-    /** HTML text (and attribute) escape; do not use falsy check — preserve 0 / false. */
+    /**
+     * Encoding contract for flows2 UI code:
+     * - User/API text in the DOM: prefer element.textContent = …
+     * - Legacy HTML strings: escapeHtml() once at interpolation time
+     * - Double-quoted attributes only: flows2EscapeAttr()
+     * - Arbitrary values as plain text: flows2ValueForHtml() then escapeHtml if building a string; prefer textContent
+     * - escapeHtml: pure string replacement (no innerHTML / DOM); safe for text and double-quoted attribute contexts
+     */
     function escapeHtml(text) {
       if (text === null || text === undefined) return '';
-      const div = document.createElement('div');
-      div.textContent = String(text);
-      return div.innerHTML;
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
     
     // ============================================================
@@ -1735,10 +1842,17 @@
       const container = document.getElementById('steps-container');
       if (!container) return;
       
-      container.innerHTML = '';
+      container.replaceChildren();
       
       if (!steps || steps.length === 0) {
-        container.innerHTML = '<div style="text-align: center; padding: 32px;"><p style="color: var(--text-secondary);">No steps defined for this process.</p></div>';
+        const wrap = document.createElement('div');
+        wrap.style.textAlign = 'center';
+        wrap.style.padding = '32px';
+        const p = document.createElement('p');
+        p.style.color = 'var(--text-secondary)';
+        p.textContent = 'No steps defined for this process.';
+        wrap.appendChild(p);
+        container.appendChild(wrap);
         // Update step count text
         const stepCountText = document.getElementById('step-count-text');
         if (stepCountText) {
@@ -1785,6 +1899,139 @@
       }
     }
     
+    /**
+     * Summary row in the flows2 step card body: title + chip + optional sub line.
+     * @param {boolean} [omitSubRow] — if true, no `.flows2-summary-item__sub` (traceability rows).
+     */
+    function flows2AppendStepSummaryItem(listEl, titleText, chipText, subText, omitSubRow) {
+      const item = document.createElement('div');
+      item.className = 'flows2-summary-item';
+      const main = document.createElement('div');
+      main.className = 'flows2-summary-item__main';
+      const row = document.createElement('div');
+      row.className = 'flows2-summary-item__row';
+      const titleEl = document.createElement('div');
+      titleEl.className = 'flows2-summary-item__title';
+      titleEl.textContent = titleText;
+      row.appendChild(titleEl);
+      if (chipText != null && chipText !== '') {
+        const chipEl = document.createElement('div');
+        chipEl.className = 'flows2-chip';
+        chipEl.textContent = chipText;
+        row.appendChild(chipEl);
+      }
+      main.appendChild(row);
+      if (!omitSubRow) {
+        const subEl = document.createElement('div');
+        subEl.className = 'flows2-summary-item__sub';
+        subEl.textContent = subText != null ? String(subText) : '';
+        main.appendChild(subEl);
+      }
+      item.appendChild(main);
+      listEl.appendChild(item);
+    }
+
+    function flows2SvgStepDragGrip18() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '18');
+      svg.setAttribute('height', '18');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      svg.setAttribute('aria-hidden', 'true');
+      [
+        [8, 6, 8, 6],
+        [8, 12, 8, 12],
+        [8, 18, 8, 18],
+        [16, 6, 16, 6],
+        [16, 12, 16, 12],
+        [16, 18, 16, 18],
+      ].forEach(([x1, y1, x2, y2]) => {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', String(x1));
+        line.setAttribute('y1', String(y1));
+        line.setAttribute('x2', String(x2));
+        line.setAttribute('y2', String(y2));
+        svg.appendChild(line);
+      });
+      return svg;
+    }
+
+    function flows2SvgChevronDown18() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '18');
+      svg.setAttribute('height', '18');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      svg.setAttribute('aria-hidden', 'true');
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      poly.setAttribute('points', '6 9 12 15 18 9');
+      svg.appendChild(poly);
+      return svg;
+    }
+
+    function flows2SvgHelpCircle14() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', '12');
+      c.setAttribute('cy', '12');
+      c.setAttribute('r', '10');
+      const l1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l1.setAttribute('x1', '12');
+      l1.setAttribute('y1', '16');
+      l1.setAttribute('x2', '12');
+      l1.setAttribute('y2', '12');
+      const l2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l2.setAttribute('x1', '12');
+      l2.setAttribute('y1', '8');
+      l2.setAttribute('x2', '12.01');
+      l2.setAttribute('y2', '8');
+      svg.appendChild(c);
+      svg.appendChild(l1);
+      svg.appendChild(l2);
+      return svg;
+    }
+
+    function flows2SvgCloseX14() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const l1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l1.setAttribute('x1', '18');
+      l1.setAttribute('y1', '6');
+      l1.setAttribute('x2', '6');
+      l1.setAttribute('y2', '18');
+      const l2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      l2.setAttribute('x1', '6');
+      l2.setAttribute('y1', '6');
+      l2.setAttribute('x2', '18');
+      l2.setAttribute('y2', '18');
+      svg.appendChild(l1);
+      svg.appendChild(l2);
+      return svg;
+    }
+
     // Create step card (displayIndex is 0-based; badge shows displayIndex + 1 so first step always shows 1)
     function createStepCard(step, displayIndex) {
       const card = document.createElement('div');
@@ -1798,14 +2045,14 @@
       const displayNumber = typeof displayIndex === 'number' ? displayIndex + 1 : (step.step_number || 1);
       const hasConfigs = !!(step && (step.configurations || step.configuration || step.config || step.settings));
 
-      function fmtQty(q, unit) {
+      function fmtQtyPlain(q, unit) {
         const hasQ = (q === 0 || q);
         const qn = hasQ ? String(q) : '';
         const u = (unit || '').toString().trim();
         if (!qn && !u) return '';
-        if (!qn) return escapeHtml(u);
-        if (!u) return escapeHtml(qn);
-        return escapeHtml(qn + ' ' + u);
+        if (!qn) return u;
+        if (!u) return qn;
+        return `${qn} ${u}`;
       }
 
       function inputModeLabel(i) {
@@ -1844,53 +2091,6 @@
       const evidenceFlag = promptFlag('evidence');
 
       const cfgObj = step && (step.configurations || step.configuration || step.config || step.settings) || null;
-      const cfgJson = hasConfigs ? escapeHtml(JSON.stringify(cfgObj, null, 2)) : '';
-
-      const inputsSummaryHtml = (inputs && inputs.length)
-        ? inputs.map(i => {
-            const name = escapeHtml((i && i.name) ? String(i.name) : '—');
-            const qty = fmtQty(i && i.quantity, i && i.unit);
-            const mode = escapeHtml(inputModeLabel(i));
-            return `
-              <div class="flows2-summary-item">
-                <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__row">
-                    <div class="flows2-summary-item__title">${name}</div>
-                    <div class="flows2-chip">${mode}</div>
-                  </div>
-                  <div class="flows2-summary-item__sub">${qty || ''}</div>
-                </div>
-              </div>
-            `;
-          }).join('')
-        : '<p class="flows2-empty">No inputs configured.</p>';
-
-      const outputsSummaryHtml = (outputs && outputs.length)
-        ? outputs.map(o => {
-            const name = escapeHtml((o && o.name) ? String(o.name) : '—');
-            const qty = fmtQty(o && o.quantity, o && o.unit);
-            const mode = escapeHtml(outputModeLabel(o));
-            const extra = (o && o.extra_data && typeof o.extra_data === 'object') ? o.extra_data : null;
-            const hasExpiry = !!(extra && extra.custom_expiry && extra.custom_expiry.enabled);
-            const hasReady = !!(extra && extra.ready_date && extra.ready_date.enabled);
-            const extras = [];
-            if (hasExpiry) extras.push('Expiry rules');
-            if (hasReady) extras.push('Ready date rules');
-            const extrasText = extras.length ? escapeHtml(extras.join(' • ')) : '';
-            const sub = [qty, extrasText].filter(Boolean).join(' • ');
-            return `
-              <div class="flows2-summary-item">
-                <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__row">
-                    <div class="flows2-summary-item__title">${name}</div>
-                    <div class="flows2-chip">${mode}</div>
-                  </div>
-                  <div class="flows2-summary-item__sub">${sub}</div>
-                </div>
-              </div>
-            `;
-          }).join('')
-        : '<p class="flows2-empty">No outputs configured.</p>';
 
       function isTraceabilityOrSystemPrompt(p) {
         if (!p) return false;
@@ -1902,27 +2102,6 @@
       }
       const customPrompts = (executionPrompts || []).filter(p => !isTraceabilityOrSystemPrompt(p));
 
-      const promptsSummaryHtml = (customPrompts && customPrompts.length)
-        ? customPrompts.map(p => {
-            const label = escapeHtml((p && (p.label || p.prompt)) ? String(p.label || p.prompt) : '—');
-            const type = escapeHtml((p && p.type) ? String(p.type) : 'text');
-            const unit = escapeHtml((p && p.unit) ? String(p.unit) : '');
-            const req = (p && p.required === false) ? 'Optional' : 'Required';
-            const sub = [type, unit ? ('Unit: ' + unit) : ''].filter(Boolean).join(' • ');
-            return `
-              <div class="flows2-summary-item">
-                <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__row">
-                    <div class="flows2-summary-item__title">${label}</div>
-                    <div class="flows2-chip">${escapeHtml(req)}</div>
-                  </div>
-                  <div class="flows2-summary-item__sub">${escapeHtml(sub)}</div>
-                </div>
-              </div>
-            `;
-          }).join('')
-        : '';
-
       // Best-effort documentation extraction from advanced config blocks (if present).
       function pickDocs(obj) {
         if (!obj || typeof obj !== 'object') return null;
@@ -1930,92 +2109,228 @@
       }
       const docsObj = pickDocs(cfgObj);
       const hasDocs = !!(docsObj && (Array.isArray(docsObj) ? docsObj.length : true));
-      const docsJson = hasDocs ? escapeHtml(JSON.stringify(docsObj, null, 2)) : '';
-      
-      card.innerHTML = `
-        <div class="flows2-step__header">
-          <button type="button" class="flows2-step__drag step-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="8" y1="6" x2="8" y2="6"></line>
-              <line x1="8" y1="12" x2="8" y2="12"></line>
-              <line x1="8" y1="18" x2="8" y2="18"></line>
-              <line x1="16" y1="6" x2="16" y2="6"></line>
-              <line x1="16" y1="12" x2="16" y2="12"></line>
-              <line x1="16" y1="18" x2="16" y2="18"></line>
-            </svg>
-          </button>
-          <div class="flow-step-num-badge step-number" aria-label="Step number">${displayNumber}</div>
-          <div class="flows2-step__titlewrap" onclick="toggleStep(this)">
-            <p class="flows2-step__title">${escapeHtml(step.name || 'Unnamed step')}</p>
-            <p class="flows2-step__sub">${escapeHtml(step.description || '') || 'No description'}</p>
-          </div>
-          <div class="flows2-step__meta">
-            <span>${inputs.length} input${inputs.length !== 1 ? 's' : ''}</span>
-            <span>${outputs.length} output${outputs.length !== 1 ? 's' : ''}</span>
-          </div>
-          <button type="button" class="flows2-step__toggle" onclick="toggleStep(this)" aria-label="Expand step">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-        </div>
-        <div class="flows2-step__body">
-          <div class="flows2-step__body-inner">
-          <div class="flows2-section">
-            <p class="flows2-section__title">Inputs</p>
-            <div class="flows2-summary-list">${inputsSummaryHtml}</div>
-          </div>
 
-          <div class="flows2-section">
-            <p class="flows2-section__title">Outputs</p>
-            <div class="flows2-summary-list">${outputsSummaryHtml}</div>
-          </div>
+      const header = document.createElement('div');
+      header.className = 'flows2-step__header';
 
-          <div class="flows2-section">
-            <p class="flows2-section__title">Traceability & compliance</p>
-            <div class="flows2-summary-list">
-              <div class="flows2-summary-item">
-                <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__row">
-                    <div class="flows2-summary-item__title">Batch number</div>
-                    <div class="flows2-chip">${escapeHtml(batchFlag || 'Off')}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="flows2-summary-item">
-                <div class="flows2-summary-item__main">
-                  <div class="flows2-summary-item__row">
-                    <div class="flows2-summary-item__title">Evidence</div>
-                    <div class="flows2-chip">${escapeHtml(evidenceFlag || 'Off')}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+      const dragBtn = document.createElement('button');
+      dragBtn.type = 'button';
+      dragBtn.className = 'flows2-step__drag step-drag-handle';
+      dragBtn.draggable = true;
+      dragBtn.title = 'Drag to reorder';
+      dragBtn.setAttribute('aria-label', 'Drag to reorder');
+      dragBtn.appendChild(flows2SvgStepDragGrip18());
+      dragBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+      dragBtn.addEventListener('click', (e) => e.stopPropagation());
 
-          <div class="flows2-section">
-            <p class="flows2-section__title">Prompts</p>
-            <div class="flows2-summary-list${promptsSummaryHtml ? '' : ' flows2-summary-list--empty'}">${promptsSummaryHtml || '<div class="flows2-summary-item"><div class="flows2-summary-item__main"><div class="flows2-summary-item__row"><div class="flows2-summary-item__title">No custom prompts configured.</div></div><div class="flows2-summary-item__sub">Add prompts to capture operator inputs during execution.</div></div></div>'}</div>
-          </div>
+      const badge = document.createElement('div');
+      badge.className = 'flow-step-num-badge step-number';
+      badge.setAttribute('aria-label', 'Step number');
+      badge.textContent = String(displayNumber);
 
-          ${hasDocs ? `
-            <div class="flows2-section">
-              <p class="flows2-section__title">Documentation</p>
-              <pre style="margin:0; padding: 10px 0; overflow:auto; max-height: 240px;">${docsJson}</pre>
-            </div>
-          ` : ''}
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'flows2-step__titlewrap';
+      titleWrap.addEventListener('click', () => {
+        if (typeof window.toggleStep === 'function') window.toggleStep(titleWrap);
+      });
+      const titleP = document.createElement('p');
+      titleP.className = 'flows2-step__title';
+      titleP.textContent = step.name || 'Unnamed step';
+      const subP = document.createElement('p');
+      subP.className = 'flows2-step__sub';
+      subP.textContent = (step.description && String(step.description)) || 'No description';
+      titleWrap.appendChild(titleP);
+      titleWrap.appendChild(subP);
 
-          ${hasConfigs ? `
-            <div class="flows2-section">
-              <p class="flows2-section__title">Advanced settings</p>
-              <pre style="margin:0; padding: 10px 0; overflow:auto; max-height: 240px;">${cfgJson}</pre>
-            </div>
-          ` : ''}
+      const meta = document.createElement('div');
+      meta.className = 'flows2-step__meta';
+      const metaIn = document.createElement('span');
+      metaIn.textContent = `${inputs.length} input${inputs.length !== 1 ? 's' : ''}`;
+      const metaOut = document.createElement('span');
+      metaOut.textContent = `${outputs.length} output${outputs.length !== 1 ? 's' : ''}`;
+      meta.appendChild(metaIn);
+      meta.appendChild(metaOut);
 
-          </div>
-        </div>
-      `;
-      
+      const expandBtn = document.createElement('button');
+      expandBtn.type = 'button';
+      expandBtn.className = 'flows2-step__toggle';
+      expandBtn.setAttribute('aria-label', 'Expand step');
+      expandBtn.appendChild(flows2SvgChevronDown18());
+      expandBtn.addEventListener('click', () => {
+        if (typeof window.toggleStep === 'function') window.toggleStep(expandBtn);
+      });
+
+      header.appendChild(dragBtn);
+      header.appendChild(badge);
+      header.appendChild(titleWrap);
+      header.appendChild(meta);
+      header.appendChild(expandBtn);
+      card.appendChild(header);
+
+      const body = document.createElement('div');
+      body.className = 'flows2-step__body';
+      const bodyInner = document.createElement('div');
+      bodyInner.className = 'flows2-step__body-inner';
+
+      function appendInputsSection() {
+        const sec = document.createElement('div');
+        sec.className = 'flows2-section';
+        const t = document.createElement('p');
+        t.className = 'flows2-section__title';
+        t.textContent = 'Inputs';
+        const list = document.createElement('div');
+        list.className = 'flows2-summary-list';
+        if (inputs && inputs.length) {
+          inputs.forEach((i) => {
+            const name = (i && i.name) ? String(i.name) : '—';
+            const qty = fmtQtyPlain(i && i.quantity, i && i.unit);
+            flows2AppendStepSummaryItem(list, name, inputModeLabel(i), qty);
+          });
+        } else {
+          const empty = document.createElement('p');
+          empty.className = 'flows2-empty';
+          empty.textContent = 'No inputs configured.';
+          list.appendChild(empty);
+        }
+        sec.appendChild(t);
+        sec.appendChild(list);
+        bodyInner.appendChild(sec);
+      }
+
+      function appendOutputsSection() {
+        const sec = document.createElement('div');
+        sec.className = 'flows2-section';
+        const t = document.createElement('p');
+        t.className = 'flows2-section__title';
+        t.textContent = 'Outputs';
+        const list = document.createElement('div');
+        list.className = 'flows2-summary-list';
+        if (outputs && outputs.length) {
+          outputs.forEach((o) => {
+            const name = (o && o.name) ? String(o.name) : '—';
+            const qty = fmtQtyPlain(o && o.quantity, o && o.unit);
+            const extra = o && o.extra_data && typeof o.extra_data === 'object' ? o.extra_data : null;
+            const hasExpiry = !!(extra && extra.custom_expiry && extra.custom_expiry.enabled);
+            const hasReady = !!(extra && extra.ready_date && extra.ready_date.enabled);
+            const extras = [];
+            if (hasExpiry) extras.push('Expiry rules');
+            if (hasReady) extras.push('Ready date rules');
+            const extrasText = extras.length ? extras.join(' • ') : '';
+            const sub = [qty, extrasText].filter(Boolean).join(' • ');
+            flows2AppendStepSummaryItem(list, name, outputModeLabel(o), sub);
+          });
+        } else {
+          const empty = document.createElement('p');
+          empty.className = 'flows2-empty';
+          empty.textContent = 'No outputs configured.';
+          list.appendChild(empty);
+        }
+        sec.appendChild(t);
+        sec.appendChild(list);
+        bodyInner.appendChild(sec);
+      }
+
+      function appendTraceabilitySection() {
+        const sec = document.createElement('div');
+        sec.className = 'flows2-section';
+        const t = document.createElement('p');
+        t.className = 'flows2-section__title';
+        t.textContent = 'Traceability & compliance';
+        const list = document.createElement('div');
+        list.className = 'flows2-summary-list';
+        flows2AppendStepSummaryItem(list, 'Batch number', batchFlag || 'Off', '', true);
+        flows2AppendStepSummaryItem(list, 'Evidence', evidenceFlag || 'Off', '', true);
+        sec.appendChild(t);
+        sec.appendChild(list);
+        bodyInner.appendChild(sec);
+      }
+
+      function appendPromptsSection() {
+        const sec = document.createElement('div');
+        sec.className = 'flows2-section';
+        const t = document.createElement('p');
+        t.className = 'flows2-section__title';
+        t.textContent = 'Prompts';
+        const list = document.createElement('div');
+        list.className =
+          'flows2-summary-list' + (customPrompts && customPrompts.length ? '' : ' flows2-summary-list--empty');
+        if (customPrompts && customPrompts.length) {
+          customPrompts.forEach((p) => {
+            const label = (p && (p.label || p.prompt)) ? String(p.label || p.prompt) : '—';
+            const type = (p && p.type) ? String(p.type) : 'text';
+            const unit = (p && p.unit) ? String(p.unit) : '';
+            const req = p && p.required === false ? 'Optional' : 'Required';
+            const sub = [type, unit ? `Unit: ${unit}` : ''].filter(Boolean).join(' • ');
+            flows2AppendStepSummaryItem(list, label, req, sub);
+          });
+        } else {
+          const item = document.createElement('div');
+          item.className = 'flows2-summary-item';
+          const main = document.createElement('div');
+          main.className = 'flows2-summary-item__main';
+          const row = document.createElement('div');
+          row.className = 'flows2-summary-item__row';
+          const titleEl = document.createElement('div');
+          titleEl.className = 'flows2-summary-item__title';
+          titleEl.textContent = 'No custom prompts configured.';
+          row.appendChild(titleEl);
+          main.appendChild(row);
+          const subEl = document.createElement('div');
+          subEl.className = 'flows2-summary-item__sub';
+          subEl.textContent = 'Add prompts to capture operator inputs during execution.';
+          main.appendChild(subEl);
+          item.appendChild(main);
+          list.appendChild(item);
+        }
+        sec.appendChild(t);
+        sec.appendChild(list);
+        bodyInner.appendChild(sec);
+      }
+
+      appendInputsSection();
+      appendOutputsSection();
+      appendTraceabilitySection();
+      appendPromptsSection();
+
+      if (hasDocs) {
+        const sec = document.createElement('div');
+        sec.className = 'flows2-section';
+        const pt = document.createElement('p');
+        pt.className = 'flows2-section__title';
+        pt.textContent = 'Documentation';
+        const pre = document.createElement('pre');
+        pre.style.cssText = 'margin:0; padding: 10px 0; overflow:auto; max-height: 240px;';
+        try {
+          pre.textContent = JSON.stringify(docsObj, null, 2);
+        } catch (e) {
+          pre.textContent = String(docsObj);
+        }
+        sec.appendChild(pt);
+        sec.appendChild(pre);
+        bodyInner.appendChild(sec);
+      }
+
+      if (hasConfigs) {
+        const sec = document.createElement('div');
+        sec.className = 'flows2-section';
+        const pt = document.createElement('p');
+        pt.className = 'flows2-section__title';
+        pt.textContent = 'Advanced settings';
+        const pre = document.createElement('pre');
+        pre.style.cssText = 'margin:0; padding: 10px 0; overflow:auto; max-height: 240px;';
+        try {
+          pre.textContent = JSON.stringify(cfgObj, null, 2);
+        } catch (e) {
+          pre.textContent = String(cfgObj);
+        }
+        sec.appendChild(pt);
+        sec.appendChild(pre);
+        bodyInner.appendChild(sec);
+      }
+
+      body.appendChild(bodyInner);
+      card.appendChild(body);
+
       return card;
     }
     
@@ -2185,6 +2500,433 @@
         completedDetails._collapseBound = true;
       }
     }
+
+    function flows2SvgChevron14() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      poly.setAttribute('points', '6 9 12 15 18 9');
+      svg.appendChild(poly);
+      return svg;
+    }
+
+    function flows2SvgChevron16() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '16');
+      svg.setAttribute('height', '16');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      poly.setAttribute('points', '6 9 12 15 18 9');
+      svg.appendChild(poly);
+      return svg;
+    }
+
+    function flows2SvgPlayTriangle16() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '16');
+      svg.setAttribute('height', '16');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      poly.setAttribute('points', '5 3 19 12 5 21 5 3');
+      svg.appendChild(poly);
+      return svg;
+    }
+
+    function flows2SvgPlayTriangle14() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '14');
+      svg.setAttribute('height', '14');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      poly.setAttribute('points', '5 3 19 12 5 21 5 3');
+      svg.appendChild(poly);
+      return svg;
+    }
+
+    function flows2BuildExecutionEvidenceSectionDOM(evidenceList) {
+      if (!evidenceList || !evidenceList.length) return null;
+      const shown = evidenceList.slice(0, FLOWS2_MAX_EVIDENCE_ITEMS);
+      const section = document.createElement('div');
+      section.className = 'execution-evidence-section';
+      section.style.cssText =
+        'margin-bottom: 12px; padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-light, #e5e7eb);';
+      const title = document.createElement('div');
+      title.style.cssText =
+        'font-size: 12px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;';
+      title.textContent = `Evidence (${evidenceList.length})`;
+      section.appendChild(title);
+      const list = document.createElement('div');
+      list.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
+      shown.forEach((ev) => {
+        const viewUrl =
+          typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceViewUrl ? CoreAPI.getEvidenceViewUrl(ev.id) : '#';
+        const downloadUrl =
+          typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceDownloadUrl ? CoreAPI.getEvidenceDownloadUrl(ev.id) : '#';
+        const row = document.createElement('div');
+        row.style.cssText =
+          'display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--bg-card, #fff); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb);';
+        const span = document.createElement('span');
+        span.style.cssText = 'font-size: 13px; color: var(--text-primary, #111827);';
+        span.textContent = ev.file_name || 'Evidence file';
+        const links = document.createElement('div');
+        links.style.cssText = 'display: flex; gap: 8px;';
+        const aView = document.createElement('a');
+        aView.href = viewUrl;
+        aView.target = '_blank';
+        aView.rel = 'noopener';
+        aView.style.cssText = 'font-size: 12px; color: var(--primary, #3b82f6); text-decoration: none; font-weight: 500;';
+        aView.textContent = 'View';
+        const aDl = document.createElement('a');
+        aDl.href = downloadUrl;
+        aDl.target = '_blank';
+        aDl.rel = 'noopener';
+        aDl.style.cssText = 'font-size: 12px; color: var(--primary, #3b82f6); text-decoration: none; font-weight: 500;';
+        aDl.textContent = 'Download';
+        links.appendChild(aView);
+        links.appendChild(aDl);
+        row.appendChild(span);
+        row.appendChild(links);
+        list.appendChild(row);
+      });
+      section.appendChild(list);
+      return section;
+    }
+
+    /** One completed execution step row (inputs / outputs / metadata panes). */
+    function flows2BuildCompletedExecutionStepRowDOM(es) {
+      const completedDate = es.completed_at
+        ? new Date(es.completed_at).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+          })
+        : 'Unknown';
+      let completedByRaw = es.execution_data?.completed_by || es.execution_data?.completed_by_email || 'Unknown';
+      const completedBy =
+        typeof completedByRaw === 'object' && completedByRaw !== null
+          ? flows2ValueForHtml(completedByRaw)
+          : String(completedByRaw);
+      const stepName = es.step_name || `Step ${es.step_number}`;
+      const actualInputs = es.actual_inputs || [];
+      const actualOutputs = es.actual_outputs || [];
+      const stepInputs = es.step_inputs || [];
+      const stepOutputs = es.step_outputs || [];
+      const displayInputs = actualInputs.length > 0 ? actualInputs : stepInputs;
+      const displayOutputs = actualOutputs.length > 0 ? actualOutputs : stepOutputs;
+
+      const executionData = es.execution_data || {};
+      const executionMetadata = [];
+      const internalFields = ['completed_by', 'completed_by_email', 'completed_by_user_id', 'completed_at'];
+      flows2SafeKeys(executionData)
+        .filter((key) => !internalFields.includes(key))
+        .slice(0, FLOWS2_MAX_EXECUTION_METADATA_KEYS)
+        .forEach((key) => {
+          if (executionData[key] !== null && executionData[key] !== undefined && executionData[key] !== '') {
+            executionMetadata.push({ label: key, value: executionData[key] });
+          }
+        });
+
+      const executionStepId =
+        es.id || `step-${es.step_id}-${es.step_number}-${Math.random().toString(36).substr(2, 9)}`;
+      const inputsPaneId = `inputs-${executionStepId}`;
+      const outputsPaneId = `outputs-${executionStepId}`;
+      const metadataPaneId = `metadata-${executionStepId}`;
+
+      const outer = document.createElement('div');
+      outer.style.cssText = 'padding: 12px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);';
+      const col = document.createElement('div');
+      col.style.cssText = 'display: flex; flex-direction: column;';
+      const headBlock = document.createElement('div');
+      headBlock.style.marginBottom = '8px';
+      const nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-size: 13px; color: var(--text-primary, #111827); font-weight: 500;';
+      nameEl.textContent = stepName;
+      const subEl = document.createElement('div');
+      subEl.style.cssText = 'font-size: 12px; color: var(--text-secondary, #6b7280); margin-top: 2px;';
+      subEl.textContent = `Completed: ${completedDate} by ${completedBy}`;
+      headBlock.appendChild(nameEl);
+      headBlock.appendChild(subEl);
+      col.appendChild(headBlock);
+
+      const ioRow = document.createElement('div');
+      ioRow.style.cssText = 'margin-top: 12px; display: flex; gap: 0;';
+
+      if (displayInputs.length > 0) {
+        const pane = document.createElement('div');
+        pane.style.cssText =
+          'flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-right: 8px; overflow: hidden;';
+        const hdr = document.createElement('div');
+        hdr.className = 'io-pane-header flows2-io-pane-hdr';
+        hdr.setAttribute('data-io-pane-id', inputsPaneId);
+        hdr.style.cssText =
+          'display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;';
+        const hLeft = document.createElement('div');
+        hLeft.style.cssText =
+          'font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;';
+        hLeft.textContent = `Inputs (${displayInputs.length})`;
+        const hToggle = document.createElement('div');
+        hToggle.className = 'io-pane-toggle';
+        hToggle.id = `${inputsPaneId}-toggle`;
+        hToggle.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg);';
+        hToggle.appendChild(flows2SvgChevron14());
+        hdr.appendChild(hLeft);
+        hdr.appendChild(hToggle);
+        const body = document.createElement('div');
+        body.className = 'io-pane-content';
+        body.id = inputsPaneId;
+        body.style.cssText = 'display: none; padding: 0 10px 10px 10px;';
+        displayInputs.slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP).forEach((input) => {
+          const inputName = input.name || 'Unknown';
+          const inputQty = input.quantity !== null && input.quantity !== undefined ? input.quantity : '';
+          const inputUnit = input.unit || '';
+          const inventoryItemId = input.inventory_item_id || null;
+          const row = document.createElement('div');
+          row.style.cssText =
+            'font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);';
+          const n = document.createElement('div');
+          n.style.fontWeight = '500';
+          n.textContent = inputName;
+          row.appendChild(n);
+          if (inputQty) {
+            const q = document.createElement('div');
+            q.style.cssText = 'font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;';
+            q.textContent = `${inputQty} ${inputUnit}`.trim();
+            row.appendChild(q);
+          }
+          if (inventoryItemId) {
+            const idRow = document.createElement('div');
+            idRow.style.cssText = 'font-size: 10px; color: var(--text-tertiary, #9ca3af); margin-top: 2px;';
+            idRow.textContent = `Inventory ID: ${inventoryItemId}`;
+            row.appendChild(idRow);
+          }
+          body.appendChild(row);
+        });
+        pane.appendChild(hdr);
+        pane.appendChild(body);
+        ioRow.appendChild(pane);
+      }
+
+      if (displayOutputs.length > 0) {
+        const pane = document.createElement('div');
+        pane.style.cssText =
+          'flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-left: 8px; overflow: hidden;';
+        const hdr = document.createElement('div');
+        hdr.className = 'io-pane-header flows2-io-pane-hdr';
+        hdr.setAttribute('data-io-pane-id', outputsPaneId);
+        hdr.style.cssText =
+          'display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;';
+        const hLeft = document.createElement('div');
+        hLeft.style.cssText =
+          'font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;';
+        hLeft.textContent = `Outputs (${displayOutputs.length})`;
+        const hToggle = document.createElement('div');
+        hToggle.className = 'io-pane-toggle';
+        hToggle.id = `${outputsPaneId}-toggle`;
+        hToggle.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg);';
+        hToggle.appendChild(flows2SvgChevron14());
+        hdr.appendChild(hLeft);
+        hdr.appendChild(hToggle);
+        const body = document.createElement('div');
+        body.className = 'io-pane-content';
+        body.id = outputsPaneId;
+        body.style.cssText = 'display: none; padding: 0 10px 10px 10px;';
+        displayOutputs.slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP).forEach((output) => {
+          const outputName = output.name || 'Unknown';
+          const outputQty = output.quantity !== null && output.quantity !== undefined ? output.quantity : '';
+          const outputUnit = output.unit || '';
+          const row = document.createElement('div');
+          row.style.cssText =
+            'font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);';
+          const n = document.createElement('div');
+          n.style.fontWeight = '500';
+          n.textContent = outputName;
+          row.appendChild(n);
+          if (outputQty) {
+            const q = document.createElement('div');
+            q.style.cssText = 'font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;';
+            q.textContent = `${outputQty} ${outputUnit}`.trim();
+            row.appendChild(q);
+          }
+          body.appendChild(row);
+        });
+        pane.appendChild(hdr);
+        pane.appendChild(body);
+        ioRow.appendChild(pane);
+      }
+
+      if (displayInputs.length > 0 || displayOutputs.length > 0) col.appendChild(ioRow);
+
+      if (executionMetadata.length > 0) {
+        const metaWrap = document.createElement('div');
+        metaWrap.style.cssText =
+          'flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-top: 8px; overflow: hidden;';
+        const hdr = document.createElement('div');
+        hdr.className = 'io-pane-header flows2-io-pane-hdr';
+        hdr.setAttribute('data-io-pane-id', metadataPaneId);
+        hdr.style.cssText =
+          'display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;';
+        const hLeft = document.createElement('div');
+        hLeft.style.cssText =
+          'font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;';
+        hLeft.textContent = `Execution Metadata (${executionMetadata.length})`;
+        const hToggle = document.createElement('div');
+        hToggle.className = 'io-pane-toggle';
+        hToggle.id = `${metadataPaneId}-toggle`;
+        hToggle.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg);';
+        hToggle.appendChild(flows2SvgChevron14());
+        hdr.appendChild(hLeft);
+        hdr.appendChild(hToggle);
+        const body = document.createElement('div');
+        body.className = 'io-pane-content';
+        body.id = metadataPaneId;
+        body.style.cssText = 'display: none; padding: 0 10px 10px 10px;';
+        executionMetadata.forEach((meta) => {
+          const metaLabel = meta.label || 'Unknown';
+          const metaValue = meta.value;
+          const row = document.createElement('div');
+          row.style.cssText =
+            'font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);';
+          const lab = document.createElement('div');
+          lab.style.fontWeight = '500';
+          lab.textContent = metaLabel;
+          const val = document.createElement('div');
+          val.style.cssText = 'font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;';
+          val.textContent = flows2ValueForHtml(metaValue);
+          row.appendChild(lab);
+          row.appendChild(val);
+          body.appendChild(row);
+        });
+        metaWrap.appendChild(hdr);
+        metaWrap.appendChild(body);
+        col.appendChild(metaWrap);
+      }
+
+      outer.appendChild(col);
+      return outer;
+    }
+
+    function flows2BuildCompletedStepsSectionDOM(
+      executionId,
+      status,
+      completedSteps,
+      completedStepsCapped
+    ) {
+      const completedStepsSectionId = `completed-steps-${executionId}`;
+      let sectionTitle =
+        status === 'completed' ? `All Steps (${completedSteps.length})` : `Completed Steps (${completedSteps.length})`;
+      if (completedSteps.length > FLOWS2_MAX_COMPLETED_EXECUTION_STEPS) {
+        sectionTitle += ` — showing ${FLOWS2_MAX_COMPLETED_EXECUTION_STEPS}`;
+      }
+      const wrap = document.createElement('div');
+      wrap.className = 'completed-steps-section';
+      wrap.style.cssText = 'margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);';
+      const hdr = document.createElement('div');
+      hdr.className = 'completed-steps-header flows2-completed-steps-toggle';
+      hdr.setAttribute('data-completed-section-id', completedStepsSectionId);
+      hdr.style.cssText =
+        'display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; margin-bottom: 12px;';
+      const titleDiv = document.createElement('div');
+      titleDiv.style.cssText = 'font-size: 12px; color: var(--text-secondary); font-weight: 500;';
+      titleDiv.textContent = sectionTitle;
+      const toggleWrap = document.createElement('div');
+      toggleWrap.className = 'completed-steps-toggle';
+      toggleWrap.id = `${completedStepsSectionId}-toggle`;
+      toggleWrap.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg);';
+      toggleWrap.appendChild(flows2SvgChevron14());
+      hdr.appendChild(titleDiv);
+      hdr.appendChild(toggleWrap);
+      const content = document.createElement('div');
+      content.className = 'completed-steps-content';
+      content.id = completedStepsSectionId;
+      content.style.display = 'none';
+      completedStepsCapped.forEach((es) => {
+        content.appendChild(flows2BuildCompletedExecutionStepRowDOM(es));
+      });
+      wrap.appendChild(hdr);
+      wrap.appendChild(content);
+      return wrap;
+    }
+
+    function flows2BuildNextStepSectionDOM(stepDetails, compactHeaderMargin) {
+      const wrap = document.createElement('div');
+      wrap.className = 'next-step-section';
+      wrap.style.cssText = compactHeaderMargin
+        ? 'margin-top: 8px; margin-bottom: 8px;'
+        : 'margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);';
+      const inner = document.createElement('div');
+      inner.className = 'next-step-header';
+      inner.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+      const icon = document.createElement('div');
+      icon.className = 'next-step-icon';
+      icon.style.flexShrink = '0';
+      icon.appendChild(flows2SvgPlayTriangle16());
+      const info = document.createElement('div');
+      info.className = 'next-step-info';
+      info.style.flex = '1';
+      const lbl = document.createElement('div');
+      lbl.className = 'next-step-label';
+      lbl.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
+      lbl.textContent = 'Next Step';
+      const nm = document.createElement('div');
+      nm.className = 'next-step-name';
+      nm.style.cssText = 'font-weight: 500; color: var(--text-primary); font-size: 14px;';
+      nm.textContent = stepDetails.name || 'Unknown';
+      info.appendChild(lbl);
+      info.appendChild(nm);
+      if (stepDetails.description) {
+        const desc = document.createElement('div');
+        desc.className = 'next-step-description';
+        desc.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-top: 2px;';
+        desc.textContent = stepDetails.description;
+        info.appendChild(desc);
+      }
+      inner.appendChild(icon);
+      inner.appendChild(info);
+      wrap.appendChild(inner);
+      return wrap;
+    }
+
+    function flows2AppendExecutionProgressBlock(parent, progressColor, progressPct, opts) {
+      const progWrap = document.createElement('div');
+      progWrap.className = 'execution-progress';
+      if (opts && opts.marginBottom != null) progWrap.style.marginBottom = opts.marginBottom;
+      if (opts && opts.marginTop != null) progWrap.style.marginTop = opts.marginTop;
+      const progLabel = document.createElement('div');
+      progLabel.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
+      progLabel.textContent = 'Progress';
+      const barOuter = document.createElement('div');
+      barOuter.className = 'progress-bar';
+      barOuter.style.cssText = 'height: 8px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden;';
+      const barFill = document.createElement('div');
+      barFill.className = 'progress-fill';
+      barFill.style.cssText = `height: 100%; background: ${progressColor}; width: ${progressPct}%; transition: width 0.3s, background 0.3s;`;
+      barOuter.appendChild(barFill);
+      progWrap.appendChild(progLabel);
+      progWrap.appendChild(barOuter);
+      parent.appendChild(progWrap);
+    }
     
     // Render executions
     async function renderExecutions(active, completed) {
@@ -2201,9 +2943,12 @@
       if (completedPluralEl) completedPluralEl.textContent = completed.length !== 1 ? 's' : '';
       
       if (activeContainer) {
-        activeContainer.innerHTML = '';
+        activeContainer.replaceChildren();
         if (active.length === 0) {
-          activeContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px; text-align: center;">No active executions</p>';
+          const p = document.createElement('p');
+          p.style.cssText = 'color: var(--text-secondary); padding: 16px; text-align: center;';
+          p.textContent = 'No active executions';
+          activeContainer.appendChild(p);
         } else {
           for (const execution of active) {
             const card = await createExecutionCard(execution, 'active');
@@ -2213,9 +2958,12 @@
       }
       
       if (completedContainer) {
-        completedContainer.innerHTML = '';
+        completedContainer.replaceChildren();
         if (completed.length === 0) {
-          completedContainer.innerHTML = '<p style="color: var(--text-secondary); padding: 16px; text-align: center;">No completed executions</p>';
+          const p = document.createElement('p');
+          p.style.cssText = 'color: var(--text-secondary); padding: 16px; text-align: center;';
+          p.textContent = 'No completed executions';
+          completedContainer.appendChild(p);
         } else {
           for (const execution of completed) {
             const card = await createExecutionCard(execution, 'completed');
@@ -2279,250 +3027,57 @@
       // Check if current step is terminal (last step) - don't show next step if it is
       const isTerminalStep = stepNumber === totalSteps && totalSteps > 0;
       
-      // Next step button (only for active executions) - shown in header next to Started/Started by
-      let executeStepHtml = '';
+      // Next step button (only for active executions) — shown in header next to Started/Started by
+      let nextStepBtnWrap = null;
       if (status === 'active' && currentStep.step_id) {
-        executeStepHtml =
-          '<button type="button" class="btn btn-primary btn-sm flows2-exec-next-step" style="white-space: nowrap;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>Next step</button>';
+        nextStepBtnWrap = document.createElement('div');
+        nextStepBtnWrap.className = 'flows2-exec-next-step-wrap';
+        nextStepBtnWrap.style.marginTop = '8px';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-primary btn-sm flows2-exec-next-step';
+        btn.style.whiteSpace = 'nowrap';
+        const tri = flows2SvgPlayTriangle14();
+        tri.style.marginRight = '6px';
+        btn.appendChild(tri);
+        btn.appendChild(document.createTextNode('Next step'));
+        nextStepBtnWrap.appendChild(btn);
       }
       
-      // Fetch execution details once for both completed steps and next step
-      // Do this for both active and completed executions
-      let completedStepsHtml = '';
-      let nextStepHtml = '';
-      let nextStepHeaderHtml = '';
-      let executionEvidenceHtml = '';
+      // Fetch execution details once for completed steps, evidence, and next-step header
+      let executionEvidenceEl = null;
+      let completedStepsSectionEl = null;
+      let nextStepHeaderEl = null;
       if (status === 'active' || status === 'completed') {
         try {
           const executionData = await CoreAPI.getExecution(executionId);
           const executionSteps = executionData.execution_steps || [];
           const evidenceList = executionData.evidence || [];
           if (evidenceList.length > 0) {
-            const evidenceShown = evidenceList.slice(0, FLOWS2_MAX_EVIDENCE_ITEMS);
-            executionEvidenceHtml = `
-              <div class="execution-evidence-section" style="margin-bottom: 12px; padding: 12px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-light, #e5e7eb);">
-                <div style="font-size: 12px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Evidence (${evidenceList.length})</div>
-                <div style="display: flex; flex-direction: column; gap: 6px;">
-                  ${evidenceShown.map(ev => {
-                    const viewUrl = typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceViewUrl ? CoreAPI.getEvidenceViewUrl(ev.id) : '#';
-                    const downloadUrl = typeof CoreAPI !== 'undefined' && CoreAPI.getEvidenceDownloadUrl ? CoreAPI.getEvidenceDownloadUrl(ev.id) : '#';
-                    const fileName = escapeHtml(ev.file_name || 'Evidence file');
-                    return '<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--bg-card, #fff); border-radius: 6px; border: 1px solid var(--border-light, #e5e7eb);"><span style="font-size: 13px; color: var(--text-primary, #111827);">' + fileName + '</span><div style="display: flex; gap: 8px;"><a href="' + viewUrl + '" target="_blank" rel="noopener" style="font-size: 12px; color: var(--primary, #3b82f6); text-decoration: none; font-weight: 500;">View</a><a href="' + downloadUrl + '" target="_blank" rel="noopener" style="font-size: 12px; color: var(--primary, #3b82f6); text-decoration: none; font-weight: 500;">Download</a></div></div>';
-                  }).join('')}
-                </div>
-              </div>
-            `;
+            executionEvidenceEl = flows2BuildExecutionEvidenceSectionDOM(evidenceList);
           }
           
-          // Get completed steps, sorted by step_number
           const completedSteps = executionSteps
-            .filter(es => es.status === 'completed' || es.status === 'COMPLETED')
+            .filter((es) => es.status === 'completed' || es.status === 'COMPLETED')
             .sort((a, b) => a.step_number - b.step_number);
           
           if (completedSteps.length > 0) {
             const completedStepsCapped = completedSteps.slice(0, FLOWS2_MAX_COMPLETED_EXECUTION_STEPS);
-            const completedStepsSectionId = `completed-steps-${executionId}`;
-            let sectionTitle =
-              status === 'completed' ? `All Steps (${completedSteps.length})` : `Completed Steps (${completedSteps.length})`;
-            if (completedSteps.length > FLOWS2_MAX_COMPLETED_EXECUTION_STEPS) {
-              sectionTitle += ` — showing ${FLOWS2_MAX_COMPLETED_EXECUTION_STEPS}`;
-            }
-            completedStepsHtml = `
-              <div class="completed-steps-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
-                <div class="completed-steps-header flows2-completed-steps-toggle" data-completed-section-id="${flows2EscapeAttr(completedStepsSectionId)}" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; margin-bottom: 12px;">
-                  <div style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">${sectionTitle}</div>
-                  <div class="completed-steps-toggle" id="${completedStepsSectionId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                  </div>
-                </div>
-                <div class="completed-steps-content" id="${completedStepsSectionId}" style="display: none;">
-                ${completedStepsCapped.map(es => {
-                  const completedDate = es.completed_at ? new Date(es.completed_at).toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit'
-                  }) : 'Unknown';
-                  const completedBy = es.execution_data?.completed_by || es.execution_data?.completed_by_email || 'Unknown';
-                  const stepName = es.step_name || `Step ${es.step_number}`;
-                  // Use actual inputs/outputs if available, otherwise fall back to step definition
-                  const actualInputs = es.actual_inputs || [];
-                  const actualOutputs = es.actual_outputs || [];
-                  const stepInputs = es.step_inputs || [];
-                  const stepOutputs = es.step_outputs || [];
-                  
-                  // Use actual if available, otherwise use step definition
-                  const displayInputs = actualInputs.length > 0 ? actualInputs : stepInputs;
-                  const displayOutputs = actualOutputs.length > 0 ? actualOutputs : stepOutputs;
-                  
-                  // Get execution metadata (execution prompts and other data)
-                  const executionData = es.execution_data || {};
-                  const executionMetadata = [];
-                  const internalFields = ['completed_by', 'completed_by_email', 'completed_by_user_id', 'completed_at'];
-                  flows2SafeKeys(executionData)
-                    .filter((key) => !internalFields.includes(key))
-                    .slice(0, FLOWS2_MAX_EXECUTION_METADATA_KEYS)
-                    .forEach((key) => {
-                      if (executionData[key] !== null && executionData[key] !== undefined && executionData[key] !== '') {
-                        executionMetadata.push({
-                          label: key,
-                          value: executionData[key],
-                        });
-                      }
-                    });
-                  
-                  // Create unique IDs for this step's panes using execution step ID
-                  const executionStepId = es.id || `step-${es.step_id}-${es.step_number}-${Math.random().toString(36).substr(2, 9)}`;
-                  const inputsPaneId = `inputs-${executionStepId}`;
-                  const outputsPaneId = `outputs-${executionStepId}`;
-                  
-                  // Create inputs pane
-                  let inputsPaneHtml = '';
-                  if (displayInputs.length > 0) {
-                    inputsPaneHtml = `
-                      <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-right: 8px; overflow: hidden;">
-                        <div class="io-pane-header flows2-io-pane-hdr" data-io-pane-id="${flows2EscapeAttr(inputsPaneId)}" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;">
-                          <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Inputs (${displayInputs.length})</div>
-                          <div class="io-pane-toggle" id="${inputsPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                              <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                          </div>
-                        </div>
-                        <div class="io-pane-content" id="${inputsPaneId}" style="display: none; padding: 0 10px 10px 10px;">
-                          ${displayInputs.slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP).map(input => {
-                            const inputName = input.name || 'Unknown';
-                            const inputQty = input.quantity !== null && input.quantity !== undefined ? input.quantity : '';
-                            const inputUnit = input.unit || '';
-                            const inventoryItemId = input.inventory_item_id || null;
-                            return `
-                              <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
-                                <div style="font-weight: 500;">${escapeHtml(inputName)}</div>
-                                ${inputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${escapeHtml(String(inputQty))} ${escapeHtml(String(inputUnit))}</div>` : ''}
-                                ${inventoryItemId ? `<div style="font-size: 10px; color: var(--text-tertiary, #9ca3af); margin-top: 2px;">Inventory ID: ${escapeHtml(inventoryItemId)}</div>` : ''}
-                              </div>
-                            `;
-                          }).join('')}
-                        </div>
-                      </div>
-                    `;
-                  }
-                  
-                  // Create outputs pane
-                  let outputsPaneHtml = '';
-                  if (displayOutputs.length > 0) {
-                    outputsPaneHtml = `
-                      <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-left: 8px; overflow: hidden;">
-                        <div class="io-pane-header flows2-io-pane-hdr" data-io-pane-id="${flows2EscapeAttr(outputsPaneId)}" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;">
-                          <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Outputs (${displayOutputs.length})</div>
-                          <div class="io-pane-toggle" id="${outputsPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                              <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                          </div>
-                        </div>
-                        <div class="io-pane-content" id="${outputsPaneId}" style="display: none; padding: 0 10px 10px 10px;">
-                          ${displayOutputs.slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP).map(output => {
-                            const outputName = output.name || 'Unknown';
-                            const outputQty = output.quantity !== null && output.quantity !== undefined ? output.quantity : '';
-                            const outputUnit = output.unit || '';
-                            return `
-                              <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
-                                <div style="font-weight: 500;">${escapeHtml(outputName)}</div>
-                                ${outputQty ? `<div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${escapeHtml(String(outputQty))} ${escapeHtml(String(outputUnit))}</div>` : ''}
-                              </div>
-                            `;
-                          }).join('')}
-                        </div>
-                      </div>
-                    `;
-                  }
-                  
-                  // Create execution metadata pane
-                  let metadataPaneHtml = '';
-                  if (executionMetadata.length > 0) {
-                    const metadataPaneId = `metadata-${executionStepId}`;
-                    metadataPaneHtml = `
-                      <div style="flex: 1; background: var(--bg-secondary, #f9fafb); border: 1px solid var(--border-light, #e5e7eb); border-radius: 6px; margin-top: 8px; overflow: hidden;">
-                        <div class="io-pane-header flows2-io-pane-hdr" data-io-pane-id="${flows2EscapeAttr(metadataPaneId)}" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; cursor: pointer; user-select: none;">
-                          <div style="font-size: 11px; color: var(--text-secondary, #6b7280); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Execution Metadata (${executionMetadata.length})</div>
-                          <div class="io-pane-toggle" id="${metadataPaneId}-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                              <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                          </div>
-                        </div>
-                        <div class="io-pane-content" id="${metadataPaneId}" style="display: none; padding: 0 10px 10px 10px;">
-                          ${executionMetadata.map(meta => {
-                            const metaLabel = meta.label || 'Unknown';
-                            const metaValue = meta.value;
-                            return `
-                              <div style="font-size: 12px; color: var(--text-primary, #111827); margin-top: 6px; padding: 4px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
-                                <div style="font-weight: 500;">${escapeHtml(metaLabel)}</div>
-                                <div style="font-size: 11px; color: var(--text-secondary, #6b7280); margin-top: 2px;">${escapeHtml(flows2ValueForHtml(metaValue))}</div>
-                              </div>
-                            `;
-                          }).join('')}
-                        </div>
-                      </div>
-                    `;
-                  }
-                  
-                  // Only show panes if we have inputs, outputs, or metadata
-                  let ioPanesHtml = '';
-                  if (inputsPaneHtml || outputsPaneHtml) {
-                    ioPanesHtml = `
-                      <div style="margin-top: 12px; display: flex; gap: 0;">
-                        ${inputsPaneHtml}
-                        ${outputsPaneHtml}
-                      </div>
-                    `;
-                  }
-                  
-                  return `
-                    <div style="padding: 12px 0; border-bottom: 1px solid var(--border-light, #e5e7eb);">
-                      <div style="display: flex; flex-direction: column;">
-                        <div style="margin-bottom: 8px;">
-                          <div style="font-size: 13px; color: var(--text-primary, #111827); font-weight: 500;">${escapeHtml(stepName)}</div>
-                          <div style="font-size: 12px; color: var(--text-secondary, #6b7280); margin-top: 2px;">Completed: ${completedDate} by ${escapeHtml(completedBy)}</div>
-                        </div>
-                        ${ioPanesHtml}
-                        ${metadataPaneHtml}
-                      </div>
-                    </div>
-                  `;
-                }).join('')}
-                </div>
-              </div>
-            `;
+            completedStepsSectionEl = flows2BuildCompletedStepsSectionDOM(
+              executionId,
+              status,
+              completedSteps,
+              completedStepsCapped
+            );
           }
           
-          // Check for next ready step (only if not terminal)
           if (!isTerminalStep) {
-            const readySteps = executionSteps.filter(es => es.status === 'ready' || es.status === 'READY');
-            
+            const readySteps = executionSteps.filter((es) => es.status === 'ready' || es.status === 'READY');
             if (readySteps.length > 0) {
               const nextReadyStep = readySteps[0];
-              const stepDetails = currentProcess?.steps?.find(s => s.id === nextReadyStep.step_id);
-              
+              const stepDetails = currentProcess?.steps?.find((s) => s.id === nextReadyStep.step_id);
               if (stepDetails) {
-                const nextStepInner = `
-                  <div class="next-step-header" style="display: flex; align-items: center; gap: 12px;">
-                    <div class="next-step-icon" style="flex-shrink: 0;">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    </div>
-                    <div class="next-step-info" style="flex: 1;">
-                      <div class="next-step-label" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Next Step</div>
-                      <div class="next-step-name" style="font-weight: 500; color: var(--text-primary); font-size: 14px;">${escapeHtml(stepDetails.name || 'Unknown')}</div>
-                      ${stepDetails.description ? `<div class="next-step-description" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(stepDetails.description)}</div>` : ''}
-                    </div>
-                  </div>
-                `;
-                nextStepHtml = `<div class="next-step-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">${nextStepInner}</div>`;
-                nextStepHeaderHtml = `<div class="next-step-section" style="margin-top: 8px; margin-bottom: 8px;">${nextStepInner}</div>`;
+                nextStepHeaderEl = flows2BuildNextStepSectionDOM(stepDetails, true);
               }
             }
           }
@@ -2536,74 +3091,97 @@
       if (progress >= 100) {
         progressColor = 'var(--success, #10b981)'; // Fully green when complete
       } else if (progress >= 75) {
-        // Blend from blue to green between 75% and 100%
-        const blendFactor = (progress - 75) / 25; // 0 at 75%, 1 at 100%
-        const blue = [59, 130, 246]; // #3b82f6
-        const green = [16, 185, 129]; // #10b981
+        const blendFactor = (progress - 75) / 25;
+        const blue = [59, 130, 246];
+        const green = [16, 185, 129];
         const r = Math.round(blue[0] + (green[0] - blue[0]) * blendFactor);
         const g = Math.round(blue[1] + (green[1] - blue[1]) * blendFactor);
         const b = Math.round(blue[2] + (green[2] - blue[2]) * blendFactor);
         progressColor = `rgb(${r}, ${g}, ${b})`;
       }
       
-      card.innerHTML = `
-        <div class="execution-header flows2-exec-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);">
-          <div style="flex: 1; min-width: 0;">
-            ${status === 'active' ? `
-              ${nextStepHeaderHtml || ''}
-              <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px; margin-top: ${nextStepHeaderHtml ? '8px' : '0'};">Started: ${startDate}</div>
-              <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Started by: ${escapeHtml(user.username)}</div>
-              ${executeStepHtml ? `<div class="flows2-exec-next-step-wrap" style="margin-top: 8px;">${executeStepHtml}</div>` : ''}
-              <div class="execution-progress" style="margin-top: 12px;">
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Progress</div>
-                <div class="progress-bar" style="height: 8px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden;">
-                  <div class="progress-fill" style="height: 100%; background: ${progressColor}; width: ${progress}%; transition: width 0.3s, background 0.3s;"></div>
-                </div>
-              </div>
-            ` : `
-              <div class="execution-id" style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(executionDisplayName)}</div>
-              <div class="execution-date" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;">Completed: ${completedDate || startDate}</div>
-            `}
-          </div>
-          <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-            <span class="badge ${status === 'active' ? 'badge-accent' : 'badge-success'}" style="flex-shrink: 0;">${status === 'active' ? 'In Progress' : 'Completed'}</span>
-            <div class="execution-toggle" style="transition: transform 0.2s; transform: rotate(0deg);">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
-        </div>
-        <div class="execution-content" style="display: none; padding: 12px;">
-          ${status !== 'active' ? `
-          <div class="execution-progress" style="margin-bottom: 12px;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Progress</div>
-            <div class="progress-bar" style="height: 8px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden;">
-              <div class="progress-fill" style="height: 100%; background: ${progressColor}; width: ${progress}%; transition: width 0.3s, background 0.3s;"></div>
-            </div>
-          </div>
-          ` : ''}
-          <div class="execution-details" style="margin-bottom: 12px;">
-            ${status === 'active' ? `
-              ${execution.batch_id ? `
-                <div class="execution-detail" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
-                  <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Batch ID</span>
-                  <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary);">${escapeHtml(execution.batch_id)}</span>
-                </div>
-              ` : ''}
-            ` : `
-              ${execution.batch_id ? `
-                <div class="execution-detail" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
-                  <span class="execution-detail-label" style="font-size: 13px; color: var(--text-secondary);">Batch ID</span>
-                  <span class="execution-detail-value" style="font-size: 13px; color: var(--text-primary);">${escapeHtml(execution.batch_id)}</span>
-                </div>
-              ` : ''}
-            `}
-          </div>
-          ${executionEvidenceHtml || ''}
-          ${completedStepsHtml}
-        </div>
-      `;
+      const execHeader = document.createElement('div');
+      execHeader.className = 'execution-header flows2-exec-card-header';
+      execHeader.style.cssText =
+        'display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; padding: 12px; border-bottom: 1px solid var(--border-light);';
+      
+      const headerLeft = document.createElement('div');
+      headerLeft.style.cssText = 'flex: 1; min-width: 0;';
+      
+      if (status === 'active') {
+        if (nextStepHeaderEl) headerLeft.appendChild(nextStepHeaderEl);
+        const startedEl = document.createElement('div');
+        startedEl.className = 'execution-date';
+        startedEl.style.cssText = `font-size: 13px; color: var(--text-secondary); margin-bottom: 2px; margin-top: ${nextStepHeaderEl ? '8px' : '0'};`;
+        startedEl.textContent = `Started: ${startDate}`;
+        headerLeft.appendChild(startedEl);
+        const byEl = document.createElement('div');
+        byEl.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;';
+        byEl.textContent = `Started by: ${user.username}`;
+        headerLeft.appendChild(byEl);
+        if (nextStepBtnWrap) headerLeft.appendChild(nextStepBtnWrap);
+        flows2AppendExecutionProgressBlock(headerLeft, progressColor, progress, { marginTop: '12px' });
+      } else {
+        const nameEl = document.createElement('div');
+        nameEl.className = 'execution-id';
+        nameEl.style.cssText = 'font-weight: 600; color: var(--text-primary); margin-bottom: 4px;';
+        nameEl.textContent = executionDisplayName;
+        headerLeft.appendChild(nameEl);
+        const compEl = document.createElement('div');
+        compEl.className = 'execution-date';
+        compEl.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;';
+        compEl.textContent = `Completed: ${completedDate || startDate}`;
+        headerLeft.appendChild(compEl);
+      }
+      
+      const headerRight = document.createElement('div');
+      headerRight.style.cssText = 'display: flex; align-items: center; gap: 12px; flex-shrink: 0;';
+      const badge = document.createElement('span');
+      badge.className = `badge ${status === 'active' ? 'badge-accent' : 'badge-success'}`;
+      badge.style.flexShrink = '0';
+      badge.textContent = status === 'active' ? 'In Progress' : 'Completed';
+      const toggleWrap = document.createElement('div');
+      toggleWrap.className = 'execution-toggle';
+      toggleWrap.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg);';
+      toggleWrap.appendChild(flows2SvgChevron16());
+      headerRight.appendChild(badge);
+      headerRight.appendChild(toggleWrap);
+      execHeader.appendChild(headerLeft);
+      execHeader.appendChild(headerRight);
+      card.appendChild(execHeader);
+      
+      const execContent = document.createElement('div');
+      execContent.className = 'execution-content';
+      execContent.style.cssText = 'display: none; padding: 12px;';
+      
+      if (status !== 'active') {
+        flows2AppendExecutionProgressBlock(execContent, progressColor, progress, { marginBottom: '12px' });
+      }
+      
+      const detailsWrap = document.createElement('div');
+      detailsWrap.className = 'execution-details';
+      detailsWrap.style.marginBottom = '12px';
+      if (execution.batch_id) {
+        const row = document.createElement('div');
+        row.className = 'execution-detail';
+        row.style.cssText =
+          'display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light);';
+        const lab = document.createElement('span');
+        lab.className = 'execution-detail-label';
+        lab.style.cssText = 'font-size: 13px; color: var(--text-secondary);';
+        lab.textContent = 'Batch ID';
+        const val = document.createElement('span');
+        val.className = 'execution-detail-value';
+        val.style.cssText = 'font-size: 13px; color: var(--text-primary);';
+        val.textContent = execution.batch_id;
+        row.appendChild(lab);
+        row.appendChild(val);
+        detailsWrap.appendChild(row);
+      }
+      execContent.appendChild(detailsWrap);
+      if (executionEvidenceEl) execContent.appendChild(executionEvidenceEl);
+      if (completedStepsSectionEl) execContent.appendChild(completedStepsSectionEl);
+      card.appendChild(execContent);
 
       // Clicks on .flows2-exec-next-step-wrap / .flows2-exec-next-step must not toggle card expand
       // (see stopPropagation on the wrap; do not add interactive children on the header outside that wrap without updating this).
@@ -2734,11 +3312,43 @@
       }
     }
 
+    const FLOWS2_JSON_DISPLAY_MAX_DEPTH = 12;
+    const FLOWS2_JSON_DISPLAY_MAX_ARRAY_ITEMS = 400;
+
+    function flows2ClampObjectForDisplay(val, maxDepth, depth) {
+      if (depth >= maxDepth) return '[Max nesting depth for display]';
+      if (val === null || typeof val !== 'object') return val;
+      if (Array.isArray(val)) {
+        const cap = Math.min(val.length, FLOWS2_JSON_DISPLAY_MAX_ARRAY_ITEMS);
+        const out = [];
+        for (let i = 0; i < cap; i++) {
+          const x = val[i];
+          out.push(
+            x !== null && typeof x === 'object'
+              ? flows2ClampObjectForDisplay(x, maxDepth, depth + 1)
+              : x
+          );
+        }
+        if (val.length > cap) out.push('… [array truncated for display]');
+        return out;
+      }
+      const out = {};
+      flows2SafeKeys(val).forEach((k) => {
+        const v = val[k];
+        out[k] =
+          v !== null && typeof v === 'object'
+            ? flows2ClampObjectForDisplay(v, maxDepth, depth + 1)
+            : v;
+      });
+      return out;
+    }
+
     function flows2SerializeForDisplay(val) {
       if (val === null || val === undefined) return '';
       if (typeof val === 'object') {
         try {
-          let s = JSON.stringify(val, null, 2);
+          const clamped = flows2ClampObjectForDisplay(val, FLOWS2_JSON_DISPLAY_MAX_DEPTH, 0);
+          let s = JSON.stringify(clamped, null, 2);
           if (s.length > FLOWS2_MAX_JSON_DISPLAY_CHARS) {
             return s.slice(0, FLOWS2_MAX_JSON_DISPLAY_CHARS) + '\n… [truncated for display]';
           }
@@ -2759,6 +3369,22 @@
       if (val === null || val === undefined) return '';
       if (typeof val === 'object') return flows2SerializeForDisplay(val);
       return String(val);
+    }
+
+    function flows2CreateChevronSvgEl16() {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '16');
+      svg.setAttribute('height', '16');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      poly.setAttribute('points', '6 9 12 15 18 9');
+      svg.appendChild(poly);
+      return svg;
     }
 
     /** Same rules as execution-shared-utils.prettyLabel (batch/start picker Details). */
@@ -2941,7 +3567,18 @@
       return findings.some((f) => f && String(f.check_id || '') === 'untracked_items');
     }
 
-    function flows2RenderKvRowsFromObject(entry, options) {
+    function flows2InvAppendExecPickerKv(grid, keyText, valueText) {
+      const k = document.createElement('div');
+      k.className = 'exec-picker-kv__k';
+      k.textContent = keyText;
+      const v = document.createElement('div');
+      v.className = 'exec-picker-kv__v';
+      v.textContent = valueText;
+      grid.appendChild(k);
+      grid.appendChild(v);
+    }
+
+    function flows2InvCollectKvKeys(entry, options) {
       const skip = options.skipKeys || new Set(['user_id']);
       const preferred = options.preferredKeys || [];
       const keys = [];
@@ -2957,29 +3594,38 @@
         if (v === undefined || v === null || v === '') return;
         keys.push(k);
       });
-      return keys
-        .map((k) => {
-          const raw = entry[k];
-          const label = flows2HumanFieldLabel(k);
-          let display = flows2FormatPlainFieldValue(k, raw);
-          if (typeof raw === 'object' && raw !== null) display = flows2SerializeForDisplay(raw);
-          if (!display) return '';
-          return `<div class="flows2-inv-kv"><span style="color:var(--text-secondary);">${escapeHtml(label)}</span><span>${escapeHtml(display)}</span></div>`;
-        })
-        .filter(Boolean)
-        .join('');
+      return keys;
     }
 
-    /** Audit rows only — batch/start picker parity (execution-modal.css .exec-picker-kv). */
-    function flows2FormatAuditHistoryEntries(history) {
-      if (!Array.isArray(history) || !history.length) return '';
-      // UX only: hide values that look like raw UUIDs in name fields (not a security boundary).
+    function flows2InvAppendKvRowsFromObject(container, entry, options) {
+      flows2InvCollectKvKeys(entry, options).forEach((k) => {
+        const raw = entry[k];
+        const label = flows2HumanFieldLabel(k);
+        let display = flows2FormatPlainFieldValue(k, raw);
+        if (typeof raw === 'object' && raw !== null) display = flows2SerializeForDisplay(raw);
+        if (!display) return;
+        const row = document.createElement('div');
+        row.className = 'flows2-inv-kv';
+        const s1 = document.createElement('span');
+        s1.style.color = 'var(--text-secondary)';
+        s1.textContent = label;
+        const s2 = document.createElement('span');
+        s2.textContent = display;
+        row.appendChild(s1);
+        row.appendChild(s2);
+        container.appendChild(row);
+      });
+    }
+
+    /** Audit rows — DOM nodes only (execution-modal.css .exec-picker-kv). */
+    function flows2InvAppendAuditHistoryEntries(grid, history) {
+      if (!Array.isArray(history) || !history.length) return;
       const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return history
+      history
         .slice(-FLOWS2_MAX_AUDIT_HISTORY)
         .reverse()
-        .map((h) => {
-          if (!h || typeof h !== 'object') return '';
+        .forEach((h) => {
+          if (!h || typeof h !== 'object') return;
           const when = h.timestamp_utc || h.timestamp || h.created_at || '';
           const src = h.source_method || h.source || '';
           let nameDisp = (h.operator_name && String(h.operator_name).trim()) || '';
@@ -2997,19 +3643,15 @@
           if (!action) action = 'inventory item added';
           const whenDisp = when ? flows2FmtIsoAudit(when) : '—';
           const srcDisp = src ? flows2PrettyLabel(String(src)) : '—';
-          return (
-            `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('action'))}</div><div class="exec-picker-kv__v">${escapeHtml(flows2PrettyLabel(action))}</div>` +
-            `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('timestamp_utc'))}</div><div class="exec-picker-kv__v">${escapeHtml(whenDisp)}</div>` +
-            `<div class="exec-picker-kv__k">${escapeHtml('Operator name')}</div><div class="exec-picker-kv__v">${escapeHtml(nameOut)}</div>` +
-            `<div class="exec-picker-kv__k">${escapeHtml('Operator email')}</div><div class="exec-picker-kv__v">${escapeHtml(emailOut)}</div>` +
-            `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('source_method'))}</div><div class="exec-picker-kv__v">${escapeHtml(srcDisp)}</div>`
-          );
-        })
-        .join('');
+          flows2InvAppendExecPickerKv(grid, flows2PrettyLabel('action'), flows2PrettyLabel(action));
+          flows2InvAppendExecPickerKv(grid, flows2PrettyLabel('timestamp_utc'), whenDisp);
+          flows2InvAppendExecPickerKv(grid, 'Operator name', nameOut);
+          flows2InvAppendExecPickerKv(grid, 'Operator email', emailOut);
+          flows2InvAppendExecPickerKv(grid, flows2PrettyLabel('source_method'), srcDisp);
+        });
     }
 
-    /** When inventory_audit_history is empty but execution_trace exists (typical for produced items). Mirrors execution-render-inputs fallback. */
-    function flows2RenderSyntheticAuditFromTrace(item, trace) {
+    function flows2InvAppendSyntheticAuditFromTrace(grid, item, trace) {
       const ts = item.created_at || trace.completed_at || '';
       let opName = '';
       let opEmail = '';
@@ -3028,73 +3670,86 @@
           }
         }
       }
-      // UX only: avoid showing raw UUID as operator name when a friendlier field exists (not a security check).
       if (opName && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(opName.trim())) opName = '';
       let srcMethod = trace.source_method ? String(trace.source_method) : '';
       if (!srcMethod && item.source_execution_step_id) srcMethod = 'completed step';
-      const rows =
-        `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('action'))}</div><div class="exec-picker-kv__v">${escapeHtml('Inventory item created')}</div>` +
-        `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('timestamp_utc'))}</div><div class="exec-picker-kv__v">${escapeHtml(ts ? flows2FmtIsoAudit(ts) : '—')}</div>` +
-        `<div class="exec-picker-kv__k">${escapeHtml('Operator name')}</div><div class="exec-picker-kv__v">${escapeHtml(opName || '—')}</div>` +
-        `<div class="exec-picker-kv__k">${escapeHtml('Operator email')}</div><div class="exec-picker-kv__v">${escapeHtml(opEmail || '—')}</div>` +
-        `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel('source_method'))}</div><div class="exec-picker-kv__v">${escapeHtml(srcMethod ? flows2PrettyLabel(srcMethod) : '—')}</div>`;
-      return `<div class="exec-picker-kv">${rows}</div>`;
+      flows2InvAppendExecPickerKv(grid, flows2PrettyLabel('action'), 'Inventory item created');
+      flows2InvAppendExecPickerKv(grid, flows2PrettyLabel('timestamp_utc'), ts ? flows2FmtIsoAudit(ts) : '—');
+      flows2InvAppendExecPickerKv(grid, 'Operator name', opName || '—');
+      flows2InvAppendExecPickerKv(grid, 'Operator email', opEmail || '—');
+      flows2InvAppendExecPickerKv(
+        grid,
+        flows2PrettyLabel('source_method'),
+        srcMethod ? flows2PrettyLabel(srcMethod) : '—'
+      );
     }
 
-    /** Always render audit block: persisted history → else synthetic from trace → else empty copy. */
-    function flows2RenderInventoryAuditSection(item) {
+    function flows2AppendInventoryAuditSection(frag, item) {
       const ex = item.extra_data || {};
       const audit = ex.inventory_audit_history;
       const auditArr = Array.isArray(audit) ? audit : [];
-      const persisted = flows2FormatAuditHistoryEntries(auditArr);
-      if (persisted) {
-        return `<div class="flows2-inv-detail-section"><h4>Audit history</h4><div class="exec-picker-kv">${persisted}</div></div>`;
+      const section = document.createElement('div');
+      section.className = 'flows2-inv-detail-section';
+      const h = document.createElement('h4');
+      h.textContent = 'Audit history';
+      section.appendChild(h);
+      const grid = document.createElement('div');
+      grid.className = 'exec-picker-kv';
+      if (auditArr.length) {
+        flows2InvAppendAuditHistoryEntries(grid, auditArr);
+        section.appendChild(grid);
+        frag.appendChild(section);
+        return;
       }
       const trace = ex.execution_trace;
       if (trace && typeof trace === 'object' && flows2SafeKeys(trace).length) {
-        return `<div class="flows2-inv-detail-section"><h4>Audit history</h4>${flows2RenderSyntheticAuditFromTrace(item, trace)}</div>`;
+        flows2InvAppendSyntheticAuditFromTrace(grid, item, trace);
+        section.appendChild(grid);
+        frag.appendChild(section);
+        return;
       }
-      return (
-        `<div class="flows2-inv-detail-section"><h4>Audit history</h4>` +
-        `<p style="margin:0;font-size:13px;color:var(--text-secondary,#6b7280);">No audit entries recorded for this item.</p></div>`
-      );
+      const empty = document.createElement('p');
+      empty.style.margin = '0';
+      empty.style.fontSize = '13px';
+      empty.style.color = 'var(--text-secondary,#6b7280)';
+      empty.textContent = 'No audit entries recorded for this item.';
+      section.appendChild(empty);
+      frag.appendChild(section);
     }
 
     /**
      * System findings messages plus, only when check_id untracked_items is present: remaining to reconcile
      * and reconciliation activity. No reconciliation UI when that finding is absent.
      */
-    function flows2RenderInventorySystemFindingsSection(item) {
+    function flows2AppendInventorySystemFindingsSection(frag, item) {
       const ex = item.extra_data || {};
       const findings = item.system_findings;
       const hasUntracked = flows2HasUntrackedSystemFinding(item);
 
-      let messagesHtml = '';
+      const messagesFrag = document.createDocumentFragment();
       if (findings && findings.length) {
         const messages = [];
         findings.forEach((f) => {
           const msg = flows2SystemFindingPlainMessage(f);
           if (msg && !messages.includes(msg)) messages.push(msg);
         });
-        if (messages.length) {
-          messagesHtml = messages
-            .slice(0, FLOWS2_MAX_SYSTEM_FINDING_MESSAGES)
-            .map(
-              (m) =>
-                `<div style="margin:0 0 10px 0;font-size:13px;line-height:1.4;color:var(--text-primary,#111827);">${escapeHtml(m)}</div>`
-            )
-            .join('');
-        }
+        messages.slice(0, FLOWS2_MAX_SYSTEM_FINDING_MESSAGES).forEach((m) => {
+          const div = document.createElement('div');
+          div.style.margin = '0 0 10px 0';
+          div.style.fontSize = '13px';
+          div.style.lineHeight = '1.4';
+          div.style.color = 'var(--text-primary,#111827)';
+          div.textContent = m;
+          messagesFrag.appendChild(div);
+        });
       }
 
-      let untrackedHtml = '';
+      let untrackedOuter = null;
       if (hasUntracked) {
         const remainingBal = ex.remaining_balance_to_reconcile;
         const hasRemaining =
           remainingBal !== undefined && remainingBal !== null && String(remainingBal).trim() !== '';
-
-        const history = ex.reconciliation_history;
-        const arr = Array.isArray(history) ? history : [];
+        const arr = Array.isArray(ex.reconciliation_history) ? ex.reconciliation_history : [];
         const preferred = [
           'timestamp',
           'user_email',
@@ -3104,48 +3759,62 @@
           'reconciliation_amount',
           'surplus_from_reconciliation',
         ];
-        const blocks = arr
-          .slice(0, FLOWS2_MAX_RECONCILIATION_BLOCKS)
-          .map((entry) => {
-            if (!entry || typeof entry !== 'object') return '';
-            const rows = flows2RenderKvRowsFromObject(entry, {
-              preferredKeys: preferred,
-              skipKeys: new Set(['user_id']),
-            });
-            if (!rows) return '';
-            return `<div style="padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);">${rows}</div>`;
-          })
-          .filter(Boolean)
-          .join('');
 
-        const extras = [];
+        const extras = document.createElement('div');
         if (hasRemaining) {
-          extras.push(
-            `<div class="exec-picker-kv"><div class="exec-picker-kv__k">${escapeHtml('Remaining to reconcile')}</div><div class="exec-picker-kv__v">${escapeHtml(String(remainingBal))}</div></div>`
-          );
+          const grid = document.createElement('div');
+          grid.className = 'exec-picker-kv';
+          flows2InvAppendExecPickerKv(grid, 'Remaining to reconcile', String(remainingBal));
+          extras.appendChild(grid);
         }
-        if (blocks) {
-          const recTop = hasRemaining ? 'margin-top:14px;' : '';
-          extras.push(
-            `<div style="${recTop}margin-bottom:10px;font-size:12px;font-weight:600;color:var(--text-secondary,#6b7280);letter-spacing:0.03em;text-transform:uppercase;">Reconciliation activity</div>${blocks}`
-          );
+
+        const boxesFrag = document.createDocumentFragment();
+        arr.slice(0, FLOWS2_MAX_RECONCILIATION_BLOCKS).forEach((entry) => {
+          if (!entry || typeof entry !== 'object') return;
+          const inner = document.createElement('div');
+          flows2InvAppendKvRowsFromObject(inner, entry, {
+            preferredKeys: preferred,
+            skipKeys: new Set(['user_id']),
+          });
+          if (!inner.childNodes.length) return;
+          const box = document.createElement('div');
+          box.style.cssText =
+            'padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);';
+          box.appendChild(inner);
+          boxesFrag.appendChild(box);
+        });
+
+        if (boxesFrag.childNodes.length) {
+          const hdr = document.createElement('div');
+          hdr.style.cssText = `${hasRemaining ? 'margin-top:14px;' : ''}margin-bottom:10px;font-size:12px;font-weight:600;color:var(--text-secondary,#6b7280);letter-spacing:0.03em;text-transform:uppercase;`;
+          hdr.textContent = 'Reconciliation activity';
+          extras.appendChild(hdr);
+          extras.appendChild(boxesFrag);
         }
-        if (extras.length) {
-          const sep =
-            messagesHtml !== ''
-              ? 'margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light,#e5e7eb);'
-              : '';
-          untrackedHtml = `<div style="${sep}">${extras.join('')}</div>`;
+
+        if (extras.childNodes.length) {
+          untrackedOuter = extras;
+          if (messagesFrag.childNodes.length) {
+            untrackedOuter.style.marginTop = '12px';
+            untrackedOuter.style.paddingTop = '12px';
+            untrackedOuter.style.borderTop = '1px solid var(--border-light,#e5e7eb)';
+          }
         }
       }
 
-      const body = messagesHtml + untrackedHtml;
-      if (!body.trim()) return '';
-      return `<div class="flows2-inv-detail-section"><h4>System findings</h4>${body}</div>`;
+      if (!messagesFrag.childNodes.length && !untrackedOuter) return;
+
+      const section = document.createElement('div');
+      section.className = 'flows2-inv-detail-section';
+      const h = document.createElement('h4');
+      h.textContent = 'System findings';
+      section.appendChild(h);
+      section.appendChild(messagesFrag);
+      if (untrackedOuter) section.appendChild(untrackedOuter);
+      frag.appendChild(section);
     }
 
-    /** Output: variable_output (minus ready-date technical keys) + one Ready date row + custom_expiry_actual (same grid as Production / audit). */
-    function flows2RenderInventoryOutputSection(item) {
+    function flows2AppendInventoryOutputSection(frag, item) {
       const ex = item.extra_data || {};
       const vOut = ex.variable_output;
       const pairs = [];
@@ -3162,9 +3831,7 @@
       }
 
       const readyOne = flows2InventorySingleReadyDate(item);
-      if (readyOne) {
-        pairs.unshift(['Ready date', readyOne]);
-      }
+      if (readyOne) pairs.unshift(['Ready date', readyOne]);
 
       const vOutHas = (key) =>
         vOut && typeof vOut === 'object' && Object.prototype.hasOwnProperty.call(vOut, key);
@@ -3179,140 +3846,228 @@
         pairs.push(['Custom expiry applied', flows2FormatCustomExpiryObj(cea) || '—']);
       }
 
-      if (!pairs.length) return '';
+      if (!pairs.length) return;
 
-      const rows = pairs
-        .map(
-          ([lab, val]) =>
-            `<div class="exec-picker-kv__k">${escapeHtml(lab)}</div><div class="exec-picker-kv__v">${escapeHtml(val)}</div>`
-        )
-        .join('');
-      return `<div class="flows2-inv-detail-section"><h4>Output</h4><div class="exec-picker-kv">${rows}</div></div>`;
+      const section = document.createElement('div');
+      section.className = 'flows2-inv-detail-section';
+      const h = document.createElement('h4');
+      h.textContent = 'Output';
+      section.appendChild(h);
+      const grid = document.createElement('div');
+      grid.className = 'exec-picker-kv';
+      pairs.forEach(([lab, val]) => flows2InvAppendExecPickerKv(grid, lab, String(val)));
+      section.appendChild(grid);
+      frag.appendChild(section);
     }
 
-    function flows2RenderInventoryProductionBlock(item) {
+    function flows2AppendInventoryProductionBlock(frag, item) {
       const ex = item.extra_data || {};
       const producingProcessName = ex.producing_process_name ? String(ex.producing_process_name).trim() : '';
-      let rows = '';
+      const grid = document.createElement('div');
+      grid.className = 'exec-picker-kv';
+      let any = false;
       if (item.process_name) {
-        rows += `<div class="exec-picker-kv__k">${escapeHtml('Process')}</div><div class="exec-picker-kv__v">${escapeHtml(String(item.process_name))}</div>`;
+        flows2InvAppendExecPickerKv(grid, 'Process', String(item.process_name));
+        any = true;
       }
       if (
         producingProcessName &&
         (!item.process_name || String(item.process_name) !== producingProcessName)
       ) {
-        rows += `<div class="exec-picker-kv__k">${escapeHtml('Producing process')}</div><div class="exec-picker-kv__v">${escapeHtml(producingProcessName)}</div>`;
+        flows2InvAppendExecPickerKv(grid, 'Producing process', producingProcessName);
+        any = true;
       }
       const stepName =
         (item.producing_step_name && String(item.producing_step_name).trim()) ||
         (ex.producing_step_name && String(ex.producing_step_name).trim()) ||
         '';
       if (stepName) {
-        rows += `<div class="exec-picker-kv__k">${escapeHtml('Producing step')}</div><div class="exec-picker-kv__v">${escapeHtml(stepName)}</div>`;
+        flows2InvAppendExecPickerKv(grid, 'Producing step', stepName);
+        any = true;
       }
-      if (!rows) return '';
-      return (
-        `<div style="margin-top: 0;">` +
-        `<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">Production</div>` +
-        `<div class="exec-picker-kv">${rows}</div>` +
-        `</div>`
-      );
+      if (!any) return;
+      const wrap = document.createElement('div');
+      wrap.style.marginTop = '0';
+      const lbl = document.createElement('div');
+      lbl.style.cssText =
+        'font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;';
+      lbl.textContent = 'Production';
+      wrap.appendChild(lbl);
+      wrap.appendChild(grid);
+      frag.appendChild(wrap);
     }
 
-    /** Inputs consumed on the step that created this item (same section for intermediate + final). */
-    function flows2RenderInventoryInputsSection(item) {
-      if (!flows2InventoryIsProducedItem(item)) return '';
+    function flows2AppendInventoryInputsSection(frag, item) {
+      if (!flows2InventoryIsProducedItem(item)) return;
       const ex = item.extra_data || {};
       const fq = flows2InvFormatQty;
       const vInputs = ex.variable_inputs;
-      const blocks =
-        Array.isArray(vInputs) && vInputs.length
-          ? vInputs
-              .slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP)
-              .map((input) => {
-                return `<div style="padding:10px;background:var(--bg-secondary,#f9fafb);border-radius:8px;border:1px solid var(--border-light,#e5e7eb);margin-bottom:8px;">
-              <p style="margin:0 0 4px;font-weight:600;">${escapeHtml(input.name || 'Input')}</p>
-              <p style="margin:4px 0 0;font-size:12px;color:var(--text-secondary);">${escapeHtml(fq(input.quantity))} ${escapeHtml(input.unit || '')}</p>
-            </div>`;
-              })
-              .join('')
-          : `<p style="margin:0;font-size:13px;color:var(--text-secondary,#6b7280);">No inputs recorded for this step.</p>`;
-      return `<div class="flows2-inv-detail-section"><h4>Inputs</h4>${blocks}</div>`;
+      const section = document.createElement('div');
+      section.className = 'flows2-inv-detail-section';
+      const h = document.createElement('h4');
+      h.textContent = 'Inputs';
+      section.appendChild(h);
+      if (Array.isArray(vInputs) && vInputs.length) {
+        vInputs.slice(0, FLOWS2_MAX_IO_ROWS_PER_STEP).forEach((input) => {
+          const box = document.createElement('div');
+          box.style.cssText =
+            'padding:10px;background:var(--bg-secondary,#f9fafb);border-radius:8px;border:1px solid var(--border-light,#e5e7eb);margin-bottom:8px;';
+          const p1 = document.createElement('p');
+          p1.style.margin = '0 0 4px';
+          p1.style.fontWeight = '600';
+          p1.textContent = input.name || 'Input';
+          const p2 = document.createElement('p');
+          p2.style.margin = '4px 0 0';
+          p2.style.fontSize = '12px';
+          p2.style.color = 'var(--text-secondary)';
+          p2.textContent = `${fq(input.quantity)} ${input.unit || ''}`.trim();
+          box.appendChild(p1);
+          box.appendChild(p2);
+          section.appendChild(box);
+        });
+      } else {
+        const p = document.createElement('p');
+        p.style.margin = '0';
+        p.style.fontSize = '13px';
+        p.style.color = 'var(--text-secondary,#6b7280)';
+        p.textContent = 'No inputs recorded for this step.';
+        section.appendChild(p);
+      }
+      frag.appendChild(section);
     }
 
-    /** Prior steps that fed this item’s inputs (intermediate + final when trace was computed). */
-    function flows2RenderInventoryUpstreamSection(item) {
+    function flows2AppendInventoryUpstreamSection(frag, item) {
       const ex = item.extra_data || {};
       const fq = flows2InvFormatQty;
       const fd = flows2InvFormatDate;
       const prevSteps = ex.previous_steps_data;
-      if (!Array.isArray(prevSteps) || !prevSteps.length) return '';
-      const blocks = prevSteps
-        .slice(0, FLOWS2_MAX_UPSTREAM_STEPS)
-        .map((step) => {
-          const sn = step.step_name || 'Step';
-          const snum = step.step_number != null ? `#${step.step_number}` : '';
-          let inner = `<p style="margin:0 0 8px;font-weight:600;">${escapeHtml(sn)} ${escapeHtml(snum)}</p>`;
-          if (step.completed_at) inner += `<p style="margin:0 0 6px;font-size:12px;color:var(--text-secondary);">Completed: ${escapeHtml(fd(step.completed_at))}</p>`;
-          if (step.input_name)
-            inner += `<p style="margin:0 0 4px;font-size:12px;">Consumed: ${escapeHtml(step.input_name)} — ${escapeHtml(fq(step.input_quantity))} ${escapeHtml(step.input_unit || '')}</p>`;
-          const sp = step.execution_prompts;
-          if (sp && typeof sp === 'object' && flows2SafeKeys(sp).length) {
-            inner += `<p style="margin:8px 0 4px;font-size:11px;font-weight:600;color:var(--text-secondary);">Prompts in chain</p>`;
-            inner += flows2SafeKeys(sp)
-              .slice(0, FLOWS2_MAX_PROMPT_ENTRIES)
-              .map(
-                (k) =>
-                  `<div class="flows2-inv-kv"><span>${escapeHtml(k)}</span><span>${escapeHtml(flows2SerializeForDisplay(sp[k]))}</span></div>`
-              )
-              .join('');
-          }
-          if (step.completed_by) inner += `<div class="flows2-inv-kv"><span>Completed by</span><span>${escapeHtml(flows2SerializeForDisplay(step.completed_by))}</span></div>`;
-          if (step.execution_errors)
-            inner += `<p style="margin:8px 0 0;font-size:12px;color:var(--error,#b91c1c);">${escapeHtml(flows2SerializeForDisplay(step.execution_errors))}</p>`;
-          if (step.execution_warnings)
-            inner += `<p style="margin:4px 0 0;font-size:12px;color:var(--warning,#b45309);">${escapeHtml(flows2SerializeForDisplay(step.execution_warnings))}</p>`;
-          return `<div style="padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);">${inner}</div>`;
-        })
-        .join('');
-      return `<div class="flows2-inv-detail-section"><h4>Upstream chain</h4>${blocks}</div>`;
+      if (!Array.isArray(prevSteps) || !prevSteps.length) return;
+
+      const section = document.createElement('div');
+      section.className = 'flows2-inv-detail-section';
+      const h = document.createElement('h4');
+      h.textContent = 'Upstream chain';
+      section.appendChild(h);
+
+      prevSteps.slice(0, FLOWS2_MAX_UPSTREAM_STEPS).forEach((step) => {
+        const box = document.createElement('div');
+        box.style.cssText =
+          'padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);';
+        const sn = step.step_name || 'Step';
+        const snum = step.step_number != null ? `#${step.step_number}` : '';
+        const p1 = document.createElement('p');
+        p1.style.margin = '0 0 8px';
+        p1.style.fontWeight = '600';
+        p1.textContent = `${sn} ${snum}`.trim();
+        box.appendChild(p1);
+        if (step.completed_at) {
+          const p2 = document.createElement('p');
+          p2.style.cssText = 'margin:0 0 6px;font-size:12px;color:var(--text-secondary);';
+          p2.textContent = `Completed: ${fd(step.completed_at)}`;
+          box.appendChild(p2);
+        }
+        if (step.input_name) {
+          const p3 = document.createElement('p');
+          p3.style.cssText = 'margin:0 0 4px;font-size:12px;';
+          p3.textContent = `Consumed: ${step.input_name} — ${fq(step.input_quantity)} ${step.input_unit || ''}`;
+          box.appendChild(p3);
+        }
+        const sp = step.execution_prompts;
+        if (sp && typeof sp === 'object' && flows2SafeKeys(sp).length) {
+          const pl = document.createElement('p');
+          pl.style.cssText = 'margin:8px 0 4px;font-size:11px;font-weight:600;color:var(--text-secondary);';
+          pl.textContent = 'Prompts in chain';
+          box.appendChild(pl);
+          flows2SafeKeys(sp)
+            .slice(0, FLOWS2_MAX_PROMPT_ENTRIES)
+            .forEach((k) => {
+              const row = document.createElement('div');
+              row.className = 'flows2-inv-kv';
+              const s1 = document.createElement('span');
+              s1.textContent = k;
+              const s2 = document.createElement('span');
+              s2.textContent = flows2SerializeForDisplay(sp[k]);
+              row.appendChild(s1);
+              row.appendChild(s2);
+              box.appendChild(row);
+            });
+        }
+        if (step.completed_by) {
+          const row = document.createElement('div');
+          row.className = 'flows2-inv-kv';
+          const s1 = document.createElement('span');
+          s1.textContent = 'Completed by';
+          const s2 = document.createElement('span');
+          s2.textContent = flows2SerializeForDisplay(step.completed_by);
+          row.appendChild(s1);
+          row.appendChild(s2);
+          box.appendChild(row);
+        }
+        if (step.execution_errors) {
+          const pe = document.createElement('p');
+          pe.style.cssText = 'margin:8px 0 0;font-size:12px;color:var(--error,#b91c1c);';
+          pe.textContent = flows2SerializeForDisplay(step.execution_errors);
+          box.appendChild(pe);
+        }
+        if (step.execution_warnings) {
+          const pw = document.createElement('p');
+          pw.style.cssText = 'margin:4px 0 0;font-size:12px;color:var(--warning,#b45309);';
+          pw.textContent = flows2SerializeForDisplay(step.execution_warnings);
+          box.appendChild(pw);
+        }
+        section.appendChild(box);
+      });
+      frag.appendChild(section);
     }
 
-    /**
-     * Single expand layout for all inventory types: same section order; each block adds content only when applicable
-     * (Inputs always for produced items; Audit always rendered by flows2RenderInventoryAuditSection).
-     */
-    function buildFlows2InventoryDetailsSection(item) {
+    /** DOM-only inventory details (no innerHTML); appended under `.execution-content`. */
+    function buildFlows2InventoryDetailsFragment(item) {
+      const frag = document.createDocumentFragment();
       const ex = item.extra_data || {};
-      let html = '';
 
-      html += flows2RenderInventoryProductionBlock(item);
-      html += flows2RenderInventorySystemFindingsSection(item);
+      flows2AppendInventoryProductionBlock(frag, item);
+      flows2AppendInventorySystemFindingsSection(frag, item);
 
       const prompts = ex.execution_prompts;
       if (prompts && typeof prompts === 'object' && flows2SafeKeys(prompts).length) {
-        const rows = flows2SafeKeys(prompts)
+        const sec = document.createElement('div');
+        sec.className = 'flows2-inv-detail-section';
+        const h = document.createElement('h4');
+        h.textContent = 'Custom prompts';
+        sec.appendChild(h);
+        const grid = document.createElement('div');
+        grid.className = 'exec-picker-kv';
+        flows2SafeKeys(prompts)
           .slice(0, FLOWS2_MAX_PROMPT_ENTRIES)
-          .map(
-            (k) =>
-              `<div class="exec-picker-kv__k">${escapeHtml(flows2PrettyLabel(k))}</div><div class="exec-picker-kv__v">${escapeHtml(flows2SerializeForDisplay(prompts[k]))}</div>`
-          )
-          .join('');
-        html += `<div class="flows2-inv-detail-section"><h4>Custom prompts</h4><div class="exec-picker-kv">${rows}</div></div>`;
+          .forEach((k) => {
+            flows2InvAppendExecPickerKv(grid, flows2PrettyLabel(k), flows2SerializeForDisplay(prompts[k]));
+          });
+        sec.appendChild(grid);
+        frag.appendChild(sec);
       }
 
-      html += flows2RenderInventoryInputsSection(item);
-      html += flows2RenderInventoryOutputSection(item);
-      html += flows2RenderInventoryUpstreamSection(item);
+      flows2AppendInventoryInputsSection(frag, item);
+      flows2AppendInventoryOutputSection(frag, item);
+      flows2AppendInventoryUpstreamSection(frag, item);
 
       const notes = (ex.notes && String(ex.notes).trim()) || '';
       if (notes) {
-        html += `<div class="flows2-inv-detail-section"><h4>Notes</h4><p style="margin:0;white-space:pre-wrap;font-size:13px;">${escapeHtml(notes)}</p></div>`;
+        const sec = document.createElement('div');
+        sec.className = 'flows2-inv-detail-section';
+        const hn = document.createElement('h4');
+        hn.textContent = 'Notes';
+        sec.appendChild(hn);
+        const p = document.createElement('p');
+        p.style.margin = '0';
+        p.style.whiteSpace = 'pre-wrap';
+        p.style.fontSize = '13px';
+        p.textContent = notes;
+        sec.appendChild(p);
+        frag.appendChild(sec);
       }
 
-      html += flows2RenderInventoryAuditSection(item);
-
-      return html;
+      flows2AppendInventoryAuditSection(frag, item);
+      return frag;
     }
 
     function createInventoryItemCardFlows(item) {
@@ -3385,8 +4140,7 @@
       arrowWrap.className = 'execution-toggle';
       arrowWrap.id = 'arrow-flows-' + item.id;
       arrowWrap.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg);';
-      arrowWrap.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+      arrowWrap.appendChild(flows2CreateChevronSvgEl16());
 
       right.appendChild(badge);
       right.appendChild(arrowWrap);
@@ -3399,7 +4153,7 @@
       content.className = 'execution-content';
       content.id = 'details-flows-' + item.id;
       content.style.cssText = 'display: none; padding: 12px;';
-      content.innerHTML = buildFlows2InventoryDetailsSection(item);
+      content.appendChild(buildFlows2InventoryDetailsFragment(item));
 
       card.appendChild(content);
 
@@ -3414,17 +4168,25 @@
       const container = document.getElementById('inventory-container');
       if (!container) return;
 
-      container.innerHTML = '';
+      container.replaceChildren();
 
       if (!flows2Inventory.allItems.length) {
-        container.innerHTML =
-          '<div class="flows2-inv-empty"><p>No inventory items for this process.</p></div>';
+        const empty = document.createElement('div');
+        empty.className = 'flows2-inv-empty';
+        const p = document.createElement('p');
+        p.textContent = 'No inventory items for this process.';
+        empty.appendChild(p);
+        container.appendChild(empty);
         return;
       }
 
       if (!items.length) {
-        container.innerHTML =
-          '<div class="flows2-inv-empty"><p>No items in this category.</p></div>';
+        const empty = document.createElement('div');
+        empty.className = 'flows2-inv-empty';
+        const p = document.createElement('p');
+        p.textContent = 'No items in this category.';
+        empty.appendChild(p);
+        container.appendChild(empty);
         return;
       }
 
@@ -3440,16 +4202,11 @@
 
     async function loadInventory() {
       if (!processId) return;
-      if (flows2InventoryFetchController) {
-        flows2InventoryFetchController.abort();
-      }
-      flows2InventoryFetchController = new AbortController();
       const requestedPid = processId;
-      const gen = ++flows2InventoryLoadGeneration;
-      const { signal } = flows2InventoryFetchController;
+      const { signal, gen } = Flows2InvLoad.begin();
       try {
         const inventoryData = await CoreAPI.getInventory(null, requestedPid, { signal });
-        if (gen !== flows2InventoryLoadGeneration || requestedPid !== processId) return;
+        if (gen !== Flows2InvLoad.generation || requestedPid !== processId) return;
         const items = inventoryData.inventory_items || [];
         flows2SetInventoryFromApi(items, requestedPid);
         flows2RerenderInventory();
@@ -3696,7 +4453,7 @@
     function updateUnitDropdown(unitSelect, selectedUnit) {
       if (!selectedUnit) {
         // Show all units
-        unitSelect.innerHTML = '';
+        unitSelect.replaceChildren();
         [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
           const option = document.createElement('option');
           option.value = unit;
@@ -3709,7 +4466,7 @@
       const relatedUnits = getRelatedUnits(selectedUnit);
       const currentValue = unitSelect.value;
       
-      unitSelect.innerHTML = '';
+      unitSelect.replaceChildren();
       relatedUnits.forEach(unit => {
         const option = document.createElement('option');
         option.value = unit;
@@ -3731,50 +4488,61 @@
       container.style.position = 'relative';
       container.style.flex = '1';
       
-      container.innerHTML = `
-        <input 
-          type="text" 
-          class="form-input io-name-input searchable-dropdown-input" 
-          placeholder="${placeholder}"
-          autocomplete="off"
-          style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;"
-          data-dropdown-id="${uniqueId}"
-        />
-        <div 
-          class="searchable-dropdown-list" 
-          id="${uniqueId}"
-          style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; max-height: 200px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-top: 4px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12));"
-        ></div>
-      `;
-      
-      const input = container.querySelector('.searchable-dropdown-input');
-      const dropdown = container.querySelector('.searchable-dropdown-list');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'form-input io-name-input searchable-dropdown-input';
+      input.setAttribute('placeholder', placeholder);
+      input.setAttribute('autocomplete', 'off');
+      input.setAttribute('data-dropdown-id', uniqueId);
+      input.style.cssText =
+        'width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      const dropdown = document.createElement('div');
+      dropdown.className = 'searchable-dropdown-list';
+      dropdown.id = uniqueId;
+      dropdown.style.cssText =
+        'display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; max-height: 200px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-top: 4px; box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.12));';
+      container.appendChild(input);
+      container.appendChild(dropdown);
       let filteredItems = items;
       let selectedIndex = -1;
       const originalItems = items; // Keep reference to original items for comparison
       
       function renderDropdown() {
+        dropdown.replaceChildren();
         if (filteredItems.length === 0) {
-          dropdown.innerHTML = '<div style="padding: 12px; color: var(--text-secondary); text-align: center; font-size: 14px;">No materials found</div>';
+          const empty = document.createElement('div');
+          empty.style.cssText =
+            'padding: 12px; color: var(--text-secondary); text-align: center; font-size: 14px;';
+          empty.textContent = 'No materials found';
+          dropdown.appendChild(empty);
         } else {
-          dropdown.innerHTML = filteredItems.map((item, index) => {
-            // Prepend process name to product name for quick identification
+          filteredItems.forEach((item, index) => {
             const baseDisplayName = item.displayName || item.name;
             const displayName = item.process_name ? `${item.process_name} - ${baseDisplayName}` : baseDisplayName;
-            const displayText = `${displayName} (${item.quantity || '0'} ${item.unit || ''})`;
-            return `
-              <div 
-                class="dropdown-item ${index === selectedIndex ? 'selected' : ''}"
-                data-index="${index}"
-                style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-light); transition: background 0.15s; ${index === selectedIndex ? 'background: var(--bg-hover, rgba(0, 0, 0, 0.05));' : ''}"
-                onmouseover="this.style.background='var(--bg-hover, rgba(0, 0, 0, 0.05))'"
-                onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'"
-              >
-                <div style="font-weight: 500; color: var(--text-primary); font-size: 14px;">${escapeHtml(displayName)}</div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${item.quantity || '0'} ${item.unit || ''}</div>
-              </div>
-            `;
-          }).join('');
+            const row = document.createElement('div');
+            row.className = 'dropdown-item' + (index === selectedIndex ? ' selected' : '');
+            row.setAttribute('data-index', String(index));
+            row.style.cssText =
+              'padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border-light); transition: background 0.15s;';
+            if (index === selectedIndex) {
+              row.style.background = 'var(--bg-hover, rgba(0, 0, 0, 0.05))';
+            }
+            const line1 = document.createElement('div');
+            line1.style.cssText = 'font-weight: 500; color: var(--text-primary); font-size: 14px;';
+            line1.textContent = displayName;
+            const line2 = document.createElement('div');
+            line2.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-top: 2px;';
+            line2.textContent = `${item.quantity || '0'} ${item.unit || ''}`.trim();
+            row.appendChild(line1);
+            row.appendChild(line2);
+            row.addEventListener('mouseenter', () => {
+              if (index !== selectedIndex) row.style.background = 'var(--bg-hover, rgba(0, 0, 0, 0.05))';
+            });
+            row.addEventListener('mouseleave', () => {
+              if (index !== selectedIndex) row.style.background = 'transparent';
+            });
+            dropdown.appendChild(row);
+          });
         }
         dropdown.style.display = filteredItems.length > 0 || input.value.trim() ? 'block' : 'none';
       }
@@ -4067,13 +4835,7 @@
       tooltipIcon.className = 'tooltip-icon';
       tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
       tooltipIcon.title = 'Select inventory at execution: You will choose which supplier batch is consumed when this step runs. Do NOT ask for batch numbers here. Static: System will not prompt for confirmation upon execution.';
-      tooltipIcon.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="16" x2="12" y2="12"></line>
-          <line x1="12" y1="8" x2="12.01" y2="8"></line>
-        </svg>
-      `;
+      tooltipIcon.replaceChildren(flows2SvgHelpCircle14());
       typeSpan.appendChild(tooltipIcon);
       
       // Delete button
@@ -4084,12 +4846,7 @@
         ioItem.remove();
         updateStepMeta(button.closest('.step-card'));
       };
-      deleteButton.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      `;
+      deleteButton.replaceChildren(flows2SvgCloseX14());
       
       // Assemble the item
       ioItem.appendChild(nameContainer);
@@ -4237,13 +4994,7 @@
       tooltipIcon.className = 'tooltip-icon';
       tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
       tooltipIcon.title = 'Select inventory at execution: You will choose which supplier batch is consumed when this step runs. Do NOT ask for batch numbers here. Static: System will not prompt for confirmation upon execution.';
-      tooltipIcon.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="16" x2="12" y2="12"></line>
-          <line x1="12" y1="8" x2="12.01" y2="8"></line>
-        </svg>
-      `;
+      tooltipIcon.replaceChildren(flows2SvgHelpCircle14());
       typeSpan.appendChild(tooltipIcon);
       
       // Delete button
@@ -4260,12 +5011,7 @@
           ioList.appendChild(emptyMsg);
         }
       };
-      deleteButton.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      `;
+      deleteButton.replaceChildren(flows2SvgCloseX14());
       
       // Assemble the item
       ioItem.appendChild(nameContainer);
@@ -4353,13 +5099,7 @@
       tooltipIcon.className = 'tooltip-icon';
       tooltipIcon.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
       tooltipIcon.title = 'Select inventory at execution: You will choose which supplier batch is consumed when this step runs. Do NOT ask for batch numbers here. Static: System will not prompt for confirmation upon execution.';
-      tooltipIcon.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="16" x2="12" y2="12"></line>
-          <line x1="12" y1="8" x2="12.01" y2="8"></line>
-        </svg>
-      `;
+      tooltipIcon.replaceChildren(flows2SvgHelpCircle14());
       typeSpan.appendChild(tooltipIcon);
       
       // Delete button
@@ -4376,12 +5116,7 @@
           ioList.appendChild(emptyMsg);
         }
       };
-      deleteButton.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      `;
+      deleteButton.replaceChildren(flows2SvgCloseX14());
       
       // Assemble the item
       ioItem.appendChild(nameContainer);
@@ -4400,105 +5135,187 @@
     window.addExecutionPrompt = function(button) {
       const ioSection = button.closest('.io-section');
       const ioList = ioSection.querySelector('.io-list');
-      
-      // Remove "No execution prompts defined" message if present
+      const stepCard = button.closest('.step-card');
+
       const emptyMsg = ioList.querySelector('p');
       if (emptyMsg && emptyMsg.textContent.includes('No execution prompts defined')) {
         emptyMsg.remove();
       }
-      
-      const promptHtml = `
-        <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
-          <span class="io-item-name" style="flex: 1;">
-            <input type="text" class="form-input prompt-label-input" placeholder="Label (e.g., Batch number)" style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-          </span>
-          <span class="io-item-type">
-            <select class="form-select prompt-type-input" style="width: 120px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="date">Date</option>
-              <option value="select">Select</option>
-              <option value="evidence">Evidence (upload)</option>
-            </select>
-          </span>
-          <span class="io-item-unit">
-            <input type="text" class="form-input prompt-unit-input" placeholder="Unit (optional)" style="width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-          </span>
-          <span class="io-item-type">
-            <select class="form-select prompt-required-input" style="width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="true">Required</option>
-              <option value="false">Optional</option>
-            </select>
-          </span>
-          <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.io-item').remove(); updateStepMeta(this.closest('.step-card'));" style="padding: 4px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-      `;
-      
-      ioList.insertAdjacentHTML('beforeend', promptHtml);
-      
-      // Update step meta
-      updateStepMeta(button.closest('.step-card'));
+
+      const ioItem = document.createElement('div');
+      ioItem.className = 'io-item';
+      ioItem.style.cssText =
+        'display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'io-item-name';
+      nameSpan.style.flex = '1';
+      const labelIn = document.createElement('input');
+      labelIn.type = 'text';
+      labelIn.className = 'form-input prompt-label-input';
+      labelIn.placeholder = 'Label (e.g., Batch number)';
+      labelIn.style.cssText =
+        'width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      nameSpan.appendChild(labelIn);
+
+      const typeSpan1 = document.createElement('span');
+      typeSpan1.className = 'io-item-type';
+      const typeSel = document.createElement('select');
+      typeSel.className = 'form-select prompt-type-input';
+      typeSel.style.cssText =
+        'width: 120px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      [
+        ['text', 'Text'],
+        ['number', 'Number'],
+        ['date', 'Date'],
+        ['select', 'Select'],
+        ['evidence', 'Evidence (upload)'],
+      ].forEach(([val, label]) => {
+        const o = document.createElement('option');
+        o.value = val;
+        o.textContent = label;
+        typeSel.appendChild(o);
+      });
+      typeSpan1.appendChild(typeSel);
+
+      const unitSpan = document.createElement('span');
+      unitSpan.className = 'io-item-unit';
+      const unitIn = document.createElement('input');
+      unitIn.type = 'text';
+      unitIn.className = 'form-input prompt-unit-input';
+      unitIn.placeholder = 'Unit (optional)';
+      unitIn.style.cssText =
+        'width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      unitSpan.appendChild(unitIn);
+
+      const reqSpan = document.createElement('span');
+      reqSpan.className = 'io-item-type';
+      const reqSel = document.createElement('select');
+      reqSel.className = 'form-select prompt-required-input';
+      reqSel.style.cssText =
+        'width: 100px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      const reqT = document.createElement('option');
+      reqT.value = 'true';
+      reqT.textContent = 'Required';
+      const reqF = document.createElement('option');
+      reqF.value = 'false';
+      reqF.textContent = 'Optional';
+      reqSel.appendChild(reqT);
+      reqSel.appendChild(reqF);
+      reqSpan.appendChild(reqSel);
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn btn-ghost btn-icon btn-sm';
+      delBtn.style.padding = '4px';
+      delBtn.replaceChildren(flows2SvgCloseX14());
+      delBtn.addEventListener('click', () => {
+        ioItem.remove();
+        updateStepMeta(stepCard);
+      });
+
+      ioItem.appendChild(nameSpan);
+      ioItem.appendChild(typeSpan1);
+      ioItem.appendChild(unitSpan);
+      ioItem.appendChild(reqSpan);
+      ioItem.appendChild(delBtn);
+
+      ioList.appendChild(ioItem);
+      updateStepMeta(stepCard);
     };
-    
+
     window.addOutput = function(button) {
       const ioSection = button.closest('.io-section');
       const ioList = ioSection.querySelector('.io-list');
-      
-      // Remove "No outputs defined" message if present
+      const stepCard = button.closest('.step-card');
+
       const emptyMsg = ioList.querySelector('p');
       if (emptyMsg && emptyMsg.textContent.includes('No outputs defined')) {
         emptyMsg.remove();
       }
-      
-      const outputHtml = `
-        <div class="io-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;">
-          <span class="io-item-name" style="flex: 1;">
-            <input type="text" class="form-input io-name-input" placeholder="Product name" style="width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-          </span>
-          <span class="io-item-quantity">
-            <input type="number" class="form-input io-quantity-input" placeholder="0" style="width: 80px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-          </span>
-          <span class="io-item-unit">
-            <select class="form-select io-unit-input" style="width: 90px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="kg">kg</option>
-              <option value="g">g</option>
-              <option value="L">L</option>
-              <option value="mL">mL</option>
-              <option value="pcs">pcs</option>
-              <option value="units">units</option>
-            </select>
-          </span>
-          <span class="io-item-type" style="position: relative;">
-            <select class="form-select io-type-input" style="width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">
-              <option value="variable">Confirm at execution</option>
-              <option value="static">Static</option>
-            </select>
-            <span class="tooltip-icon" style="margin-left: 4px; cursor: help; color: var(--text-tertiary);" title="Confirm at execution: You will confirm or override the actual quantity produced when this step runs. Static: System will not prompt for confirmation upon execution.">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-              </svg>
-            </span>
-          </span>
-          <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.io-item').remove(); updateStepMeta(this.closest('.step-card'));" style="padding: 4px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-      `;
-      
-      ioList.insertAdjacentHTML('beforeend', outputHtml);
-      
-      // Update step meta
-      updateStepMeta(button.closest('.step-card'));
+
+      const ioItem = document.createElement('div');
+      ioItem.className = 'io-item';
+      ioItem.style.cssText =
+        'display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: var(--radius-md); margin-bottom: 8px;';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'io-item-name';
+      nameSpan.style.flex = '1';
+      const nameIn = document.createElement('input');
+      nameIn.type = 'text';
+      nameIn.className = 'form-input io-name-input';
+      nameIn.placeholder = 'Product name';
+      nameIn.style.cssText =
+        'width: 100%; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      nameSpan.appendChild(nameIn);
+
+      const qtySpan = document.createElement('span');
+      qtySpan.className = 'io-item-quantity';
+      const qtyIn = document.createElement('input');
+      qtyIn.type = 'number';
+      qtyIn.className = 'form-input io-quantity-input';
+      qtyIn.placeholder = '0';
+      qtyIn.style.cssText =
+        'width: 80px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      qtySpan.appendChild(qtyIn);
+
+      const unitSpan = document.createElement('span');
+      unitSpan.className = 'io-item-unit';
+      const unitSel = document.createElement('select');
+      unitSel.className = 'form-select io-unit-input';
+      unitSel.style.cssText =
+        'width: 90px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      ['kg', 'g', 'L', 'mL', 'pcs', 'units'].forEach((u) => {
+        const o = document.createElement('option');
+        o.value = u;
+        o.textContent = u;
+        unitSel.appendChild(o);
+      });
+      unitSpan.appendChild(unitSel);
+
+      const typeSpan = document.createElement('span');
+      typeSpan.className = 'io-item-type';
+      typeSpan.style.position = 'relative';
+      const typeSel = document.createElement('select');
+      typeSel.className = 'form-select io-type-input';
+      typeSel.style.cssText =
+        'width: 180px; padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+      const optV = document.createElement('option');
+      optV.value = 'variable';
+      optV.textContent = 'Confirm at execution';
+      const optS = document.createElement('option');
+      optS.value = 'static';
+      optS.textContent = 'Static';
+      typeSel.appendChild(optV);
+      typeSel.appendChild(optS);
+      typeSpan.appendChild(typeSel);
+      const outTooltip = document.createElement('span');
+      outTooltip.className = 'tooltip-icon';
+      outTooltip.style.cssText = 'margin-left: 4px; cursor: help; color: var(--text-tertiary);';
+      outTooltip.title =
+        'Confirm at execution: You will confirm or override the actual quantity produced when this step runs. Static: System will not prompt for confirmation upon execution.';
+      outTooltip.replaceChildren(flows2SvgHelpCircle14());
+      typeSpan.appendChild(outTooltip);
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn btn-ghost btn-icon btn-sm';
+      delBtn.style.padding = '4px';
+      delBtn.replaceChildren(flows2SvgCloseX14());
+      delBtn.addEventListener('click', () => {
+        ioItem.remove();
+        updateStepMeta(stepCard);
+      });
+
+      ioItem.appendChild(nameSpan);
+      ioItem.appendChild(qtySpan);
+      ioItem.appendChild(unitSpan);
+      ioItem.appendChild(typeSpan);
+      ioItem.appendChild(delBtn);
+
+      ioList.appendChild(ioItem);
+      updateStepMeta(stepCard);
     };
     
     // Helper function to update step meta (input/output counts)
@@ -4510,10 +5327,13 @@
       
       const stepMeta = stepCard.querySelector('.flows2-step__meta');
       if (stepMeta) {
-        stepMeta.innerHTML = `
-          <span>${inputs} input${inputs !== 1 ? 's' : ''}</span>
-          <span>${outputs} output${outputs !== 1 ? 's' : ''}</span>
-        `;
+        stepMeta.textContent = '';
+        const sIn = document.createElement('span');
+        sIn.textContent = `${inputs} input${inputs !== 1 ? 's' : ''}`;
+        const sOut = document.createElement('span');
+        sOut.textContent = `${outputs} output${outputs !== 1 ? 's' : ''}`;
+        stepMeta.appendChild(sIn);
+        stepMeta.appendChild(sOut);
       }
     }
     
@@ -4540,7 +5360,9 @@
           card.style.opacity = '0.5';
           dragHandle.style.cursor = 'grabbing';
           e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/html', card.innerHTML);
+          // Some browsers require setData for drag to proceed; reorder uses `draggedStepCard`, not this payload.
+          const stepId = card.getAttribute('data-step-id') || '';
+          e.dataTransfer.setData('text/plain', 'flows2-step:' + stepId);
         });
         
         dragHandle.addEventListener('dragend', (e) => {
@@ -5025,12 +5847,6 @@
   </div>
   <script>
     (function() {
-      function escapeHtml(text) {
-        if (text == null || text === undefined) return '';
-        var div = document.createElement('div');
-        div.textContent = String(text);
-        return div.innerHTML;
-      }
       function initRecordWastageModal() {
         var recordWastageModal = document.getElementById('record-wastage-modal');
         var recordWastageCardsContainer = document.getElementById('record-wastage-cards-container');
@@ -5039,7 +5855,11 @@
         var recordWastageSubmit = document.getElementById('record-wastage-submit');
         if (!recordWastageModal || !recordWastageCardsContainer) return;
         async function openRecordWastageModal(optionalFilterIds) {
-          recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">Loading inventory...</p>';
+          recordWastageCardsContainer.replaceChildren();
+          var loadMsg = document.createElement('p');
+          loadMsg.style.cssText = 'padding: 16px; color: var(--text-secondary);';
+          loadMsg.textContent = 'Loading inventory...';
+          recordWastageCardsContainer.appendChild(loadMsg);
           recordWastageModal.style.display = 'flex';
           document.body.style.overflow = 'hidden';
           var filterIds = Array.isArray(optionalFilterIds) ? optionalFilterIds.map(String) : null;
@@ -5054,10 +5874,16 @@
               items = items.filter(function(item) { return item && idSet.has(String(item.id)); });
             }
             if (items.length === 0) {
-              recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--text-secondary);">' + (filterIds ? 'No expired materials with quantity to dispose.' : 'No inventory with quantity to dispose.') + '</p>';
+              recordWastageCardsContainer.replaceChildren();
+              var emptyP = document.createElement('p');
+              emptyP.style.cssText = 'padding: 16px; color: var(--text-secondary);';
+              emptyP.textContent = filterIds
+                ? 'No expired materials with quantity to dispose.'
+                : 'No inventory with quantity to dispose.';
+              recordWastageCardsContainer.appendChild(emptyP);
               return;
             }
-            recordWastageCardsContainer.innerHTML = '';
+            recordWastageCardsContainer.replaceChildren();
             items.forEach(function(item) {
               var qtyNum = parseFloat(item.quantity);
               var unit = item.unit || 'units';
@@ -5067,16 +5893,47 @@
               card.dataset.inventoryId = item.id;
               card.dataset.maxQuantity = String(item.quantity);
               var nameLine = (item.process_name ? item.process_name + ' – ' : '') + item.name;
-              card.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">' +
-                '<div><span style="font-weight: 600; color: var(--text-primary);">' + escapeHtml(nameLine) + '</span>' +
-                '<span style="font-size: 12px; color: var(--text-secondary); margin-left: 6px;">Available: ' + escapeHtml(String(item.quantity)) + ' ' + escapeHtml(unit) + '</span></div></div>' +
-                '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">' +
-                '<label style="font-size: 12px; color: var(--text-secondary);">Quantity to waste</label>' +
-                '<input type="number" class="wastage-qty-input" min="0" max="' + qtyNum + '" step="0.0001" placeholder="0" value="" style="width: 100px; padding: 8px 10px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;">' +
-                '<span style="font-size: 13px; color: var(--text-secondary);">' + escapeHtml(unit) + '</span>' +
-                '<button type="button" class="btn btn-secondary btn-sm waste-entire-btn" style="font-size: 12px;">Waste entire item</button></div>';
-              var qtyInput = card.querySelector('.wastage-qty-input');
-              var wasteEntireBtn = card.querySelector('.waste-entire-btn');
+              var topRow = document.createElement('div');
+              topRow.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;';
+              var titleWrap = document.createElement('div');
+              var nameSpan = document.createElement('span');
+              nameSpan.style.cssText = 'font-weight: 600; color: var(--text-primary);';
+              nameSpan.textContent = nameLine;
+              var availSpan = document.createElement('span');
+              availSpan.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-left: 6px;';
+              availSpan.textContent = 'Available: ' + String(item.quantity) + ' ' + unit;
+              titleWrap.appendChild(nameSpan);
+              titleWrap.appendChild(availSpan);
+              topRow.appendChild(titleWrap);
+              var ctrlRow = document.createElement('div');
+              ctrlRow.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-wrap: wrap;';
+              var qtyLab = document.createElement('label');
+              qtyLab.style.cssText = 'font-size: 12px; color: var(--text-secondary);';
+              qtyLab.textContent = 'Quantity to waste';
+              var qtyInput = document.createElement('input');
+              qtyInput.type = 'number';
+              qtyInput.className = 'wastage-qty-input';
+              qtyInput.min = '0';
+              qtyInput.max = String(qtyNum);
+              qtyInput.step = '0.0001';
+              qtyInput.placeholder = '0';
+              qtyInput.value = '';
+              qtyInput.style.cssText =
+                'width: 100px; padding: 8px 10px; border-radius: var(--radius-lg); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px;';
+              var unitSpan = document.createElement('span');
+              unitSpan.style.cssText = 'font-size: 13px; color: var(--text-secondary);';
+              unitSpan.textContent = unit;
+              var wasteEntireBtn = document.createElement('button');
+              wasteEntireBtn.type = 'button';
+              wasteEntireBtn.className = 'btn btn-secondary btn-sm waste-entire-btn';
+              wasteEntireBtn.style.fontSize = '12px';
+              wasteEntireBtn.textContent = 'Waste entire item';
+              ctrlRow.appendChild(qtyLab);
+              ctrlRow.appendChild(qtyInput);
+              ctrlRow.appendChild(unitSpan);
+              ctrlRow.appendChild(wasteEntireBtn);
+              card.appendChild(topRow);
+              card.appendChild(ctrlRow);
               if (wasteEntireBtn) wasteEntireBtn.addEventListener('click', function() { qtyInput.value = String(item.quantity); });
               if (qtyInput) qtyInput.addEventListener('input', function() {
                 var v = parseFloat(this.value);
@@ -5087,7 +5944,11 @@
             });
           } catch (e) {
             console.error('Failed to load inventory for wastage', e);
-            recordWastageCardsContainer.innerHTML = '<p style="padding: 16px; color: var(--error, #ef4444);">Failed to load inventory.</p>';
+            recordWastageCardsContainer.replaceChildren();
+            var errP = document.createElement('p');
+            errP.style.cssText = 'padding: 16px; color: var(--error, #ef4444);';
+            errP.textContent = 'Failed to load inventory.';
+            recordWastageCardsContainer.appendChild(errP);
           }
         }
         function closeRecordWastageModal() {
