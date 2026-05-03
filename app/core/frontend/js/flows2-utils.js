@@ -49,6 +49,11 @@
         .replace(/>/g, '&gt;');
     }
 
+    /** Strip non-alphanumeric characters from an API-supplied ID before using it as a DOM id or dataset value. */
+    function flows2NormalizeId(v) {
+      return String(v).replace(/[^a-zA-Z0-9_-]/g, '');
+    }
+
     /** Resolve element by id when id may contain CSS-special characters (matches dataset inventory IDs). */
     function flows2QueryById(id) {
       const s = String(id);

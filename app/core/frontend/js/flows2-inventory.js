@@ -723,7 +723,7 @@
       const isUntracked = item.extra_data && item.extra_data.untracked === true;
       const card = document.createElement('div');
       card.className = 'execution-card' + (isUntracked ? ' inventory-card-untracked' : '');
-      card.dataset.inventoryId = String(item.id);
+      card.dataset.inventoryId = flows2NormalizeId(item.id);
       card.dataset.isExpanded = 'false';
 
       const fq = flows2InvFormatQty;
@@ -787,7 +787,7 @@
 
       const arrowWrap = document.createElement('div');
       arrowWrap.className = 'execution-toggle';
-      arrowWrap.id = 'arrow-flows-' + item.id;
+      arrowWrap.id = 'arrow-flows-' + flows2NormalizeId(item.id);
       arrowWrap.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg);';
       arrowWrap.appendChild(flows2CreateChevronSvgEl16());
 
@@ -800,7 +800,7 @@
 
       const content = document.createElement('div');
       content.className = 'execution-content';
-      content.id = 'details-flows-' + item.id;
+      content.id = 'details-flows-' + flows2NormalizeId(item.id);
       content.style.cssText = 'display: none; padding: 12px;';
       content.appendChild(buildFlows2InventoryDetailsFragment(item));
 
