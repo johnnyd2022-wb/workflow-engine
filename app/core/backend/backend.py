@@ -2493,8 +2493,6 @@ def list_inventory():
                         extra_data["variable_output"] = matching_output
             except Exception:
                 inc_counter("inventory_hydration_failures")
-                # DEBUG: per-item on hot path — use internal_counters for dashboards
-                logger.debug("list_inventory hydrate extra_data failed item_id=%s", item.id, exc_info=True)
 
         # Look up previous steps data for intermediate products AND final products
         # DAG TRAVERSAL PERFORMANCE WARNING:

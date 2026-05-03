@@ -87,7 +87,7 @@ def validate_json_blob(
             raise ValueError(f"{path}: string too long (max {MAX_STRING_LENGTH} chars)")
     elif isinstance(obj, bool):
         pass
-    elif isinstance(obj, (int, float)):
+    elif isinstance(obj, int | float):
         pass
     elif obj is None:
         pass
