@@ -78,20 +78,26 @@ LIST_INVENTORY_MAX_RECONCILIATION_HISTORY = 60
 
 
 _LIST_ITEM_MAX_CHARS = 4096
+_LIST_ITEM_MAX_NESTED = 20
+
+
+def _trim_value(v):
+    """Cap strings, lists, and dicts one level deep — prevents deep payload explosions."""
+    if isinstance(v, str) and len(v) > _LIST_ITEM_MAX_CHARS:
+        return v[:_LIST_ITEM_MAX_CHARS] + "…"
+    if isinstance(v, list):
+        return v[:_LIST_ITEM_MAX_NESTED]
+    if isinstance(v, dict):
+        return {k: _trim_value(val) for k, val in list(v.items())[:_LIST_ITEM_MAX_NESTED]}
+    return v
 
 
 def _safe_slice_list(lst: list, max_len: int) -> list:
-    """Slice list and trim oversized string values inside dict items."""
+    """Slice list and recursively bound values inside dict items."""
     out = []
     for item in lst[:max_len]:
         if isinstance(item, dict):
-            trimmed = {}
-            for k, v in item.items():
-                if isinstance(v, str) and len(v) > _LIST_ITEM_MAX_CHARS:
-                    trimmed[k] = v[:_LIST_ITEM_MAX_CHARS] + "…"
-                else:
-                    trimmed[k] = v
-            out.append(trimmed)
+            out.append({k: _trim_value(v) for k, v in item.items()})
         else:
             out.append(item)
     return out

@@ -1,3 +1,4 @@
+    // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
     (function () {
       function setActive(target) {
         var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-flows2-target]'));

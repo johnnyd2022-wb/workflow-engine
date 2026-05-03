@@ -1,3 +1,4 @@
+    // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
     // State reset on every navigation — window properties survive HTMX swaps across pages
     window.currentProcess = null;
     window.currentUser = window.currentUser || null;

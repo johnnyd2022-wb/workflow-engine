@@ -1,3 +1,4 @@
+    // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
     async function loadExecutions() {
       if (!processId) return;
       

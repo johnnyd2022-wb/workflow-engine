@@ -1,3 +1,4 @@
+    // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
     function renderSteps(steps) {
       const container = document.getElementById('steps-container');
       if (!container) return;

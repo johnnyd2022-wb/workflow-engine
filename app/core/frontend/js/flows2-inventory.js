@@ -1,3 +1,4 @@
+    // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
     function flows2InventoryTypeLabel(invType) {
       const map = {
         raw_material: 'Raw material',

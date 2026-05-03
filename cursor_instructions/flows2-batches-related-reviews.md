@@ -291,3 +291,265 @@ Globals across split files are fragile long-term
 - ⏭ #5 Not changed — async cancellation already production-grade
 - ⏭ #7 Not changed — three-layer DoS protection already in place
 - ⏭ #8 Not changed — full namespace refactor deferred; state objects already partially scoped
+
+
+Review 2
+This is a strong, materially improved revision. The important part isn’t that every theoretical edge is covered—it’s that your failure modes are now bounded and explicit. That’s the difference between “works in prod” and “survives prod.”
+
+Here’s a precise audit of what you’ve now got—and where the remaining sharp edges actually are.
+
+1. Backend bounding — now correct in practice, with one remaining edge
+
+Your updated pattern:
+
+def _safe_slice_list(lst: list, max_len: int) -> list:
+What you fixed properly
+✅ List cardinality bounded
+✅ Per-item string size bounded (_LIST_ITEM_MAX_CHARS)
+✅ No mutation of ORM objects
+✅ Handles mixed-type lists safely
+
+This closes the primary amplification vector (large arrays + large strings).
+
+Remaining gap (real, but narrow)
+
+You still allow nested structures inside dict values:
+
+{
+  "meta": {
+    "logs": [ ... potentially large ... ]
+  }
+}
+
+Your current logic:
+
+trims strings
+does not bound nested lists/dicts
+Why this matters
+
+A single item could still contain:
+
+deeply nested arrays
+large object graphs
+
+→ You’ve prevented wide explosions, but not deep explosions
+
+Recommendation (keep it pragmatic)
+
+Don’t over-engineer recursion—just cap one more level:
+
+def _trim_value(v):
+    if isinstance(v, str) and len(v) > _LIST_ITEM_MAX_CHARS:
+        return v[:_LIST_ITEM_MAX_CHARS] + "…"
+    if isinstance(v, list):
+        return v[:20]  # small defensive cap
+    if isinstance(v, dict):
+        return {k: _trim_value(val) for k, val in list(v.items())[:20]}
+    return v
+
+Then:
+
+trimmed[k] = _trim_value(v)
+
+That gives you:
+
+depth cap
+breadth cap
+string cap
+
+→ Fully bounded payload surface
+
+**✅ FIXED** — Added `_trim_value` to `backend.py` (caps strings at 4096 chars, lists at 20 items, dicts at 20 keys with recursive value trimming). `_safe_slice_list` now delegates to `_trim_value` per item key. Payload surface is now fully bounded: wide + deep.
+
+2. Frontend serialization — your decision is correct
+
+You explicitly rejected the replacer approach. That’s the right call.
+
+Why your current design wins
+flows2ClampObjectForDisplay → prevents large traversal
+JSON.stringify → runs on already bounded object
+truncation → final safety net
+Critical insight
+
+You’ve moved from:
+
+“truncate after danger”
+
+to:
+
+“prevent danger, then serialize”
+
+That’s the correct order.
+
+Only remaining edge
+
+If flows2ClampObjectForDisplay ever regresses or is bypassed:
+
+JSON.stringify(val, null, 2)
+
+becomes your hot path again.
+
+Minimal hardening (optional)
+
+Guard stringify size via try/catch fallback (you already do this partially). You could also short-circuit:
+
+if (Array.isArray(val) && val.length > SOME_LIMIT) {
+  return '[Array truncated]';
+}
+
+Not urgent—your current layering is already solid.
+
+3. DOM rendering — this is now your biggest win
+
+You eliminated:
+
+innerHTML = `...`
+
+and replaced with:
+
+textContent
+createElement
+appendChild
+Net effect
+XSS surface: near-zero
+Auditability: localized
+Future risk: contained
+Important confirmation
+
+You stated:
+
+buildFlows2InventoryDetailsSection no longer exists
+
+and replaced with:
+
+buildFlows2InventoryDetailsFragment
+
+→ returning DocumentFragment
+
+That’s exactly the right end-state.
+
+Result
+
+You’ve eliminated:
+
+HTML parsing
+string injection
+attribute confusion bugs
+
+This is a category-level fix, not just a patch.
+
+4. ID normalisation — subtle but high-value fix
+function flows2NormalizeId(v)
+
+Applied to:
+
+dataset.inventoryId
+DOM id
+arrow/content IDs
+Why this matters more than it looks
+
+You’ve eliminated:
+
+CSS selector injection
+querySelector breakage
+weird edge cases with #id lookups
+
+Even if IDs are “currently safe” (Postgres ints), this prevents:
+
+future schema drift issues
+accidental UUID/string exposure bugs
+
+This is defensive correctness, not just security.
+
+5. Async control — already production-grade
+
+Your pattern:
+
+const gen = ++flows2InventoryLoadGeneration;
+if (gen !== flows2InventoryLoadGeneration) return;
+AbortController
+This gives you:
+last-write-wins semantics
+no stale UI state
+no race-induced flicker
+
+There’s nothing to improve here without adding complexity.
+
+6. Escaping model — correct because it’s disciplined
+
+You didn’t change anything here, which is correct.
+
+Your system works because:
+
+textContent is dominant
+escaping is context-specific
+rules are documented
+Real risk (organizational, not technical)
+
+If future contributors:
+
+mix contexts
+reintroduce innerHTML
+
+→ bugs reappear
+
+Mitigation (lightweight)
+
+Add one lint-style comment near the top of each file:
+
+// RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
+
+That’s enough to prevent regression.
+
+**✅ FIXED** — Added `// RULE: Never use innerHTML with API data. Use textContent or DOM APIs.` as the first line of all six flows2 JS files.
+
+7. Architecture — still the only structural weakness
+
+You correctly deferred the namespace refactor.
+
+Current state
+Script order defines correctness
+Globals are shared implicitly
+Real risk
+not security
+not performance
+maintainability drift
+When this becomes a problem
+multiple engineers
+longer-lived codebase
+partial refactors
+Minimal future-proofing (low effort)
+
+Instead of full namespace, do this incrementally:
+
+window.flows2 = window.flows2 || {};
+
+Then attach only new things there.
+
+This avoids:
+
+big bang refactor
+breaking changes
+
+**⏭ NOT CHANGED** — Adding `window.flows2 = window.flows2 || {}` without migrating existing globals creates two parallel naming conventions in the same files, which is worse than the current consistent (if flat) approach. Deferred until there's a reason to do the full migration.
+
+Final assessment (what actually changed)
+Before
+Unbounded payloads
+String-based DOM rendering
+Implicit trust of API shape
+Potential XSS + UI DoS vectors
+Now
+Bounded backend payloads (wide + partial depth)
+Pre-clamped frontend objects
+DOM-safe rendering via nodes
+Controlled async flow
+Sanitized identifiers
+Remaining real risks (ranked)
+1. Nested backend structures (medium)
+
+→ fix with shallow recursive clamp
+
+2. Future misuse of DOM APIs (medium, human risk)
+
+→ mitigate with convention comment
