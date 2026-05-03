@@ -13,18 +13,18 @@
       '.exec-spa-section-title { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-secondary, #6b7280); margin: 0 0 14px 0; }',
       '.exec-spa-input-label { font-size: 14px; font-weight: 600; color: var(--text-primary, #111827); margin: 0 0 10px 0; }',
       '.exec-spa-input-label span { font-weight: 400; color: var(--text-secondary, #6b7280); margin-left: 4px; }',
-      // Picker tabs (pill style, brand red for selected)
+      // Picker tabs (pill style, use app success green when selected)
       '.exec-picker-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px 0; }',
       '.exec-picker-tab { appearance: none; border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff); color: var(--text-primary, #111827); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color 120ms, background 120ms, color 120ms; }',
-      '.exec-picker-tab[aria-selected="true"] { border-color: #D9384B; background: rgba(217,56,75,0.06); color: #D9384B; }',
-      '.exec-picker-tab:hover:not([aria-selected="true"]) { border-color: rgba(217,56,75,0.35); }',
+      '.exec-picker-tab[aria-selected="true"] { border-color: var(--success, #10b981); background: var(--bg-card, #fff); color: var(--success, #10b981); }',
+      '.exec-picker-tab:hover:not([aria-selected="true"]) { border-color: color-mix(in srgb, var(--success, #10b981) 45%, transparent); }',
       // Search
       '.exec-picker-search { margin: 0 0 10px 0; }',
       // Card list
       '.exec-picker-cards { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; padding-right: 2px; }',
       '.exec-picker-card { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 10px 14px; border-radius: var(--radius-md, 10px); border: 1px solid var(--border-default, #e5e7eb); background: var(--bg-card, #fff); color: var(--text-primary, #111827); cursor: pointer; transition: border-color 120ms, box-shadow 120ms, background 120ms; }',
-      '.exec-picker-card:hover { border-color: rgba(217,56,75,0.45); }',
-      '.exec-picker-card[aria-pressed="true"] { border-color: #D9384B; box-shadow: 0 0 0 2px rgba(217,56,75,0.14); background: rgba(217,56,75,0.03); }',
+      '.exec-picker-card:hover { border-color: color-mix(in srgb, var(--success, #10b981) 45%, transparent); }',
+      '.exec-picker-card[aria-pressed="true"] { border-color: var(--success, #10b981); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success, #10b981) 22%, transparent); }',
       '.exec-picker-card__title { font-size: 14px; font-weight: 600; margin: 0; }',
       '.exec-picker-card__sub { font-size: 12px; color: var(--text-tertiary, #9ca3af); margin: 0; line-height: 1.4; }',
       '.exec-picker-card__meta { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }',
@@ -77,11 +77,147 @@
   }
 
   function invMatchesSearch(inv, q) {
+    var ITU = window.InventoryTypeUtils;
+    if (ITU && typeof ITU.matchesSearch === 'function') return ITU.matchesSearch(inv, q);
     q = (q || '').trim().toLowerCase();
     if (!q) return true;
     var hay = [inv && inv.name, inv && inv.unit, inv && inv.supplier, inv && inv.supplier_batch_number, inv && inv.process_name]
       .filter(Boolean).join(' ').toLowerCase();
     return hay.indexOf(q) !== -1;
+  }
+
+  function normalizeInventoryTabType(inv) {
+    var t = String((inv && (inv.inventory_type || inv.type || inv.category || inv.item_type)) || '').toLowerCase().trim();
+    if (!t) return 'raw_material';
+    if (t === 'intermediate' || t === 'work_in_progress' || t === 'wip') return 'work_in_progress';
+    if (t === 'final' || t === 'final_product') return 'final_product';
+    if (t === 'raw' || t === 'raw_material') return 'raw_material';
+    return t;
+  }
+
+  /**
+   * Same rules as execution-render-inputs pickDefaultPickerType (modal / batches:start page).
+   */
+  function pickDefaultInventoryTab(inp, allInventory, executionId) {
+    function normalizeExpectedInventoryTabHint(i) {
+      if (!i) return null;
+      var v = i.expected_inventory_type != null ? i.expected_inventory_type : i.expectedInventoryType;
+      if (v == null || v === '') return null;
+      var s = String(v).toLowerCase().trim();
+      if (s === 'intermediate' || s === 'wip' || s === 'work_in_progress') return 'work_in_progress';
+      if (s === 'final' || s === 'final_product') return 'final_product';
+      if (s === 'raw' || s === 'raw_material') return 'raw_material';
+      return null;
+    }
+    function normInputName(s) {
+      return String(s || '').trim().toLowerCase();
+    }
+    function safeName(inv) {
+      try { return String((inv && inv.name) || '').trim().toLowerCase(); } catch (e) { return ''; }
+    }
+    function countTabTypes(list) {
+      var counts = { raw_material: 0, work_in_progress: 0, final_product: 0 };
+      (list || []).forEach(function(inv) {
+        var tab = normalizeInventoryTabType(inv);
+        if (counts[tab] != null) counts[tab] += 1;
+      });
+      return counts;
+    }
+    function sortWithExecutionBias(list) {
+      return (list || []).slice().sort(function(a, b) {
+        var aExecutionId = a.source_execution_id || a.execution_id || null;
+        var bExecutionId = b.source_execution_id || b.execution_id || null;
+        if (executionId) {
+          var aMatches = aExecutionId && String(aExecutionId) === String(executionId);
+          var bMatches = bExecutionId && String(bExecutionId) === String(executionId);
+          if (aMatches && !bMatches) return -1;
+          if (!aMatches && bMatches) return 1;
+        }
+        return 0;
+      });
+    }
+
+    var hinted = normalizeExpectedInventoryTabHint(inp);
+    if (hinted) return hinted;
+
+    var expectedNorm = normInputName(inp && inp.name);
+    var matchingInventory = (allInventory || []).filter(function(inv) {
+      if (!expectedNorm) return false;
+      return safeName(inv) === expectedNorm;
+    });
+    var list = sortWithExecutionBias(matchingInventory);
+    var expected = normInputName(inp && inp.name);
+    var exact =
+      expected
+        ? list.filter(function(inv) {
+            return normInputName(inv && inv.name) === expected;
+          })
+        : [];
+    if (exact.length) {
+      var ec = countTabTypes(exact);
+      var er = ec.raw_material > 0;
+      var ew = ec.work_in_progress > 0;
+      var ef = ec.final_product > 0;
+      var kinds = (er ? 1 : 0) + (ew ? 1 : 0) + (ef ? 1 : 0);
+      if (kinds === 1) {
+        if (er) return 'raw_material';
+        if (ew) return 'work_in_progress';
+        return 'final_product';
+      }
+      if (er && !ew && !ef) return 'raw_material';
+      if (ew && !er && !ef) return 'work_in_progress';
+      if (ef && !er && !ew) return 'final_product';
+      if (ec.final_product > ec.work_in_progress) return 'final_product';
+      if (ec.work_in_progress > ec.final_product) return 'work_in_progress';
+      if (ec.raw_material >= ec.work_in_progress && ec.raw_material >= ec.final_product) return 'raw_material';
+    }
+
+    var counts = countTabTypes(list);
+    var hasWip = counts.work_in_progress > 0;
+    var hasFinal = counts.final_product > 0;
+    var hasRaw = counts.raw_material > 0;
+
+    if (!list.length) {
+      if (inp && inp.source_output_id) return 'work_in_progress';
+      var expectedN = normInputName(inp && inp.name);
+      if (expectedN && allInventory && allInventory.length) {
+        var byName = allInventory.filter(function(inv) {
+          return normInputName(inv && inv.name) === expectedN;
+        });
+        if (byName.length) {
+          var gc = countTabTypes(byName);
+          var gr = gc.raw_material > 0;
+          var gw = gc.work_in_progress > 0;
+          var gf = gc.final_product > 0;
+          var gkinds = (gr ? 1 : 0) + (gw ? 1 : 0) + (gf ? 1 : 0);
+          if (gkinds === 1) {
+            if (gr) return 'raw_material';
+            if (gw) return 'work_in_progress';
+            return 'final_product';
+          }
+          if (gw && !gr && !gf) return 'work_in_progress';
+          if (gf && !gr && !gw) return 'final_product';
+          if (gr && !gw && !gf) return 'raw_material';
+        }
+      }
+      return 'raw_material';
+    }
+
+    if (inp && inp.source_output_id) {
+      if (hasWip || hasFinal) {
+        return counts.final_product > counts.work_in_progress ? 'final_product' : 'work_in_progress';
+      }
+      return 'work_in_progress';
+    }
+
+    if (hasRaw && !hasWip && !hasFinal) return 'raw_material';
+    if (!hasRaw && (hasWip || hasFinal)) {
+      return counts.work_in_progress >= counts.final_product ? 'work_in_progress' : 'final_product';
+    }
+    if (hasRaw && (hasWip || hasFinal)) {
+      return 'raw_material';
+    }
+    return 'raw_material';
   }
 
   function renderPickerCards(container, allInventory, getExpiredReason, activeType, q, selectedId) {
@@ -278,7 +414,12 @@
         var tabs = tabContainer ? Array.prototype.slice.call(tabContainer.querySelectorAll('.exec-picker-tab')) : [];
         if (!cardHost) return;
 
-        var pickerState = { activeType: 'raw_material', q: '', selectedId: '' };
+        var defaultTab = pickDefaultInventoryTab(inp, allInventory, ctx.executionId);
+        var pickerState = { activeType: defaultTab, q: '', selectedId: '' };
+        tabs.forEach(function(tab) {
+          var on = tab.getAttribute('data-exec-type') === defaultTab;
+          tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
 
         function rerender() {
           renderPickerCards(cardHost, allInventory, getExpiredReason, pickerState.activeType, pickerState.q, pickerState.selectedId);
@@ -386,9 +527,9 @@
         });
 
         await CoreAPI.completeStep(executionId, readyStep.id, {
-          inputs: actualInputs,
-          outputs: actualOutputs,
-          execution_prompts: promptPayload,
+          actual_inputs: actualInputs,
+          actual_outputs: actualOutputs,
+          execution_data: promptPayload,
         });
 
         if (typeof ctx.onDone === 'function') ctx.onDone({ executionId: executionId, completed: true });

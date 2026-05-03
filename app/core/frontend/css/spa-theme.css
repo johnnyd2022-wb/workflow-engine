@@ -242,8 +242,8 @@ html[data-spa-theme="dark"] #page-content .long-session-banner-message {
     background: linear-gradient(
       to top,
       #030303 0,
-      #030303 calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px)),
-      transparent calc(var(--spa-mobile-bottom-tab-height, 72px) + env(safe-area-inset-bottom, 0px))
+      #030303 calc(var(--spa-mobile-bottom-tab-height, 66px) + env(safe-area-inset-bottom, 0px)),
+      transparent calc(var(--spa-mobile-bottom-tab-height, 66px) + env(safe-area-inset-bottom, 0px))
     );
   }
 }

@@ -1,0 +1,152 @@
+{# Scripts for batch-start page — placed inside #page-content so HTMX carries them on swap.
+   Jinja context required: process_id, execution_id, step_id, draft, return_to #}
+<script>
+  window.ExecutionStepPageContext = {
+    processId: {{ process_id|tojson }},
+    executionId: {{ execution_id|tojson }},
+    stepId: {{ step_id|tojson }},
+    draft: {{ draft|tojson }},
+    returnTo: {{ return_to|tojson }},
+  };
+
+  (function () {
+    function batchStartNavigate(url) {
+      if (window.htmx) {
+        history.pushState({}, '', url);
+        htmx.ajax('GET', url, {
+          target: '#page-content',
+          swap: 'innerHTML',
+          select: '#page-content',
+        });
+      } else {
+        window.location.href = url;
+      }
+    }
+
+    window.ExecutionModalConfig = {
+      onStepCompleted: async function () {
+        try {
+          var fallback = '/core/flows?id=' + encodeURIComponent(String({{ process_id|tojson }}));
+          var dest = (window.ExecutionStepPageContext && window.ExecutionStepPageContext.returnTo) || fallback;
+          if (
+            typeof dest !== 'string' ||
+            !dest.startsWith('/') ||
+            dest.startsWith('//') ||
+            dest.indexOf('://') !== -1 ||
+            dest.indexOf('\\') !== -1
+          ) {
+            dest = fallback;
+          }
+          batchStartNavigate(dest);
+        } catch (e) {
+          batchStartNavigate('/core/flows');
+        }
+      }
+    };
+  })();
+</script>
+<script src="{{ url_for('core.serve_core_js', filename='core.js') }}"></script>
+<script src="{{ url_for('core.serve_core_js', filename='execution-ui-utils.js') }}"></script>
+{% include 'shared/execution_modal_stack_scripts.html' %}
+<script src="{{ url_for('core.serve_core_js', filename='execution-step-page.js') }}"></script>
+<script>
+  (function () {
+    'use strict';
+
+    function els() {
+      return {
+        root: document.getElementById('batch-record-confirm-root'),
+        openBtn: document.getElementById('batch-start-record-btn'),
+        cancel: document.getElementById('batch-record-confirm-cancel'),
+        ok: document.getElementById('batch-record-confirm-ok'),
+      };
+    }
+
+    var prevFocus = null;
+
+    function lockScroll(on) {
+      document.documentElement.classList.toggle('batch-record-confirm--open', !!on);
+      document.body.classList.toggle('batch-record-confirm--open', !!on);
+    }
+
+    function openConfirm() {
+      var e = els();
+      if (!e.root) {
+        if (typeof window.submitExecution === 'function') return window.submitExecution();
+        return;
+      }
+      prevFocus = document.activeElement;
+      e.root.hidden = false;
+      e.root.setAttribute('aria-hidden', 'false');
+      lockScroll(true);
+      if (e.cancel && e.cancel.focus) e.cancel.focus();
+    }
+
+    function closeConfirm() {
+      var e = els();
+      if (!e.root) return;
+      e.root.hidden = true;
+      e.root.setAttribute('aria-hidden', 'true');
+      lockScroll(false);
+      if (prevFocus && typeof prevFocus.focus === 'function') {
+        try {
+          prevFocus.focus();
+        } catch (err) {}
+      }
+      prevFocus = null;
+    }
+
+    function onKeyDown(ev) {
+      var e = els();
+      if (!e.root || e.root.hidden) return;
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closeConfirm();
+      }
+    }
+
+    function wire() {
+      var e = els();
+      if (!e.openBtn || !e.root) return;
+
+      e.openBtn.addEventListener('click', async function (ev) {
+        ev.preventDefault();
+        if (typeof window.validateExecutionStepForm === 'function') {
+          var ok = await window.validateExecutionStepForm();
+          if (!ok) return;
+        }
+        openConfirm();
+      });
+
+      if (e.cancel) {
+        e.cancel.addEventListener('click', function () {
+          closeConfirm();
+        });
+      }
+
+      if (e.ok) {
+        e.ok.addEventListener('click', async function () {
+          closeConfirm();
+          try {
+            if (typeof window.submitExecution === 'function') await window.submitExecution();
+            else if (typeof window.showNotification === 'function') {
+              window.showNotification('error', 'Record step', 'submitExecution() is not available.');
+            }
+          } catch (err) {
+            if (typeof window.showNotification === 'function') {
+              window.showNotification('error', 'Record step failed', err && err.message ? err.message : String(err));
+            }
+          }
+        });
+      }
+
+      if (!document._batchConfirmKeyBound) {
+        document._batchConfirmKeyBound = true;
+        document.addEventListener('keydown', onKeyDown);
+      }
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+    else wire();
+  })();
+</script>

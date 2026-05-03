@@ -1,0 +1,41 @@
+You are working in a multi-tenant manufacturing/inventory SaaS (Python/Flask/SQLAlchemy/PostgreSQL, vanilla JS, Jinja2, HTMX). Before completing any code change, run the relevant checklist below for the file type you are editing. Fix violations inline — do not leave them for the user to catch.
+
+Detailed rules with good/bad examples are in:
+  .cursor/rules/python-review.mdc  →  Python
+  .cursor/rules/html-review.mdc    →  HTML / Jinja2
+  .cursor/rules/js-review.mdc      →  JavaScript / TypeScript
+
+---
+
+## PYTHON — non-negotiable checks
+
+- Every query on a tenant-owned table must include `org_id` — missing this leaks cross-tenant data
+- Every new route needs `@requires_auth` AND `@requires_org_scope`
+- No client-supplied ID fetched without `org_id` re-check (IDOR)
+- No N+1 queries — use `joinedload` or a single batch fetch
+- No unbounded `.all()` — paginate with `.limit()` / `.offset()`
+- No raw SQL string interpolation — use ORM or `text("... :param", {"param": val})`
+- No hardcoded secrets — read from env vars
+- Never return stack traces to the client — log with `logger.exception`, respond with a generic message
+- Independent I/O operations must run concurrently (`ThreadPoolExecutor`), not sequentially
+- Inventory mutations need `.with_for_update()` to prevent lost updates
+
+## HTML / JINJA2 — non-negotiable checks
+
+- New pages must extend `shared/base_spa.html` — never standalone `<!DOCTYPE html>`
+- Use shared partials/macros (`page_header`, `primary_card`, `delete-doc-confirm-modal`, etc.) — never reimplement them
+- Never `| safe` on user-supplied values — XSS
+- No sensitive data in `data-*` attributes or `<input type="hidden">`
+- HTMX swaps must target `#page-content`; cross-blueprint links use `hx-boost="false"`
+- No hardcoded hex colours — use CSS variables (`var(--primary)`, `var(--error)`, etc.) and design-system classes
+- Page-specific CSS must be scoped to a component class, not added globally
+
+## JAVASCRIPT — non-negotiable checks
+
+- All mutating API calls must use `CoreAPI.request()` — raw `fetch()` skips CSRF and error normalisation
+- Non-`/api/core` mutating fetches must read CSRF from `meta[name="csrf-token"]` explicitly
+- Never `innerHTML` with user-supplied data — use `textContent` or DOM node creation
+- Every async function needs `try/catch` with visible user feedback (loading state before, error state on failure)
+- Search/filter inputs must be debounced (300 ms) — no request per keystroke
+- Large list renders must use `DocumentFragment` — no per-iteration `appendChild`
+- No sensitive values in `localStorage` or `sessionStorage`

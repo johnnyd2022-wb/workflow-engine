@@ -174,6 +174,7 @@
         name: name,
         unit: unit,
         quantity: quantity ? parseFloat(quantity) : null,
+        inventory_type: (outputEl.dataset && outputEl.dataset.outputInventoryType) ? outputEl.dataset.outputInventoryType : 'work_in_progress',
         is_variable: true,
         requires_execution_confirmation: true
       };
@@ -277,6 +278,7 @@
         const isPreviousOutput = !executionTypeSelect;
         const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
         const requiresInventorySelection = isPreviousOutput ? true : (executionType === 'variable');
+        const expectedInventoryType = inputEl.dataset.expectedInventoryType || null;
         inputs.push({
           inputType,
           name,
@@ -285,6 +287,7 @@
           executionType,
           source_output_id: sourceOutputId || undefined,
           previousOutputDisplayName: previousOutputDisplayName || undefined,
+          expected_inventory_type: expectedInventoryType || undefined,
           inventoryPreselected,
           is_variable: isVariable,
           requires_inventory_selection: requiresInventorySelection
@@ -726,6 +729,11 @@
         const outputContainers = document.querySelectorAll('#guided-outputs-list > div');
         const lastOutputContainer = outputContainers[outputContainers.length - 1];
         if (lastOutputContainer) {
+          if (output.inventory_type === 'work_in_progress' || output.inventory_type === 'final_product') {
+            lastOutputContainer.dataset.outputInventoryType = output.inventory_type;
+          } else if (!lastOutputContainer.dataset.outputInventoryType) {
+            lastOutputContainer.dataset.outputInventoryType = 'work_in_progress';
+          }
           const nameInput = lastOutputContainer.querySelector('.guided-output-name');
           if (nameInput) {
             nameInput.value = output.name || '';
@@ -1015,16 +1023,21 @@
       const inputType = inputEl.dataset.inputType || (inputEl.getAttribute && inputEl.getAttribute('data-input-type')) || '';
       const requiresInventorySelection = (inputType === 'inventory' || inputType === 'previous_output') ? true : (executionType === 'variable');
       const isVariable = executionType === 'variable' || executionType === 'prompt';
+      const sourceOutputId = inputEl.dataset.sourceOutputId || null;
+      const expectedInventoryType = inputEl.dataset.expectedInventoryType || null;
       
       if (name && unit) {
-        inputs.push({
+        const row = {
           name: name,
           quantity: quantity ? parseFloat(quantity) : null,
           unit: unit,
           executionType: executionType,
           requires_inventory_selection: requiresInventorySelection,
           is_variable: isVariable
-        });
+        };
+        if (sourceOutputId) row.source_output_id = sourceOutputId;
+        if (expectedInventoryType) row.expected_inventory_type = expectedInventoryType;
+        inputs.push(row);
       }
     });
     return inputs;
@@ -2303,6 +2316,7 @@
               name: output.name,
               quantity: output.quantity !== null && output.quantity !== undefined ? output.quantity : null,
               unit: output.unit || '',
+              inventory_type: output.inventory_type || null,
               step_number: stepNumber,
               is_previous_output: true,
               displayName: `Step ${stepNumber}: ${output.name}`
@@ -2782,6 +2796,12 @@
           if (matchingItem) {
             const unitSelect = container.querySelector('.guided-input-unit');
             if (unitSelect) unitSelect.value = data.unit || matchingItem.unit || '';
+            if (!data.expected_inventory_type && type === 'inventory') {
+              const cat = matchingItem.inventory_type || matchingItem.category;
+              if (cat === 'raw_material' || cat === 'work_in_progress' || cat === 'final_product') {
+                container.dataset.expectedInventoryType = cat;
+              }
+            }
           }
         } catch (err) {
           console.warn('Could not load inventory items for restoration:', err);
@@ -2814,6 +2834,12 @@
     }
     if (type === 'new') syncGuidedNewInputExecutionSegments(container);
     if (data.source_output_id) container.dataset.sourceOutputId = data.source_output_id;
+    if (data.expected_inventory_type) {
+      container.dataset.expectedInventoryType = data.expected_inventory_type;
+      if (typeof container._applyExpectedTypeUI === 'function') {
+        container._applyExpectedTypeUI();
+      }
+    }
     setTimeout(() => {
       const nameDisplay = container.querySelector('.guided-input-name-display');
       const titleSpan = container.querySelector('.guided-input-title');
@@ -2999,7 +3025,11 @@
         nameDisplay.style.display = 'inline';
         titleSpan.style.display = 'none';
         selectedInventoryItems.add(preSelectedItem.name);
-        
+        const preCat = preSelectedItem.inventory_type || preSelectedItem.category;
+        if (preCat === 'raw_material' || preCat === 'work_in_progress' || preCat === 'final_product') {
+          inputContainer.dataset.expectedInventoryType = preCat;
+        }
+
         const hiddenName = document.createElement('input');
         hiddenName.type = 'hidden';
         hiddenName.className = 'guided-input-name searchable-dropdown-input';
@@ -3102,7 +3132,8 @@
             displayName: output.displayName || output.name,
             is_previous_output: true,
             step_number: output.step_number,
-            quantity: output.quantity
+            quantity: output.quantity,
+            inventory_type: output.inventory_type || null
           }))
         };
       } else {
@@ -3168,8 +3199,27 @@
             selectedPreviousOutputs.add(displayName);
             inputContainer.dataset.previousOutputDisplayName = displayName;
             if (item.id) inputContainer.dataset.sourceOutputId = item.id;
+            // Previous outputs carry an explicit type (intermediate/final) from the output definition.
+            if (item.inventory_type === 'work_in_progress' || item.inventory_type === 'final_product') {
+              inputContainer.dataset.expectedInventoryType = item.inventory_type;
+              if (typeof inputContainer._applyExpectedTypeUI === 'function') {
+                inputContainer._applyExpectedTypeUI();
+              }
+            } else if (type === 'previous_output') {
+              // Default previous outputs to Intermediate when not specified.
+              inputContainer.dataset.expectedInventoryType = 'work_in_progress';
+              if (typeof inputContainer._applyExpectedTypeUI === 'function') {
+                inputContainer._applyExpectedTypeUI();
+              }
+            }
           } else {
             selectedInventoryItems.add(item.name);
+            if (type === 'inventory' && item.category && item.category !== 'previous_outputs') {
+              inputContainer.dataset.expectedInventoryType = item.category;
+              if (typeof inputContainer._applyExpectedTypeUI === 'function') {
+                inputContainer._applyExpectedTypeUI();
+              }
+            }
           }
           // Update the dropdown to exclude this item from other inputs
           updateInventoryDropdowns();
@@ -3189,6 +3239,63 @@
       );
       nameField.appendChild(nameDropdown);
       contentArea.appendChild(nameField);
+
+      // Inventory type hint (raw / intermediate / final) persisted on the step input.
+      // Needed so execution can default the correct picker tab even when inventory is missing.
+      if (type === 'inventory') {
+        const typeField = document.createElement('div');
+        typeField.style.marginBottom = '12px';
+        const typeLabel = document.createElement('label');
+        typeLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;';
+        typeLabel.textContent = 'Inventory type';
+        typeField.appendChild(typeLabel);
+
+        const seg = document.createElement('div');
+        seg.className = 'flow-mode-segmented';
+        seg.setAttribute('role', 'group');
+        seg.setAttribute('aria-label', 'Inventory type');
+        seg.style.marginBottom = '0';
+
+        function normalizeInvCat(v) {
+          v = String(v || '').toLowerCase().trim();
+          if (v === 'intermediate' || v === 'wip') return 'work_in_progress';
+          if (v === 'final') return 'final_product';
+          if (!v) return 'raw_material';
+          return v;
+        }
+
+        function applyExpectedTypeUI() {
+          const current = normalizeInvCat(inputContainer.dataset.expectedInventoryType || 'raw_material');
+          seg.querySelectorAll('.flow-mode-segment[data-inventory-cat]').forEach(function(btn) {
+            const on = btn.getAttribute('data-inventory-cat') === current;
+            btn.classList.toggle('flow-mode-segment--active', !!on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+          });
+        }
+
+        [
+          { key: 'raw_material', label: 'Raw materials' },
+          { key: 'work_in_progress', label: 'Intermediate' },
+          { key: 'final_product', label: 'Final products' }
+        ].forEach(function(opt) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'flow-mode-segment';
+          btn.setAttribute('data-inventory-cat', opt.key);
+          btn.setAttribute('aria-pressed', 'false');
+          btn.textContent = opt.label;
+          btn.addEventListener('click', function() {
+            inputContainer.dataset.expectedInventoryType = opt.key;
+            applyExpectedTypeUI();
+          });
+          seg.appendChild(btn);
+        });
+
+        typeField.appendChild(seg);
+        contentArea.appendChild(typeField);
+        inputContainer._applyExpectedTypeUI = applyExpectedTypeUI;
+        applyExpectedTypeUI();
+      }
       
       // Listen for changes to the name input
       const nameInput = nameDropdown.querySelector('.searchable-dropdown-input');
@@ -3849,6 +3956,51 @@
     });
     unitField.appendChild(unitSelect);
     contentArea.appendChild(unitField);
+
+    // Output inventory type (Intermediate / Final). Stored on output JSON so "previous output" inputs can infer the type even when inventory is missing.
+    // Defaults to Intermediate to match most workflows.
+    outputContainer.dataset.outputInventoryType = outputContainer.dataset.outputInventoryType || 'work_in_progress';
+    const outTypePane = document.createElement('div');
+    outTypePane.style.cssText = 'position: relative; margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);';
+    const outTypeLabel = document.createElement('label');
+    outTypeLabel.style.cssText = 'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;';
+    outTypeLabel.textContent = 'Output type';
+    outTypePane.appendChild(outTypeLabel);
+    const outTypeDesc = document.createElement('p');
+    outTypeDesc.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;';
+    outTypeDesc.textContent = 'Intermediate outputs can be used in later steps. Final outputs are finished goods.';
+    outTypePane.appendChild(outTypeDesc);
+    const outTypeSeg = document.createElement('div');
+    outTypeSeg.className = 'flow-mode-segmented';
+    outTypeSeg.setAttribute('role', 'group');
+    outTypeSeg.setAttribute('aria-label', 'Output type');
+    function applyOutputTypeUI() {
+      const current = String(outputContainer.dataset.outputInventoryType || 'work_in_progress');
+      outTypeSeg.querySelectorAll('.flow-mode-segment[data-output-type]').forEach(function(btn) {
+        const on = btn.getAttribute('data-output-type') === current;
+        btn.classList.toggle('flow-mode-segment--active', !!on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+    [
+      { key: 'work_in_progress', label: 'Intermediate' },
+      { key: 'final_product', label: 'Final product' }
+    ].forEach(function(opt) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'flow-mode-segment';
+      btn.setAttribute('data-output-type', opt.key);
+      btn.setAttribute('aria-pressed', 'false');
+      btn.textContent = opt.label;
+      btn.addEventListener('click', function() {
+        outputContainer.dataset.outputInventoryType = opt.key;
+        applyOutputTypeUI();
+      });
+      outTypeSeg.appendChild(btn);
+    });
+    outTypePane.appendChild(outTypeSeg);
+    contentArea.appendChild(outTypePane);
+    applyOutputTypeUI();
     
     // Custom output expiry — sub-pane inside this output (same visual style as Batch number / Evidence on step 4)
     const expiryPane = document.createElement('div');
@@ -4615,6 +4767,9 @@
       };
       const sourceOutputId = inputRow.source_output_id || inputRow.sourceOutputId || null;
       if (sourceOutputId) inputObj.source_output_id = sourceOutputId;
+      const expectedInv =
+        inputRow.expected_inventory_type || inputRow.expectedInventoryType || null;
+      if (expectedInv) inputObj.expected_inventory_type = expectedInv;
       inputs.push(inputObj);
     });
     return inputs;
@@ -6028,6 +6183,7 @@
       source_output_id: apiIn.source_output_id || undefined,
       previousOutputDisplayName:
         apiIn.previous_output_display_name || apiIn.previousOutputDisplayName || undefined,
+      expected_inventory_type: apiIn.expected_inventory_type || undefined,
       inventoryPreselected: false,
       is_variable: isVariable,
       requires_inventory_selection: requiresInventorySelection

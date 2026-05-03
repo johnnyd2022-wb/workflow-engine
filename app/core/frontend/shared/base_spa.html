@@ -19,6 +19,8 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='execution-modal.css') }}">
   {# Execute-step page: scoped to .batch-start-spa so safe to load globally (needed for HTMX swaps). #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batch-start.css') }}">
+  {# Add-inventory manual: rules use :has(.add-inventory-manual-root); must be global for HTMX #page-content swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-add-manual.css') }}">
   {# Dashboard: rules are scoped to .workflow-dashboard; inert on other pages. Kept here so HTMX #page-content swaps still have the sheet. #}
   <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='dashboard_spa.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -367,8 +369,8 @@
     /* Mobile: same tall header when menu is open (avoid slim desktop height + broken dropdown anchor). */
     @media (max-width: 767px) {
       .main-header.bee-menu-open {
-        height: var(--spa-mobile-topbar-height, 72px) !important;
-        min-height: var(--spa-mobile-topbar-height, 72px) !important;
+        height: var(--spa-mobile-topbar-height, 66px) !important;
+        min-height: var(--spa-mobile-topbar-height, 66px) !important;
       }
     }
 
@@ -630,10 +632,10 @@
     /* Mobile: compact chrome vs page CTAs (.btn ~14px + padding; flows2 Manage / Start new batch stay visually primary) */
     @media (max-width: 767px) {
       .bee-topbar-wrap {
-        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 72px) - 30px));
+        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 66px) - 30px));
       }
       .bee-profile {
-        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 72px) - 30px));
+        --bee-size: min(38px, calc(var(--spa-mobile-topbar-height, 66px) - 30px));
       }
       .spa-banner-back svg {
         width: 20px;
@@ -812,12 +814,12 @@
       .bee-menu {
         border-radius: 0 0 var(--radius-xl, 14px) var(--radius-xl, 14px);
         /* Anchor under the sticky top bar instead of overlapping the viewport top */
-        top: calc(env(safe-area-inset-top, 0px) + var(--spa-mobile-topbar-height, 72px));
+        top: calc(env(safe-area-inset-top, 0px) + var(--spa-mobile-topbar-height, 66px));
         max-height: calc(
-          100vh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 72px) - env(safe-area-inset-bottom, 0px)
+          100vh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 66px) - env(safe-area-inset-bottom, 0px)
         );
         max-height: calc(
-          100dvh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 72px) - env(safe-area-inset-bottom, 0px)
+          100dvh - env(safe-area-inset-top, 0px) - var(--spa-mobile-topbar-height, 66px) - env(safe-area-inset-bottom, 0px)
         );
       }
     }
@@ -1248,6 +1250,42 @@
     }
     window.spaResetMainScrollPosition = spaResetMainScrollPosition;
 
+    /** Add manual (/core/inventory/add/manual): toggle shell classes so CSS can constrain scroll to #page-content (htmx-boost safe). */
+    function syncAddInventoryManualPageShell() {
+      var pc = document.getElementById('page-content');
+      var on = !!(pc && pc.querySelector && pc.querySelector('.add-inventory-manual-root'));
+      document.body.classList.toggle('add-inventory-manual-spa', on);
+      if (pc) pc.classList.toggle('add-inventory-manual-page', on);
+    }
+
+    /** Bold primary action for “Add missing item” — markup may be <button> without href (execution-render-inputs). */
+    function tagExecAddMissingItemControls(scope) {
+      var root = scope && scope.nodeType === 1 ? scope : document;
+      try {
+        var sel =
+          '#execute-inputs-container button, #execute-inputs-container a.btn, #execute-inputs-container a[href*="manual"], ' +
+          '[data-var-input] button, .exec-picker-panel button, .exec-picker-panel a.btn';
+        var nodes = root.querySelectorAll(sel);
+        for (var i = 0; i < nodes.length; i++) {
+          var el = nodes[i];
+          var t = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          if (t.indexOf('add missing') !== -1) el.classList.add('exec-add-missing-item-btn');
+        }
+      } catch (e) {}
+    }
+
+    function wireExecInputsMutationObserver() {
+      var c = document.getElementById('execute-inputs-container');
+      if (!c || c._execAddMissingMo) return;
+      c._execAddMissingMo = true;
+      try {
+        var mo = new MutationObserver(function () {
+          tagExecAddMissingItemControls(c);
+        });
+        mo.observe(c, { childList: true, subtree: true });
+      } catch (e) {}
+    }
+
     function spaBannerBackInit() {
       var el = document.getElementById('spa-banner-back');
       if (!el) return;
@@ -1293,6 +1331,9 @@
       spaLastScrollResetPath =
         (window.location.pathname || '').replace(/\/$/, '') || '/';
       spaBannerBackInit();
+      syncAddInventoryManualPageShell();
+      tagExecAddMissingItemControls(document);
+      wireExecInputsMutationObserver();
       if (typeof window.syncSpaThemeToggle === 'function') {
         window.syncSpaThemeToggle();
       }
@@ -1306,9 +1347,20 @@
       }
     });
 
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+      var tgt = evt.detail && evt.detail.target;
+      if (tgt && tgt.id === 'page-content') {
+        syncAddInventoryManualPageShell();
+        tagExecAddMissingItemControls(document);
+        wireExecInputsMutationObserver();
+      }
+    });
+
     // After boosted navigation settles: sync banner + scroll the real overflow parent (#page-content),
     // not window (fixes tiny post-nav drift on mobile when the column scroll container kept its old scrollTop).
     document.body.addEventListener('htmx:afterSettle', function (evt) {
+      tagExecAddMissingItemControls(document);
+      syncAddInventoryManualPageShell();
       if (typeof spaSyncBannerBack === 'function') {
         spaSyncBannerBack();
       }

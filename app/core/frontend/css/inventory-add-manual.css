@@ -1,0 +1,158 @@
+/* Manual add inventory — same shell pattern as process-flow wizard inputs (/core/flows/create/inputs):
+ * fixed bottom rail + flex column #page-content + padding-bottom on content wrapper so fields clear the overlay.
+ * Shell classes toggled in base_spa.html; :has() fallbacks when JS misses.
+ */
+
+body.add-inventory-manual-spa .main-content,
+.main-content:has(.add-inventory-manual-root) {
+  min-height: 0;
+}
+
+/* Match .process-flow-spa #page-content: fill column; scroll here */
+body.add-inventory-manual-spa #page-content.page-content.add-inventory-manual-page,
+#page-content.page-content:has(.add-inventory-manual-root) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto !important;
+  overflow-x: clip;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Override base_spa.html #page-content padding-bottom !important (flows2 / process-flow pattern).
+ * Inner clearance for the fixed rail lives on .add-inventory-manual-root below.
+ */
+body.add-inventory-manual-spa #page-content.page-content.add-inventory-manual-page,
+#page-content.page-content:has(.add-inventory-manual-root) {
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+}
+@media (max-width: 767px) {
+  body.add-inventory-manual-spa #page-content.page-content.add-inventory-manual-page,
+  #page-content.page-content:has(.add-inventory-manual-root) {
+    padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 66px) + 12px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Match .process-flow-spa #page-content .max-content */
+body.add-inventory-manual-spa #page-content .max-content.add-inventory-manual-root,
+#page-content:has(.add-inventory-manual-root) .max-content.add-inventory-manual-root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+/*
+ * Same as .process-flow-spa .create-process-step:has(.spa-fixed-action-bar) —
+ * keeps last fields above the fixed rail (+ mobile tab stack).
+ */
+body.add-inventory-manual-spa .add-inventory-manual-root,
+#page-content:has(.add-inv-manual-submit-bar) .add-inventory-manual-root {
+  padding-bottom: 88px;
+}
+@media (max-width: 767px) {
+  body.add-inventory-manual-spa .add-inventory-manual-root,
+  #page-content:has(.add-inv-manual-submit-bar) .add-inventory-manual-root {
+    padding-bottom: calc(var(--spa-mobile-bottom-tab-height, 66px) + 72px);
+  }
+}
+
+.add-inv-manual-return-hint {
+  margin: 0 0 1rem 0;
+  padding: 12px 14px;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary, #6b7280);
+  background: var(--bg-secondary, #f3f4f6);
+  border: 1px solid var(--border-default, #e5e7eb);
+  border-radius: var(--radius-md, 10px);
+  box-sizing: border-box;
+}
+html[data-spa-theme="dark"] .add-inv-manual-return-hint {
+  background: rgba(148, 163, 184, 0.08);
+  border-color: var(--border-default, rgba(148, 163, 184, 0.35));
+  color: var(--text-secondary, #94a3b8);
+}
+
+body.add-inventory-manual-spa #page-content.page-content.add-inventory-manual-page .card.spa-primary-flat > .card-header,
+#page-content.page-content:has(.add-inventory-manual-root) .card.spa-primary-flat > .card-header {
+  justify-content: center !important;
+}
+body.add-inventory-manual-spa #page-content.page-content.add-inventory-manual-page .card.spa-primary-flat > .card-header > div:first-child,
+#page-content.page-content:has(.add-inventory-manual-root) .card.spa-primary-flat > .card-header > div:first-child {
+  text-align: center;
+}
+
+/* Fixed rail — align with .batch-start-record-bar / .process-flow-spa .spa-fixed-action-bar */
+body.add-inventory-manual-spa .add-inv-manual-submit-bar,
+#page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 220;
+  margin: 0;
+  background: var(--bg-app, hsl(220, 20%, 97%));
+  border-top: 1px solid var(--border-default, #e5e7eb);
+  box-sizing: border-box;
+}
+html[data-spa-theme="dark"] body.add-inventory-manual-spa .add-inv-manual-submit-bar,
+html[data-spa-theme="dark"] #page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar {
+  background: var(--bg-app, #030303);
+  border-top-color: var(--border-default, rgba(148, 163, 184, 0.35));
+}
+@media (min-width: 768px) {
+  body.add-inventory-manual-spa .add-inv-manual-submit-bar,
+  #page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar {
+    left: 260px;
+  }
+  .app-layout:has(#sidebar.collapsed) body.add-inventory-manual-spa .add-inv-manual-submit-bar,
+  .app-layout:has(#sidebar.collapsed) #page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar {
+    left: 72px;
+  }
+}
+@media (max-width: 767px) {
+  body.add-inventory-manual-spa .add-inv-manual-submit-bar,
+  #page-content.page-content:has(.add-inventory-manual-root) .add-inv-manual-submit-bar {
+    bottom: calc(var(--spa-mobile-bottom-tab-height, 66px) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.add-inv-manual-submit-bar__inner {
+  padding: 10px 16px;
+  padding-left: calc(16px + max(0px, env(safe-area-inset-left, 0px)));
+  padding-right: calc(16px + max(0px, env(safe-area-inset-right, 0px)));
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .add-inv-manual-submit-bar__inner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 12px 32px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.add-inv-manual-submit-bar__btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 48px;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+@media (min-width: 768px) {
+  .add-inv-manual-submit-bar__btn {
+    width: auto;
+    min-width: 220px;
+    max-width: min(420px, 100%);
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+}

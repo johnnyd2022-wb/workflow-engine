@@ -6,12 +6,182 @@
 (function (root) {
   'use strict';
 
+  /**
+   * Delegated reconcile clicks: one listener per `.execute-reconcile-untracked-cards` node.
+   * Each execute-step render builds new containers; detached nodes are GC’d with their listeners.
+   */
+  var reconcileCardsDelegationBound = new WeakSet();
+
+  /** Canonical reconcile id: trimmed string; null/undefined/whitespace-only → '' (none / no selection). */
+  function normalizeReconcileId(v) {
+    if (v == null) return '';
+    return String(v).trim();
+  }
+
+  /** Sentinel value for hidden input / submit when no untracked row is chosen (matches backend expectation). */
+  var RECONCILE_NONE_ID = '';
+
+  /**
+   * Collapsible details for untracked reconciliation cards — aligns with inventory picker (audit, notes).
+   */
+  function buildUntrackedReconcileExpandHtml(u, escapeHtml, prettyLabel, orgUsersMap) {
+    var pl = typeof prettyLabel === 'function' ? prettyLabel : function(s) {
+      return String(s == null ? '' : s).replace(/_/g, ' ');
+    };
+    var extra = (u && u.extra_data && typeof u.extra_data === 'object') ? u.extra_data : {};
+    function section(title, innerHtml) {
+      if (!innerHtml || !String(innerHtml).trim()) return '';
+      return (
+        '<div style="margin-top: 12px;">' +
+          '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">' +
+            escapeHtml(title) +
+          '</div>' +
+          innerHtml +
+        '</div>'
+      );
+    }
+    var parts = [];
+    var rem = u.remaining_balance_to_reconcile;
+    var unreconciledQty = (rem != null && String(rem).trim() !== '') ? String(rem).trim() : null;
+    var createdStr = '';
+    if (u.created_at) {
+      try { createdStr = new Date(u.created_at).toLocaleString(); } catch (e) { createdStr = String(u.created_at); }
+    }
+    var summaryRows = '';
+    function kv(label, val) {
+      if (val == null || String(val).trim() === '') return;
+      summaryRows +=
+        '<div class="exec-picker-kv__k">' + escapeHtml(label) + '</div>' +
+        '<div class="exec-picker-kv__v">' + escapeHtml(String(val)) + '</div>';
+    }
+    if (unreconciledQty !== null) kv('Unreconciled quantity', unreconciledQty + ' ' + (u.unit || ''));
+    if (u.process_name) kv('Process', u.process_name);
+    if (u.producing_step_name) kv('Step to execute to reconcile', u.producing_step_name);
+    else if (u.step_name) kv('Source step', u.step_name);
+    if (u.source_step_completed_by) kv('Step completed by', u.source_step_completed_by);
+    if (createdStr) kv('Created', createdStr);
+    if (summaryRows) parts.push(section('Summary', '<div class="exec-picker-kv">' + summaryRows + '</div>'));
+
+    var invRows = '';
+    function kv2(label, val) {
+      if (val == null || String(val).trim() === '') return;
+      invRows +=
+        '<div class="exec-picker-kv__k">' + escapeHtml(label) + '</div>' +
+        '<div class="exec-picker-kv__v">' + escapeHtml(String(val)) + '</div>';
+    }
+    if (u.inventory_type) kv2('Inventory type', pl(String(u.inventory_type).replace(/_/g, ' ')));
+    if (u.quantity != null && String(u.quantity).trim() !== '') kv2('Quantity on hand', String(u.quantity) + ' ' + (u.unit || ''));
+    if (u.purchase_date) kv2('Purchase date', String(u.purchase_date));
+    if (u.expiry_date) kv2('Expiry date', String(u.expiry_date));
+    if (u.supplier) kv2('Supplier', u.supplier);
+    if (u.supplier_batch_number) kv2('Supplier batch', u.supplier_batch_number);
+    if (u.barcode) kv2('Barcode', u.barcode);
+    if (u.source_execution_id) kv2('Source execution', u.source_execution_id);
+    if (u.source_execution_step_id) kv2('Source execution step', u.source_execution_step_id);
+    if (invRows) parts.push(section('Inventory', '<div class="exec-picker-kv">' + invRows + '</div>'));
+
+    var noteStr = (extra.notes != null && String(extra.notes).trim()) ? String(extra.notes) : (u.notes != null ? String(u.notes) : '');
+    if (noteStr.trim()) {
+      parts.push(section('Notes', '<div style="font-size: 13px; color: var(--text-primary,#111827); line-height: 1.5; white-space: pre-line;">' + escapeHtml(noteStr) + '</div>'));
+    }
+
+    var prompts = u.source_step_execution_prompts;
+    if (prompts && typeof prompts === 'object') {
+      var entries = Object.keys(prompts).map(function(k) { return [k, prompts[k]]; }).filter(function(e) {
+        return e[1] != null && String(e[1]).trim() !== '';
+      });
+      if (entries.length) {
+        var ul = '<ul style="margin: 0; padding-left: 18px;">' +
+          entries.map(function(e, idx) {
+            return '<li style="margin: 0 0 6px 0; font-size: 13px;">' +
+              '<span style="font-weight:600;">Prompt ' + (idx + 1) + '</span>' +
+              ' <span style="color: var(--text-secondary,#6b7280);">(' + escapeHtml(pl(e[0])) + ')</span>: ' +
+              '<span style="font-weight:400;">' + escapeHtml(String(e[1])) + '</span></li>';
+          }).join('') +
+        '</ul>';
+        parts.push(section('Step prompts', ul));
+      }
+    }
+
+    var rh = extra.reconciliation_history;
+    if (Array.isArray(rh) && rh.length) {
+      var rhBlocks = rh.slice().reverse().map(function(h) {
+        if (!h || typeof h !== 'object') return '';
+        var lines = '';
+        function hkv(k, v) {
+          if (v == null || v === '') return;
+          lines += '<div class="exec-picker-kv__k">' + escapeHtml(pl(k)) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(v)) + '</div>';
+        }
+        hkv('timestamp', h.timestamp || h.ts || '');
+        hkv('method', h.method != null ? pl(String(h.method)) : '');
+        hkv('quantity_reconciled', h.quantity_reconciled);
+        hkv('surplus_to_live', h.surplus_to_live);
+        hkv('user_email', h.user_email);
+        if (h.reconciliation_via_execution === true) hkv('via_execution', 'yes');
+        if (!lines) {
+          try { lines = '<div class="exec-picker-kv__k"></div><div class="exec-picker-kv__v">' + escapeHtml(JSON.stringify(h)) + '</div>'; } catch (e2) {}
+        }
+        return '<div class="exec-picker-kv" style="margin-bottom: 10px;">' + lines + '</div>';
+      }).join('');
+      parts.push(section('Reconciliation history', rhBlocks));
+    }
+
+    var auditInner = '';
+    try {
+      var hist = extra.inventory_audit_history ? extra.inventory_audit_history : [];
+      if (Array.isArray(hist) && hist.length) {
+        var rows = hist.slice().reverse().map(function(h) {
+          var when = h.timestamp_utc || h.timestamp || h.created_at || '';
+          var src = h.source_method || h.source || '';
+          var opEmail = (h.operator_email || h.email || '').trim();
+          var rawName = (h.operator_name || '').trim();
+          var opId = h.user_id || h.operator_id || h.user || '';
+          var opLabel = rawName;
+          if (opEmail && rawName === opEmail) {
+            opLabel = '';
+          }
+          if (!opLabel && opId && orgUsersMap && typeof orgUsersMap.get === 'function') {
+            opLabel = (orgUsersMap.get(String(opId)) || '').trim();
+          }
+          if (!opLabel && !opEmail && opId) {
+            opLabel = String(opId);
+          }
+          try {
+            var uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (opLabel && uuidLike.test(String(opLabel).trim())) opLabel = '';
+          } catch (eU) {}
+          if (!opLabel) {
+            opLabel = opEmail ? '—' : 'Unknown operator';
+          }
+          var action = h.action || h.event || '';
+          if (!action) action = 'inventory change';
+          return (
+            '<div class="exec-picker-kv__k">' + escapeHtml(pl('action')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(pl(action)) + '</div>' +
+            '<div class="exec-picker-kv__k">' + escapeHtml(pl('timestamp_utc')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(when || '—')) + '</div>' +
+            '<div class="exec-picker-kv__k">' + escapeHtml(pl('operator')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(opLabel)) + '</div>' +
+            '<div class="exec-picker-kv__k">' + escapeHtml('Operator email') + '</div><div class="exec-picker-kv__v">' + escapeHtml(opEmail || '—') + '</div>' +
+            '<div class="exec-picker-kv__k">' + escapeHtml(pl('source_method')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(pl(src) || '—') + '</div>'
+          );
+        }).join('');
+        auditInner = '<div class="exec-picker-kv">' + rows + '</div>';
+      }
+    } catch (eA) {}
+    if (auditInner) parts.push(section('Audit history', auditInner));
+
+    if (!parts.length) {
+      return '<p style="margin:0; font-size:13px; color: var(--text-secondary);">No additional metadata.</p>';
+    }
+    return parts.join('');
+  }
+
   async function renderVariableOutputs(ctx) {
     var modal = ctx.modal;
     var outputsContainer = ctx.outputsContainer;
     var stepDefinition = ctx.stepDefinition;
     var untrackedItems = ctx.untrackedItems;
     var escapeHtml = ctx.escapeHtml;
+    var prettyLabel = ctx.prettyLabel;
+    var orgUsersMap = ctx.orgUsersMap;
     var signal = ctx.signal;
     var CoreAPI = root.CoreAPI;
     // Render variable outputs (confirmation/override)
@@ -24,6 +194,7 @@
     // Fetch matching untracked per output from backend (includes qty>0 and qty 0 consumed in this execution).
     // Do not pass process_id so untracked items without source_execution (e.g. manually added) are included.
     let matchingUntrackedPerOutput = [];
+    var matchingUntrackedFetchFailed = false;
     const currentExecutionId = modal.dataset.executionId;
     if (CoreAPI && variableOutputs.length > 0 && currentExecutionId && typeof CoreAPI.getMatchingUntracked === 'function') {
       try {
@@ -37,11 +208,21 @@
         matchingUntrackedPerOutput = results.map(function(r) { return (r && r.matching_untracked) ? r.matching_untracked : []; });
       } catch (e) {
         if (e && e.name === 'AbortError') throw e;
+        matchingUntrackedFetchFailed = true;
         console.warn('Could not fetch matching untracked per output', e);
       }
     }
 
     if (variableOutputs.length > 0 && outputsContainer) {
+      if (matchingUntrackedFetchFailed) {
+        var fetchWarn = document.createElement('div');
+        fetchWarn.setAttribute('role', 'alert');
+        fetchWarn.style.cssText =
+          'margin-bottom: 12px; padding: 10px 14px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; color: #92400e;';
+        fetchWarn.textContent =
+          'Could not load the latest untracked inventory matches. Using the list from this page if available.';
+        outputsContainer.appendChild(fetchWarn);
+      }
       variableOutputs.forEach((output, index) => {
         const outputSection = document.createElement('div');
         outputSection.className = 'execute-output-section';
@@ -62,6 +243,7 @@
             });
         var defaultId = matchingUntracked.length === 1 ? String(matchingUntracked[0].id) : '';
         var hasMatch = matchingUntracked.length > 0;
+        var promptsContainer = modal ? modal.querySelector('#execute-prompts-container') : null;
         var ce = (output.extra_data || {}).custom_expiry;
         var rd = (output.extra_data || {}).ready_date;
         var customExpiryHtml = '';
@@ -114,23 +296,225 @@
             </label>
             <input type="number" class="spa-inp execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
-            <div class="execute-reconcile-untracked-wrapper" data-output-id="${escapeHtml(outputId)}" style="display: ${hasMatch ? 'block' : 'none'}; margin-top: 12px; padding: 12px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px; position: relative;">
-              <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
-              <label style="display: block; font-weight: 600; color: #92400e; margin-bottom: 8px;">Reconcile to untracked item (optional)</label>
-              <p style="margin: 0 0 8px 0; color: #92400e; font-size: 12px;">Choose an item from the dropdown to reconcile when you complete the step.</p>
-              <div class="execute-reconcile-untracked-trigger" role="button" tabindex="0" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; cursor: pointer; min-height: 44px;">
-                <span class="execute-reconcile-trigger-label" style="flex: 1; text-align: left; min-width: 0;">— None —</span>
-                <span class="execute-reconcile-trigger-arrow-box" style="flex-shrink: 0; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-md, 6px); border: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); color: var(--text-secondary);">
-                  <svg class="execute-reconcile-trigger-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
-                </span>
-              </div>
-              <div class="execute-reconcile-untracked-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 6px; max-height: 320px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 8px;">
-                <div class="execute-reconcile-untracked-cards" style="display: flex; flex-direction: column; gap: 8px;"></div>
-              </div>
-            </div>
+            <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
           </div>
         `;
         outputsContainer.appendChild(outputSection);
+
+        // Reconciliation UI belongs in Compliance and traceability section (not Outputs).
+        if (hasMatch && promptsContainer) {
+          var recon = document.createElement('div');
+          recon.className = 'execute-reconcile-untracked-wrapper';
+          recon.setAttribute('data-output-id', String(outputId));
+          recon.style.cssText = 'margin-top: 12px; padding: 14px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px;';
+          recon.innerHTML =
+            '<label style="display:block; font-weight: 700; color: #92400e; margin-bottom: 6px;">Reconciliation</label>' +
+            '<p style="margin: 0 0 12px 0; color: #92400e; font-size: 12px; line-height: 1.45;">This step produces an output that is currently untracked in your inventory. Choose an item to reconcile when you record this step.</p>' +
+            '<div class="execute-reconcile-untracked-cards" style="display:flex; flex-direction:column; gap: 10px;"></div>';
+          promptsContainer.appendChild(recon);
+
+          var cardsContainer = recon.querySelector('.execute-reconcile-untracked-cards');
+          var hiddenInput = outputSection.querySelector('.execute-reconcile-untracked-value');
+
+          if (!cardsContainer || !hiddenInput) {
+            console.warn('execute reconcile UI: missing cards container or hidden input');
+          } else {
+          var defaultIdNorm = normalizeReconcileId(defaultId);
+          /** Authoritative UI state; hidden input mirrors selectedId for form submit only (written from here each update). */
+          var reconcileState = { locked: false, selectedId: '' };
+          var reconcileCardById = {};
+          var reconcileStateBootstrapped = false;
+
+          function applyReconcileCardVisual(card) {
+            if (!card) return;
+            var lock = reconcileState.locked;
+            var st = normalizeReconcileId(reconcileState.selectedId);
+            var cardId = normalizeReconcileId(card.dataset.untrackedId);
+            var selected = cardId === st;
+            card.classList.toggle('execute-reconcile-card-selected', selected);
+            if (!lock) {
+              card.style.display = '';
+            } else {
+              card.style.display = selected ? '' : 'none';
+            }
+            var btn = card.querySelector('.exec-reconcile-confirm-btn');
+            if (btn) {
+              btn.textContent = selected ? 'Reconciliation selected' : 'Confirm reconciliation';
+              btn.disabled = !!selected;
+            }
+          }
+
+          function sweepAllReconcileCards() {
+            Object.keys(reconcileCardById).forEach(function(k) {
+              var el = reconcileCardById[k];
+              if (el) applyReconcileCardVisual(el);
+            });
+          }
+
+          function setReconcileState(locked, selectedId) {
+            var newLock = !!locked;
+            var newSel = normalizeReconcileId(selectedId);
+            var oldLock = reconcileState.locked;
+            var oldSel = normalizeReconcileId(reconcileState.selectedId);
+            reconcileState.locked = newLock;
+            reconcileState.selectedId = newSel;
+            hiddenInput.value = newSel;
+            if (!reconcileStateBootstrapped || oldLock !== newLock) {
+              reconcileStateBootstrapped = true;
+              sweepAllReconcileCards();
+              return;
+            }
+            if (oldSel === newSel) return;
+            var cPrev = reconcileCardById[oldSel];
+            var cNext = reconcileCardById[newSel];
+            if (cPrev && cNext) {
+              applyReconcileCardVisual(cPrev);
+              applyReconcileCardVisual(cNext);
+              return;
+            }
+            console.warn('execute reconcile: delta targets missing; sweeping', {
+              oldSel: oldSel,
+              newSel: newSel,
+              hadPrev: !!cPrev,
+              hadNext: !!cNext,
+            });
+            sweepAllReconcileCards();
+          }
+
+          function bindReconcileCardsDelegation() {
+            if (reconcileCardsDelegationBound.has(cardsContainer)) return;
+            reconcileCardsDelegationBound.add(cardsContainer);
+            cardsContainer.addEventListener('click', function(ev) {
+              var target = ev.target;
+              var detailBtn = target && target.closest
+                ? target.closest('[data-action="toggle-reconcile-details"]')
+                : null;
+              if (detailBtn && cardsContainer.contains(detailBtn)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                var rowForDetail = detailBtn.closest('.execute-reconcile-untracked-card');
+                var panel = rowForDetail && rowForDetail.querySelector('.exec-reconcile-details-panel');
+                if (!panel) return;
+                var isOpen = panel.style.display === 'block';
+                panel.style.display = isOpen ? 'none' : 'block';
+                detailBtn.textContent = isOpen ? 'Details' : 'Hide details';
+                return;
+              }
+              var confirmBtn = target && target.closest
+                ? target.closest('.exec-reconcile-confirm-btn')
+                : null;
+              if (confirmBtn && cardsContainer.contains(confirmBtn)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                var rowCard = confirmBtn.closest('.execute-reconcile-untracked-card');
+                if (!rowCard || !cardsContainer.contains(rowCard)) return;
+                var uid = normalizeReconcileId(
+                  confirmBtn.dataset.untrackedId ?? rowCard.dataset.untrackedId
+                );
+                if (uid === RECONCILE_NONE_ID) {
+                  setReconcileState(false, RECONCILE_NONE_ID);
+                } else {
+                  setReconcileState(true, uid);
+                }
+                return;
+              }
+              var removeBtn = target && target.closest
+                ? target.closest('.exec-reconcile-remove-btn')
+                : null;
+              if (removeBtn && cardsContainer.contains(removeBtn)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                setReconcileState(false, RECONCILE_NONE_ID);
+              }
+            });
+          }
+
+          var noneCard = document.createElement('div');
+          noneCard.className = 'execute-reconcile-untracked-card' + (defaultIdNorm ? '' : ' execute-reconcile-card-selected');
+          noneCard.dataset.untrackedId = '';
+          noneCard.innerHTML =
+            '<div style="padding: 12px 16px;">' +
+              '<div style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">— None —</div>' +
+            '</div>' +
+            '<div style="padding: 0 16px 14px 16px;">' +
+              '<div style="display:flex; gap: 10px; justify-content:flex-start;">' +
+                '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-confirm-btn" style="font-size: 12px; font-weight: 700;">Confirm reconciliation</button>' +
+              '</div>' +
+            '</div>';
+          var noneConfirmBtn = noneCard.querySelector('.exec-reconcile-confirm-btn');
+          if (noneConfirmBtn) noneConfirmBtn.dataset.untrackedId = RECONCILE_NONE_ID;
+          var cardsFrag = document.createDocumentFragment();
+          cardsFrag.appendChild(noneCard);
+
+          matchingUntracked.forEach(function(u) {
+            var idNorm = normalizeReconcileId(u.id);
+            var card = document.createElement('div');
+            card.className = 'execute-reconcile-untracked-card card card-interactive' + (idNorm === defaultIdNorm ? ' execute-reconcile-card-selected' : '');
+            card.dataset.untrackedId = idNorm;
+            var unreconciledQty = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? String(u.remaining_balance_to_reconcile).trim() : null;
+            var subtitleParts = [];
+            if (unreconciledQty !== null) {
+              subtitleParts.push('Unreconciled: ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || ''));
+            } else {
+              subtitleParts.push(escapeHtml(u.quantity != null ? String(u.quantity) : '0') + ' ' + escapeHtml(u.unit || ''));
+            }
+            if (u.process_name || u.producing_step_name || u.step_name) {
+              var stepLabel = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : u.step_name;
+              var ps = [u.process_name, stepLabel].filter(Boolean).map(function(x) { return escapeHtml(x); }).join(' · ');
+              if (ps) subtitleParts.push(ps);
+            }
+            if (u.source_step_completed_by) subtitleParts.push('Completed by: ' + escapeHtml(u.source_step_completed_by));
+            var subtitleLine = subtitleParts.join(' · ');
+            var expandInner = buildUntrackedReconcileExpandHtml(u, escapeHtml, prettyLabel, orgUsersMap);
+            card.innerHTML =
+              '<div style="padding: 12px 16px;">' +
+                '<div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px;">' +
+                  '<div style="min-width:0;">' +
+                    '<div style="font-size: 14px; font-weight: 700; color: var(--text-primary);">' + escapeHtml(u.name || 'Unknown') + '</div>' +
+                    (subtitleLine
+                      ? '<div style="font-size: 12px; color: var(--text-secondary); margin-top: 6px; line-height: 1.4;">' + subtitleLine + '</div>'
+                      : '') +
+                  '</div>' +
+                  '<button type="button" class="btn btn-secondary btn-sm" data-action="toggle-reconcile-details" style="flex-shrink:0; font-size: 12px;">Details</button>' +
+                '</div>' +
+              '</div>' +
+              '<div class="exec-reconcile-details-panel" style="display: none; padding: 0 16px 12px 16px;">' +
+                '<div style="padding: 12px 14px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;">' +
+                  expandInner +
+                '</div>' +
+              '</div>' +
+              '<div style="padding: 0 16px 14px 16px;">' +
+                '<div style="display:flex; gap: 10px; justify-content:flex-start;">' +
+                  '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-confirm-btn" style="font-size: 12px; font-weight: 700;">Confirm reconciliation</button>' +
+                  '<button type="button" class="btn btn-secondary btn-sm exec-reconcile-remove-btn" style="font-size: 12px;">Remove reconciliation</button>' +
+                '</div>' +
+              '</div>';
+            var rowConfirmBtn = card.querySelector('.exec-reconcile-confirm-btn');
+            if (rowConfirmBtn) rowConfirmBtn.dataset.untrackedId = idNorm;
+            cardsFrag.appendChild(card);
+          });
+
+          cardsContainer.appendChild(cardsFrag);
+
+          /* One index per render; '' is only for the None row (single row). Keys match submit ids (trimmed). */
+          cardsContainer.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
+            if (!('untrackedId' in c.dataset)) {
+              console.warn('execute reconcile: card missing data-untracked-id');
+              return;
+            }
+            var key = normalizeReconcileId(c.dataset.untrackedId);
+            if (Object.prototype.hasOwnProperty.call(reconcileCardById, key)) {
+              console.warn('execute reconcile: duplicate data-untracked-id', key === '' ? '(none)' : key);
+              return;
+            }
+            reconcileCardById[key] = c;
+          });
+
+          bindReconcileCardsDelegation();
+
+          setReconcileState(false, defaultIdNorm);
+          }
+        }
 
         // Wire expiry input toggle (set_at_execution)
         try {
@@ -256,145 +640,7 @@
           }
         } catch (e) {}
 
-        if (hasMatch) {
-          var wrapper = outputSection.querySelector('.execute-reconcile-untracked-wrapper');
-          var trigger = outputSection.querySelector('.execute-reconcile-untracked-trigger');
-          var triggerLabel = outputSection.querySelector('.execute-reconcile-trigger-label');
-          var triggerArrow = outputSection.querySelector('.execute-reconcile-trigger-arrow');
-          var dropdown = outputSection.querySelector('.execute-reconcile-untracked-dropdown');
-          var cardsContainer = outputSection.querySelector('.execute-reconcile-untracked-cards');
-          var hiddenInput = outputSection.querySelector('.execute-reconcile-untracked-value');
-          var safeId = function(s) { return String(s).replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 40); };
-          var detailId = function(uOrId) { var id = typeof uOrId === 'string' ? uOrId : (uOrId && uOrId.id); return 'execute-reconcile-details-' + safeId(outName) + '-' + id; };
-          var arrowId = function(uOrId) { var id = typeof uOrId === 'string' ? uOrId : (uOrId && uOrId.id); return 'execute-reconcile-arrow-' + safeId(outName) + '-' + id; };
-
-          function getSelectionLabel(id) {
-            if (!id) return '— None —';
-            var u = matchingUntracked.find(function(x) { return String(x.id) === id; });
-            if (!u) return '— None —';
-            var qtyLabel = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? 'Unreconciled: ' + u.remaining_balance_to_reconcile : (u.quantity != null ? u.quantity : '0');
-            return (u.name || 'Unknown') + ' · ' + qtyLabel + ' ' + (u.unit || '');
-          }
-
-          function closeDropdown() {
-            dropdown.style.display = 'none';
-            if (triggerArrow) triggerArrow.style.transform = '';
-            document.removeEventListener('click', closeDropdownOutside);
-          }
-          function closeDropdownOutside(e) {
-            if (wrapper && !wrapper.contains(e.target)) closeDropdown();
-          }
-          function openDropdown() {
-            dropdown.style.display = 'block';
-            if (triggerArrow) triggerArrow.style.transform = 'rotate(180deg)';
-            setTimeout(function() { document.addEventListener('click', closeDropdownOutside); }, 0);
-          }
-          function toggleDropdown() {
-            var isOpen = dropdown.style.display === 'block';
-            if (isOpen) closeDropdown(); else openDropdown();
-          }
-          trigger.addEventListener('click', function(e) { e.stopPropagation(); toggleDropdown(); });
-          trigger.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDropdown(); } });
-          dropdown.addEventListener('click', function(e) { e.stopPropagation(); });
-
-          function setSelection(selectedId) {
-            hiddenInput.value = selectedId || '';
-            triggerLabel.textContent = getSelectionLabel(selectedId);
-            wrapper.querySelectorAll('.execute-reconcile-untracked-card').forEach(function(c) {
-              var id = c.dataset.untrackedId || '';
-              var selected = id === selectedId;
-              c.classList.toggle('execute-reconcile-card-selected', selected);
-              c.style.borderColor = selected ? 'var(--warning, #f59e0b)' : '';
-              c.style.boxShadow = selected ? '0 0 0 2px rgba(245, 158, 11, 0.25)' : '';
-            });
-            closeDropdown();
-          }
-
-          function toggleCardDetails(itemId) {
-            var details = outputSection.querySelector('#' + detailId(itemId));
-            var arrow = outputSection.querySelector('#' + arrowId(itemId));
-            if (!details || !arrow) return;
-            var isExpanded = details.style.display === 'block';
-            details.style.display = isExpanded ? 'none' : 'block';
-            arrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
-          }
-
-          var noneCard = document.createElement('div');
-          noneCard.className = 'execute-reconcile-untracked-card' + (defaultId ? '' : ' execute-reconcile-card-selected');
-          noneCard.dataset.untrackedId = '';
-          noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
-          noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
-          noneCard.onclick = function(e) { e.stopPropagation(); setSelection(''); };
-          cardsContainer.appendChild(noneCard);
-
-          matchingUntracked.forEach(function(u) {
-            var id = String(u.id);
-            var card = document.createElement('div');
-            card.className = 'execute-reconcile-untracked-card card card-interactive' + (id === defaultId ? ' execute-reconcile-card-selected' : '');
-            card.dataset.untrackedId = id;
-            card.style.cssText = 'margin-bottom: 0; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; overflow: hidden;';
-            var createdStr = '';
-            if (u.created_at) {
-              try { createdStr = new Date(u.created_at).toLocaleDateString(); } catch (e) {}
-            }
-            var unreconciledQty = (u.remaining_balance_to_reconcile != null && String(u.remaining_balance_to_reconcile).trim() !== '') ? String(u.remaining_balance_to_reconcile).trim() : null;
-            var subtitleParts = [];
-            if (unreconciledQty !== null) {
-              subtitleParts.push('Unreconciled: ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || ''));
-            } else {
-              subtitleParts.push(escapeHtml(u.quantity != null ? String(u.quantity) : '0') + ' ' + escapeHtml(u.unit || ''));
-            }
-            if (u.process_name || u.producing_step_name || u.step_name) {
-              var stepLabel = (u.producing_step_name != null && u.producing_step_name !== '') ? u.producing_step_name : u.step_name;
-              var ps = [u.process_name, stepLabel].filter(Boolean).map(function(x) { return escapeHtml(x); }).join(' · ');
-              if (ps) subtitleParts.push(ps);
-            }
-            if (u.source_step_completed_by) subtitleParts.push('Completed by: ' + escapeHtml(u.source_step_completed_by));
-            var subtitleLine = subtitleParts.join(' · ');
-            var promptsHtml = '';
-            if (u.source_step_execution_prompts && typeof u.source_step_execution_prompts === 'object' && Object.keys(u.source_step_execution_prompts).length > 0) {
-              promptsHtml = '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default);"><div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Step metadata</div><div style="display: flex; flex-direction: column; gap: 6px;">' +
-                Object.entries(u.source_step_execution_prompts).map(function(e) {
-                  return '<div style="padding: 6px 10px; background: var(--bg-secondary, #f9fafb); border-radius: 6px;"><span style="color: var(--text-secondary); font-size: 11px;">' + escapeHtml(e[0]) + '</span><br><span style="color: var(--text-primary); font-size: 13px;">' + escapeHtml(String(e[1])) + '</span></div>';
-                }).join('') + '</div></div>';
-            }
-            var detailsParts = [];
-            if (unreconciledQty !== null) {
-              detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Unreconciled quantity</span> ' + escapeHtml(unreconciledQty) + ' ' + escapeHtml(u.unit || '') + '</p>');
-            }
-            if (u.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(u.process_name) + '</p>');
-            if (u.producing_step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step to execute to reconcile</span> ' + escapeHtml(u.producing_step_name) + '</p>');
-            else if (u.step_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Step</span> ' + escapeHtml(u.step_name) + '</p>');
-            if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
-            if (u.notes) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Notes</span> ' + escapeHtml(u.notes) + '</p>');
-            if (u.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(u.supplier) + '</p>');
-            if (u.supplier_batch_number) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(u.supplier_batch_number) + '</p>');
-            card.innerHTML =
-              '<div class="process-card-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; word-wrap: break-word; overflow-wrap: break-word;">' +
-                '<div style="flex: 1; min-width: 0; cursor: pointer;" data-expand-trigger="1">' +
-                  '<h4 style="margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary);">' + escapeHtml(u.name || 'Unknown') + '</h4>' +
-                  '<p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + subtitleLine + '</p>' +
-                '</div>' +
-                '<svg class="execute-reconcile-arrow" id="' + arrowId(u) + '" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; cursor: pointer; transform: rotate(0deg); transition: transform 0.2s;" data-expand-trigger="1">' +
-                  '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>' +
-                '</svg>' +
-              '</div>' +
-              '<div class="execute-reconcile-details" id="' + detailId(u) + '" style="display: none; padding: 12px 16px; border-top: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); font-size: 13px;">' +
-                detailsParts.join('') +
-                promptsHtml +
-              '</div>';
-            card.onclick = function(e) {
-              if (e.target.closest('[data-expand-trigger="1"]')) {
-                e.stopPropagation();
-                toggleCardDetails(id);
-                return;
-              }
-              setSelection(id);
-            };
-            cardsContainer.appendChild(card);
-          });
-          setSelection(defaultId);
-        }
+        // Reconciliation cards are rendered above (in prompts section). No dropdown wiring needed here.
       });
     } else if (outputsContainer) {
       outputsContainer.innerHTML = '<p style="color: var(--text-secondary); font-size: 14px; padding: 16px;">No variable outputs for this step.</p>';

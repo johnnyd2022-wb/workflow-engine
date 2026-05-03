@@ -17,6 +17,30 @@
             return String(x == null ? '' : x);
           };
     var showNotification = root.showNotification;
+    var IDisp = root.InventoryDisplay;
+    if (!IDisp || typeof IDisp.formatTriggerLabel !== 'function') {
+      throw new Error('inventory-display.js must load before execution-modal-secondary.js');
+    }
+
+    /**
+     * return_to for manual add inventory: same-origin, pathname must start with /core/.
+     * Uses URL parsing so encoded slashes / protocol-relative //… do not bypass checks.
+     */
+    function safeInventoryManualReturnTo(rt) {
+      try {
+        var s = String(rt || '').trim();
+        if (!s) return '';
+        var loc = window.location;
+        var url = new URL(s, loc.origin);
+        if (url.origin !== loc.origin) return '';
+        var path = (url.pathname || '').replace(/\/+/g, '/');
+        if (path.indexOf('/../') !== -1) return '';
+        if (!path.toLowerCase().startsWith('/core/')) return '';
+        return path + (url.search || '');
+      } catch (e) {
+        return '';
+      }
+    }
 
   // ============================================================
   // ADD MISSING ITEM (in-flow raw material)
@@ -24,15 +48,51 @@
   // Opens the page's Add Inventory modal with prefill. Set window.addInventoryContext
   // so the add-inventory submit handler can call refreshExecutionModalInventory(savedItem) on success.
   window.openAddInventoryModalForMissingInput = function(prefill) {
+    prefill = prefill || {};
+    var invType = String(prefill.inventory_type || 'raw_material').trim();
+
+    // Intermediate / final (same as legacy “Add untracked output” during execution — notes + type, not supplier-led raw form).
+    if (invType === 'work_in_progress' || invType === 'final_product') {
+      // UX: always use the manual add page (no modal) so operators have a consistent "leave → add → return" flow.
+      var execModal = document.getElementById('execute-step-modal');
+      var processId = execModal && execModal.dataset ? (execModal.dataset.processId || '') : '';
+      var paramsWip = new URLSearchParams();
+      if (prefill.name) paramsWip.set('name', String(prefill.name));
+      if (prefill.unit) paramsWip.set('unit', String(prefill.unit));
+      paramsWip.set('inventory_type', invType);
+      if (processId) paramsWip.set('producing_process_id', String(processId));
+      if (prefill.producing_process_name) paramsWip.set('producing_process_name', String(prefill.producing_process_name));
+      if (prefill.producing_step_name) paramsWip.set('producing_step_name', String(prefill.producing_step_name));
+      try {
+        var rtw = safeInventoryManualReturnTo(window.location.pathname + window.location.search);
+        if (rtw) paramsWip.set('return_to', rtw);
+      } catch (eW) {}
+      window.location.href = '/core/inventory/add/manual?' + paramsWip.toString();
+      return;
+    }
+
     var addModal = document.getElementById('add-inventory-modal');
-    if (!addModal) return;
+    // flows2 embeds #add-inventory-modal; batch/start and other shells do not — send operators to manual add with prefill.
+    if (!addModal) {
+      var params = new URLSearchParams();
+      if (prefill.name) params.set('name', String(prefill.name));
+      // Do not pass step "expected" quantity — operator enters the amount they are adding.
+      if (prefill.unit) params.set('unit', String(prefill.unit));
+      params.set('inventory_type', 'raw_material');
+      try {
+        var rt = safeInventoryManualReturnTo(window.location.pathname + window.location.search);
+        if (rt) params.set('return_to', rt);
+      } catch (e0) {}
+      window.location.href = '/core/inventory/add/manual?' + params.toString();
+      return;
+    }
     var form = addModal.querySelector('form');
     if (form) {
       var nameEl = form.querySelector('[name="name"]');
       var qtyEl = form.querySelector('[name="quantity"]');
       var unitEl = form.querySelector('[name="unit"]');
       if (nameEl) nameEl.value = prefill.name || '';
-      if (qtyEl) qtyEl.value = prefill.quantity != null && prefill.quantity !== '' ? prefill.quantity : '';
+      if (qtyEl) qtyEl.value = '';
       if (unitEl) unitEl.value = prefill.unit || 'kg';
     }
     window.addInventoryContext = { fromExecutionModal: true, inputName: prefill.name || '' };
@@ -42,9 +102,11 @@
   };
 
   // Open lightweight "Add untracked output" modal (missing output recorded during execution).
-  window.openAddUntrackedOutputModal = function(outputDef, executionId, executionStepId) {
+  window.openAddUntrackedOutputModal = function(outputDef, executionId, executionStepId, options) {
     var m = document.getElementById('add-untracked-output-modal');
     if (!m) return;
+    outputDef = outputDef || {};
+    options = options || {};
     var nameEl = document.getElementById('untracked-output-name');
     var qtyEl = document.getElementById('untracked-output-quantity');
     var unitEl = document.getElementById('untracked-output-unit');
@@ -62,6 +124,13 @@
     }
     var notesEl = document.getElementById('untracked-output-notes');
     if (notesEl) notesEl.value = '';
+    var typeSel = document.getElementById('untracked-output-inventory-type');
+    if (typeSel) {
+      var pref = options.inventory_type || options.inventoryType;
+      if (pref === 'work_in_progress' || pref === 'final_product') {
+        typeSel.value = pref;
+      }
+    }
     window.untrackedOutputContext = {
       executionId: executionId,
       executionStepId: executionStepId,
@@ -180,6 +249,10 @@
     var allInventory = inventoryData.inventory_items || [];
     var currentExecutionId = modal.dataset.executionId;
 
+    if (window.ExecutionRenderInputs && typeof window.ExecutionRenderInputs.clearInventoryPickerCardCaches === 'function') {
+      window.ExecutionRenderInputs.clearInventoryPickerCardCaches(modal);
+    }
+
     var selects = modal.querySelectorAll('.execute-inventory-select');
     for (var i = 0; i < selects.length; i++) {
       var hiddenInput = selects[i];
@@ -256,7 +329,7 @@
             hiddenInput.value = id;
             hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
             hiddenInput.dataset.unit = inv.unit || '';
-            if (triggerLabel) triggerLabel.textContent = (inv.process_name ? escapeHtml(inv.process_name) + ' - ' : '') + escapeHtml(inv.name) + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+            if (triggerLabel) triggerLabel.textContent = IDisp.formatTriggerLabel(inv);
             var q = section.querySelector('.execute-quantity-input');
             var u = section.querySelector('.execute-quantity-unit-display');
             if (q && u) {
@@ -286,7 +359,7 @@
         hiddenInput.value = selectedId;
         hiddenInput.dataset.quantity = inv.quantity != null ? String(inv.quantity) : '';
         hiddenInput.dataset.unit = inv.unit || '';
-        if (triggerLabel) triggerLabel.textContent = (inv.process_name ? escapeHtml(inv.process_name) + ' - ' : '') + escapeHtml(inv.name) + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+        if (triggerLabel) triggerLabel.textContent = IDisp.formatTriggerLabel(inv);
         var qtyInput = section ? section.querySelector('.execute-quantity-input') : null;
         var unitDisplay = section ? section.querySelector('.execute-quantity-unit-display') : null;
         if (qtyInput && unitDisplay) {

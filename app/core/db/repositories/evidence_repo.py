@@ -84,6 +84,20 @@ class EvidenceRepository:
             .all()
         )
 
+    def list_by_executions(self, execution_ids: list[UUID], org_id: UUID) -> list[ExecutionEvidence]:
+        if not execution_ids:
+            return []
+        return (
+            self.db.query(ExecutionEvidence)
+            .filter(
+                ExecutionEvidence.execution_id.in_(execution_ids),
+                ExecutionEvidence.org_id == org_id,
+                ExecutionEvidence.evidence_status == EVIDENCE_STATUS_ACTIVE,
+            )
+            .order_by(ExecutionEvidence.execution_id, ExecutionEvidence.created_at.asc())
+            .all()
+        )
+
     def list_by_step(self, execution_id: UUID, step_id: UUID, org_id: UUID) -> list[ExecutionEvidence]:
         return (
             self.db.query(ExecutionEvidence)

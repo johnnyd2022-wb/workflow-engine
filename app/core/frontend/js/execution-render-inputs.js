@@ -5,6 +5,40 @@
 (function (root) {
   "use strict";
 
+  var ITU = root.InventoryTypeUtils;
+  var IDisp = root.InventoryDisplay;
+  if (!ITU || typeof ITU.normalizeInventoryTabType !== "function" || typeof ITU.normalizeExpectedInventoryTabHint !== "function" || typeof ITU.matchesInventoryTab !== "function" || typeof ITU.matchesSearch !== "function") {
+    throw new Error("inventory-type-utils.js must load before execution-render-inputs.js");
+  }
+  if (!IDisp || typeof IDisp.formatTriggerLabel !== "function" || typeof IDisp.quantityUnitLine !== "function") {
+    throw new Error("inventory-display.js must load before execution-render-inputs.js");
+  }
+  var ExecInvPickView = root.ExecutionInventoryPickerView;
+  if (!ExecInvPickView || typeof ExecInvPickView.buildPayload !== "function" || typeof ExecInvPickView.assembleCard !== "function" || typeof ExecInvPickView.syncCard !== "function") {
+    throw new Error("execution-inventory-picker-view.js must load before execution-render-inputs.js");
+  }
+  var EIRR = root.ExecutionInventoryRowRenderer;
+  if (!EIRR || typeof EIRR.createInputRow !== "function") {
+    throw new Error("execution-inventory-row-renderer.js must load before execution-render-inputs.js");
+  }
+
+  /** Max inventory rows for which we reuse picker card DOM (see flows-and-batches-review cache guidance). */
+  var PICKER_CARD_CACHE_MAX_ROWS = 400;
+
+  function clearInventoryPickerCardCaches(rootEl) {
+    var root = rootEl || document;
+    if (!root || typeof root.querySelectorAll !== "function") return;
+    var sections = root.querySelectorAll(".execute-input-section");
+    for (var i = 0; i < sections.length; i++) {
+      var sec = sections[i];
+      try {
+        if (sec._execPickerCardElCache instanceof Map) {
+          sec._execPickerCardElCache.clear();
+        }
+      } catch (e) {}
+    }
+  }
+
   function renderVariableInventoryInputs(ctx) {
     var modal = ctx.modal;
     var ses = ctx.ses;
@@ -23,75 +57,181 @@
         // Page-style sections (no card chrome). CSS can further refine.
         inputSection.style.cssText = 'margin: 0; padding: 18px 0;' + (inputIdx === 0 ? '' : ' border-top: 1px solid var(--border-default, #e5e7eb);');
         
-        // Filter inventory by material name (shows all matching items)
-        const matchingInventory = allInventory.filter(inv => 
-          inv.name.toLowerCase().includes(input.name.toLowerCase()) || 
-          input.name.toLowerCase().includes(inv.name.toLowerCase())
-        );
-        
-        // Get current execution ID from modal context
+        // Get current execution ID from modal context (used to prioritize inventory produced in this execution).
         const currentExecutionId = modal.dataset.executionId;
-        
-        // Sort inventory: items with same execution_id first, then others
-        const sortedInventory = matchingInventory.sort((a, b) => {
-          const aExecutionId = a.source_execution_id || a.execution_id || null;
-          const bExecutionId = b.source_execution_id || b.execution_id || null;
-          
-          // If current execution ID is available, prioritize items from same execution
-          if (currentExecutionId) {
-            const aMatches = aExecutionId && String(aExecutionId) === String(currentExecutionId);
-            const bMatches = bExecutionId && String(bExecutionId) === String(currentExecutionId);
-            
-            if (aMatches && !bMatches) return -1; // a comes first
-            if (!aMatches && bMatches) return 1;  // b comes first
-          }
-          
-          // If both match or both don't match, maintain original order
-          return 0;
+
+        function safeName(inv) {
+          try { return String((inv && inv.name) || '').trim().toLowerCase(); } catch (e) { return ''; }
+        }
+
+        // Default list (no search): only inventory whose name exactly matches the expected input (trimmed, case-insensitive).
+        const expectedInputNorm = String((input && input.name) || '').trim().toLowerCase();
+        const matchingInventory = allInventory.filter(function(inv) {
+          if (!expectedInputNorm) return false;
+          return safeName(inv) === expectedInputNorm;
         });
+
+        // Keep ordering stable, but float "same execution" items to the top.
+        function sortWithExecutionBias(list) {
+          return (list || []).slice().sort((a, b) => {
+            const aExecutionId = a.source_execution_id || a.execution_id || null;
+            const bExecutionId = b.source_execution_id || b.execution_id || null;
+
+            if (currentExecutionId) {
+              const aMatches = aExecutionId && String(aExecutionId) === String(currentExecutionId);
+              const bMatches = bExecutionId && String(bExecutionId) === String(currentExecutionId);
+              if (aMatches && !bMatches) return -1;
+              if (!aMatches && bMatches) return 1;
+            }
+            return 0;
+          });
+        }
+
+        const sortedInventory = sortWithExecutionBias(matchingInventory);
+        const allInventorySorted = sortWithExecutionBias(allInventory);
         
         // Check if no matching inventory is available
         const hasNoInventory = sortedInventory.length === 0;
-        const errorStyle = hasNoInventory ? 'border: 2px solid var(--error, #ef4444);' : '';
-        const errorMessage = hasNoInventory ? `<p class="execute-input-no-inventory-warning" style="color: var(--error, #ef4444); font-size: 12px; margin-top: 4px; font-weight: 500;">⚠️ No matching inventory items found. Please add inventory before executing this step.</p>` : '';
         const safeInputName = (input.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
         const inventoryById = new Map();
         allInventory.forEach(function(inv) { inventoryById.set(String(inv.id), inv); });
 
-        inputSection.innerHTML = `
-          <div class="execute-input-section-header" style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-              ${escapeHtml(input.name)} 
-              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${input.quantity || '0'} ${input.unit || ''})</span>
-            </label>
-          </div>
-          <div class="execute-input-rows-container" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}"></div>
-          <div class="exec-picker-panel" data-exec-picker-panel="true" style="display:block; margin-top: 10px;">
-            <div class="flow-mode-segmented" role="group" aria-label="Inventory category" style="margin-bottom: 10px;">
-              <button type="button" class="flow-mode-segment flow-mode-segment--active" data-exec-type="raw_material" aria-pressed="true">Raw materials</button>
-              <button type="button" class="flow-mode-segment" data-exec-type="work_in_progress" aria-pressed="false">Intermediate</button>
-              <button type="button" class="flow-mode-segment" data-exec-type="final_product" aria-pressed="false">Finals products</button>
-            </div>
-            <div class="exec-picker-search">
-              <input type="search" class="spa-inp" data-exec-picker-search="true" placeholder="Search inventory…" autocomplete="off">
-            </div>
-            <div class="exec-picker-cards" data-exec-picker-cards="true"></div>
-          </div>
-          <div class="execute-add-input-pane" style="margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">Add another input</label>
-            <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;">Add one or more inputs to meet step quantity (e.g. multiple batches) or to record an additional material when inputs are not always set per execution.</p>
-            <button type="button" class="btn btn-secondary btn-sm execute-add-another-input-btn" data-input-name="${escapeHtml(input.name)}" data-safe-name="${safeInputName}" style="font-size: 13px;">+ Add another input</button>
-          </div>
-          <div class="execute-input-qty-expected-warning" style="display: none; margin-top: 12px; padding: 10px 12px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); color: #92400e; font-size: 13px; font-weight: 500;" role="status"></div>
-          <div class="execute-input-unexpected-material-warning" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
-          ${errorMessage}
-          ${hasNoInventory ? `<p style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm add-missing-item-btn" data-input-name="${escapeHtml(input.name)}" data-input-quantity="${escapeHtml(String(input.quantity != null ? input.quantity : ''))}" data-input-unit="${escapeHtml(input.unit || '')}" data-source-output-id="${input.source_output_id ? escapeHtml(String(input.source_output_id)) : ''}" data-source-step-id="${input.source_step_id ? escapeHtml(String(input.source_step_id)) : ''}" data-source-process-id="${input.source_process_id ? escapeHtml(String(input.source_process_id)) : ''}" style="font-size: 13px;">Add Missing Item</button></p>` : ''}
-        `;
+        var headerEl = document.createElement("div");
+        headerEl.className = "execute-input-section-header";
+        headerEl.style.marginBottom = "12px";
+        var headerLabel = document.createElement("label");
+        headerLabel.style.cssText = "display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;";
+        headerLabel.appendChild(document.createTextNode(input.name || ""));
+        headerLabel.appendChild(document.createTextNode(" "));
+        var expSpan = document.createElement("span");
+        expSpan.style.cssText = "color: var(--text-secondary); font-weight: normal;";
+        expSpan.textContent =
+          "(Expected: " +
+          String(input.quantity != null ? input.quantity : "0") +
+          " " +
+          (input.unit || "") +
+          ")";
+        headerLabel.appendChild(expSpan);
+        headerEl.appendChild(headerLabel);
+        inputSection.appendChild(headerEl);
 
-        const rowsContainer = inputSection.querySelector('.execute-input-rows-container');
-        const pickerPanel = inputSection.querySelector('[data-exec-picker-panel="true"]');
-        const pickerCards = inputSection.querySelector('[data-exec-picker-cards="true"]');
-        const pickerSearch = inputSection.querySelector('[data-exec-picker-search="true"]');
+        const rowsContainer = document.createElement("div");
+        rowsContainer.className = "execute-input-rows-container";
+        rowsContainer.dataset.inputName = input.name || "";
+        rowsContainer.dataset.safeName = safeInputName;
+        inputSection.appendChild(rowsContainer);
+
+        var pickerPanel = document.createElement("div");
+        pickerPanel.className = "exec-picker-panel";
+        pickerPanel.setAttribute("data-exec-picker-panel", "true");
+        pickerPanel.style.display = "block";
+        pickerPanel.style.marginTop = "10px";
+        var seg = document.createElement("div");
+        seg.className = "flow-mode-segmented";
+        seg.setAttribute("role", "group");
+        seg.setAttribute("aria-label", "Inventory category");
+        seg.style.marginBottom = "10px";
+        [["raw_material", "Raw materials", true], ["work_in_progress", "Intermediate", false], ["final_product", "Final products", false]].forEach(function(spec) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "flow-mode-segment" + (spec[2] ? " flow-mode-segment--active" : "");
+          b.setAttribute("data-exec-type", spec[0]);
+          b.setAttribute("aria-pressed", spec[2] ? "true" : "false");
+          b.textContent = spec[1];
+          seg.appendChild(b);
+        });
+        pickerPanel.appendChild(seg);
+        var searchWrap = document.createElement("div");
+        searchWrap.className = "exec-picker-search";
+        var pickerSearch = document.createElement("input");
+        pickerSearch.type = "search";
+        pickerSearch.className = "spa-inp";
+        pickerSearch.setAttribute("data-exec-picker-search", "true");
+        pickerSearch.placeholder = "Search inventory…";
+        pickerSearch.autocomplete = "off";
+        searchWrap.appendChild(pickerSearch);
+        pickerPanel.appendChild(searchWrap);
+        var pickerCards = document.createElement("div");
+        pickerCards.className = "exec-picker-cards";
+        pickerCards.setAttribute("data-exec-picker-cards", "true");
+        pickerPanel.appendChild(pickerCards);
+        inputSection.appendChild(pickerPanel);
+
+        if (hasNoInventory) {
+          var missPane = document.createElement("div");
+          missPane.className = "execute-missing-inventory-pane";
+          missPane.style.cssText =
+            "margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);";
+          var missP = document.createElement("p");
+          missP.style.cssText = "font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.5;";
+          missP.appendChild(document.createTextNode("⚠️ Nothing in inventory matches this input yet. Use "));
+          var sStrong = document.createElement("strong");
+          sStrong.textContent = "Add Missing Item";
+          missP.appendChild(sStrong);
+          missP.appendChild(
+            document.createTextNode(
+              " below to register what you need—you’ll be returned here afterwards to continue recording this step."
+            )
+          );
+          missPane.appendChild(missP);
+          var missBtn = document.createElement("button");
+          missBtn.type = "button";
+          missBtn.className = "btn btn-secondary btn-sm exec-add-missing-item-btn add-missing-item-btn";
+          missBtn.style.fontSize = "13px";
+          missBtn.dataset.inputName = input.name || "";
+          missBtn.dataset.inputQuantity = input.quantity != null ? String(input.quantity) : "";
+          missBtn.dataset.inputUnit = input.unit || "";
+          missBtn.dataset.expectedInventoryType =
+            input.expected_inventory_type || input.expectedInventoryType
+              ? String(input.expected_inventory_type || input.expectedInventoryType)
+              : input.source_output_id
+                ? "work_in_progress"
+                : "";
+          if (input.producing_process_name) missBtn.dataset.producingProcessName = String(input.producing_process_name);
+          if (input.producing_step_name) missBtn.dataset.producingStepName = String(input.producing_step_name);
+          if (input.source_output_id) missBtn.dataset.sourceOutputId = String(input.source_output_id);
+          if (input.source_step_id) missBtn.dataset.sourceStepId = String(input.source_step_id);
+          if (input.source_process_id) missBtn.dataset.sourceProcessId = String(input.source_process_id);
+          missBtn.textContent = "Add Missing Item";
+          missPane.appendChild(missBtn);
+          inputSection.appendChild(missPane);
+        }
+
+        var addPane = document.createElement("div");
+        addPane.className = "execute-add-input-pane";
+        addPane.style.cssText =
+          "margin-top: 12px; margin-bottom: 0; padding: 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);";
+        var addLbl = document.createElement("label");
+        addLbl.style.cssText = "display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;";
+        addLbl.textContent = "Add another input";
+        addPane.appendChild(addLbl);
+        var addDesc = document.createElement("p");
+        addDesc.style.cssText = "font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0; line-height: 1.45;";
+        addDesc.textContent =
+          "Add one or more inputs to meet step quantity (e.g. multiple batches) or to record an additional material when inputs are not always set per execution.";
+        addPane.appendChild(addDesc);
+        var execAddAnotherButton = document.createElement("button");
+        execAddAnotherButton.type = "button";
+        execAddAnotherButton.className = "btn btn-secondary btn-sm execute-add-another-input-btn";
+        execAddAnotherButton.style.fontSize = "13px";
+        execAddAnotherButton.dataset.inputName = input.name || "";
+        execAddAnotherButton.dataset.safeName = safeInputName;
+        execAddAnotherButton.textContent = "+ Add another input";
+        addPane.appendChild(execAddAnotherButton);
+        inputSection.appendChild(addPane);
+
+        var qtyWarn = document.createElement("div");
+        qtyWarn.className = "execute-input-qty-expected-warning";
+        qtyWarn.style.cssText =
+          "display: none; margin-top: 12px; padding: 10px 12px; background: hsl(38, 92%, 95%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); color: #92400e; font-size: 13px; font-weight: 500;";
+        qtyWarn.setAttribute("role", "status");
+        inputSection.appendChild(qtyWarn);
+        var matWarn = document.createElement("div");
+        matWarn.className = "execute-input-unexpected-material-warning";
+        matWarn.style.cssText =
+          "display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;";
+        matWarn.setAttribute("role", "status");
+        inputSection.appendChild(matWarn);
 
         // Ensure rows stack cleanly when adding additional inputs.
         if (rowsContainer) {
@@ -101,41 +241,14 @@
         }
         const pickerTabs = Array.prototype.slice.call(inputSection.querySelectorAll('.flow-mode-segment'));
         let rowIndex = 0;
+        var rowInputApi = {};
         if (!ses.inputStateByKey) ses.inputStateByKey = new Map();
 
-        function getInvType(inv) {
-          return inv && (inv.inventory_type || inv.type || inv.category || inv.item_type || '');
-        }
-        /** Map API/mock inventory types onto picker tab keys (raw_material | work_in_progress | final_product). */
         function normalizeInventoryTabType(inv) {
-          var t = String(getInvType(inv) || '').toLowerCase().trim();
-          if (!t) return 'raw_material';
-          if (t === 'intermediate' || t === 'work_in_progress' || t === 'wip') return 'work_in_progress';
-          if (t === 'final' || t === 'final_product') return 'final_product';
-          if (t === 'raw' || t === 'raw_material') return 'raw_material';
-          return t;
+          return ITU.normalizeInventoryTabType(inv);
         }
         function invMatchesType(inv, selected) {
-          if (!selected || selected === 'all') return true;
-          return normalizeInventoryTabType(inv) === selected;
-        }
-        function invMatchesSearch(inv, q) {
-          q = (q || '').trim().toLowerCase();
-          if (!q) return true;
-          var hay = [
-            inv && inv.name,
-            inv && inv.unit,
-            inv && inv.supplier,
-            inv && inv.supplier_batch_number,
-            inv && inv.process_name,
-          ].filter(Boolean).join(' ').toLowerCase();
-          return hay.indexOf(q) !== -1;
-        }
-        function fmtQty(inv) {
-          if (!inv) return '';
-          var q = (inv.quantity != null) ? String(inv.quantity) : '';
-          var u = inv.unit || '';
-          return (q && u) ? (q + ' ' + u) : (q || u || '');
+          return ITU.matchesInventoryTab(inv, selected);
         }
         function renderPickerCards(activeType, q) {
           if (!pickerCards) return;
@@ -159,339 +272,90 @@
             });
           } catch (e) {}
 
-          var list = sortedInventory
+          var qTrim = (q || '').trim();
+          // Default (no search): show inventory related to expected input name.
+          // While searching: search across all inventory.
+          var base = qTrim ? allInventorySorted : sortedInventory;
+          var list = base
             .filter(function(inv) { return invMatchesType(inv, activeType); })
-            .filter(function(inv) { return invMatchesSearch(inv, q); });
+            .filter(function(inv) { return ITU.matchesSearch(inv, qTrim); });
           list = list.filter(function(inv) {
             var id = String(inv.id);
             if (pendingId && id === pendingId) return true;
             return !selectedIds.has(id);
           });
 
-          // Keep list stable during preview (no reordering).
+          /**
+           * Reuse picker card DOM nodes across filter/tab/search rerenders (same inventory row objects).
+           * Beyond PICKER_CARD_CACHE_MAX_ROWS visible rows, skip reuse to cap retained DOM / Map entries.
+           */
+          var usePickerCardCache = list.length <= PICKER_CARD_CACHE_MAX_ROWS;
+          var pickerCardCache =
+            inputSection._execPickerCardElCache ||
+            (inputSection._execPickerCardElCache = new Map());
+          if (!usePickerCardCache) {
+            try {
+              pickerCardCache.clear();
+            } catch (e) {}
+          }
+
+          var pickerCardCtx = {
+            getExpiredReason: getExpiredReason,
+            escapeHtml: escapeHtml,
+            prettyLabel: prettyLabel,
+            orgUsersMap: orgUsersMap
+          };
+
+          function computeExecPickerCardPayload(inv) {
+            return ExecInvPickView.buildPayload(inv, pickerCardCtx);
+          }
+          function assembleExecPickerCard(inv, payload, isPending, rawId) {
+            return ExecInvPickView.assembleCard(inv, payload, isPending, rawId, IDisp);
+          }
+          function syncExecPickerCard(card, inv, payload, isPending, rawId) {
+            ExecInvPickView.syncCard(card, inv, payload, isPending, rawId, IDisp);
+          }
+
           if (!list.length) {
-            pickerCards.innerHTML = '<p style="margin: 0; font-size: 13px; color: var(--text-secondary); padding: 6px 2px;">No inventory matches.</p>';
+            pickerCardCache.clear();
+            pickerCards.replaceChildren();
+            var emptyP = document.createElement('p');
+            emptyP.style.cssText = 'margin: 0; font-size: 13px; color: var(--text-secondary); padding: 6px 2px;';
+            emptyP.textContent = 'No inventory matches.';
+            pickerCards.appendChild(emptyP);
             return;
           }
-          pickerCards.innerHTML = list.map(function(inv) {
+          var pickerFrag = document.createDocumentFragment();
+          var seenIds = new Set();
+          list.forEach(function(inv) {
             var rawId = String(inv.id);
-            var id = escapeHtml(rawId);
-            var name = escapeHtml(inv.name || 'Unnamed');
-            var sub = escapeHtml(fmtQty(inv));
-            var chips = '';
-            if (inv.supplier) chips += '<span class="exec-picker-chip">' + escapeHtml(inv.supplier) + '</span>';
-            if (inv.supplier_batch_number) chips += '<span class="exec-picker-chip">Batch ' + escapeHtml(inv.supplier_batch_number) + '</span>';
-            var reason = getExpiredReason(inv.id);
-            if (reason) {
-              var cls = reason.toLowerCase().indexOf('untracked') !== -1 ? 'exec-picker-chip--danger'
-                : (reason.toLowerCase().indexOf('expired') !== -1 ? 'exec-picker-chip--danger' : 'exec-picker-chip--warn');
-              chips += '<span class="exec-picker-chip ' + cls + '">' + escapeHtml(reason) + '</span>';
-            }
+            seenIds.add(rawId);
+            var payload = computeExecPickerCardPayload(inv);
             var isPending = pendingId && pendingId === rawId;
-            function fmtDate(raw) {
-              if (!raw) return '';
-              try { return new Date(raw).toLocaleDateString(); } catch (e) { return String(raw); }
+            var card = null;
+            if (usePickerCardCache) {
+              card = pickerCardCache.get(rawId);
+              if (card) {
+                syncExecPickerCard(card, inv, payload, isPending, rawId);
+              } else {
+                card = assembleExecPickerCard(inv, payload, isPending, rawId);
+                pickerCardCache.set(rawId, card);
+              }
+            } else {
+              card = assembleExecPickerCard(inv, payload, isPending, rawId);
             }
-            function addMeta(label, value) {
-              if (value == null) return '';
-              var s = String(value);
-              if (!s.trim()) return '';
-              return (
-                '<div style="min-width:0;">' +
-                  '<div style="font-size:11px; color: var(--text-tertiary, #9ca3af); line-height:1.2;">' + escapeHtml(label) + '</div>' +
-                  '<div style="font-size:12px; color: var(--text-primary, #111827); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(s) + '</div>' +
-                '</div>'
-              );
-            }
-            var metaBits = '';
-            // Core production identifiers
-            metaBits += addMeta('Process', inv.process_name || '');
-            metaBits += addMeta('Supplier', inv.supplier || '');
-            metaBits += addMeta('Batch', inv.supplier_batch_number || inv.batch_number || inv.lot_number || '');
-            metaBits += addMeta('Barcode', inv.barcode || '');
-            metaBits += addMeta('Source step', inv.source_step_name || '');
-            // Dates (if present)
-            metaBits += addMeta('Purchase', inv.purchase_date ? fmtDate(inv.purchase_date) : '');
-            metaBits += addMeta('Expiry', inv.expiry_date ? fmtDate(inv.expiry_date) : '');
-            metaBits += addMeta('Ready', inv.ready_date ? fmtDate(inv.ready_date) : '');
-            metaBits += addMeta('Created', inv.created_at ? fmtDate(inv.created_at) : '');
-            // Provenance (if present)
-            metaBits += addMeta('Operator', inv.operator_name || inv.operator || '');
-            metaBits += addMeta('Created by', inv.created_by_name || inv.created_by || '');
-
-            // Extra metadata (bounded): show up to 8 keys, include small objects with "name"/"email".
-            var extraBits = '';
+            pickerFrag.appendChild(card);
+          });
+          if (usePickerCardCache) {
+            pickerCardCache.forEach(function(_el, id) {
+              if (!seenIds.has(id)) pickerCardCache.delete(id);
+            });
+          } else {
             try {
-              var extra = inv.extra_data;
-              if (extra && typeof extra === 'object') {
-                var keys = Object.keys(extra);
-                var shown = 0;
-                for (var k = 0; k < keys.length; k++) {
-                  if (shown >= 8) break;
-                  var key = keys[k];
-                  if (key === 'execution_prompts') continue; // handled elsewhere / too verbose
-                  var val = extra[key];
-                  if (val == null) continue;
-                  var vv = '';
-                  if (typeof val === 'object') {
-                    if (val && (val.name || val.email)) vv = String(val.name || val.email);
-                    else continue;
-                  } else {
-                    vv = String(val);
-                  }
-                  if (!vv.trim()) continue;
-                  // Prefer showing common production keys early.
-                  var label = key;
-                  if (/batch|lot/i.test(key)) label = 'Batch';
-                  if (/operator/i.test(key)) label = 'Operator';
-                  if (/created_by|creator|made_by/i.test(key)) label = 'Created by';
-                  extraBits += addMeta(label, vv);
-                  shown++;
-                }
-              }
+              pickerCardCache.clear();
             } catch (e) {}
-
-            var metaBlock = '';
-            var combined = (metaBits || '') + (extraBits || '');
-            if (combined) {
-              metaBlock =
-                '<div class="exec-picker-card__meta-grid" style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">' +
-                  combined +
-                '</div>';
-            }
-
-            // Full metadata (expand/collapse): show every scalar key on inv + full JSON for extra_data.
-            function safeString(v) {
-              if (v == null) return '';
-              if (typeof v === 'string') return v;
-              if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-              return '';
-            }
-            var kv = [];
-            try {
-              Object.keys(inv || {}).forEach(function(k) {
-                if (k === 'extra_data') return;
-                var v = inv[k];
-                if (v == null) return;
-                if (typeof v === 'object') return;
-                var s = safeString(v);
-                if (!s || !String(s).trim()) return;
-                kv.push([k, s]);
-              });
-            } catch (e) {}
-            kv.sort(function(a, b) { return a[0].localeCompare(b[0]); });
-            var kvHtml = kv.map(function(p) {
-              return '<div class="exec-picker-kv__k">' + escapeHtml(p[0]) + '</div><div class="exec-picker-kv__v">' + escapeHtml(p[1]) + '</div>';
-            }).join('');
-            var extraJson = '';
-            try {
-              if (inv.extra_data && typeof inv.extra_data === 'object') {
-                extraJson = JSON.stringify(inv.extra_data, null, 2);
-              }
-            } catch (e) {}
-            // Audit history (extra_data.inventory_audit_history): show human-friendly operator + cleaned labels.
-            var auditHtml = '';
-            try {
-              var hist = (inv.extra_data && inv.extra_data.inventory_audit_history) ? inv.extra_data.inventory_audit_history : [];
-              if (Array.isArray(hist) && hist.length) {
-                var rows = hist.slice().reverse().map(function(h) {
-                  var when = h.timestamp_utc || h.timestamp || h.created_at || '';
-                  var src = h.source_method || h.source || '';
-                  var opLabel = h.operator_name || h.operator_email || '';
-                  if (!opLabel) {
-                    var opId = h.user_id || h.operator_id || h.user || '';
-                    opLabel = opId && orgUsersMap && typeof orgUsersMap.get === 'function'
-                      ? (orgUsersMap.get(String(opId)) || String(opId))
-                      : String(opId || '');
-                  }
-                  // Never leak raw UUIDs in the UI; show a friendly fallback.
-                  try {
-                    var uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-                    if (!opLabel || uuidLike.test(String(opLabel).trim())) opLabel = 'Unknown operator';
-                  } catch (e) {
-                    if (!opLabel) opLabel = 'Unknown operator';
-                  }
-                  // Action isn't logged yet for raw materials; use a sensible default for now.
-                  var action = h.action || h.event || '';
-                  if (!action) action = 'inventory item added';
-                  return (
-                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('action')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(prettyLabel(action)) + '</div>' +
-                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('timestamp_utc')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(when || '—')) + '</div>' +
-                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('operator')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(opLabel || '—')) + '</div>' +
-                    '<div class="exec-picker-kv__k">' + escapeHtml(prettyLabel('source_method')) + '</div><div class="exec-picker-kv__v">' + escapeHtml(prettyLabel(src) || '—') + '</div>'
-                  );
-                }).join('');
-                auditHtml =
-                  '<div style="margin-top: 12px;">' +
-                    '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">Audit history</div>' +
-                    '<div class="exec-picker-kv">' + rows + '</div>' +
-                  '</div>';
-              }
-            } catch (e) {}
-
-            var isRawMaterial = String(inv.inventory_type || 'raw_material') === 'raw_material';
-
-            function section(title, innerHtml) {
-              if (!innerHtml || !String(innerHtml).trim()) return '';
-              return (
-                '<div style="margin-top: 12px;">' +
-                  '<div style="font-size: 12px; font-weight: 700; color: var(--text-secondary,#6b7280); letter-spacing:0.03em; text-transform: uppercase; margin-bottom: 8px;">' +
-                    escapeHtml(title) +
-                  '</div>' +
-                  innerHtml +
-                '</div>'
-              );
-            }
-            function li(text) {
-              return '<li style="margin: 0 0 6px 0; font-size: 13px; color: var(--text-primary, #111827); line-height: 1.35;">' + text + '</li>';
-            }
-            function fmtIso(iso) {
-              if (!iso) return '';
-              try { return new Date(iso).toISOString().replace('.000Z','Z'); } catch (e) { return String(iso); }
-            }
-            function fmtCustomExpiry(obj) {
-              if (!obj || typeof obj !== 'object') return '';
-              var mode = (obj.mode || '').toString();
-              if (mode === 'duration') {
-                var dv = obj.duration_value != null ? String(obj.duration_value) : '';
-                var du = obj.duration_unit != null ? String(obj.duration_unit).replace(/_/g, ' ') : '';
-                var wv = obj.warning_value != null ? String(obj.warning_value) : '';
-                var wu = obj.warning_unit != null ? String(obj.warning_unit).replace(/_/g, ' ') : '';
-                var base = (dv && du) ? ('Expiry: ' + escapeHtml(dv + ' ' + du)) : '';
-                var warn = (wv && wu) ? ('Warning: ' + escapeHtml(wv + ' ' + wu)) : '';
-                return [base, warn].filter(Boolean).join(' · ');
-              }
-              if (mode === 'datetime') {
-                var exp = obj.expiry_at || obj.expiryAt || '';
-                var warnAt = obj.warning_at || obj.warn_at || obj.warningAt || '';
-                var base2 = exp ? ('Expiry at (UTC): ' + escapeHtml(fmtIso(exp))) : '';
-                var warn2 = warnAt ? ('Warning at (UTC): ' + escapeHtml(fmtIso(warnAt))) : '';
-                return [base2, warn2].filter(Boolean).join(' · ');
-              }
-              // Unknown schema
-              try { return escapeHtml(JSON.stringify(obj)); } catch (e) { return ''; }
-            }
-
-            var humanDetails = '';
-            if (!isRawMaterial) {
-              // Traceability summary for intermediate/final products.
-              var trace = (inv.extra_data && inv.extra_data.execution_trace) ? inv.extra_data.execution_trace : {};
-              var prompts = (inv.extra_data && inv.extra_data.execution_prompts) ? inv.extra_data.execution_prompts : null;
-              var vInputs = (inv.extra_data && inv.extra_data.variable_inputs) ? inv.extra_data.variable_inputs : null;
-              var vOut = (inv.extra_data && inv.extra_data.variable_output) ? inv.extra_data.variable_output : null;
-
-              var top = '';
-              var topRows = '';
-              if (inv.process_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Process name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.process_name)) + '</div>';
-              if (inv.source_step_name) topRows += '<div class="exec-picker-kv__k">' + escapeHtml('Source step name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(inv.source_step_name)) + '</div>';
-              if (topRows) top = '<div class="exec-picker-kv">' + topRows + '</div>';
-              humanDetails += section('Production', top);
-
-              // Custom expiry (differentiate inputs)
-              var ceActual = (inv.extra_data && inv.extra_data.custom_expiry_actual) ? inv.extra_data.custom_expiry_actual : null;
-              var ceInput = vOut && vOut.custom_expiry_input ? vOut.custom_expiry_input : (inv.extra_data && inv.extra_data.custom_expiry_input ? inv.extra_data.custom_expiry_input : null);
-              var ceBits = '';
-              if (ceActual) ceBits += '<div class="exec-picker-kv">' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Custom expiry (applied)') + '</div><div class="exec-picker-kv__v">' + fmtCustomExpiry(ceActual) + '</div>' +
-              '</div>';
-              if (ceInput) ceBits += '<div class="exec-picker-kv" style="margin-top:6px;">' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Custom expiry (entered)') + '</div><div class="exec-picker-kv__v">' + fmtCustomExpiry(ceInput) + '</div>' +
-              '</div>';
-              humanDetails += section('Custom expiry', ceBits);
-
-              // Execution prompts
-              if (prompts && typeof prompts === 'object') {
-                var entries = Object.entries(prompts);
-                if (entries.length) {
-                  var ul = '<ul style="margin: 0; padding-left: 18px;">' +
-                    entries.map(function(e, idx) {
-                      var k = e[0];
-                      var v = e[1];
-                      return li('<span style="font-weight:600;">Prompt ' + (idx + 1) + '</span>' +
-                        ' <span style="color: var(--text-secondary,#6b7280); font-weight:500;">(' + escapeHtml(prettyLabel(k)) + ')</span>' +
-                        ': <span style="font-weight:400;">' + escapeHtml(String(v)) + '</span>');
-                    }).join('') +
-                  '</ul>';
-                  humanDetails += section('Custom prompts', ul);
-                }
-              }
-
-              // Inputs (variable_inputs)
-              if (Array.isArray(vInputs) && vInputs.length) {
-                var ul2 = '<ul style="margin: 0; padding-left: 18px;">' +
-                  vInputs.map(function(x) {
-                    var nm = (x && (x.name || x.input_name || x.inputName)) ? String(x.name || x.input_name || x.inputName) : 'Input';
-                    var q = (x && (x.quantity != null ? x.quantity : x.input_quantity)) != null ? String(x.quantity != null ? x.quantity : x.input_quantity) : '';
-                    var u = (x && (x.unit || x.input_unit)) ? String(x.unit || x.input_unit) : '';
-                    return li('<span style="font-weight:400;">' + escapeHtml(nm) + '</span>' +
-                      (q ? (' <span style="color: var(--text-secondary,#6b7280); font-weight:400;">— ' + escapeHtml(String(q)) + (u ? (' ' + escapeHtml(u)) : '') + '</span>') : ''));
-                  }).join('') +
-                '</ul>';
-                humanDetails += section('Inputs', ul2);
-              }
-
-              // Variable output (human-readable)
-              if (vOut && typeof vOut === 'object') {
-                var outNm = vOut.name || inv.name || '';
-                var outQ = vOut.quantity != null ? vOut.quantity : '';
-                var outU = vOut.unit || inv.unit || '';
-                var outRows = '';
-                if (outNm) outRows += '<div class="exec-picker-kv__k">' + escapeHtml('Output name') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(outNm)) + '</div>';
-                if (outQ !== '' && outQ != null) outRows += '<div class="exec-picker-kv__k">' + escapeHtml('Output quantity') + '</div><div class="exec-picker-kv__v">' + escapeHtml(String(outQ)) + (outU ? (' ' + escapeHtml(String(outU))) : '') + '</div>';
-                humanDetails += section('Output', outRows ? ('<div class="exec-picker-kv">' + outRows + '</div>') : '');
-              }
-
-              // Execution trace (audit-like, human labels)
-              var auditBits = '';
-              var ts = inv.created_at || (trace && trace.completed_at) || '';
-              // Operator: prefer completed_by label; else map completed_by_user_id to org user display; else email.
-              var op = (trace && (trace.completed_by || trace.completed_by_email)) || inv.operator_name || inv.created_by_name || '';
-              if (!op) {
-                var uid = trace && (trace.completed_by_user_id || trace.completed_by_user || trace.user_id);
-                if (uid && orgUsersMap && typeof orgUsersMap.get === 'function') {
-                  op = orgUsersMap.get(String(uid)) || '';
-                }
-              }
-              var srcMethod = (trace && trace.source_method) || '';
-              if (!srcMethod && inv.source_execution_step_id) srcMethod = 'completed step';
-              auditBits += '<div class="exec-picker-kv">' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Action') + '</div><div class="exec-picker-kv__v">' + escapeHtml('Inventory item created') + '</div>' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Timestamp UTC') + '</div><div class="exec-picker-kv__v">' + escapeHtml(ts ? fmtIso(ts) : '—') + '</div>' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Operator') + '</div><div class="exec-picker-kv__v">' + escapeHtml(op || '—') + '</div>' +
-                '<div class="exec-picker-kv__k">' + escapeHtml('Source method') + '</div><div class="exec-picker-kv__v">' + escapeHtml(srcMethod ? prettyLabel(srcMethod) : '—') + '</div>' +
-              '</div>';
-              humanDetails += section('Audit history', auditBits);
-            }
-
-            var detailsHtml =
-              '<div class="exec-picker-card__details">' +
-                (isRawMaterial ? '' : humanDetails) +
-                (isRawMaterial ? auditHtml : '') +
-              '</div>';
-            var actions = '';
-            if (isPending) {
-              actions =
-                '<div class="exec-picker-card__actions" style="justify-content:flex-start;">' +
-                  '<button type="button" class="btn btn-secondary btn-sm exec-picker-confirm-btn" data-action="confirm-input" data-inv-id="' + id + '">Confirm input</button>' +
-                '</div>';
-            }
-            return (
-              '<div class="exec-picker-card" role="button" tabindex="0" data-inv-id="' + id + '" aria-pressed="' + (isPending ? 'true' : 'false') + '" data-expanded="false">' +
-                '<div class="exec-picker-card__top">' +
-                  '<div style="min-width:0;">' +
-                    '<p class="exec-picker-card__title">' + name + '</p>' +
-                    '<p class="exec-picker-card__sub">' + sub + '</p>' +
-                  '</div>' +
-                  '<button type="button" class="exec-picker-card__toggle" data-action="toggle-details" data-inv-id="' + id + '">Details</button>' +
-                '</div>' +
-                (chips ? '<div class="exec-picker-card__meta">' + chips + '</div>' : '') +
-                metaBlock +
-                '<div class="exec-picker-card__spacer"></div>' +
-                actions +
-                detailsHtml +
-              '</div>'
-            );
-          }).join('');
+          }
+          pickerCards.replaceChildren(pickerFrag);
         }
 
         function normInputName(s) {
@@ -505,12 +369,19 @@
           });
           return counts;
         }
+        function normalizeExpectedInventoryTabHint(inp) {
+          return ITU.normalizeExpectedInventoryTabHint(inp);
+        }
+
         /**
          * Choose initial category tab from name-matched inventory.
          * Previously any WIP/final in the fuzzy-matched set forced WIP/final over raw — wrong when the step
          * expects a raw material but loose name matching also pulled in finals.
          */
         function pickDefaultPickerType() {
+          var hinted = normalizeExpectedInventoryTabHint(input);
+          if (hinted) return hinted;
+
           var list = sortedInventory || [];
           var expected = normInputName(input && input.name);
           var exact =
@@ -543,11 +414,39 @@
           var hasFinal = counts.final_product > 0;
           var hasRaw = counts.raw_material > 0;
 
+          // No rows matching this input name: tab counts are all zero — avoid defaulting to Raw unless we are sure.
+          if (!list.length) {
+            if (input && input.source_output_id) return 'work_in_progress';
+            var expectedN = normInputName(input && input.name);
+            if (expectedN && allInventory && allInventory.length) {
+              var byName = allInventory.filter(function(inv) {
+                return normInputName(inv && inv.name) === expectedN;
+              });
+              if (byName.length) {
+                var gc = countTabTypes(byName);
+                var gr = gc.raw_material > 0;
+                var gw = gc.work_in_progress > 0;
+                var gf = gc.final_product > 0;
+                var gkinds = (gr ? 1 : 0) + (gw ? 1 : 0) + (gf ? 1 : 0);
+                if (gkinds === 1) {
+                  if (gr) return 'raw_material';
+                  if (gw) return 'work_in_progress';
+                  return 'final_product';
+                }
+                if (gw && !gr && !gf) return 'work_in_progress';
+                if (gf && !gr && !gw) return 'final_product';
+                if (gr && !gw && !gf) return 'raw_material';
+              }
+            }
+            return 'raw_material';
+          }
+
           if (input && input.source_output_id) {
             if (hasWip || hasFinal) {
               return counts.final_product > counts.work_in_progress ? 'final_product' : 'work_in_progress';
             }
-            return 'raw_material';
+            // Chained / previous-output inputs are never raw materials; default Intermediate when stock is missing.
+            return 'work_in_progress';
           }
 
           if (hasRaw && !hasWip && !hasFinal) return 'raw_material';
@@ -561,29 +460,24 @@
         }
 
         var defaultPickerType = pickDefaultPickerType();
-        var pickerState = { activeType: defaultPickerType, q: '' };
-        function syncTabState(next) {
-          pickerState.activeType = next;
-          pickerTabs.forEach(function(t) {
-            var isOn = t.getAttribute('data-exec-type') === next;
-            t.setAttribute('aria-pressed', isOn ? 'true' : 'false');
-            t.classList.toggle('flow-mode-segment--active', isOn);
-          });
-          renderPickerCards(pickerState.activeType, pickerState.q);
+        var IPC = root.InventoryPickerController;
+        if (!IPC || typeof IPC.create !== "function") {
+          throw new Error("inventory-picker-controller.js must load before execution-render-inputs.js");
         }
-        pickerTabs.forEach(function(btn) {
-          btn.addEventListener('click', function() {
-            syncTabState(btn.getAttribute('data-exec-type') || 'all');
-          });
+        var pickerCtl = IPC.create({
+          inputSection: inputSection,
+          pickerTabs: pickerTabs,
+          pickerSearch: pickerSearch,
+          defaultActiveType: defaultPickerType,
+          onFilterChange: function (activeType, q) {
+            renderPickerCards(activeType, q);
+          },
+          searchDebounceMs: 300
         });
-        if (pickerSearch) {
-          pickerSearch.addEventListener('input', function() {
-            pickerState.q = pickerSearch.value || '';
-            renderPickerCards(pickerState.activeType, pickerState.q);
-          });
-        }
+        var pickerState = pickerCtl.state;
+        var syncTabState = pickerCtl.syncTabState;
+        pickerCtl.bind();
         if (pickerPanel) {
-          // initial render (ensure correct default tab is active)
           syncTabState(defaultPickerType);
         }
 
@@ -637,82 +531,17 @@
         }
 
         function createInputRow(isFirst) {
-          const rowId = 'execute-input-row-' + safeInputName + '-' + rowIndex++;
-          const stateKey = safeInputName + '::' + rowId;
-          const row = document.createElement('div');
-          row.className = 'execute-input-row';
-          row.id = rowId;
-          row.dataset.inputName = input.name;
-          row.dataset.stateKey = stateKey;
-          // Ensure rows naturally stack in the document flow.
-          row.style.display = 'block';
-          row.style.width = '100%';
-          row.style.position = 'relative';
-          if (!ses.inputStateByKey.has(stateKey)) {
-            ses.inputStateByKey.set(stateKey, {
-              input_name: input.name,
-              inventory_item_id: '',
-              quantity: input.quantity != null ? Number(input.quantity) : 0,
-              unit: input.unit || '',
-              expired_reason: '',
-            });
-          }
-          row.innerHTML = `
-            <input type="hidden" class="execute-inventory-select" data-input-name="${escapeHtml(input.name)}" data-quantity="" data-unit="" data-expired-reason="" value="">
-
-            <div style="display:flex; justify-content:flex-end; margin-bottom: 10px;">
-              <button type="button" class="execute-remove-input-row-btn btn btn-secondary btn-sm" style="font-size: 12px;">Remove input</button>
-            </div>
-
-            <div class="execute-selected-inv-card" style="display:none; padding: 12px 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md, 10px); background: var(--bg-card, #fff);"></div>
-
-            <div class="execute-input-expired-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
-            <div class="execute-input-unexpected-row-warning" data-input-name="${escapeHtml(input.name)}" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(210, 90%, 96%); border: 1px solid var(--info, #3b82f6); border-radius: var(--radius-md); color: #1e40af; font-size: 13px; font-weight: 500;" role="status"></div>
-
-            <div class="execute-qty-pane" style="display:none; margin-top: 12px;">
-              <label class="spa-field-label">Quantity to consume</label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="number" class="spa-inp execute-quantity-input" data-input-name="${escapeHtml(input.name)}" data-step-unit="${escapeHtml(input.unit || '')}" data-original-quantity="${input.quantity || ''}" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0" style="flex: 1;">
-                <span class="execute-quantity-unit-display" style="font-size: 14px; color: var(--text-secondary); min-width: 40px; text-align: left;">${input.unit || ''}</span>
-              </div>
-            </div>
-          `;
-          var qtyInput = row.querySelector('.execute-quantity-input');
-          if (qtyInput) {
-            // Ensure we start from a neutral border (avoid stale inline styles / bfcache).
-            qtyInput.style.border = '1px solid var(--border-default, #e5e7eb)';
-            qtyInput.addEventListener('input', function() {
-              var st = ses.inputStateByKey.get(stateKey);
-              if (!st) return;
-              var q = parseFloat(qtyInput.value);
-              st.quantity = isNaN(q) ? 0 : q;
-            });
-          }
-
-          // Remove input: if it's the only row, clear selection + unlock; otherwise remove the row.
-          var removeBtn = row.querySelector('.execute-remove-input-row-btn');
-          if (removeBtn) {
-            removeBtn.addEventListener('click', function(e) {
-              if (e) { e.preventDefault(); e.stopPropagation(); }
-              row.setAttribute('data-pending-inv-id', '');
-              row.setAttribute('data-selection-locked', 'false');
-              if (!rowsContainer) return;
-              var rowCount = rowsContainer.querySelectorAll('.execute-input-row').length;
-              if (rowCount <= 1) {
-                setRowSelection(row, '');
-                setActiveRow(row);
-              } else {
-                var stateKey = row.dataset.stateKey || '';
-                if (stateKey && ses.inputStateByKey) ses.inputStateByKey.delete(stateKey);
-                row.remove();
-                // Ensure active row points to a remaining row.
-                var next = rowsContainer.querySelector('.execute-input-row');
-                if (next) setActiveRow(next);
-              }
-              renderPickerCards(pickerState.activeType, pickerState.q);
-            });
-          }
-          return row;
+          return EIRR.createInputRow({
+            isFirst: isFirst,
+            safeInputName: safeInputName,
+            bumpRowIndex: function () {
+              return rowIndex++;
+            },
+            ses: ses,
+            input: input,
+            rowsContainer: rowsContainer,
+            api: rowInputApi
+          });
         }
 
         function nameMatchesExact(invName) {
@@ -844,9 +673,9 @@
           var stateKey = rowEl.dataset.stateKey || '';
           var st = stateKey ? ses.inputStateByKey.get(stateKey) : null;
           hiddenInput.value = invId || '';
-          hiddenInput.dataset.quantity = '';
-          hiddenInput.dataset.unit = '';
-          hiddenInput.dataset.expiredReason = '';
+          delete hiddenInput.dataset.quantity;
+          delete hiddenInput.dataset.unit;
+          delete hiddenInput.dataset.expiredReason;
 
           // Always clear warning when changing selection; only show if the selected item needs it.
           if (expiredWarningEl) { expiredWarningEl.style.display = 'none'; expiredWarningEl.textContent = ''; }
@@ -860,7 +689,9 @@
               quantityInput.dataset.originalQuantity = input.quantity || '';
               quantityInput.dataset.inventoryUnit = '';
             }
+            hiddenInput.setAttribute('data-input-name', input.name || '');
             if (st) {
+              st.input_name = input.name || '';
               st.inventory_item_id = '';
               st.unit = (quantityInput && (quantityInput.dataset.stepUnit || input.unit)) || (input.unit || '');
               st.expired_reason = '';
@@ -890,7 +721,10 @@
             hiddenInput.dataset.unit = inv.unit || '';
             const reason = getExpiredReason(inv.id);
             hiddenInput.dataset.expiredReason = reason || '';
+            var consumedLabel = (inv.name && String(inv.name).trim()) ? String(inv.name).trim() : (input.name || '');
+            hiddenInput.setAttribute('data-input-name', consumedLabel);
             if (st) {
+              st.input_name = consumedLabel;
               st.inventory_item_id = String(inv.id);
               st.unit = (quantityInput && (quantityInput.dataset.stepUnit || input.unit)) || (input.unit || inv.unit || '');
               st.expired_reason = reason || '';
@@ -906,27 +740,58 @@
                 if (!raw) return '';
                 try { return new Date(raw).toLocaleDateString(); } catch (e) { return String(raw); }
               }
-              var meta = [];
-              if (inv.supplier) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Supplier</span><div style="font-weight:600;">' + escapeHtml(inv.supplier) + '</div></div>');
+              function addMetaCell(grid, label, value) {
+                if (value == null || String(value) === '') return;
+                var cell = document.createElement('div');
+                var lab = document.createElement('span');
+                lab.style.cssText = 'color:var(--text-tertiary,#9ca3af); font-size:12px;';
+                lab.textContent = label;
+                var valEl = document.createElement('div');
+                valEl.style.fontWeight = '600';
+                valEl.textContent = String(value);
+                cell.appendChild(lab);
+                cell.appendChild(valEl);
+                grid.appendChild(cell);
+              }
+              selectedCardEl.replaceChildren();
+              var rowTop = document.createElement('div');
+              rowTop.style.cssText = 'display:flex; align-items:flex-start; justify-content:space-between; gap:12px;';
+              var col = document.createElement('div');
+              col.style.minWidth = '0';
+              var t1 = document.createElement('div');
+              t1.style.cssText = 'font-size:14px; font-weight:700; color:var(--text-primary,#111827);';
+              t1.textContent = inv.name || 'Selected item';
+              var t2 = document.createElement('div');
+              t2.style.cssText = 'font-size:12px; color:var(--text-secondary,#6b7280); margin-top:4px;';
+              t2.textContent = IDisp.formatSelectedRowSubtitle(inv);
+              col.appendChild(t1);
+              col.appendChild(t2);
+              rowTop.appendChild(col);
+              if (reason) {
+                var chip = document.createElement('div');
+                chip.className = 'exec-picker-chip exec-picker-chip--warn';
+                chip.style.flexShrink = '0';
+                chip.textContent = reason;
+                rowTop.appendChild(chip);
+              }
+              selectedCardEl.appendChild(rowTop);
               var batchAny = inv.supplier_batch_number || inv.batch_number || inv.lot_number || '';
-              if (batchAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Batch</span><div style="font-weight:600;">' + escapeHtml(batchAny) + '</div></div>');
               var operatorAny = inv.operator_name || inv.operator || '';
-              if (operatorAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Operator</span><div style="font-weight:600;">' + escapeHtml(operatorAny) + '</div></div>');
               var createdByAny = inv.created_by_name || inv.created_by || '';
-              if (createdByAny) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created by</span><div style="font-weight:600;">' + escapeHtml(createdByAny) + '</div></div>');
-              if (inv.purchase_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Purchase date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.purchase_date)) + '</div></div>');
-              if (inv.expiry_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Expiry date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.expiry_date)) + '</div></div>');
-              if (inv.ready_date) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Ready date</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.ready_date)) + '</div></div>');
-              if (inv.created_at) meta.push('<div><span style="color:var(--text-tertiary,#9ca3af); font-size:12px;">Created</span><div style="font-weight:600;">' + escapeHtml(fmtDate(inv.created_at)) + '</div></div>');
-              selectedCardEl.innerHTML =
-                '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">' +
-                  '<div style="min-width:0;">' +
-                    '<div style="font-size:14px; font-weight:700; color:var(--text-primary,#111827);">' + escapeHtml(inv.name || 'Selected item') + '</div>' +
-                    '<div style="font-size:12px; color:var(--text-secondary,#6b7280); margin-top:4px;">' + escapeHtml((inv.process_name ? (inv.process_name + ' · ') : '') + fmtQty(inv)) + '</div>' +
-                  '</div>' +
-                  (reason ? ('<div class="exec-picker-chip exec-picker-chip--warn" style="flex-shrink:0;">' + escapeHtml(reason) + '</div>') : '') +
-                '</div>' +
-                (meta.length ? ('<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:12px;">' + meta.join('') + '</div>') : '');
+              if (inv.supplier || batchAny || operatorAny || createdByAny || inv.purchase_date || inv.expiry_date || inv.ready_date || inv.created_at) {
+                var grid = document.createElement('div');
+                grid.style.cssText =
+                  'display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:12px;';
+                addMetaCell(grid, 'Supplier', inv.supplier);
+                addMetaCell(grid, 'Batch', batchAny);
+                addMetaCell(grid, 'Operator', operatorAny);
+                addMetaCell(grid, 'Created by', createdByAny);
+                if (inv.purchase_date) addMetaCell(grid, 'Purchase date', fmtDate(inv.purchase_date));
+                if (inv.expiry_date) addMetaCell(grid, 'Expiry date', fmtDate(inv.expiry_date));
+                if (inv.ready_date) addMetaCell(grid, 'Ready date', fmtDate(inv.ready_date));
+                if (inv.created_at) addMetaCell(grid, 'Created', fmtDate(inv.created_at));
+                selectedCardEl.appendChild(grid);
+              }
               selectedCardEl.style.display = 'block';
             }
             if (qtyPane) qtyPane.style.display = 'block';
@@ -935,6 +800,8 @@
           updateSectionQtyExpectedWarning();
           updateUnexpectedMaterialWarning();
         }
+
+        rowInputApi.setRowSelection = setRowSelection;
 
         const firstRow = createInputRow(true);
         rowsContainer.appendChild(firstRow);
@@ -947,10 +814,9 @@
 
         function getInventorySelectionLabel(invId) {
           if (!invId) return 'Select inventory item...';
-          const inv = inventoryById.get(String(invId));
+          var inv = inventoryById.get(String(invId));
           if (!inv) return 'Select inventory item...';
-          const productName = inv.process_name ? escapeHtml(inv.process_name) + ' - ' + escapeHtml(inv.name) : escapeHtml(inv.name);
-          return productName + ' - ' + (inv.quantity != null ? inv.quantity : '') + ' ' + (inv.unit || '');
+          return IDisp.formatTriggerLabel(inv);
         }
 
         // Always-on card picker: clicking a row makes it active; clicking a card assigns selection to the active row.
@@ -969,6 +835,11 @@
             if (pickerPanel) pickerPanel.style.display = (locked && hasSel) ? 'none' : 'block';
           } catch (e) {}
         }
+        rowInputApi.setActiveRow = setActiveRow;
+        rowInputApi.refreshPicker = function () {
+          renderPickerCards(pickerState.activeType, pickerState.q);
+        };
+
         function getSelectedInventoryIdsExcludingRow(excludeRowEl) {
           var ids = new Set();
           inputSection.querySelectorAll('.execute-input-row').forEach(function(row) {
@@ -990,10 +861,7 @@
           if (inv.created_at) {
             try { createdStr = new Date(inv.created_at).toLocaleDateString(); } catch (e) {}
           }
-          var subtitleParts = [];
-          subtitleParts.push(escapeHtml(inv.quantity != null ? String(inv.quantity) : '0') + ' ' + escapeHtml(inv.unit || ''));
-          if (inv.process_name) subtitleParts.push(escapeHtml(inv.process_name));
-          var subtitleLine = subtitleParts.join(' · ');
+          var subtitleLine = escapeHtml(IDisp.formatDropdownCardSubtitle(inv));
           var detailsParts = [];
           if (inv.quantity != null) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Quantity</span> ' + escapeHtml(String(inv.quantity)) + ' ' + escapeHtml(inv.unit || '') + '</p>');
           if (inv.process_name) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Process</span> ' + escapeHtml(inv.process_name) + '</p>');
@@ -1175,8 +1043,7 @@
         }
 
         // Picker is always visible; keep tab/search predictable once on init.
-        if (pickerSearch) pickerSearch.value = '';
-        pickerState.q = '';
+        pickerCtl.resetSearchUiAndQuery();
         syncTabState(defaultPickerType);
 
         function toggleInventoryCardDetails(cardId) {
@@ -1208,9 +1075,8 @@
           });
         }
 
-        var addAnotherBtn = inputSection.querySelector('.execute-add-another-input-btn');
-        if (addAnotherBtn) {
-          addAnotherBtn.addEventListener('click', function() {
+        if (execAddAnotherButton) {
+          execAddAnotherButton.addEventListener('click', function() {
             var newRow = createInputRow(false);
             rowsContainer.appendChild(newRow);
             newRow.addEventListener('click', function() { setActiveRow(newRow); });
@@ -1229,7 +1095,7 @@
           });
         }
         
-        // Add Missing Item: fromOutput = from previous output; else raw material modal
+        // Add Missing Item: previous-step output → untracked/WIP modal; catalog intermediate/final → same modal (via openAddInventoryModalForMissingInput); raw → raw modal or /inventory/add/manual
         const addMissingBtn = inputSection.querySelector('.add-missing-item-btn');
         if (addMissingBtn) {
           addMissingBtn.addEventListener('click', function() {
@@ -1238,17 +1104,29 @@
             var name_ = this.dataset.inputName || '';
             var quantity_ = this.dataset.inputQuantity != null && this.dataset.inputQuantity !== '' ? this.dataset.inputQuantity : '';
             var unit_ = this.dataset.inputUnit || '';
-            if (fromOutput && window.openAddUntrackedOutputModal) {
-              window.addInventoryContext = { fromExecutionModal: true, inputName: name_ };
-              window.openAddUntrackedOutputModal(
-                { name: name_, quantity: quantity_, unit: unit_, id: sourceOutputId || undefined },
-                modal.dataset.executionId,
-                modal.dataset.executionStepId
-              );
-              var untrackedModal = document.getElementById('add-untracked-output-modal');
-              if (untrackedModal) untrackedModal.style.zIndex = '1001';
-            } else if (!fromOutput && window.openAddInventoryModalForMissingInput) {
-              window.openAddInventoryModalForMissingInput({ name: name_, quantity: quantity_, unit: unit_ });
+            var expectedInv = (this.dataset.expectedInventoryType || '').trim();
+            if (!expectedInv) {
+              try {
+                expectedInv = String((inputSection && inputSection.dataset && inputSection.dataset.activePickerType) || '').trim();
+              } catch (e0) {}
+            }
+            if (!expectedInv && pickerState && pickerState.activeType) {
+              expectedInv = String(pickerState.activeType || '').trim();
+            }
+            var typeOpt =
+              expectedInv === 'work_in_progress' || expectedInv === 'final_product' ? { inventory_type: expectedInv } : undefined;
+            // Always route through openAddInventoryModalForMissingInput so batches/start uses the manual add page
+            // and so intermediate/final get the correct field set.
+            if (fromOutput && !expectedInv) expectedInv = 'work_in_progress';
+            if (window.openAddInventoryModalForMissingInput) {
+              window.openAddInventoryModalForMissingInput({
+                name: name_,
+                quantity: quantity_,
+                unit: unit_,
+                inventory_type: expectedInv || 'raw_material',
+                producing_process_name: this.dataset.producingProcessName || '',
+                producing_step_name: this.dataset.producingStepName || ''
+              });
             }
           });
         }
@@ -1260,12 +1138,11 @@
 
   /**
    * Variable inputs that do not use inventory: confirm quantity + unit at execution.
-   * @param {{ inputsContainer: HTMLElement | null, confirmInputs: Array<unknown>, escapeHtml: (s: string) => string }} ctx
+   * @param {{ inputsContainer: HTMLElement | null, confirmInputs: Array<unknown> }} ctx
    */
   function renderConfirmExecutionInputs(ctx) {
     var inputsContainer = ctx.inputsContainer;
     var confirmInputs = ctx.confirmInputs;
-    var escapeHtml = ctx.escapeHtml;
     if (!confirmInputs || !confirmInputs.length || !inputsContainer) return;
     confirmInputs.forEach(function (input) {
       const inputSection = document.createElement('div');
@@ -1273,28 +1150,79 @@
       inputSection.style.cssText =
         'margin-bottom: 20px; padding: 16px; border: 1px solid var(--border-light); border-radius: var(--radius-md);';
 
-      inputSection.innerHTML = `
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-              ${escapeHtml(input.name)} 
-              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${input.quantity || '0'} ${input.unit || ''})</span>
-              <span style="color: var(--error, #ef4444);">*</span>
-            </label>
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Quantity <span style="color: var(--error, #ef4444);">*</span></label>
-            <input type="number" class="spa-inp execute-confirm-quantity-input" data-input-name="${escapeHtml(input.name)}" data-required="true" placeholder="${input.quantity || '0'}" value="${input.quantity || ''}" step="0.01" min="0">
-          </div>
-          <div>
-            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">Unit <span style="color: var(--error, #ef4444);">*</span></label>
-            <select class="spa-inp execute-confirm-unit-input" data-input-name="${escapeHtml(input.name)}" data-required="true">
-              <option value="">Select unit...</option>
-              ${['kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in', 'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers'].map((unit) => `
-                <option value="${unit}" ${input.unit === unit ? 'selected' : ''}>${unit}</option>
-              `).join('')}
-            </select>
-          </div>
-        `;
+      var rowHead = document.createElement('div');
+      rowHead.style.marginBottom = '12px';
+      var lblHead = document.createElement('label');
+      lblHead.style.cssText =
+        'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;';
+      lblHead.appendChild(document.createTextNode(input.name || ''));
+      lblHead.appendChild(document.createTextNode(' '));
+      var expSp = document.createElement('span');
+      expSp.style.cssText = 'color: var(--text-secondary); font-weight: normal;';
+      expSp.textContent =
+        '(Expected: ' + String(input.quantity != null ? input.quantity : '0') + ' ' + (input.unit || '') + ')';
+      lblHead.appendChild(expSp);
+      lblHead.appendChild(document.createTextNode(' '));
+      var ast1 = document.createElement('span');
+      ast1.style.color = 'var(--error, #ef4444)';
+      ast1.textContent = '*';
+      lblHead.appendChild(ast1);
+      rowHead.appendChild(lblHead);
+      inputSection.appendChild(rowHead);
+
+      var qtyRow = document.createElement('div');
+      qtyRow.style.marginBottom = '12px';
+      var qtyLbl = document.createElement('label');
+      qtyLbl.style.cssText =
+        'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;';
+      qtyLbl.appendChild(document.createTextNode('Quantity '));
+      var ast2 = document.createElement('span');
+      ast2.style.color = 'var(--error, #ef4444)';
+      ast2.textContent = '*';
+      qtyLbl.appendChild(ast2);
+      qtyRow.appendChild(qtyLbl);
+      var qtyInputEl = document.createElement('input');
+      qtyInputEl.type = 'number';
+      qtyInputEl.className = 'spa-inp execute-confirm-quantity-input';
+      qtyInputEl.dataset.inputName = input.name || '';
+      qtyInputEl.dataset.required = 'true';
+      qtyInputEl.placeholder = String(input.quantity != null ? input.quantity : '0');
+      qtyInputEl.value = input.quantity != null ? String(input.quantity) : '';
+      qtyInputEl.step = '0.01';
+      qtyInputEl.min = '0';
+      qtyRow.appendChild(qtyInputEl);
+      inputSection.appendChild(qtyRow);
+
+      var unitRow = document.createElement('div');
+      var unitLbl = document.createElement('label');
+      unitLbl.style.cssText =
+        'display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;';
+      unitLbl.appendChild(document.createTextNode('Unit '));
+      var ast3 = document.createElement('span');
+      ast3.style.color = 'var(--error, #ef4444)';
+      ast3.textContent = '*';
+      unitLbl.appendChild(ast3);
+      unitRow.appendChild(unitLbl);
+      var unitSel = document.createElement('select');
+      unitSel.className = 'spa-inp execute-confirm-unit-input';
+      unitSel.dataset.inputName = input.name || '';
+      unitSel.dataset.required = 'true';
+      var opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = 'Select unit...';
+      unitSel.appendChild(opt0);
+      [
+        'kg', 'g', 'mg', 'lb', 'oz', 'ton', 'tonne', 'l', 'ml', 'gal', 'm3', 'ft3', 'm', 'cm', 'mm', 'ft', 'in',
+        'units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers',
+      ].forEach(function(unit) {
+        var op = document.createElement('option');
+        op.value = unit;
+        op.textContent = unit;
+        if (input.unit === unit) op.selected = true;
+        unitSel.appendChild(op);
+      });
+      unitRow.appendChild(unitSel);
+      inputSection.appendChild(unitRow);
 
       const quantityInput = inputSection.querySelector('.execute-confirm-quantity-input');
       const unitSelect = inputSection.querySelector('.execute-confirm-unit-input');
@@ -1322,5 +1250,7 @@
   root.ExecutionRenderInputs = {
     renderVariableInventoryInputs: renderVariableInventoryInputs,
     renderConfirmExecutionInputs: renderConfirmExecutionInputs,
+    clearInventoryPickerCardCaches: clearInventoryPickerCardCaches,
+    PICKER_CARD_CACHE_MAX_ROWS: PICKER_CARD_CACHE_MAX_ROWS
   };
 })(typeof window !== "undefined" ? window : this);

@@ -23,7 +23,7 @@ class Step(Base):
     position = Column(Numeric(50, 20), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     description = Column(String(1000), nullable=True)
-    # Inputs and outputs stored as JSONB array
+    # Inputs and outputs stored as JSONB array (not separate tables — inventory eager-load avoids N+1 via Step row).
     # Format: [{"name": "Aluminum Sheets", "quantity": 100, "unit": "kg", "requires_inventory_selection": true}, ...]
     inputs = Column(JSONB, nullable=False, default=list)
     outputs = Column(JSONB, nullable=False, default=list)

@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.db.models.inventory_item import InventoryItem
@@ -168,8 +169,10 @@ class InventoryRepository:
         if unit is not None and unit != "":
             query = query.filter(InventoryItem.unit == unit.strip())
         if process_id is not None:
-            query = query.join(Execution, InventoryItem.source_execution_id == Execution.id).filter(
-                Execution.org_id == org_id, Execution.process_id == process_id
+            tagged_pid = InventoryItem.extra_data["producing_process_id"].astext == str(process_id)
+            query = query.outerjoin(Execution, InventoryItem.source_execution_id == Execution.id).filter(
+                Execution.org_id == org_id,
+                or_(Execution.process_id == process_id, tagged_pid),
             )
         items = query.all()
         if quantity_gt_zero:
@@ -187,8 +190,10 @@ class InventoryRepository:
             # Filter by process through execution
             from app.core.db.models.execution import Execution
 
-            query = query.join(Execution, InventoryItem.source_execution_id == Execution.id).filter(
-                Execution.process_id == process_id
+            # Also include manually-added untracked items that are tagged to a process in extra_data.
+            tagged_pid = InventoryItem.extra_data["producing_process_id"].astext == str(process_id)
+            query = query.outerjoin(Execution, InventoryItem.source_execution_id == Execution.id).filter(
+                or_(Execution.process_id == process_id, tagged_pid)
             )
         return query.order_by(InventoryItem.created_at.desc()).all()
 

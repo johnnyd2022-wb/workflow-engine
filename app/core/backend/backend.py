@@ -6,17 +6,27 @@ import logging
 import os
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
 from uuid import UUID
 
 from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
+from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
 from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
+from app.core.backend.complete_step_payload import (
+    MAX_COMPLETE_STEP_CONTENT_LENGTH,
+    CompleteStepRequestBody,
+    validate_json_blob,
+)
+from app.core.backend.complete_step_payload import (
+    MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
+)
 from app.core.backend.evidence import evidence_routes
-from app.core.backend.evidence.evidence_service import list_evidence_for_execution
+from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import SessionLocal, db_session
@@ -39,6 +49,7 @@ from app.core.domain.inventory_quantity_guard import (
     allow_inventory_quantity_write,
 )
 from app.core.security.permissions import requires_auth
+from app.core.utils.internal_counters import get_counter_snapshot, inc_counter
 from app.core.utils.inventory_quantity import (
     assert_movement_unit_matches_item_canonical,
     coerce_stored_quantity,
@@ -59,6 +70,29 @@ logger = logging.getLogger(__name__)
 
 # Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
 MAX_WASTAGE_BATCH_ENTRIES = 100
+
+# GET /api/core/inventory: bound nested display-only lists (aligned with flows2.html caps; not persisted).
+LIST_INVENTORY_MAX_PREVIOUS_STEPS = 80
+LIST_INVENTORY_MAX_AUDIT_HISTORY = 120
+LIST_INVENTORY_MAX_RECONCILIATION_HISTORY = 60
+
+
+def _bound_inventory_extra_data_for_list_response(extra_data: dict) -> dict:
+    """Clamp large nested lists in extra_data for list responses (operator UI only)."""
+    if not extra_data:
+        return extra_data
+    out = dict(extra_data)
+    psd = out.get("previous_steps_data")
+    if isinstance(psd, list) and len(psd) > LIST_INVENTORY_MAX_PREVIOUS_STEPS:
+        out["previous_steps_data"] = psd[:LIST_INVENTORY_MAX_PREVIOUS_STEPS]
+    ah = out.get("inventory_audit_history")
+    if isinstance(ah, list) and len(ah) > LIST_INVENTORY_MAX_AUDIT_HISTORY:
+        out["inventory_audit_history"] = ah[:LIST_INVENTORY_MAX_AUDIT_HISTORY]
+    rh = out.get("reconciliation_history")
+    if isinstance(rh, list) and len(rh) > LIST_INVENTORY_MAX_RECONCILIATION_HISTORY:
+        out["reconciliation_history"] = rh[:LIST_INVENTORY_MAX_RECONCILIATION_HISTORY]
+    return out
+
 
 # Create core blueprint
 core_bp = Blueprint(
@@ -382,6 +416,39 @@ _EXECUTION_DATA_TRACE_KEYS = {
 }
 
 
+def _strip_trace_keys_recursive(obj: Any, depth: int = 0) -> Any:
+    """
+    Remove trace keys at any depth.
+
+    **Contract:** Call only on trees that already passed ``validate_json_blob`` (same MAX_JSON_DEPTH).
+    If depth exceeds the guard, something bypassed validation — fail loudly rather than return partly stripped data.
+    """
+    if depth > _STRIP_MAX_DEPTH:
+        raise RuntimeError(
+            "_strip_trace_keys_recursive exceeded MAX_JSON_DEPTH; "
+            "execution_data must be validated with validate_json_blob before strip."
+        )
+    if isinstance(obj, dict):
+        return {
+            k: _strip_trace_keys_recursive(v, depth + 1) for k, v in obj.items() if k not in _EXECUTION_DATA_TRACE_KEYS
+        }
+    if isinstance(obj, list):
+        return [_strip_trace_keys_recursive(x, depth + 1) for x in obj]
+    return obj
+
+
+def _strip_incoming_execution_trace_keys(execution_data: dict | None) -> dict:
+    """
+    Remove audit/trace keys from the client JSON payload before merge/persist (recursive).
+
+    For HTTP: only call after ``validate_json_blob`` on the same object so depth/node invariants match.
+    """
+    if not execution_data:
+        return {}
+    cleaned = _strip_trace_keys_recursive(execution_data, 0)
+    return cleaned if isinstance(cleaned, dict) else {}
+
+
 def _to_iso_timestamp(ts) -> str | None:
     """Normalize a timestamp to ISO format string for consistent API output."""
     if ts is None:
@@ -397,6 +464,10 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
     """
     Split execution_data into user prompts and system trace. Single place for prompt/trace split logic.
     Returns (prompts_dict, trace_dict). Use for extra_data.execution_prompts and extra_data.execution_trace.
+
+    Audit keys (completed_by, completed_by_email, …) are mirrored from persisted execution_data. For HTTP step
+    completion, ``_strip_incoming_execution_trace_keys`` drops client-supplied trace keys before merge; identity is
+    then set from the authenticated session. Other persistence paths must enforce the same contract.
     """
     if not execution_data:
         return {}, {}
@@ -406,6 +477,8 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
     trace = {}
     if execution_data.get("completed_by") is not None:
         trace["completed_by"] = execution_data["completed_by"]
+    if execution_data.get("completed_by_email") is not None:
+        trace["completed_by_email"] = execution_data["completed_by_email"]
     completed_ts = execution_data.get("completed_at")
     if completed_ts is not None:
         trace["completed_at"] = _to_iso_timestamp(completed_ts)
@@ -1507,9 +1580,12 @@ def list_executions():
     repo = ExecutionRepository(db_session)
     executions = repo.list_executions(org_id=org_id, process_id=process_id, status=status)
 
+    # Batch-fetch all evidence for all executions in a single query
+    executions_by_id = {str(e.id): e for e in executions}
+    evidence_by_execution = list_evidence_for_executions_batch([e.id for e in executions], org_id, executions_by_id)
+
     result = []
     for execution in executions:
-        # Get current step info
         execution_steps = execution.execution_steps if execution.execution_steps else []
         execution_steps_sorted = sorted(execution_steps, key=lambda es: es.step_number)
         current_step = None
@@ -1529,10 +1605,26 @@ def list_executions():
                 "name": next_step.step.name if next_step.step else None,
             }
 
-        # Calculate progress using snapshot total_steps to avoid division by zero and ensure consistency
-        # Progress should not change if steps are added or reordered later
         total_steps = execution.total_steps or len(execution_steps) if execution_steps else 0
         progress = (len(completed_steps) / total_steps * 100) if total_steps > 0 else 0
+
+        steps_payload = [
+            {
+                "id": str(es.id),
+                "step_id": str(es.step_id),
+                "step_number": es.step_number,
+                "status": es.status.value,
+                "actual_inputs": es.actual_inputs or [],
+                "actual_outputs": es.actual_outputs or [],
+                "execution_data": es.execution_data or {},
+                "started_at": es.started_at.isoformat() if es.started_at else None,
+                "completed_at": es.completed_at.isoformat() if es.completed_at else None,
+                "step_name": es.step.name if es.step else None,
+                "step_inputs": es.step.inputs or [] if es.step else [],
+                "step_outputs": es.step.outputs or [] if es.step else [],
+            }
+            for es in execution_steps_sorted
+        ]
 
         result.append(
             {
@@ -1544,6 +1636,8 @@ def list_executions():
                 "current_step": current_step,
                 "progress": progress,
                 "total_steps": total_steps,
+                "execution_steps": steps_payload,
+                "evidence": evidence_by_execution.get(str(execution.id), []),
             }
         )
 
@@ -1584,7 +1678,7 @@ def get_execution(execution_id: str):
             }
         )
 
-    evidence_list = list_evidence_for_execution(execution_uuid, org_id)
+    evidence_list = list_evidence_for_execution(execution_uuid, org_id, execution=execution)
 
     return (
         jsonify(
@@ -1702,11 +1796,49 @@ def complete_step(execution_id: str, execution_step_id: str):
     except ValueError:
         return jsonify({"error": "Invalid execution or step ID"}), 400
 
-    data = request.get_json() or {}
-    actual_inputs = data.get("actual_inputs", [])
-    actual_outputs = data.get("actual_outputs", [])
-    execution_data = data.get("execution_data", {})
-    allow_consumption_override = data.get("allow_consumption_override") is True
+    content_length = request.content_length
+    if content_length is not None and content_length > MAX_COMPLETE_STEP_CONTENT_LENGTH:
+        return jsonify({"error": "Request body too large"}), 413
+
+    raw_bytes = request.get_data(cache=True, as_text=False) or b""
+    if len(raw_bytes) > MAX_COMPLETE_STEP_CONTENT_LENGTH:
+        return jsonify({"error": "Request body too large"}), 413
+    if not raw_bytes.strip():
+        raw_body = {}
+    else:
+        try:
+            raw_body = json.loads(raw_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            return jsonify({"error": "Invalid JSON"}), 400
+        if not isinstance(raw_body, dict):
+            return jsonify({"error": "Invalid request body", "details": ["JSON root must be an object"]}), 400
+
+    try:
+        parsed_body = CompleteStepRequestBody.model_validate(raw_body)
+    except ValidationError as e:
+        return jsonify({"error": "Invalid request body", "details": e.errors()}), 400
+
+    try:
+        validate_json_blob(parsed_body.actual_inputs, path="$.actual_inputs")
+        validate_json_blob(parsed_body.actual_outputs, path="$.actual_outputs")
+        validate_json_blob(parsed_body.execution_data, path="$.execution_data")
+    except ValueError as e:
+        return jsonify({"error": "Invalid request body", "details": [str(e)]}), 400
+
+    actual_inputs = parsed_body.actual_inputs
+    actual_outputs = parsed_body.actual_outputs
+    try:
+        execution_data = _strip_incoming_execution_trace_keys(parsed_body.execution_data)
+    except RuntimeError:
+        logger.exception("execution_data trace-strip invariant violated (should follow validate_json_blob)")
+        inc_counter("execution_data_strip_invariant_violations")
+        return jsonify(
+            {
+                "error": "Invalid request body",
+                "details": ["Payload failed sanitisation invariants"],
+            }
+        ), 400
+    allow_consumption_override = parsed_body.allow_consumption_override
 
     # Get current user from Flask g and always store in execution_data for accuracy
     # TODO: execution_data is becoming a structured contract with known fields:
@@ -1724,20 +1856,23 @@ def complete_step(execution_id: str, execution_step_id: str):
 
     repo = ExecutionRepository(db_session)
     try:
+        # Single transaction: mark step complete + inventory + outputs commit together.
+        # If validation fails after marking COMPLETED in-session, rollback so the step stays READY
+        # and the client can retry (avoids "not in a state that can be completed" on the next attempt).
         execution_step = repo.complete_step(
             execution_step_id=execution_step_uuid,
             org_id=org_id,
             actual_inputs=actual_inputs,
             actual_outputs=actual_outputs,
             execution_data=execution_data,
+            commit=False,
         )
 
         if not execution_step:
             return jsonify({"error": "Execution step not found"}), 404
 
-        # Refresh execution_step to ensure we have the latest data including execution_data
-        db_session.refresh(execution_step)
-        # Capture step outputs for post-commit audit (avoid lazy load after commit)
+        db_session.flush()
+        # Capture step outputs for audit (same transaction as completion)
         step_outputs_for_audit = None
         step_def = getattr(execution_step, "step", None)
         if step_def is not None:
@@ -1867,11 +2002,7 @@ def complete_step(execution_id: str, execution_step_id: str):
 
         # FAILURE HANDLING: Block execution if critical errors occurred
         if execution_errors:
-            # Persist errors to execution_data for audit trail
-            if not execution_step.execution_data:
-                execution_step.execution_data = {}
-            execution_step.execution_data["execution_errors"] = execution_errors
-            db_session.commit()
+            db_session.rollback()
             return jsonify({"error": "Execution failed", "details": execution_errors}), 400
 
         # Create inventory items for outputs if specified
@@ -2147,10 +2278,7 @@ def complete_step(execution_id: str, execution_step_id: str):
 
         # Block inventory creation when output validation failed (e.g. custom_expiry warning > duration)
         if execution_errors:
-            if not execution_step.execution_data:
-                execution_step.execution_data = {}
-            execution_step.execution_data["execution_errors"] = execution_errors
-            db_session.commit()
+            db_session.rollback()
             return jsonify({"error": "Execution failed", "details": execution_errors}), 400
 
         # FAILURE HANDLING: Persist warnings to execution_data for audit trail
@@ -2266,6 +2394,7 @@ def complete_step(execution_id: str, execution_step_id: str):
             response_data["execution_warnings"] = execution_warnings
         return (jsonify(response_data), 200)
     except ValueError as e:
+        db_session.rollback()
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         # Log the full error for debugging; return message and details for diagnosis
@@ -2274,6 +2403,7 @@ def complete_step(execution_id: str, execution_step_id: str):
         logger = logging.getLogger(__name__)
         logger.exception("Error completing execution step")
         err_detail = str(e) if e else "Unknown error"
+        db_session.rollback()
         return jsonify({"error": "Failed to complete step", "details": err_detail}), 500
 
 
@@ -2298,9 +2428,28 @@ def list_inventory():
     # System findings per item (all checks) for UI: red border + reasons in dropdown
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
 
-    # Import ExecutionStep and InventoryItem models for lookups
+    from sqlalchemy.orm import joinedload
+
+    from app.core.backend.checks.output_ready_date_check import get_operator_ready_instant_for_item
+    from app.core.db.models.execution import Execution
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
+
+    # One query for all producing steps (avoids N+1 hydration + ready-date lookups).
+    # JOIN Execution + filter org_id: bounded by step_ids (inventory row count), no materialized list of all org executions.
+    # Step.outputs is JSONB on `steps` (see Step model); joinedload(ExecutionStep.step) loads one row per step — no relationship N+1 for outputs.
+    step_ids = {i.source_execution_step_id for i in items if i.source_execution_step_id}
+    execution_step_by_id: dict = {}
+    if step_ids:
+        loaded_steps = (
+            db_session.query(ExecutionStep)
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .filter(Execution.org_id == org_id)
+            .filter(ExecutionStep.id.in_(step_ids))
+            .options(joinedload(ExecutionStep.step))
+            .all()
+        )
+        execution_step_by_id = {es.id: es for es in loaded_steps}
 
     result = []
     for item in items:
@@ -2315,42 +2464,35 @@ def list_inventory():
             # If quantity is not a valid number, skip this item
             continue
 
-        # If extra_data doesn't exist but source_execution_step_id does, look up execution_data from DB
-        # This allows existing inventory items to show metadata
-        extra_data = item.extra_data if item.extra_data else {}
-        if not extra_data.get("execution_prompts") and item.source_execution_step_id:
+        # Hydrate extra_data from the producing ExecutionStep when needed (shallow copy so we don't mutate ORM JSON in place).
+        # Prompts, trace, inputs, and output are filled independently — previously inputs were only loaded when
+        # execution_prompts was missing, which hid variable_inputs on many intermediate/final items.
+        extra_data = {**(item.extra_data or {})}
+        src_step = execution_step_by_id.get(item.source_execution_step_id) if item.source_execution_step_id else None
+        if src_step:
             try:
-                execution_step = (
-                    db_session.query(ExecutionStep).filter(ExecutionStep.id == item.source_execution_step_id).first()
-                )
-                if execution_step and execution_step.execution_data:
+                if src_step.execution_data:
                     execution_prompts, execution_trace = _split_execution_data(
-                        execution_step.execution_data, completed_at=execution_step.completed_at
+                        src_step.execution_data, completed_at=src_step.completed_at
                     )
-                    if execution_prompts:
-                        extra_data["execution_prompts"] = execution_prompts
-                    if execution_trace:
-                        extra_data["execution_trace"] = execution_trace
+                    if not extra_data.get("execution_prompts"):
+                        extra_data["execution_prompts"] = execution_prompts or {}
+                    if not extra_data.get("execution_trace"):
+                        extra_data["execution_trace"] = execution_trace or {}
 
-                    # Also include variable inputs and outputs if not already in extra_data
-                    # This is important for existing items that may not have variable_inputs populated
-                    if not extra_data.get("variable_inputs"):
-                        if execution_step.actual_inputs:
-                            extra_data["variable_inputs"] = execution_step.actual_inputs
-                        else:
-                            # Ensure variable_inputs exists as empty list if not present
-                            extra_data["variable_inputs"] = []
-                    if not extra_data.get("variable_output") and execution_step.actual_outputs:
-                        # Find matching output
-                        output_name = item.name
-                        matching_output = next(
-                            (o for o in execution_step.actual_outputs if o.get("name") == output_name), None
-                        )
-                        if matching_output:
-                            extra_data["variable_output"] = matching_output
+                if not extra_data.get("variable_inputs"):
+                    if src_step.actual_inputs:
+                        extra_data["variable_inputs"] = src_step.actual_inputs
+                    else:
+                        extra_data["variable_inputs"] = []
+
+                if not extra_data.get("variable_output") and src_step.actual_outputs:
+                    output_name = item.name
+                    matching_output = next((o for o in src_step.actual_outputs if o.get("name") == output_name), None)
+                    if matching_output:
+                        extra_data["variable_output"] = matching_output
             except Exception:
-                # If lookup fails, just use existing extra_data
-                pass
+                inc_counter("inventory_hydration_failures")
 
         # Look up previous steps data for intermediate products AND final products
         # DAG TRAVERSAL PERFORMANCE WARNING:
@@ -2548,6 +2690,13 @@ def list_inventory():
             except Exception:
                 # If lookup fails, just continue without process name
                 pass
+        if not process_name:
+            try:
+                tagged = (extra_data or {}).get("producing_process_name")
+                if tagged:
+                    process_name = str(tagged)
+            except Exception:
+                pass
 
         # For untracked items, resolve producing step (step that defines this output) for "Execute next step" button
         producing_step_id = None
@@ -2566,17 +2715,36 @@ def list_inventory():
                         )
                     # Fallback: if no output match (e.g. name/unit mismatch), use the step where item was added
                     if not producing_step_id and item.source_execution_step_id:
-                        execution_step = (
-                            db_session.query(ExecutionStep)
-                            .filter(ExecutionStep.id == item.source_execution_step_id)
-                            .first()
-                        )
-                        if execution_step:
-                            producing_step_id = execution_step.step_id
-                            if execution_step.step:
-                                producing_step_name = execution_step.step.name
+                        es_untracked = execution_step_by_id.get(item.source_execution_step_id)
+                        if es_untracked:
+                            producing_step_id = es_untracked.step_id
+                            if es_untracked.step:
+                                producing_step_name = es_untracked.step.name
             except Exception:
-                pass
+                inc_counter("inventory_producing_step_failures")
+                logger.debug(
+                    "list_inventory producing_step resolution failed item_id=%s",
+                    item.id,
+                    exc_info=True,
+                )
+        if not producing_step_name:
+            try:
+                tagged_step = (extra_data or {}).get("producing_step_name")
+                if tagged_step:
+                    producing_step_name = str(tagged_step)
+            except Exception:
+                inc_counter("inventory_producing_step_name_fallback_failures")
+                logger.debug("list_inventory producing_step_name fallback failed item_id=%s", item.id, exc_info=True)
+
+        # Single operator-facing ready instant (set_at_execution date or fixed-duration from step completion)
+        ready_date_display = None
+        try:
+            rdt = get_operator_ready_instant_for_item(db_session, item, execution_step=src_step)
+            if rdt:
+                ready_date_display = rdt.isoformat()
+        except Exception:
+            inc_counter("ready_date_compute_failures")
+            logger.debug("list_inventory ready_date_display failed item_id=%s", item.id, exc_info=True)
 
         result.append(
             {
@@ -2600,8 +2768,9 @@ def list_inventory():
                 "producing_step_id": str(producing_step_id) if producing_step_id else None,
                 "producing_step_name": producing_step_name,
                 "created_at": item.created_at.isoformat() if item.created_at else None,
-                "extra_data": extra_data,
+                "extra_data": _bound_inventory_extra_data_for_list_response(extra_data),
                 "system_findings": findings_by_id.get(str(item.id), []),
+                "ready_date_display": ready_date_display,
             }
         )
 
@@ -3676,6 +3845,11 @@ def get_metrics():
                     "raw_materials": len(raw_materials),
                     "work_in_progress": len(wip),
                     "final_products": len(final_products),
+                },
+                "operational_counters": {
+                    "scope": "process-local",
+                    "note": "Counts are per web worker process; use an external sink to aggregate in multi-worker deployments.",
+                    "counts": get_counter_snapshot(),
                 },
             }
         ),

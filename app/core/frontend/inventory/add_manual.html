@@ -1,5 +1,7 @@
 {% extends "shared/base_spa.html" %}
 
+{% block body_class %}add-inventory-manual-spa{% endblock %}
+
 {% block title %}Add Inventory Manually{% endblock %}
 
 {% block head_extras %}
@@ -8,7 +10,8 @@
 {% endblock %}
 
 {% block content %}
-  <div class="max-content">
+  {# Marker for CSS :has() — survives hx-boost swaps when body_class does not update. #}
+  <div class="max-content add-inventory-manual-root">
     {% from "shared/primary_card.html" import primary_card %}
 
     {% include 'inventory/inventory_hub_banner.html' %}
@@ -17,7 +20,11 @@
       title="Add Inventory Manually",
       subtitle="Enter the details for a single inventory item."
     ) %}
+      <p id="add-inv-manual-return-hint" class="add-inv-manual-return-hint" hidden>
+        You will be redirected back to record your product step after selecting <strong>Add Inventory Item</strong>.
+      </p>
       <form id="add-inventory-form" x-data="{ advancedOpen: false }" class="spa-card-form">
+        <input type="hidden" id="add-inventory-resolved-type" value="raw_material">
         <input type="hidden" name="barcode" id="add-inventory-barcode-input" value="">
 
         <section class="spa-form-section" aria-labelledby="add-inv-section-basic">
@@ -43,7 +50,7 @@
           </div>
         </section>
 
-        <section class="spa-form-section" aria-labelledby="add-inv-section-source">
+        <section id="add-inventory-source-section" class="spa-form-section" aria-labelledby="add-inv-section-source">
           <h3 id="add-inv-section-source" class="spa-form-section-title">Source</h3>
           <div>
             <label class="spa-field-label" for="add-inventory-supplier">Supplier <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
@@ -67,7 +74,19 @@
           </div>
         </section>
 
+        <section id="add-inventory-wip-final-fields" class="spa-form-section" style="display: none;" aria-labelledby="add-inv-section-wip">
+          <div>
+            <label class="spa-field-label" for="add-inventory-manual-notes">Notes <span style="color: var(--error, #ef4444);">*</span></label>
+            <textarea name="manualUntrackedNotes" id="add-inventory-manual-notes" class="spa-inp" rows="3" placeholder="Why this stock is being registered manually"></textarea>
+          </div>
+          <h3 id="add-inv-section-wip" class="spa-form-section-title" style="margin-top: 14px;">Traceability</h3>
+          <div id="add-inventory-wip-traceability-box" style="margin-top: 10px; padding: 14px 16px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-lg); border: 1px solid var(--border-light, #e5e7eb);">
+            <p id="add-inventory-wip-traceability-copy" style="font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.55; white-space: pre-line;"></p>
+          </div>
+        </section>
+
         <button
+          id="add-inventory-advanced-toggle"
           type="button"
           class="spa-advanced-toggle"
           @click="advancedOpen = !advancedOpen"
@@ -84,7 +103,7 @@
           </span>
         </button>
 
-        <div x-show="advancedOpen" x-cloak x-transition class="spa-advanced-fields spa-form-section">
+        <div id="add-inventory-advanced-fields" x-show="advancedOpen" x-cloak x-transition class="spa-advanced-fields spa-form-section">
           <div>
             <label class="spa-field-label" for="add-inventory-batch">Batch number <span style="font-weight: 400; color: var(--text-secondary);">(optional)</span></label>
             <input type="text" name="batchNumber" id="add-inventory-batch" class="spa-inp" placeholder="e.g., BN-2024-001">
@@ -98,18 +117,113 @@
             <input type="date" name="expiryDate" id="add-inventory-expiry" class="spa-inp">
           </div>
         </div>
-
-        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
-          <button type="submit" class="btn btn-primary" style="min-height: 44px;">Add Inventory Item</button>
-        </div>
       </form>
     {% endcall %}
+  </div>
+
+  <div class="add-inv-manual-submit-bar" role="region" aria-label="Add inventory">
+    <div class="add-inv-manual-submit-bar__inner">
+      <button
+        type="submit"
+        form="add-inventory-form"
+        id="add-inv-manual-submit-btn"
+        class="btn btn-primary add-inv-manual-submit-bar__btn"
+      >Add Inventory Item</button>
+    </div>
   </div>
   <script>
     (function() {
       const form = document.getElementById('add-inventory-form');
       if (!form || form.getAttribute('data-add-manual-spa-init') === '1') return;
       form.setAttribute('data-add-manual-spa-init', '1');
+
+      (function applyQueryPrefill() {
+        try {
+          var sp = new URLSearchParams(window.location.search);
+          if (sp.get('return_to')) {
+            var hintEl = document.getElementById('add-inv-manual-return-hint');
+            if (hintEl) hintEl.removeAttribute('hidden');
+          }
+          var name = sp.get('name');
+          var qty = sp.get('quantity');
+          var unit = sp.get('unit');
+          if (name) {
+            var ne = document.getElementById('add-inventory-name');
+            if (ne) ne.value = name;
+          }
+          if (qty != null && qty !== '') {
+            var qe = document.getElementById('add-inventory-quantity');
+            if (qe) qe.value = qty;
+          }
+          if (unit) {
+            var ue = document.getElementById('add-inventory-unit');
+            if (ue) {
+              var v = String(unit).trim().toLowerCase();
+              var ok = false;
+              for (var i = 0; i < ue.options.length; i++) {
+                if (ue.options[i].value === v) {
+                  ok = true;
+                  break;
+                }
+              }
+              if (ok) ue.value = v;
+            }
+          }
+          var it = sp.get('inventory_type');
+          var procName = sp.get('producing_process_name');
+          var stepName = sp.get('producing_step_name');
+          var rtEl = document.getElementById('add-inventory-resolved-type');
+          var wipSec = document.getElementById('add-inventory-wip-final-fields');
+          var copyEl = document.getElementById('add-inventory-wip-traceability-copy');
+          var srcSec = document.getElementById('add-inventory-source-section');
+          var advToggle = document.getElementById('add-inventory-advanced-toggle');
+          var advFields = document.getElementById('add-inventory-advanced-fields');
+          var supplierInp = document.getElementById('add-inventory-supplier');
+          var batchInp = document.getElementById('add-inventory-batch');
+          var purchaseInp = document.getElementById('add-inventory-purchase');
+          var expiryInp = document.getElementById('add-inventory-expiry');
+
+          function hideRawOnlySections() {
+            if (srcSec) srcSec.style.display = 'none';
+            if (advToggle) advToggle.style.display = 'none';
+            if (advFields) advFields.style.display = 'none';
+            // avoid stale values accidentally carried in browser autofill
+            if (supplierInp) supplierInp.value = '';
+            if (batchInp) batchInp.value = '';
+            if (purchaseInp) purchaseInp.value = '';
+            if (expiryInp) expiryInp.value = '';
+          }
+
+          function showRawOnlySections() {
+            if (srcSec) srcSec.style.display = '';
+            if (advToggle) advToggle.style.display = '';
+            // advanced fields respect Alpine toggle; keep default hidden
+          }
+
+          if (rtEl) {
+            if (it === 'work_in_progress' || it === 'final_product') {
+              rtEl.value = it;
+              if (wipSec) wipSec.style.display = '';
+              if (copyEl) {
+                var target = '';
+                if (procName && stepName) target = String(procName) + ' → ' + String(stepName);
+                else if (stepName) target = String(stepName);
+                var sentence1 =
+                  'Adding intermediate or final products manually (instead of recording the producing step) creates untraceable stock and will require reconciliation.';
+                var sentence2 = target
+                  ? ('To reconcile this item, record the producing step (' + target + ') and use the reconcile option to map its output to this item.')
+                  : 'To reconcile this item, record the producing step and use the reconcile option to map its output to this item.';
+                copyEl.textContent = sentence1 + '\n' + sentence2;
+              }
+              hideRawOnlySections();
+            } else {
+              rtEl.value = 'raw_material';
+              if (wipSec) wipSec.style.display = 'none';
+              showRawOnlySections();
+            }
+          }
+        } catch (ePre) {}
+      })();
 
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -134,17 +248,47 @@
           return false;
         }
 
-        const payload = {
-          name,
-          quantity,
-          unit,
-          inventory_type: 'raw_material',
-          supplier: (formData.get('supplier') || '').trim() || null,
-          purchase_date: formData.get('purchaseDate') || null,
-          supplier_batch_number: (formData.get('batchNumber') || '').trim() || null,
-          expiry_date: formData.get('expiryDate') || null,
-          barcode: (formData.get('barcode') || '').trim() || null,
-        };
+        var rtEl = document.getElementById('add-inventory-resolved-type');
+        var invType = rtEl && rtEl.value ? rtEl.value : 'raw_material';
+
+        var payload;
+        if (invType === 'work_in_progress' || invType === 'final_product') {
+          var notes = (formData.get('manualUntrackedNotes') || '').trim();
+          if (!notes) {
+            window.showNotification && window.showNotification('error', 'Notes required', 'Please explain why this intermediate or final item is being added manually.');
+            return false;
+          }
+          var spMeta = {};
+          try {
+            var spQ = new URLSearchParams(window.location.search);
+            var ppid = (spQ.get('producing_process_id') || '').trim();
+            var ppn = (spQ.get('producing_process_name') || '').trim();
+            var psn = (spQ.get('producing_step_name') || '').trim();
+            if (ppid) spMeta.producing_process_id = ppid;
+            if (ppn) spMeta.producing_process_name = ppn;
+            if (psn) spMeta.producing_step_name = psn;
+          } catch (eMeta) {}
+          payload = {
+            name,
+            quantity,
+            unit,
+            inventory_type: invType,
+            untracked: true,
+            metadata: Object.assign({ notes: notes }, spMeta)
+          };
+        } else {
+          payload = {
+            name,
+            quantity,
+            unit,
+            inventory_type: 'raw_material',
+            supplier: (formData.get('supplier') || '').trim() || null,
+            purchase_date: formData.get('purchaseDate') || null,
+            supplier_batch_number: (formData.get('batchNumber') || '').trim() || null,
+            expiry_date: formData.get('expiryDate') || null,
+            barcode: (formData.get('barcode') || '').trim() || null,
+          };
+        }
 
         try {
           if (!window.CoreAPI || !window.CoreAPI.createInventoryItem) {
@@ -158,6 +302,14 @@
 
           this.reset();
 
+          try {
+            var sp = new URLSearchParams(window.location.search);
+            var rt = sp.get('return_to');
+            if (typeof rt === 'string' && rt.charAt(0) === '/' && rt.indexOf('//') !== 0 && rt.indexOf('://') === -1) {
+              window.location.href = rt;
+              return;
+            }
+          } catch (eR) {}
           window.location.href = '/core';
         } catch (err) {
           console.error('Failed to create inventory item', err);

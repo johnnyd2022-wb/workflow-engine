@@ -2,6 +2,8 @@
    base_spa.html uses hx-select="#page-content", so responses must include #page-content. #}
 
 <main id="page-content" class="page-content">
+  {# Styles inline so they apply after HTMX swap (head is not swapped). #}
+  {% include 'processes/create-process-step-content-styles.html' %}
   {% include "processes/batch-start-fragment.html" %}
+  {% include "processes/batch-start-scripts.html" %}
 </main>
-
