@@ -1,0 +1,71 @@
+rules:
+
+  # ── TENANT ISOLATION ────────────────────────────────────────────────────────
+
+  - id: filter-by-missing-org-id
+    languages: [python]
+    severity: ERROR
+    message: >
+      filter_by() is missing org_id — this query may return rows from other tenants.
+      Add org_id=g.current_org_id (or the local org_id variable) to every query on
+      a tenant-owned table.
+    patterns:
+      - pattern: $Q.filter_by($...KWARGS)
+      - pattern-not: $Q.filter_by(..., org_id=..., ...)
+
+  # ── AUTH ─────────────────────────────────────────────────────────────────────
+
+  - id: route-missing-requires-auth
+    languages: [python]
+    severity: ERROR
+    message: >
+      Route $FUNC has no @requires_auth decorator. All non-public routes must be
+      decorated with @requires_auth (and typically @requires_org_scope) to prevent
+      unauthenticated access.
+    paths:
+      exclude:
+        - "**/auth_routes.py"
+        - "**/app.py"
+    patterns:
+      - pattern: |
+          @$BLUEPRINT.route(...)
+          def $FUNC(...):
+            ...
+      - pattern-not: |
+          @requires_auth
+          def $FUNC(...):
+            ...
+      - pattern-not: |
+          @limiter.exempt
+          def $FUNC(...):
+            ...
+
+  # ── SQL INJECTION ────────────────────────────────────────────────────────────
+
+  - id: raw-sql-fstring
+    languages: [python]
+    severity: ERROR
+    message: >
+      SQL injection risk: f-string passed directly to execute(). Use parameterised
+      queries instead: session.execute(text("... WHERE col = :val"), {"val": value})
+    pattern: $SESSION.execute(f"...", ...)
+
+  - id: raw-sql-fstring-no-args
+    languages: [python]
+    severity: ERROR
+    message: >
+      SQL injection risk: f-string passed directly to execute(). Use parameterised
+      queries instead: session.execute(text("... WHERE col = :val"), {"val": value})
+    pattern: $SESSION.execute(f"...")
+
+  # ── ERROR HANDLING ───────────────────────────────────────────────────────────
+
+  - id: traceback-in-response
+    languages: [python]
+    severity: ERROR
+    message: >
+      traceback.format_exc() included in an API response — exposes full stack traces
+      to clients. Remove it and log with current_app.logger.exception() instead.
+    patterns:
+      - pattern: traceback.format_exc()
+      - pattern-inside: return jsonify(...)

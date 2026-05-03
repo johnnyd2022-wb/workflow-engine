@@ -1,0 +1,73 @@
+rules:
+
+  # ── XSS ──────────────────────────────────────────────────────────────────────
+
+  - id: innerhtml-template-literal
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      innerHTML assigned a template literal. If any ${...} interpolation contains
+      API or user data this is an XSS vector. Use textContent for plain text, or
+      build nodes with createElement/appendChild. Static strings with no
+      interpolations are acceptable but prefer textContent to avoid future risk.
+    pattern: $EL.innerHTML = `...`
+
+  - id: innerhtml-string-concat
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      innerHTML assigned via string concatenation. If any concatenated value comes
+      from API or user data this is an XSS vector. Use textContent for plain text,
+      or build nodes with createElement/appendChild.
+    pattern: $EL.innerHTML = $A + $B
+
+  # ── CSRF / FETCH ─────────────────────────────────────────────────────────────
+
+  - id: raw-fetch-post
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      Raw fetch() used for a mutating request — the CSRF token will be missing,
+      causing 400/403 failures. Use CoreAPI.request() for /api/core/* endpoints.
+      For other blueprints (CRM, workflow-engine) read the token from
+      meta[name="csrf-token"] and pass it as the X-CSRFToken header.
+    paths:
+      exclude:
+        - "**/core-api.js"
+        - "**/execution-shared-utils.js"
+    patterns:
+      - pattern: |
+          fetch($URL, {method: $METHOD, ...})
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: "^[\"'](POST|PUT|PATCH|DELETE)[\"']$"
+
+  # ── SENSITIVE STORAGE ────────────────────────────────────────────────────────
+
+  - id: localstorage-sensitive-key
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      Storing a potentially sensitive value in localStorage. localStorage is
+      accessible to any script on the page. Never store session tokens, CSRF
+      secrets, or API keys here — only UI preferences (theme, sidebar state).
+    patterns:
+      - pattern: localStorage.setItem($KEY, ...)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: "(?i)(token|secret|password|credential|auth|session|api.?key)"
+
+  # ── QUERY STRINGS ────────────────────────────────────────────────────────────
+
+  - id: url-string-concat-query
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      User-supplied value concatenated directly into a URL query string.
+      Use URLSearchParams or encodeURIComponent to prevent injection and encoding
+      bugs: '/inventory?' + new URLSearchParams({ q: searchValue })
+    patterns:
+      - pattern: $URL + $VAR
+      - metavariable-regex:
+          metavariable: $URL
+          regex: "\\?"
