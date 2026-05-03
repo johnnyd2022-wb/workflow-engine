@@ -27,10 +27,31 @@ rules:
         - "**/auth_routes.py"
         - "**/app.py"
     patterns:
-      - pattern: |
-          @$BLUEPRINT.route(...)
-          def $FUNC(...):
-            ...
+      - pattern-either:
+          - pattern: |
+              @$BP.route(...)
+              def $FUNC(...):
+                ...
+          - pattern: |
+              @$BP.get(...)
+              def $FUNC(...):
+                ...
+          - pattern: |
+              @$BP.post(...)
+              def $FUNC(...):
+                ...
+          - pattern: |
+              @$BP.put(...)
+              def $FUNC(...):
+                ...
+          - pattern: |
+              @$BP.patch(...)
+              def $FUNC(...):
+                ...
+          - pattern: |
+              @$BP.delete(...)
+              def $FUNC(...):
+                ...
       - pattern-not: |
           @requires_auth
           def $FUNC(...):

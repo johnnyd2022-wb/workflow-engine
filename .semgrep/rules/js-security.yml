@@ -19,7 +19,17 @@ rules:
       innerHTML assigned via string concatenation. If any concatenated value comes
       from API or user data this is an XSS vector. Use textContent for plain text,
       or build nodes with createElement/appendChild.
-    pattern: $EL.innerHTML = $A + $B
+    pattern-either:
+      - pattern: $EL.innerHTML = $A + $B
+      - pattern: $EL.innerHTML = $A + $B + $C
+
+  - id: insertadjacenthtml
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      insertAdjacentHTML parses raw HTML and is an XSS vector if any argument
+      contains user or API data. Prefer DOM APIs (createElement/appendChild/textContent).
+    pattern: $EL.insertAdjacentHTML(...)
 
   # ── CSRF / FETCH ─────────────────────────────────────────────────────────────
 
@@ -40,7 +50,7 @@ rules:
           fetch($URL, {method: $METHOD, ...})
       - metavariable-regex:
           metavariable: $METHOD
-          regex: "^[\"'](POST|PUT|PATCH|DELETE)[\"']$"
+          regex: "(?i)^(\"|')(post|put|patch|delete)(\"|')$"
 
   # ── SENSITIVE STORAGE ────────────────────────────────────────────────────────
 
@@ -55,7 +65,7 @@ rules:
       - pattern: localStorage.setItem($KEY, ...)
       - metavariable-regex:
           metavariable: $KEY
-          regex: "(?i)(token|secret|password|credential|auth|session|api.?key)"
+          regex: "(?i)(token|secret|password|credential|auth|session|api.?key|jwt|bearer)"
 
   # ── QUERY STRINGS ────────────────────────────────────────────────────────────
 
@@ -63,11 +73,11 @@ rules:
     languages: [javascript]
     severity: WARNING
     message: >
-      User-supplied value concatenated directly into a URL query string.
+      User-supplied value concatenated into a URL query string.
       Use URLSearchParams or encodeURIComponent to prevent injection and encoding
       bugs: '/inventory?' + new URLSearchParams({ q: searchValue })
     patterns:
-      - pattern: $URL + $VAR
+      - pattern: $BASE + $PARAM
       - metavariable-regex:
-          metavariable: $URL
-          regex: "\\?"
+          metavariable: $BASE
+          regex: "\\?.*="

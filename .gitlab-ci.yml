@@ -7,6 +7,7 @@
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 stages:
 - test
+- security
 
 include:
 - template: Security/SAST.gitlab-ci.yml
@@ -80,3 +81,14 @@ unit_tests:
     - merge_requests
     - main
   allow_failure: false
+
+semgrep:
+  stage: security
+  image: python:3.12-bullseye
+  script:
+    - pip install semgrep
+    - semgrep --config .semgrep/rules/ app/ --include="*.py" --include="*.js" --error
+  only:
+    - merge_requests
+    - main
+  allow_failure: true
