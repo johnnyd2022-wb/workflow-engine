@@ -77,20 +77,46 @@ LIST_INVENTORY_MAX_AUDIT_HISTORY = 120
 LIST_INVENTORY_MAX_RECONCILIATION_HISTORY = 60
 
 
+_LIST_ITEM_MAX_CHARS = 4096
+_LIST_ITEM_MAX_NESTED = 20
+
+
+def _trim_value(v):
+    """Cap strings, lists, and dicts one level deep — prevents deep payload explosions."""
+    if isinstance(v, str) and len(v) > _LIST_ITEM_MAX_CHARS:
+        return v[:_LIST_ITEM_MAX_CHARS] + "…"
+    if isinstance(v, list):
+        return v[:_LIST_ITEM_MAX_NESTED]
+    if isinstance(v, dict):
+        return {k: _trim_value(val) for k, val in list(v.items())[:_LIST_ITEM_MAX_NESTED]}
+    return v
+
+
+def _safe_slice_list(lst: list, max_len: int) -> list:
+    """Slice list and recursively bound values inside dict items."""
+    out = []
+    for item in lst[:max_len]:
+        if isinstance(item, dict):
+            out.append({k: _trim_value(v) for k, v in item.items()})
+        else:
+            out.append(item)
+    return out
+
+
 def _bound_inventory_extra_data_for_list_response(extra_data: dict) -> dict:
     """Clamp large nested lists in extra_data for list responses (operator UI only)."""
     if not extra_data:
         return extra_data
     out = dict(extra_data)
     psd = out.get("previous_steps_data")
-    if isinstance(psd, list) and len(psd) > LIST_INVENTORY_MAX_PREVIOUS_STEPS:
-        out["previous_steps_data"] = psd[:LIST_INVENTORY_MAX_PREVIOUS_STEPS]
+    if isinstance(psd, list):
+        out["previous_steps_data"] = _safe_slice_list(psd, LIST_INVENTORY_MAX_PREVIOUS_STEPS)
     ah = out.get("inventory_audit_history")
-    if isinstance(ah, list) and len(ah) > LIST_INVENTORY_MAX_AUDIT_HISTORY:
-        out["inventory_audit_history"] = ah[:LIST_INVENTORY_MAX_AUDIT_HISTORY]
+    if isinstance(ah, list):
+        out["inventory_audit_history"] = _safe_slice_list(ah, LIST_INVENTORY_MAX_AUDIT_HISTORY)
     rh = out.get("reconciliation_history")
-    if isinstance(rh, list) and len(rh) > LIST_INVENTORY_MAX_RECONCILIATION_HISTORY:
-        out["reconciliation_history"] = rh[:LIST_INVENTORY_MAX_RECONCILIATION_HISTORY]
+    if isinstance(rh, list):
+        out["reconciliation_history"] = _safe_slice_list(rh, LIST_INVENTORY_MAX_RECONCILIATION_HISTORY)
     return out
 
 

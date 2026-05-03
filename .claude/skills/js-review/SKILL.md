@@ -1,0 +1,232 @@
+---
+name: js-review
+description: Security, performance, and correctness review for JavaScript files and script blocks
+paths: "**/*.js,**/*.ts"
+---
+
+# JavaScript Review: Security, Performance & Correctness
+
+You are working in a **multi-tenant SaaS** that uses vanilla JS (no React/Vue), HTMX, and a shared `CoreAPI` client (`app/core/frontend/js/core-api.js`). Before finalising any JavaScript you write or modify, check every rule below and fix violations inline.
+
+---
+
+## SECURITY
+
+### 1. Use `CoreAPI.request()` — Never Raw `fetch()` for API Calls
+
+`CoreAPI` handles CSRF token injection, `Content-Type`, JSON serialisation, error normalisation, and network-error detection. Raw `fetch()` silently skips the CSRF header on mutating requests, causing 400/403 failures.
+
+**BAD**:
+```javascript
+const resp = await fetch('/api/core/processes', {
+    method: 'POST',
+    body: JSON.stringify(data)  // no CSRF — will 400
+});
+```
+**GOOD**:
+```javascript
+const result = await CoreAPI.request('/processes', {
+    method: 'POST',
+    body: data  // CoreAPI handles stringify + CSRF
+});
+```
+
+For endpoints outside `/api/core` (CRM, workflow-engine), read the token from the meta tag:
+```javascript
+const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+const resp = await fetch('/crm/invoices', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+});
+```
+
+---
+
+### 2. XSS — Never Inject User-Supplied Data via `innerHTML`
+
+`innerHTML` parses its argument as HTML. Any user-controlled string is an XSS vector.
+
+**BAD**:
+```javascript
+card.innerHTML = `<h2>${user.name}</h2><p>${user.email}</p>`;
+row.innerHTML = `<td>${item.sku}</td>`;
+```
+**GOOD**:
+```javascript
+const h2 = document.createElement('h2');
+h2.textContent = user.name;  // never parsed as HTML
+card.appendChild(h2);
+```
+
+`innerHTML` is acceptable **only for static markup strings with no user data**:
+```javascript
+container.innerHTML = '<p class="page-subtitle">No items found.</p>';  // safe
+```
+
+---
+
+### 3. Always `encodeURIComponent` / `URLSearchParams` for User Values in Query Strings
+
+**BAD**: `` const url = `/inventory?q=${searchValue}`; ``
+**GOOD**: `const url = '/inventory?' + new URLSearchParams({ q: searchValue });`
+
+---
+
+### 4. Never Store Sensitive Values in `localStorage` or `sessionStorage`
+
+Both are accessible to any JS on the page. Never store session tokens, CSRF secrets, or org credentials there. UI preferences (theme, sidebar collapse state) are fine.
+
+---
+
+## ERROR HANDLING
+
+### 5. Every Async Function Needs `try/catch` With Visible User Feedback
+
+**BAD**:
+```javascript
+async function loadItems() {
+    const data = await CoreAPI.request('/inventory');
+    renderItems(data.items);
+    // unhandled rejection leaves UI blank
+}
+```
+**GOOD**:
+```javascript
+async function loadItems() {
+    container.innerHTML = '<p class="page-subtitle">Loading…</p>';
+    try {
+        const data = await CoreAPI.request('/inventory');
+        renderItems(data.items);
+    } catch (err) {
+        container.innerHTML = '<p style="color: var(--error);">Failed to load. Please refresh.</p>';
+        console.error('loadItems failed:', err);
+    }
+}
+```
+
+---
+
+### 6. Show Loading State Before the Fetch Completes
+
+Never leave a container blank while a request is in-flight.
+
+**BAD**: open a modal, then await data — blank modal during the fetch.
+**GOOD**: show `<p class="page-subtitle">Loading…</p>` inside the modal immediately, then populate.
+
+---
+
+## PERFORMANCE
+
+### 7. Debounce Search and Filter Inputs — No Request Per Keystroke
+
+**BAD**:
+```javascript
+searchInput.addEventListener('input', () => {
+    CoreAPI.request(`/inventory?q=${searchInput.value}`).then(render);
+});
+```
+**GOOD**:
+```javascript
+let searchTimer;
+searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+        const params = new URLSearchParams({ q: searchInput.value });
+        CoreAPI.request(`/inventory?${params}`).then(render).catch(console.error);
+    }, 300);
+});
+```
+
+---
+
+### 8. Batch DOM Updates With `DocumentFragment`
+
+Appending nodes one at a time inside a loop causes a reflow per iteration.
+
+**BAD**:
+```javascript
+items.forEach(item => tableBody.appendChild(buildRow(item)));
+```
+**GOOD**:
+```javascript
+const fragment = document.createDocumentFragment();
+items.forEach(item => fragment.appendChild(buildRow(item)));
+tableBody.appendChild(fragment);  // single reflow
+```
+
+---
+
+### 9. Cancel In-Flight Requests When the User Moves On
+
+Stale responses arriving after a newer request overwrite fresh UI.
+
+**GOOD**:
+```javascript
+let activeController = null;
+async function search(q) {
+    if (activeController) activeController.abort();
+    activeController = new AbortController();
+    try {
+        const data = await CoreAPI.request(`/inventory?q=${q}`, { signal: activeController.signal });
+        render(data);
+    } catch (err) {
+        if (err.name !== 'AbortError') showError(err);
+    }
+}
+```
+
+---
+
+## CORRECTNESS
+
+### 10. Guard Against `null` DOM Elements Before Accessing Properties
+
+`querySelector` returns `null` when the element doesn't exist (common after HTMX swaps).
+
+**BAD**: `document.querySelector('#submit-btn').addEventListener('click', fn)` — TypeError if absent.
+**GOOD**:
+```javascript
+const btn = document.querySelector('#submit-btn');
+if (btn) btn.addEventListener('click', fn);
+```
+
+---
+
+### 11. Remove Event Listeners Before Re-Attaching on HTMX Swaps
+
+Attaching the same listener inside a function called after each swap stacks handlers and fires them N times.
+
+**BAD**:
+```javascript
+function init() {
+    document.querySelector('#form').addEventListener('submit', handleSubmit);
+    // N swaps → N handlers
+}
+```
+**GOOD**:
+```javascript
+function init() {
+    const form = document.querySelector('#form');
+    if (!form) return;
+    form.removeEventListener('submit', handleSubmit);
+    form.addEventListener('submit', handleSubmit);
+}
+```
+
+---
+
+## CHECKLIST
+
+- [ ] All mutating API calls use `CoreAPI.request()` (not raw `fetch`)
+- [ ] Non-`/api/core` mutating fetches include CSRF from `meta[name="csrf-token"]`
+- [ ] No `innerHTML` with user-supplied data — `textContent` or DOM node creation used
+- [ ] User values in query strings use `URLSearchParams` or `encodeURIComponent`
+- [ ] No sensitive values in `localStorage` or `sessionStorage`
+- [ ] Every async function has `try/catch` with visible user feedback
+- [ ] Loading state shown before the fetch; error state shown on failure
+- [ ] Search/filter inputs debounced (300ms)
+- [ ] Large list renders use `DocumentFragment`
+- [ ] Long-lived searches use `AbortController` to cancel stale requests
+- [ ] DOM element existence checked before property access
+- [ ] Event listeners removed before re-attaching to avoid stacking

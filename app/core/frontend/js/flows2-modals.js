@@ -1,3 +1,4 @@
+    // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
     window.openModal = function(modalId) {
       const modal = document.getElementById(modalId);
       if (modal) {
