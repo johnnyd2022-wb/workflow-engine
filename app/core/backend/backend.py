@@ -1087,31 +1087,56 @@ def serve_core_inventory_static(filename):
 def list_processes():
     """List all processes for the current organisation"""
     org_id = UUID(g.org_id)
+    include_steps = request.args.get("include_steps", "false").lower() == "true"
     repo = ProcessRepository(db_session)
     processes = repo.list_processes(org_id)
 
-    # Calculate stats for each process
+    # Batch-fetch all executions for the org once, then group by process_id in Python.
+    # Avoids N queries (one per process) when calculating active/completed counts.
     execution_repo = ExecutionRepository(db_session)
+    all_executions = execution_repo.list_executions(org_id)
+    from collections import defaultdict
+
+    execs_by_process: dict = defaultdict(list)
+    for e in all_executions:
+        execs_by_process[e.process_id].append(e)
+
     result = []
     for process in processes:
-        executions = execution_repo.list_executions(org_id, process_id=process.id)
-        active_count = sum(1 for e in executions if e.status == ExecutionStatus.IN_PROGRESS)
-        completed_count = sum(1 for e in executions if e.status == ExecutionStatus.COMPLETED)
-        step_count = len(process.steps) if process.steps else 0
+        proc_execs = execs_by_process.get(process.id, [])
+        active_count = sum(1 for e in proc_execs if e.status == ExecutionStatus.IN_PROGRESS)
+        completed_count = sum(1 for e in proc_execs if e.status == ExecutionStatus.COMPLETED)
+        step_list = process.steps or []
+        step_count = len(step_list)
 
-        result.append(
-            {
-                "id": str(process.id),
-                "name": process.name,
-                "description": process.description,
-                "category": process.category.value if process.category else None,
-                "is_draft": process.is_draft,
-                "step_count": step_count,
-                "active_executions": active_count,
-                "completed_executions": completed_count,
-                "created_at": process.created_at.isoformat() if process.created_at else None,
-            }
-        )
+        entry = {
+            "id": str(process.id),
+            "name": process.name,
+            "description": process.description,
+            "category": process.category.value if process.category else None,
+            "is_draft": process.is_draft,
+            "step_count": step_count,
+            "active_executions": active_count,
+            "completed_executions": completed_count,
+            "created_at": process.created_at.isoformat() if process.created_at else None,
+        }
+
+        if include_steps:
+            entry["steps"] = [
+                {
+                    "id": str(step.id),
+                    "step_number": step.step_number,
+                    "position": str(step.position) if getattr(step, "position", None) is not None else None,
+                    "name": step.name,
+                    "description": step.description,
+                    "inputs": step.inputs or [],
+                    "outputs": step.outputs or [],
+                    "execution_prompts": step.execution_prompts or [],
+                }
+                for step in step_list
+            ]
+
+        result.append(entry)
 
     return jsonify({"processes": result}), 200
 
@@ -2477,6 +2502,34 @@ def list_inventory():
         )
         execution_step_by_id = {es.id: es for es in loaded_steps}
 
+    # Batch-load executions and their processes for process-name and untracked-step lookups.
+    # Replaces per-item db_session.query(Execution/Process) calls inside the loop below.
+    source_exec_ids = {i.source_execution_id for i in items if i.source_execution_id}
+    execution_by_id: dict = {}
+    process_by_id: dict = {}
+    if source_exec_ids:
+        loaded_execs = (
+            db_session.query(Execution)
+            .filter(Execution.org_id == org_id)
+            .filter(Execution.id.in_(source_exec_ids))
+            .all()
+        )
+        execution_by_id = {e.id: e for e in loaded_execs}
+        proc_ids = {e.process_id for e in loaded_execs if e.process_id}
+        if proc_ids:
+            from sqlalchemy.orm import selectinload
+
+            from app.core.db.models.process import Process as ProcessModel
+
+            loaded_procs = (
+                db_session.query(ProcessModel)
+                .filter(ProcessModel.org_id == org_id)
+                .filter(ProcessModel.id.in_(proc_ids))
+                .options(selectinload(ProcessModel.steps))
+                .all()
+            )
+            process_by_id = {p.id: p for p in loaded_procs}
+
     result = []
     for item in items:
         # Filter out items with zero or negative quantity
@@ -2701,20 +2754,16 @@ def list_inventory():
         if previous_steps_data:
             extra_data["previous_steps_data"] = previous_steps_data
 
-        # Get process name from execution if available
+        # Get process name from execution if available (uses pre-loaded batch dicts)
         process_name = None
         if item.source_execution_id:
             try:
-                from app.core.db.models.execution import Execution
-                from app.core.db.models.process import Process
-
-                execution = db_session.query(Execution).filter(Execution.id == item.source_execution_id).first()
+                execution = execution_by_id.get(item.source_execution_id)
                 if execution and execution.process_id:
-                    process = db_session.query(Process).filter(Process.id == execution.process_id).first()
+                    process = process_by_id.get(execution.process_id)
                     if process:
                         process_name = process.name
             except Exception:
-                # If lookup fails, just continue without process name
                 pass
         if not process_name:
             try:
@@ -2729,12 +2778,9 @@ def list_inventory():
         producing_step_name = None
         if extra_data.get("untracked") and item.source_execution_id:
             try:
-                from app.core.db.models.execution import Execution
-
-                execution = db_session.query(Execution).filter(Execution.id == item.source_execution_id).first()
+                execution = execution_by_id.get(item.source_execution_id)
                 if execution and execution.process_id:
-                    process_repo = ProcessRepository(db_session)
-                    process_with_steps = process_repo.get_process_with_steps(execution.process_id, org_id)
+                    process_with_steps = process_by_id.get(execution.process_id)
                     if process_with_steps:
                         producing_step_id, producing_step_name = _find_producing_step(
                             process_with_steps, item.name, item.unit
@@ -3801,19 +3847,24 @@ def get_execution_metadata():
                 metadata_map[pair_key]["execution_ids"].add(str(execution.id))
                 metadata_map[pair_key]["execution_step_ids"].add(str(step.id))
 
+    # Batch-fetch all inventory items for all execution step IDs in one query.
+    all_step_ids = {UUID(sid) for data in metadata_map.values() for sid in data["execution_step_ids"]}
+    items_by_step: dict = {}
+    if all_step_ids:
+        step_items = (
+            db_session.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id)
+            .filter(InventoryItem.source_execution_step_id.in_(all_step_ids))
+            .all()
+        )
+        for inv_item in step_items:
+            items_by_step.setdefault(inv_item.source_execution_step_id, []).append(str(inv_item.id))
+
     # Convert to list format
     for pair_key, data in metadata_map.items():
-        # Find inventory items linked to these execution steps
         inventory_item_ids = []
         for step_id in data["execution_step_ids"]:
-            items = (
-                db_session.query(InventoryItem)
-                .filter(InventoryItem.org_id == org_id)
-                .filter(InventoryItem.source_execution_step_id == UUID(step_id))
-                .all()
-            )
-            for item in items:
-                inventory_item_ids.append(str(item.id))
+            inventory_item_ids.extend(items_by_step.get(UUID(step_id), []))
 
         metadata_items.append(
             {

@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.db.models.process import Process, ProcessCategory
 from app.core.db.models.step import Step
@@ -166,9 +166,10 @@ class ProcessRepository:
         return True
 
     def get_process_with_steps(self, process_id: UUID, org_id: UUID) -> Process | None:
-        """Get process with all its steps loaded"""
-        process = self.get_process_by_id(process_id, org_id)
-        if process:
-            # Eager load steps
-            _ = process.steps
-        return process
+        """Get process with all its steps loaded in a single query."""
+        return (
+            self.db.query(Process)
+            .filter(Process.id == process_id, Process.org_id == org_id)
+            .options(selectinload(Process.steps))
+            .first()
+        )

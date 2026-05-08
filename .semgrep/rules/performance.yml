@@ -1,0 +1,150 @@
+rules:
+
+  # ── PYTHON: N+1 DB QUERIES ───────────────────────────────────────────────────
+
+  - id: sqlalchemy-query-in-for-loop
+    languages: [python]
+    severity: WARNING
+    message: >
+      SQLAlchemy query inside a for-loop — this is an N+1 pattern.
+      Pre-fetch all needed rows before the loop using `.in_()` and build a dict,
+      then look up by ID inside the loop.
+    patterns:
+      - pattern-inside: |
+          for $VAR in $ITERABLE:
+            ...
+      - pattern-either:
+          - pattern: $SESSION.query(...)
+          - pattern: $SESSION.execute(...)
+
+  - id: repository-get-in-for-loop
+    languages: [python]
+    severity: WARNING
+    message: >
+      Repository lookup inside a for-loop — this is an N+1 pattern.
+      Collect all IDs before the loop, batch-fetch with a single query, then
+      use a dict for O(1) lookups inside the loop.
+    patterns:
+      - pattern-inside: |
+          for $VAR in $ITERABLE:
+            ...
+      - pattern-either:
+          - pattern: $REPO.get_$METHOD($ID, ...)
+          - pattern: $REPO.find_$METHOD($ID, ...)
+          - pattern: $REPO.list_$METHOD(..., $KEY=$VAR.$ATTR, ...)
+
+  # ── PYTHON: UNBOUNDED QUERIES ────────────────────────────────────────────────
+
+  - id: sqlalchemy-all-without-limit
+    languages: [python]
+    severity: INFO
+    message: >
+      `.all()` called without a preceding `.limit()`. For endpoints that return
+      potentially large result sets, add `.limit(N)` or add pagination parameters.
+      Queries scoped to a single entity (by primary key or unique FK) are acceptable.
+    patterns:
+      - pattern: $Q.filter(...).all()
+      - pattern-not: $Q.filter(...).limit(...).all()
+      - pattern-not: $Q.filter(...).order_by(...).limit(...).all()
+      - pattern-not-inside: |
+          $VAR = $REPO.$METHOD(...)
+    paths:
+      include:
+        - "**/backend.py"
+        - "**/backend/**/*.py"
+
+  # ── PYTHON: O(N²) SORT ───────────────────────────────────────────────────────
+
+  - id: linear-search-in-sort-key
+    languages: [python]
+    severity: WARNING
+    message: >
+      Linear search (next(...for...if...)) inside a sort key — O(n²) complexity.
+      Pre-build a dict before the sort: `lookup = {item[key]: item[val] for item in items}`
+      then use `key=lambda x: lookup[x]`.
+    pattern: $LIST.sort(key=lambda $X: next($ITER for $VAR in $COLLECTION if $COND))
+
+  # ── PYTHON: LAZY LOADING IN LOOP ─────────────────────────────────────────────
+
+  - id: orm-relationship-access-in-loop
+    languages: [python]
+    severity: WARNING
+    message: >
+      Accessing an ORM relationship attribute inside a loop may trigger a lazy-load
+      query per iteration. Use `selectinload()` or `joinedload()` in the query that
+      fetches the parent objects, or access the relationship before the loop to
+      trigger a single bulk load.
+    patterns:
+      - pattern-inside: |
+          for $VAR in $ITERABLE:
+            ...
+      - pattern-either:
+          - pattern: $VAR.steps
+          - pattern: $VAR.executions
+          - pattern: $VAR.execution_steps
+          - pattern: $VAR.inventory_items
+
+  # ── JAVASCRIPT: N+1 HTTP REQUESTS ───────────────────────────────────────────
+
+  - id: promise-all-map-individual-fetch
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      Promise.all over a .map() that fetches individual items by ID — N+1 HTTP pattern.
+      If the list endpoint already returns the needed fields, use those directly.
+      Otherwise, add a bulk endpoint (e.g. POST /api/core/items/bulk or ?ids=a,b,c)
+      and replace this pattern with a single request.
+    patterns:
+      - pattern: Promise.all($LIST.map(async ($ITEM) => { ... await $API.$METHOD($ITEM.$ID) ... }))
+      - pattern-not-inside: |
+          // N+1 acceptable: ...
+
+  - id: await-in-map-without-promise-all
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      `await` inside `.map()` without `Promise.all` — the awaits run sequentially,
+      not concurrently. Wrap with `Promise.all(items.map(async item => ...))` if
+      the requests are independent, or restructure to use a bulk endpoint.
+    patterns:
+      - pattern: $LIST.map(async ($ITEM) => { ... await $EXPR ... })
+      - pattern-not-inside: Promise.all(...)
+
+  # ── JAVASCRIPT: UNCLEARED INTERVALS ─────────────────────────────────────────
+
+  - id: setinterval-result-discarded
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      setInterval() return value not stored — the interval cannot be cancelled.
+      On SPA navigation, this creates orphaned intervals that keep firing after
+      the component is gone. Store as `const intervalId = setInterval(...)` and
+      call `clearInterval(intervalId)` on cleanup/navigation.
+    patterns:
+      - pattern: setInterval(...)
+      - pattern-not: $VAR = setInterval(...)
+      - pattern-not: let $VAR = setInterval(...)
+      - pattern-not: const $VAR = setInterval(...)
+      - pattern-not: var $VAR = setInterval(...)
+      - pattern-not: window.$VAR = setInterval(...)
+      - pattern-not: this.$VAR = setInterval(...)
+
+  # ── JAVASCRIPT: SEQUENTIAL INDEPENDENT AWAITS ────────────────────────────────
+
+  - id: sequential-independent-awaits
+    languages: [javascript]
+    severity: INFO
+    message: >
+      Two sequential `await` calls that may be independent. If the second does not
+      depend on the result of the first, combine them with `Promise.all([...])` to
+      run concurrently and reduce total load time.
+    patterns:
+      - pattern: |
+          const $A = await $EXPR1;
+          const $B = await $EXPR2;
+      - pattern-not: |
+          const $A = await $EXPR1;
+          const $B = await $EXPR2($A, ...);
+      - pattern-not: |
+          const $A = await $EXPR1;
+          const $B = await $EXPR2($A.$FIELD, ...);

@@ -2,6 +2,7 @@
     // State reset on every navigation — window properties survive HTMX swaps across pages
     window.currentProcess = null;
     window.currentUser = window.currentUser || null;
+    window.currentUserPromise = window.currentUserPromise || null;
 
     /** Caps for API-fed lists (performance / accidental huge payloads). */
     var FLOWS2_MAX_AUDIT_HISTORY = 80;

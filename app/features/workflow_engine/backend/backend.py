@@ -515,9 +515,9 @@ def get_dag_execution_order(parent_process_id, cursor):
         if in_degree[process_id] == 0:
             queue.append(process_id)
 
+    execution_order_map = {p[0]: p[2] for p in sub_processes}
     while queue:
-        # Sort queue by execution_order for deterministic ordering
-        queue.sort(key=lambda x: next(p[2] for p in sub_processes if p[0] == x))
+        queue.sort(key=lambda x: execution_order_map.get(x, 0))
         current = queue.pop(0)
         result.append(current)
 
