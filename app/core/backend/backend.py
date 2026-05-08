@@ -973,8 +973,8 @@ def serve_core_js(filename):
     # File serving must be done exclusively via send_from_directory
     try:
         response = send_from_directory(core_frontend_dir, filename)
-        # Set explicit Content-Type header
         response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=60"
         # X-Content-Type-Options is set globally in after_request handler
         return response
     except FileNotFoundError:
@@ -1018,8 +1018,8 @@ def serve_core_css(filename):
     # File serving must be done exclusively via send_from_directory
     try:
         response = send_from_directory(core_frontend_dir, filename)
-        # Set explicit Content-Type header
         response.headers["Content-Type"] = "text/css; charset=utf-8"
+        response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=60"
         # X-Content-Type-Options is set globally in after_request handler
         return response
     except FileNotFoundError:
