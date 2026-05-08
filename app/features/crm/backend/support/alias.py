@@ -3,6 +3,7 @@ Enhanced API endpoints for customer alias management.
 Uses shared functionality for consistent responses and error handling.
 """
 
+from app.core.security.permissions import requires_auth
 import os
 import sys
 
@@ -19,6 +20,7 @@ from ..crm_utils import validate_customer_exists
 
 # GET - List all aliases for a customer
 @crm_bp.route("/api/crm/customers/<customer_name>/aliases", methods=["GET"])
+@requires_auth
 @handle_database_operation
 def list_customer_aliases(connection, cursor, customer_name):
     """
@@ -64,6 +66,7 @@ def list_customer_aliases(connection, cursor, customer_name):
 
 # GET - Check if specific alias exists for customer
 @crm_bp.route("/api/crm/customers/<customer_name>/aliases/<alias_name>", methods=["GET"])
+@requires_auth
 @handle_database_operation
 def get_customer_alias(connection, cursor, customer_name, alias_name):
     """
@@ -115,6 +118,7 @@ def get_customer_alias(connection, cursor, customer_name, alias_name):
 
 # POST - Add alias to customer (Create)
 @crm_bp.route("/api/crm/customers/<customer_name>/aliases", methods=["POST"])
+@requires_auth
 @validate_api_input(["alias_name"])
 @handle_database_operation
 def create_customer_alias(connection, cursor, customer_name):
@@ -196,6 +200,7 @@ def create_customer_alias(connection, cursor, customer_name):
 
 # PUT - Update alias for customer
 @crm_bp.route("/api/crm/customers/<customer_name>/aliases/<alias_name>", methods=["PUT"])
+@requires_auth
 @validate_api_input(["new_alias_name"])
 @handle_database_operation
 def update_customer_alias(connection, cursor, customer_name, alias_name):
@@ -296,6 +301,7 @@ def update_customer_alias(connection, cursor, customer_name, alias_name):
 
 # DELETE - Remove alias from customer
 @crm_bp.route("/api/crm/customers/<customer_name>/aliases/<alias_name>", methods=["DELETE"])
+@requires_auth
 @handle_database_operation
 def delete_customer_alias(connection, cursor, customer_name, alias_name):
     """
