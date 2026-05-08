@@ -2638,7 +2638,9 @@ def list_inventory():
 
                     # Look up the input inventory item
                     input_inventory_item = (
-                        db_session.query(InventoryItem)  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
+                        db_session.query(
+                            InventoryItem
+                        )  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
                         .filter(InventoryItem.id == UUID(inventory_item_id), InventoryItem.org_id == org_id)
                         .first()
                     )
@@ -2648,7 +2650,9 @@ def list_inventory():
 
                     # Look up the execution step that produced this input
                     input_execution_step = (
-                        db_session.query(ExecutionStep)  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
+                        db_session.query(
+                            ExecutionStep
+                        )  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
                         .filter(ExecutionStep.id == input_inventory_item.source_execution_step_id)
                         .first()
                     )
@@ -3220,9 +3224,7 @@ def list_wastage():
     if records:
         item_ids = {r.inventory_item_id for r in records}
         fetched = (
-            db_session.query(InventoryItem)
-            .filter(InventoryItem.id.in_(item_ids), InventoryItem.org_id == org_id)
-            .all()
+            db_session.query(InventoryItem).filter(InventoryItem.id.in_(item_ids), InventoryItem.org_id == org_id).all()
         )
         items_by_id = {str(item.id): {"name": item.name, "unit": item.unit} for item in fetched}
     result = []
