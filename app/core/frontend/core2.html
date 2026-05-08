@@ -1718,13 +1718,13 @@
 
     async function loadInventoryV2() {
       try {
-        const inventoryData = await CoreAPI.getInventory();
-        const items = inventoryData.inventory_items || [];
-        renderInventoryV2(items);
-        const [processesData, executionsData] = await Promise.all([
+        const [inventoryData, processesData, executionsData] = await Promise.all([
+          CoreAPI.getInventory(),
           CoreAPI.getProcesses(),
           CoreAPI.getExecutions(),
         ]);
+        const items = inventoryData.inventory_items || [];
+        renderInventoryV2(items);
         const procs = processesData.processes || [];
         const execs = (executionsData.executions || []).filter(function (e) { return e && e.id; });
         var systemStatus = null;
