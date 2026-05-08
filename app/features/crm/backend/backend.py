@@ -1,8 +1,8 @@
-from app.core.security.permissions import requires_auth
 import json
 
 from flask import Blueprint, jsonify, render_template, request
 
+from app.core.security.permissions import requires_auth
 from app.utils.config_loader import config
 
 # Create CRM blueprint

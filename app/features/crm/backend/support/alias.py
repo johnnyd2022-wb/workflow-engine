@@ -3,9 +3,10 @@ Enhanced API endpoints for customer alias management.
 Uses shared functionality for consistent responses and error handling.
 """
 
-from app.core.security.permissions import requires_auth
 import os
 import sys
+
+from app.core.security.permissions import requires_auth
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../../.."))
 

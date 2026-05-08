@@ -34,8 +34,8 @@ ruff:
   script:
     - pip install uv
     - uv sync --extra dev
-    - uv run ruff check app/
     - uv run ruff format --check app/
+    - uv run ruff check app/ --fix
   only:
     - merge_requests
     - main
