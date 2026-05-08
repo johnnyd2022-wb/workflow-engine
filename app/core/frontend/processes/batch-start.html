@@ -5,8 +5,6 @@
 
 {% block head_extras %}
   {{ super() }}
-  {# Reuse wizard segmented control styling (flow-mode-segmented). #}
-  {% include 'processes/create-process-step-content-styles.html' %}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
 {% endblock %}
 
