@@ -133,7 +133,7 @@ core_bp = Blueprint(
 # --- Flow wizard safety helpers (query filtering + step integrity) ---
 _FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
 
-_ALLOWED_RETURN_PREFIX = "/core/flows"
+_ALLOWED_RETURN_PREFIX = "/core/flows"  # keep in sync with ALLOWED_PREFIX in batch-start-scripts.html
 
 
 def _safe_flow_return_to(value, process_id) -> str:
@@ -973,8 +973,8 @@ def serve_core_js(filename):
     # File serving must be done exclusively via send_from_directory
     try:
         response = send_from_directory(core_frontend_dir, filename)
-        # Set explicit Content-Type header
         response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=60"
         # X-Content-Type-Options is set globally in after_request handler
         return response
     except FileNotFoundError:
@@ -1018,8 +1018,8 @@ def serve_core_css(filename):
     # File serving must be done exclusively via send_from_directory
     try:
         response = send_from_directory(core_frontend_dir, filename)
-        # Set explicit Content-Type header
         response.headers["Content-Type"] = "text/css; charset=utf-8"
+        response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=60"
         # X-Content-Type-Options is set globally in after_request handler
         return response
     except FileNotFoundError:
