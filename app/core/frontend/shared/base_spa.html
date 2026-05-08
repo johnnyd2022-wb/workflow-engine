@@ -1089,9 +1089,9 @@
   <script src="/ui/shared/password-policy.js"></script>
   <script src="/ui/shared/workflow-engine-settings.js"></script>
 
-  {# HTMX & Alpine for SPA-style navigation and local UI state #}
-  <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous"></script>
-  <script crossorigin="anonymous" src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  {# HTMX & Alpine — self-hosted to avoid CDN dependency and floating-version risk. #}
+  <script src="{{ url_for('core.serve_core_js', filename='htmx.min.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='alpinejs.min.js') }}" defer></script>
 
   <script>
     (function () {
