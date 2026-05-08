@@ -551,7 +551,7 @@
       var tgt = evt.detail && evt.detail.target;
       if (tgt && tgt.id === 'page-content') {
         syncAddInventoryManualPageShell();
-        tagExecAddMissingItemControls(document);
+        tagExecAddMissingItemControls(tgt);
         wireExecInputsMutationObserver();
       }
     });
@@ -559,12 +559,12 @@
     // After boosted navigation settles: sync banner + scroll the real overflow parent (#page-content),
     // not window (fixes tiny post-nav drift on mobile when the column scroll container kept its old scrollTop).
     document.body.addEventListener('htmx:afterSettle', function (evt) {
-      tagExecAddMissingItemControls(document);
+      var tgt = evt.detail && evt.detail.target;
+      tagExecAddMissingItemControls(tgt && tgt.id === 'page-content' ? tgt : document);
       syncAddInventoryManualPageShell();
       if (typeof spaSyncBannerBack === 'function') {
         spaSyncBannerBack();
       }
-      var tgt = evt.detail && evt.detail.target;
       if (tgt && tgt.id === 'page-content' && typeof window.syncSpaThemeToggle === 'function') {
         window.syncSpaThemeToggle();
       }
