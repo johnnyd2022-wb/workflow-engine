@@ -1515,7 +1515,7 @@ def reorder_steps(process_id: str):
                 if step_uuid not in locked_ids:
                     return jsonify({"error": "Step not found"}), 404
                 updated = (
-                    sess.query(Step)
+                    sess.query(Step)  # nosemgrep: sqlalchemy-query-in-for-loop — each step gets a distinct position
                     .filter(Step.id == step_uuid, Step.process_id == process_uuid)
                     .update({"position": position})
                 )
@@ -2638,7 +2638,7 @@ def list_inventory():
 
                     # Look up the input inventory item
                     input_inventory_item = (
-                        db_session.query(InventoryItem)
+                        db_session.query(InventoryItem)  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
                         .filter(InventoryItem.id == UUID(inventory_item_id), InventoryItem.org_id == org_id)
                         .first()
                     )
@@ -2648,7 +2648,7 @@ def list_inventory():
 
                     # Look up the execution step that produced this input
                     input_execution_step = (
-                        db_session.query(ExecutionStep)
+                        db_session.query(ExecutionStep)  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
                         .filter(ExecutionStep.id == input_inventory_item.source_execution_step_id)
                         .first()
                     )
@@ -3219,12 +3219,12 @@ def list_wastage():
     items_by_id = {}
     if records:
         item_ids = {r.inventory_item_id for r in records}
-        for iid in item_ids:
-            item = (
-                db_session.query(InventoryItem).filter(InventoryItem.id == iid, InventoryItem.org_id == org_id).first()
-            )
-            if item:
-                items_by_id[str(iid)] = {"name": item.name, "unit": item.unit}
+        fetched = (
+            db_session.query(InventoryItem)
+            .filter(InventoryItem.id.in_(item_ids), InventoryItem.org_id == org_id)
+            .all()
+        )
+        items_by_id = {str(item.id): {"name": item.name, "unit": item.unit} for item in fetched}
     result = []
     for r in records:
         info = items_by_id.get(str(r.inventory_item_id)) or {}
