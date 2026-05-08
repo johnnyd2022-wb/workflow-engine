@@ -66,8 +66,9 @@ window.CoreAPI = window.CoreAPI || {
     },
     
     // Processes
-    async getProcesses() {
-        return this.request('/processes');
+    async getProcesses(includeSteps = false) {
+        const query = includeSteps ? '?include_steps=true' : '';
+        return this.request(`/processes${query}`);
     },
     
     async getProcess(processId) {

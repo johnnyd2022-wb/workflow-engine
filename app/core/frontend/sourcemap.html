@@ -1703,7 +1703,7 @@
       try {
         // Load processes, inventory, executions, metadata, out-of-stock, expired-materials, and untracked-items in parallel
         const [processesData, inventoryData, executionsData, metadataData, outOfStockData, expiredMaterialsResult, untrackedResult] = await Promise.all([
-          CoreAPI.getProcesses(),
+          CoreAPI.getProcesses(true),
           CoreAPI.getInventory(),
           CoreAPI.getExecutions(),
           CoreAPI.getExecutionMetadata(),
@@ -1714,40 +1714,21 @@
 
         allProcesses = processesData.processes || [];
         allInventory = inventoryData.inventory_items || [];
-        allExecutions = executionsData.executions || [];
+        allExecutions = (executionsData.executions || []).filter(exec => exec && exec.id);
         allExecutionMetadata = metadataData.metadata || [];
         allOutOfStockRawMaterials = outOfStockData.inventory_items || [];
         checkNeededData = expiredMaterialsResult || { expired_raw_materials: [], impacted_items: [], connections: [] };
         checkNeededData.untracked_items = (untrackedResult && untrackedResult.untracked_items) ? untrackedResult.untracked_items : [];
-        
-        // Filter out any invalid executions before loading details
-        const validExecutions = allExecutions.filter(exec => exec && exec.id);
-        
-        // Load full execution details with error handling
-        const executionDetailsPromises = validExecutions.map(async (exec) => {
-          try {
-            if (!exec || !exec.id) return null;
-            return await CoreAPI.getExecution(exec.id);
-          } catch (error) {
-            return null;
-          }
-        });
-        const executionDetails = await Promise.all(executionDetailsPromises);
-        // Filter out any null/undefined results
-        allExecutions = executionDetails.filter(exec => exec && exec && exec.id);
-        
+
         // Update count badge
         const badge = document.getElementById('process-count-badge');
         if (badge) {
           badge.textContent = `${allProcesses.length} ${allProcesses.length === 1 ? 'process' : 'processes'}, ${allExecutions.length} ${allExecutions.length === 1 ? 'execution' : 'executions'}`;
         }
-        
-        // Load full process details for mapping
-        const processPromises = allProcesses.map(process => CoreAPI.getProcess(process.id));
-        const processDetails = await Promise.all(processPromises);
-        processDetailsForMapping = processDetails;
-        
-        await renderProcessFlowcharts(processDetails);
+
+        processDetailsForMapping = allProcesses;
+
+        await renderProcessFlowcharts(allProcesses);
       } catch (error) {
         const container = document.getElementById('process-flowchart-container');
         if (container) {
