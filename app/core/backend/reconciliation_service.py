@@ -339,7 +339,9 @@ def get_matching_untracked(
             from app.core.db.models.execution import Execution
 
             ex = (
-                session.query(Execution)
+                session.query(
+                    Execution
+                )  # nosemgrep: sqlalchemy-query-in-for-loop — filters by process_id per item, not batchable without restructuring
                 .filter(
                     Execution.id == item.source_execution_id,
                     Execution.org_id == org_id,

@@ -2,6 +2,7 @@ import json
 
 from flask import Blueprint, jsonify, render_template, request
 
+from app.core.security.permissions import requires_auth
 from app.utils.config_loader import config
 
 # Create CRM blueprint
@@ -12,6 +13,7 @@ INVOICE_BUTTON_ENABLED = config.invoice_button_enabled
 
 
 @crm_bp.route("/crm", methods=["GET", "POST"])
+@requires_auth
 def crm():
     print("Accessed /crm route")
     from app import get_monthly_revenue_data
@@ -622,6 +624,7 @@ def get_customer_invoices(customer_name):
 
 
 @crm_bp.route("/crm-customer-invoices", methods=["POST"])
+@requires_auth
 def crm_customer_invoices():
     """Route function to get customer invoices via HTTP request"""
     print("Accessed /crm-customer-invoices route")
@@ -645,6 +648,7 @@ def crm_customer_invoices():
 
 
 @crm_bp.route("/crm-customer-invoice-data", methods=["POST"])
+@requires_auth
 def crm_customer_invoice_data():
     print("Accessed /crm-customer-invoice-data route")
     from app.initialize import db_conn
@@ -670,6 +674,7 @@ def crm_customer_invoice_data():
 
 
 @crm_bp.route("/crm-update-customer-field", methods=["POST"])
+@requires_auth
 def crm_update_customer_field():
     print("Accessed /crm-update-customer-field route")
 
@@ -728,6 +733,7 @@ def crm_update_customer_field():
 
 
 @crm_bp.route("/crm-update-follow-up-task", methods=["POST"])
+@requires_auth
 def crm_update_follow_up_task():
     print("Accessed /crm-update-follow-up-task route")
 
@@ -800,6 +806,7 @@ def crm_update_follow_up_task():
 
 
 @crm_bp.route("/crm-delete-follow-up-task", methods=["POST"])
+@requires_auth
 def crm_delete_follow_up_task():
     print("Accessed /crm-delete-follow-up-task route")
 
@@ -841,6 +848,7 @@ def crm_delete_follow_up_task():
 
 
 @crm_bp.route("/crm-add-contact", methods=["POST"])
+@requires_auth
 def crm_add_contact():
     print("=== CRM ADD CONTACT ROUTE HIT ===")
     print(f"Request method: {request.method}")
@@ -932,6 +940,7 @@ def crm_add_contact():
 
 
 @crm_bp.route("/crm-update-contact", methods=["POST"])
+@requires_auth
 def crm_update_contact():
     print("Accessed /crm-update-contact route")
 
@@ -1004,6 +1013,7 @@ def crm_update_contact():
 
 
 @crm_bp.route("/crm-delete-contact", methods=["POST"])
+@requires_auth
 def crm_delete_contact():
     print("Accessed /crm-delete-contact route")
 
@@ -1066,6 +1076,7 @@ def crm_delete_contact():
 
 
 @crm_bp.route("/crm-reorder-contacts", methods=["POST"])
+@requires_auth
 def crm_reorder_contacts():
     print("Accessed /crm-reorder-contacts route")
 
@@ -1153,6 +1164,7 @@ def crm_reorder_contacts():
 
 
 @crm_bp.route("/crm-mark-task-completed", methods=["POST"])
+@requires_auth
 def crm_mark_task_completed():
     print("Accessed /crm-mark-task-completed route")
 

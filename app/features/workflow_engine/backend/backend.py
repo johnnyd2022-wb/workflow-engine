@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from flask import Blueprint, jsonify, render_template, request
 
+from app.core.security.permissions import requires_auth
 from app.initialize import db_conn
 
 # Create Workflow Engine blueprint
@@ -37,6 +38,7 @@ def format_process_type_for_display(process_type):
 
 
 @workflow_engine_bp.route("/workflow-engine", methods=["GET", "POST"])
+@requires_auth
 def workflow_engine():
     print("Accessed /workflow-engine route")
     connection, cursor = db_conn()
@@ -106,6 +108,7 @@ def workflow_engine():
 
 
 @workflow_engine_bp.route("/workflow-engine-lovable", methods=["GET", "POST"])
+@requires_auth
 def workflow_engine_lovable():
     print("Accessed /workflow-engine-lovable route")
     connection, cursor = db_conn()
@@ -172,6 +175,7 @@ def workflow_engine_lovable():
 
 
 @workflow_engine_bp.route("/workflow-engine/index")
+@requires_auth
 def index():
     """Render the index page"""
     # return render_template("index.html")
@@ -179,42 +183,49 @@ def index():
 
 
 @workflow_engine_bp.route("/workflow-engine/core")
+@requires_auth
 def parent_processes():
     """Render the core engine workflow engine page"""
     return render_template("core.html")
 
 
 @workflow_engine_bp.route("/workflow-engine/dashboard")
+@requires_auth
 def dashboard():
     """Render the dashboard page"""
     return render_template("dashboard.html", active_page="dashboard")
 
 
 @workflow_engine_bp.route("/workflow-engine/compliance")
+@requires_auth
 def compliance():
     """Render the compliance page"""
     return render_template("compliance.html")
 
 
 @workflow_engine_bp.route("/workflow-engine/integrations")
+@requires_auth
 def integrations():
     """Render the integrations page"""
     return render_template("integrations.html", active_page="integrations")
 
 
 @workflow_engine_bp.route("/workflow-engine/settings")
+@requires_auth
 def settings():
     """Render the settings page"""
     return render_template("settings.html", active_page="settings")
 
 
 @workflow_engine_bp.route("/workflow-engine/flow-engine1")
+@requires_auth
 def flow_engine1():
     """Render the flow engine 1 page"""
     return render_template("flow-engine.html")
 
 
 @workflow_engine_bp.route("/workflow-engine/flow-engine")
+@requires_auth
 def flow_engine():
     """Render the flow engine page"""
     return render_template("flow-engine1.html")
@@ -224,6 +235,7 @@ def flow_engine():
 
 
 @workflow_engine_bp.route("/workflow-engine/parent-process/<int:parent_process_id>")
+@requires_auth
 def parent_process_detail(parent_process_id):
     print(f"Accessed parent process detail for ID: {parent_process_id}")
     connection, cursor = db_conn()
@@ -336,6 +348,7 @@ def parent_process_detail(parent_process_id):
 
 
 @workflow_engine_bp.route("/workflow-engine/parent-process/<int:parent_process_id>/visual", methods=["GET"])
+@requires_auth
 def parent_process_visual_view(parent_process_id):
     """Visual DAG view for a specific parent process showing only its sub processes"""
     print(f"Accessed /workflow-engine/parent-process/{parent_process_id}/visual route")
@@ -370,6 +383,7 @@ def parent_process_visual_view(parent_process_id):
 
 
 @workflow_engine_bp.route("/workflow-engine/sub-process/<int:sub_process_id>")
+@requires_auth
 def sub_process_detail(sub_process_id):
     """Detail view for a specific sub process"""
     print(f"Accessed sub-process detail for ID: {sub_process_id}")
@@ -531,6 +545,7 @@ def get_dag_execution_order(parent_process_id, cursor):
 
 
 @workflow_engine_bp.route("/workflow-engine/execution/<int:execution_id>")
+@requires_auth
 def execution_detail(execution_id):
     """Detail view for a specific execution"""
     print(f"Accessed execution detail for ID: {execution_id}")
@@ -592,6 +607,7 @@ def execution_detail(execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/save-layout", methods=["POST"])
+@requires_auth
 def save_layout():
     """Save DAG layout positions"""
     try:
@@ -648,6 +664,7 @@ def save_layout():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/load-layout/<int:parent_process_id>", methods=["GET"])
+@requires_auth
 def load_layout(parent_process_id):
     """Load DAG layout positions for a parent process"""
     try:
@@ -679,6 +696,7 @@ def load_layout(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/update-execution-order", methods=["POST"])
+@requires_auth
 def update_execution_order():
     """Update execution order based on DAG connections"""
     try:
@@ -714,6 +732,7 @@ def update_execution_order():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes/<int:parent_process_id>/inputs", methods=["GET"])
+@requires_auth
 def get_inputs_by_parent(parent_process_id):
     """Get all inputs for sub processes of a specific parent process"""
     try:
@@ -761,6 +780,7 @@ def get_inputs_by_parent(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes/<int:parent_process_id>/outputs", methods=["GET"])
+@requires_auth
 def get_outputs_by_parent(parent_process_id):
     """Get all outputs for sub processes of a specific parent process"""
     try:
@@ -808,6 +828,7 @@ def get_outputs_by_parent(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes/<int:parent_process_id>/connections", methods=["GET"])
+@requires_auth
 def get_connections_by_parent(parent_process_id):
     """Get all connections between sub processes of a specific parent process"""
     try:
@@ -856,6 +877,7 @@ def get_connections_by_parent(parent_process_id):
 
 
 @workflow_engine_bp.route("/workflow-engine/process/<int:process_id>")
+@requires_auth
 def process_detail(process_id):
     print(f"Accessed process detail for ID: {process_id}")
     connection, cursor = db_conn()
@@ -941,6 +963,7 @@ def process_detail(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes", methods=["POST"])
+@requires_auth
 def create_process():
     """Create a new process"""
     try:
@@ -985,6 +1008,7 @@ def create_process():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>", methods=["GET"])
+@requires_auth
 def get_process(process_id):
     """Get a specific process"""
     try:
@@ -1030,6 +1054,7 @@ def get_process(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>", methods=["PUT"])
+@requires_auth
 def update_process(process_id):
     """Update a process"""
     try:
@@ -1073,6 +1098,7 @@ def update_process(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>", methods=["DELETE"])
+@requires_auth
 def delete_process(process_id):
     """Delete a process"""
     try:
@@ -1129,6 +1155,7 @@ def delete_process(process_id):
 
 # Flow-through API endpoints
 @workflow_engine_bp.route("/api/workflow-engine/flow-through", methods=["GET"])
+@requires_auth
 def get_flow_through_outputs():
     """Get all outputs with flow-through enabled"""
     try:
@@ -1178,6 +1205,7 @@ def get_flow_through_outputs():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/flow-through/outputs/<int:output_id>/connections", methods=["GET"])
+@requires_auth
 def get_flow_through_connections(output_id):
     """Get all connections for a specific output's process"""
     try:
@@ -1233,6 +1261,7 @@ def get_flow_through_connections(output_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/flow-through/outputs/<int:output_id>/create-inputs", methods=["POST"])
+@requires_auth
 def create_flow_through_inputs(output_id):
     """Create inputs in connected processes for a specific output"""
     try:
@@ -1440,6 +1469,7 @@ def create_flow_through_inputs(output_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/flow-through/processes/<int:process_id>/sync", methods=["POST"])
+@requires_auth
 def sync_flow_through_for_process(process_id):
     """Sync all flow-through outputs for a specific process"""
     try:
@@ -1815,6 +1845,7 @@ def update_flow_through_for_connection_changes(process_id, connection, cursor):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>/flow-through", methods=["PUT"])
+@requires_auth
 def update_process_flow_through(process_id):
     """Update flow-through setting for a process"""
     try:
@@ -1861,6 +1892,7 @@ def update_process_flow_through(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>/has-connections", methods=["GET"])
+@requires_auth
 def check_process_has_connections(process_id):
     """Check if a process has any connections, inputs, or outputs"""
     try:
@@ -1925,6 +1957,7 @@ def check_process_has_connections(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>/move-to-unmanaged", methods=["PUT"])
+@requires_auth
 def move_process_to_unmanaged(process_id):
     """Move a process to unmanaged status and delete all associated inputs, outputs, and connections using CRUD APIs"""
     try:
@@ -2027,6 +2060,7 @@ def move_process_to_unmanaged(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>/managed", methods=["PUT"])
+@requires_auth
 def update_process_managed_status(process_id):
     """Update managed status for a process"""
     try:
@@ -2064,6 +2098,7 @@ def update_process_managed_status(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/inputs", methods=["GET"])
+@requires_auth
 def get_inputs():
     """Get all inputs or filter by process_id"""
     try:
@@ -2127,6 +2162,7 @@ def get_inputs():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/inputs/<int:input_id>", methods=["GET"])
+@requires_auth
 def get_input(input_id):
     """Get a specific input by ID"""
     try:
@@ -2179,6 +2215,7 @@ def get_input(input_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/inputs/<int:input_id>", methods=["PUT"])
+@requires_auth
 def update_input(input_id):
     """Update an input"""
     try:
@@ -2239,6 +2276,7 @@ def update_input(input_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/inputs/<int:input_id>", methods=["DELETE"])
+@requires_auth
 def delete_input(input_id):
     """Delete an input"""
     try:
@@ -2266,6 +2304,7 @@ def delete_input(input_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/inputs", methods=["POST"])
+@requires_auth
 def create_input():
     """Create a new input"""
     try:
@@ -2314,6 +2353,7 @@ def create_input():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/outputs", methods=["GET"])
+@requires_auth
 def get_outputs():
     """Get all outputs or filter by process_id"""
     try:
@@ -2380,6 +2420,7 @@ def get_outputs():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/outputs/<int:output_id>", methods=["GET"])
+@requires_auth
 def get_output(output_id):
     """Get a specific output by ID"""
     try:
@@ -2432,6 +2473,7 @@ def get_output(output_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/outputs/<int:output_id>", methods=["PUT"])
+@requires_auth
 def update_output(output_id):
     """Update an output"""
     try:
@@ -2523,6 +2565,7 @@ def update_output(output_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/outputs/<int:output_id>", methods=["DELETE"])
+@requires_auth
 def delete_output(output_id):
     """Delete an output"""
     try:
@@ -2550,6 +2593,7 @@ def delete_output(output_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/outputs", methods=["POST"])
+@requires_auth
 def create_output():
     """Create a new output"""
     try:
@@ -2607,6 +2651,7 @@ def create_output():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/connections", methods=["GET"])
+@requires_auth
 def get_connections():
     """Get all connections for visual display"""
     try:
@@ -2652,6 +2697,7 @@ def get_connections():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/connections", methods=["POST"])
+@requires_auth
 def create_connection():
     """Create a new connection between processes"""
     try:
@@ -2741,6 +2787,7 @@ def create_connection():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/traceability", methods=["GET"])
+@requires_auth
 def get_all_traces():
     """Get all traceability records"""
     try:
@@ -2786,6 +2833,7 @@ def get_all_traces():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/traceability/<trace_id>", methods=["PUT"])
+@requires_auth
 def update_trace(trace_id):
     """Update a traceability record"""
     try:
@@ -2832,6 +2880,7 @@ def update_trace(trace_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/traceability/<trace_id>", methods=["DELETE"])
+@requires_auth
 def delete_trace(trace_id):
     """Delete a traceability record"""
     try:
@@ -2859,6 +2908,7 @@ def delete_trace(trace_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/traceability", methods=["POST"])
+@requires_auth
 def create_trace():
     """Create a new traceability record"""
     try:
@@ -2904,6 +2954,7 @@ def create_trace():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/traceability/<trace_id>", methods=["GET"])
+@requires_auth
 def get_trace(trace_id):
     """Get traceability information for a specific item"""
     try:
@@ -2949,6 +3000,7 @@ def get_trace(trace_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes", methods=["GET"])
+@requires_auth
 def get_all_processes():
     """Get all processes for connection dropdowns"""
     try:
@@ -2986,6 +3038,7 @@ def get_all_processes():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/connections/<int:connection_id>", methods=["GET"])
+@requires_auth
 def get_connection(connection_id):
     """Get a specific connection by ID"""
     try:
@@ -3035,6 +3088,7 @@ def get_connection(connection_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/connections/<int:connection_id>", methods=["PUT"])
+@requires_auth
 def update_connection(connection_id):
     """Update a connection"""
     try:
@@ -3078,6 +3132,7 @@ def update_connection(connection_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>/activate", methods=["POST"])
+@requires_auth
 def activate_process(process_id):
     """Activate a process for batch execution"""
     try:
@@ -3140,6 +3195,7 @@ def activate_process(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/processes/<int:process_id>/execute", methods=["POST"])
+@requires_auth
 def execute_process(process_id):
     """Execute a process with batch data"""
     try:
@@ -3231,6 +3287,7 @@ def execute_process(process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/executions/<int:execution_id>/complete", methods=["POST"])
+@requires_auth
 def complete_execution(execution_id):
     """Complete a process execution and record outputs"""
     try:
@@ -3293,6 +3350,7 @@ def complete_execution(execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/connections/<int:connection_id>/details", methods=["GET"])
+@requires_auth
 def get_connection_details(connection_id):
     """Get detailed connection information including linked inputs/outputs"""
     try:
@@ -3435,6 +3493,7 @@ def get_connection_details(connection_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/connections/<int:connection_id>/auto-link", methods=["POST"])
+@requires_auth
 def auto_link_connection(connection_id):
     """Automatically link outputs from source process to inputs of destination process"""
     try:
@@ -3514,6 +3573,7 @@ def auto_link_connection(connection_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/connections/<int:connection_id>", methods=["DELETE"])
+@requires_auth
 def delete_connection(connection_id):
     """Delete a connection"""
     try:
@@ -3551,6 +3611,7 @@ def delete_connection(connection_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/dag-layout", methods=["POST"])
+@requires_auth
 def save_dag_layout():
     """Save DAG layout positions to database for a specific parent process"""
     connection = None
@@ -3612,6 +3673,7 @@ def save_dag_layout():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/dag-layout/<int:parent_process_id>", methods=["GET"])
+@requires_auth
 def get_dag_layout(parent_process_id):
     """Get saved DAG layout positions for a specific parent process"""
     try:
@@ -3643,6 +3705,7 @@ def get_dag_layout(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/dag-layout", methods=["DELETE"])
+@requires_auth
 def delete_dag_layout():
     """Delete saved DAG layout positions"""
     try:
@@ -3668,6 +3731,7 @@ def delete_dag_layout():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes", methods=["POST"])
+@requires_auth
 def create_parent_process():
     """Create a new parent process"""
     try:
@@ -3711,6 +3775,7 @@ def create_parent_process():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes/<int:parent_process_id>", methods=["GET"])
+@requires_auth
 def get_parent_process(parent_process_id):
     """Get a specific parent process"""
     try:
@@ -3754,6 +3819,7 @@ def get_parent_process(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes/<int:parent_process_id>", methods=["PUT"])
+@requires_auth
 def update_parent_process(parent_process_id):
     """Update a parent process"""
     try:
@@ -3797,6 +3863,7 @@ def update_parent_process(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes/<int:parent_process_id>", methods=["DELETE"])
+@requires_auth
 def delete_parent_process(parent_process_id):
     """Delete a parent process and all its sub processes"""
     try:
@@ -3866,6 +3933,7 @@ def delete_parent_process(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes", methods=["GET"])
+@requires_auth
 def get_all_parent_processes():
     """Get all parent processes"""
     try:
@@ -3903,6 +3971,7 @@ def get_all_parent_processes():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>/managed", methods=["PUT"])
+@requires_auth
 def update_sub_process_managed_status(sub_process_id):
     """Update managed status for a sub-process"""
     try:
@@ -3947,6 +4016,7 @@ def update_sub_process_managed_status(sub_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>/inputs", methods=["POST"])
+@requires_auth
 def create_sub_process_input(sub_process_id):
     """Create a new input for a sub-process"""
     try:
@@ -4017,6 +4087,7 @@ def create_sub_process_input(sub_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>/outputs", methods=["POST"])
+@requires_auth
 def create_sub_process_output(sub_process_id):
     """Create a new output for a sub-process"""
     try:
@@ -4099,6 +4170,7 @@ def create_sub_process_output(sub_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes", methods=["POST"])
+@requires_auth
 def create_sub_process():
     """Create a new sub process"""
     try:
@@ -4145,6 +4217,7 @@ def create_sub_process():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>", methods=["GET"])
+@requires_auth
 def get_sub_process(sub_process_id):
     """Get a specific sub process"""
     try:
@@ -4195,6 +4268,7 @@ def get_sub_process(sub_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>", methods=["PUT"])
+@requires_auth
 def update_sub_process(sub_process_id):
     """Update a sub process"""
     try:
@@ -4239,6 +4313,7 @@ def update_sub_process(sub_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>", methods=["DELETE"])
+@requires_auth
 def delete_sub_process(sub_process_id):
     """Delete a sub process and all its inputs, outputs, and connections"""
     try:
@@ -4296,6 +4371,7 @@ def delete_sub_process(sub_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>/inputs", methods=["GET"])
+@requires_auth
 def get_sub_process_inputs(sub_process_id):
     """Get all inputs for a specific sub-process"""
     try:
@@ -4343,6 +4419,7 @@ def get_sub_process_inputs(sub_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>/outputs", methods=["GET"])
+@requires_auth
 def get_sub_process_outputs(sub_process_id):
     """Get all outputs for a specific sub-process"""
     try:
@@ -4391,6 +4468,7 @@ def get_sub_process_outputs(sub_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-processes/<int:sub_process_id>/connections", methods=["GET"])
+@requires_auth
 def get_sub_process_connections(sub_process_id):
     """Get all connections for a specific sub-process"""
     try:
@@ -4439,6 +4517,7 @@ def get_sub_process_connections(sub_process_id):
 @workflow_engine_bp.route(
     "/api/workflow-engine/parent-processes/<int:parent_process_id>/sub-processes", methods=["GET"]
 )
+@requires_auth
 def get_sub_processes_by_parent(parent_process_id):
     """Get all sub processes for a specific parent process"""
     try:
@@ -4489,6 +4568,7 @@ def get_sub_processes_by_parent(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes/<int:parent_process_id>/executions", methods=["POST"])
+@requires_auth
 def create_parent_execution(parent_process_id):
     """Create a new parent execution and automatically create sub-executions"""
     print(f"Creating parent execution for parent process ID: {parent_process_id}")
@@ -4556,6 +4636,7 @@ def create_parent_execution(parent_process_id):
 @workflow_engine_bp.route(
     "/api/workflow-engine/parent-processes/<int:parent_process_id>/executions/all", methods=["GET"]
 )
+@requires_auth
 def get_all_parent_executions(parent_process_id):
     """Get all executions for a parent process (for modal view)"""
     connection, cursor = db_conn()
@@ -4586,6 +4667,7 @@ def get_all_parent_executions(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-processes/<int:parent_process_id>/executions", methods=["GET"])
+@requires_auth
 def get_parent_executions(parent_process_id):
     """Get all executions for a parent process"""
     print(f"Getting executions for parent process ID: {parent_process_id}")
@@ -4632,6 +4714,7 @@ def get_parent_executions(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/parent-executions/<int:execution_id>", methods=["GET"])
+@requires_auth
 def get_parent_execution(execution_id):
     """Get a specific parent execution with its sub-executions"""
     print(f"Getting parent execution ID: {execution_id}")
@@ -4710,6 +4793,7 @@ def get_parent_execution(execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-executions/<int:sub_execution_id>/execute", methods=["POST"])
+@requires_auth
 def execute_sub_execution(sub_execution_id):
     """Execute a sub-execution with batch data"""
     print(f"Executing sub-execution ID: {sub_execution_id}")
@@ -4837,6 +4921,7 @@ def execute_sub_execution(sub_execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-executions/<int:sub_execution_id>/status", methods=["PUT"])
+@requires_auth
 def update_sub_execution_status(sub_execution_id):
     """Update the status of a sub-execution"""
     print(f"Updating sub-execution status for ID: {sub_execution_id}")
@@ -4950,6 +5035,7 @@ def update_sub_execution_status(sub_execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sub-executions/<int:sub_execution_id>/inputs-outputs", methods=["GET"])
+@requires_auth
 def get_sub_execution_inputs_outputs(sub_execution_id):
     """Get inputs and outputs for a sub-execution with field options"""
     print(f"Getting inputs/outputs for sub-execution ID: {sub_execution_id}")
@@ -5094,6 +5180,7 @@ def get_sub_execution_inputs_outputs(sub_execution_id):
 
 # Field Options API for dynamic dropdowns
 @workflow_engine_bp.route("/api/workflow-engine/field-options", methods=["GET"])
+@requires_auth
 def get_field_options():
     """Get all field options grouped by field type"""
     print("Getting all field options")
@@ -5128,6 +5215,7 @@ def get_field_options():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/field-options/<field_type>", methods=["GET"])
+@requires_auth
 def get_field_options_by_type(field_type):
     """Get field options for a specific field type"""
     print(f"Getting field options for type: {field_type}")
@@ -5160,6 +5248,7 @@ def get_field_options_by_type(field_type):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/field-options", methods=["POST"])
+@requires_auth
 def create_field_option():
     """Create a new field option"""
     print("Creating new field option")
@@ -5212,6 +5301,7 @@ def create_field_option():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/field-options/<int:option_id>", methods=["PUT"])
+@requires_auth
 def update_field_option(option_id):
     """Update an existing field option"""
     print(f"Updating field option ID: {option_id}")
@@ -5265,6 +5355,7 @@ def update_field_option(option_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/field-options/<int:option_id>", methods=["DELETE"])
+@requires_auth
 def delete_field_option(option_id):
     """Delete a field option"""
     print(f"Deleting field option ID: {option_id}")
@@ -5303,6 +5394,7 @@ def delete_field_option(option_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/field-options/populate-defaults", methods=["POST"])
+@requires_auth
 def populate_default_field_options():
     """Populate the field options table with default options"""
     print("Populating default field options")
@@ -5376,6 +5468,7 @@ def populate_default_field_options():
 @workflow_engine_bp.route(
     "/api/workflow-engine/sub-executions/<int:sub_execution_id>/complete-with-outputs", methods=["POST"]
 )
+@requires_auth
 def complete_sub_execution_with_outputs(sub_execution_id):
     """Complete a sub-execution with output data"""
     print(f"Completing sub-execution ID: {sub_execution_id} with outputs")
@@ -5558,6 +5651,7 @@ def complete_sub_execution_with_outputs(sub_execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/flow-through/update-existing", methods=["POST"])
+@requires_auth
 def update_existing_flow_through_inputs():
     """Update existing flow-through inputs to apply prompt → template transformation"""
     print("Updating existing flow-through inputs to apply prompt → template transformation")
@@ -5632,6 +5726,7 @@ def update_existing_flow_through_inputs():
 
 
 @workflow_engine_bp.route("/workflow-engine/parent-process/<int:parent_process_id>/executions/summary")
+@requires_auth
 def execution_summary(parent_process_id):
     """Display execution summary page for a parent process"""
     connection, cursor = db_conn()
@@ -5715,6 +5810,7 @@ def execution_summary(parent_process_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/executions/<int:execution_id>/lineage", methods=["GET"])
+@requires_auth
 def get_execution_lineage(execution_id):
     """Get full execution lineage tree for tracing"""
     try:
@@ -5859,6 +5955,7 @@ def get_execution_lineage(execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/executions/<int:execution_id>/sales", methods=["GET"])
+@requires_auth
 def get_execution_sales(execution_id):
     """Get all sales linked to a specific execution"""
     try:
@@ -5913,6 +6010,7 @@ def get_execution_sales(execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sales/unmapped", methods=["GET"])
+@requires_auth
 def get_unmapped_sales():
     """Get sales that don't have execution mappings"""
     try:
@@ -5975,6 +6073,7 @@ def get_unmapped_sales():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sales/<int:sales_id>/trace", methods=["GET"])
+@requires_auth
 def trace_sales_to_source(sales_id):
     """Trace a sale back to its source execution and materials"""
     try:
@@ -6118,6 +6217,7 @@ def get_execution_lineage_data(cursor, execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/executions/<int:execution_id>/map-sales", methods=["POST"])
+@requires_auth
 def map_execution_to_sales(execution_id):
     """Map an execution to sales data"""
     try:
@@ -6191,6 +6291,7 @@ def map_execution_to_sales(execution_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/traceability/search", methods=["GET"])
+@requires_auth
 def search_traceability():
     """Search for executions, sales, or batches across the system"""
     try:
@@ -6288,6 +6389,7 @@ def search_traceability():
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sales/<int:sales_id>/auto-map", methods=["POST"])
+@requires_auth
 def auto_map_sales_to_execution(sales_id):
     """Attempt to automatically map a sale to executions"""
     try:
@@ -6302,6 +6404,7 @@ def auto_map_sales_to_execution(sales_id):
 
 
 @workflow_engine_bp.route("/api/workflow-engine/sales/<int:sales_id>/suggestions", methods=["GET"])
+@requires_auth
 def get_execution_suggestions(sales_id):
     """Get execution suggestions for a sale"""
     try:
@@ -6316,6 +6419,7 @@ def get_execution_suggestions(sales_id):
 
 
 @workflow_engine_bp.route("/workflow-engine/execution-tracing")
+@requires_auth
 def execution_tracing():
     """Serve the execution tracing page"""
     return render_template("execution_tracing.html")

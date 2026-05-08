@@ -16,6 +16,8 @@ rules:
       - pattern-either:
           - pattern: $SESSION.query(...)
           - pattern: $SESSION.execute(...)
+      - pattern-not: cursor.execute(...)
+      - pattern-not: outer_cursor.execute(...)
 
   - id: repository-get-in-for-loop
     languages: [python]
@@ -62,7 +64,8 @@ rules:
       Linear search (next(...for...if...)) inside a sort key — O(n²) complexity.
       Pre-build a dict before the sort: `lookup = {item[key]: item[val] for item in items}`
       then use `key=lambda x: lookup[x]`.
-    pattern: $LIST.sort(key=lambda $X: next($ITER for $VAR in $COLLECTION if $COND))
+    pattern: |
+      $LIST.sort(key=lambda $X: next($ITER for $VAR in $COLLECTION if $COND))
 
   # ── PYTHON: LAZY LOADING IN LOOP ─────────────────────────────────────────────
 

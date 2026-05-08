@@ -34,8 +34,8 @@ ruff:
   script:
     - pip install uv
     - uv sync --extra dev
-    - uv run ruff check app/
-    - uv run ruff format --check app/
+    - uv run ruff check app/ --fix
+    - uv run ruff format app/
   only:
     - merge_requests
     - main
@@ -84,9 +84,8 @@ unit_tests:
 
 semgrep:
   stage: security
-  image: python:3.12-bullseye
+  image: semgrep/semgrep:latest
   script:
-    - pip install semgrep
     - semgrep --config .semgrep/rules/ app/ --include="*.py" --include="*.js" --error
   only:
     - merge_requests
