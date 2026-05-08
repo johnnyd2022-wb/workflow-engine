@@ -53,13 +53,18 @@
   (function () {
     'use strict';
 
+    var cachedEls = null;
+
     function els() {
-      return {
-        root: document.getElementById('batch-record-confirm-root'),
-        openBtn: document.getElementById('batch-start-record-btn'),
-        cancel: document.getElementById('batch-record-confirm-cancel'),
-        ok: document.getElementById('batch-record-confirm-ok'),
-      };
+      if (!cachedEls) {
+        cachedEls = {
+          root: document.getElementById('batch-record-confirm-root'),
+          openBtn: document.getElementById('batch-start-record-btn'),
+          cancel: document.getElementById('batch-record-confirm-cancel'),
+          ok: document.getElementById('batch-record-confirm-ok'),
+        };
+      }
+      return cachedEls;
     }
 
     var prevFocus = null;
@@ -133,8 +138,9 @@
               window.showNotification('error', 'Record step', 'submitExecution() is not available.');
             }
           } catch (err) {
+            console.error('[batch-start] submitExecution error:', err);
             if (typeof window.showNotification === 'function') {
-              window.showNotification('error', 'Record step failed', err && err.message ? err.message : String(err));
+              window.showNotification('error', 'Record step failed', 'Something went wrong. Please try again.');
             }
           }
         });
@@ -143,6 +149,12 @@
       if (!document._batchConfirmKeyBound) {
         document._batchConfirmKeyBound = true;
         document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('htmx:beforeSwap', function teardown() {
+          document.removeEventListener('keydown', onKeyDown);
+          document._batchConfirmKeyBound = false;
+          cachedEls = null;
+          document.removeEventListener('htmx:beforeSwap', teardown);
+        });
       }
     }
 
