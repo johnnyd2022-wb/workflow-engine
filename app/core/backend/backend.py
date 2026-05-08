@@ -133,7 +133,7 @@ core_bp = Blueprint(
 # --- Flow wizard safety helpers (query filtering + step integrity) ---
 _FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
 
-_ALLOWED_RETURN_PREFIX = "/core/flows"
+_ALLOWED_RETURN_PREFIX = "/core/flows"  # keep in sync with ALLOWED_PREFIX in batch-start-scripts.html
 
 
 def _safe_flow_return_to(value, process_id) -> str:

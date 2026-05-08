@@ -28,12 +28,12 @@
         try {
           var fallback = '/core/flows?id=' + encodeURIComponent(String({{ process_id|tojson }}));
           var dest = (window.ExecutionStepPageContext && window.ExecutionStepPageContext.returnTo) || fallback;
+          var ALLOWED_PREFIX = '/core/flows';
           if (
             typeof dest !== 'string' ||
-            !dest.startsWith('/') ||
-            dest.startsWith('//') ||
-            dest.indexOf('://') !== -1 ||
-            dest.indexOf('\\') !== -1
+            (dest !== ALLOWED_PREFIX &&
+              !dest.startsWith(ALLOWED_PREFIX + '/') &&
+              !dest.startsWith(ALLOWED_PREFIX + '?'))
           ) {
             dest = fallback;
           }
