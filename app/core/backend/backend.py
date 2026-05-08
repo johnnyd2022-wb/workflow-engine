@@ -1096,6 +1096,7 @@ def list_processes():
     execution_repo = ExecutionRepository(db_session)
     all_executions = execution_repo.list_executions(org_id)
     from collections import defaultdict
+
     execs_by_process: dict = defaultdict(list)
     for e in all_executions:
         execs_by_process[e.process_id].append(e)
@@ -2516,8 +2517,10 @@ def list_inventory():
         execution_by_id = {e.id: e for e in loaded_execs}
         proc_ids = {e.process_id for e in loaded_execs if e.process_id}
         if proc_ids:
-            from app.core.db.models.process import Process as ProcessModel
             from sqlalchemy.orm import selectinload
+
+            from app.core.db.models.process import Process as ProcessModel
+
             loaded_procs = (
                 db_session.query(ProcessModel)
                 .filter(ProcessModel.org_id == org_id)
