@@ -401,28 +401,30 @@
       if (currentUser) {
         return currentUser;
       }
-      
-      try {
-        const response = await fetch('/auth/me', {
-          method: 'GET',
-          credentials: 'include'
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.user) {
-            currentUser = {
-              email: data.user.email || 'Unknown',
-              username: data.user.email || 'Unknown' // Use full email as username
-            };
-            return currentUser;
+      if (!window.currentUserPromise) {
+        window.currentUserPromise = (async () => {
+          try {
+            const response = await fetch('/auth/me', {
+              method: 'GET',
+              credentials: 'include'
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.user) {
+                currentUser = {
+                  email: data.user.email || 'Unknown',
+                  username: data.user.email || 'Unknown'
+                };
+                return currentUser;
+              }
+            }
+          } catch (error) {
+            console.error('Failed to get current user:', error);
           }
-        }
-      } catch (error) {
-        console.error('Failed to get current user:', error);
+          return { email: 'Unknown', username: 'Unknown' };
+        })();
       }
-      
-      return { email: 'Unknown', username: 'Unknown' };
+      return window.currentUserPromise;
     }
     
     // Load process data
