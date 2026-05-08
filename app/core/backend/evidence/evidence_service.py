@@ -137,10 +137,8 @@ def upload_evidence_from_temp(
     step_definition_id = str(record.step_id) if record.step_id else None
     execution_step_id = None
     if execution.execution_steps and step_definition_id:
-        for es in execution.execution_steps:
-            if es.step_id and str(es.step_id) == step_definition_id:
-                execution_step_id = str(es.id)
-                break
+        step_map = {str(es.step_id): str(es.id) for es in execution.execution_steps if es.step_id}
+        execution_step_id = step_map.get(step_definition_id)
 
     logger.info("Evidence upload_evidence_from_temp: success evidence_id=%s storage_path=%s", record.id, rel_path)
     return (
