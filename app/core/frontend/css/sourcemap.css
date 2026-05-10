@@ -1569,6 +1569,27 @@ html[data-spa-theme="dark"] .sm-banner-sleeve {
   color: var(--text-primary, #111827);
 }
 
+.sm-timeline-step-date {
+  font-size: 11px;
+  color: var(--text-tertiary, #9ca3af);
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+.sm-tl-traced-here {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #fef3c7;
+  color: #92400e;
+  flex-shrink: 0;
+}
+
+html[data-spa-theme="dark"] .sm-tl-traced-here { background: #451a03; color: #fcd34d; }
+
 .sm-timeline-step-flow {
   color: var(--text-secondary, #6b7280);
 }

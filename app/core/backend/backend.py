@@ -3654,6 +3654,27 @@ def trace_raw_material(raw_material_id: str):
     connected_items = result["items"]
     connections = result["connections"]
 
+    # Bulk-fetch ExecutionStep records so the frontend can show historical quantities and step timestamps
+    from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
+
+    _step_ids = list({UUID(it["source_execution_step_id"]) for it in connected_items if it.get("source_execution_step_id")})
+    _step_map: dict = {}
+    if _step_ids:
+        for _s in db_session.query(ExecutionStepModel).filter(ExecutionStepModel.id.in_(_step_ids)).all():
+            _step_map[str(_s.id)] = _s
+    for _item in connected_items:
+        _sid = _item.get("source_execution_step_id")
+        _s = _step_map.get(_sid) if _sid else None
+        _item["step_data"] = (
+            {
+                "completed_at": _s.completed_at.isoformat() if _s.completed_at else None,
+                "actual_inputs": _s.actual_inputs,
+                "actual_outputs": _s.actual_outputs,
+            }
+            if _s
+            else None
+        )
+
     # Match original API: add direct connection from raw material to every connected item (execution_id as link)
     raw_id_str = str(raw_material_uuid)
     conn_pairs = {(c["from_id"], c["to_id"]) for c in connections}
@@ -3688,6 +3709,7 @@ def trace_raw_material(raw_material_id: str):
         "process_name": None,
         "created_at": raw_material.created_at.isoformat() if raw_material.created_at else None,
         "extra_data": raw_material.extra_data if raw_material.extra_data else {},
+        "step_data": None,
     }
     if not any(item["id"] == str(raw_material.id) for item in connected_items):
         connected_items.insert(0, raw_material_data)
@@ -3738,6 +3760,27 @@ def trace_inventory_backward(inventory_item_id: str):
     all_result_items = result["items"]
     connections = result["connections"]
 
+    # Bulk-fetch ExecutionStep records so the frontend can show historical quantities and step timestamps
+    from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
+
+    _step_ids = list({UUID(it["source_execution_step_id"]) for it in all_result_items if it.get("source_execution_step_id")})
+    _step_map: dict = {}
+    if _step_ids:
+        for _s in db_session.query(ExecutionStepModel).filter(ExecutionStepModel.id.in_(_step_ids)).all():
+            _step_map[str(_s.id)] = _s
+    for _item in all_result_items:
+        _sid = _item.get("source_execution_step_id")
+        _s = _step_map.get(_sid) if _sid else None
+        _item["step_data"] = (
+            {
+                "completed_at": _s.completed_at.isoformat() if _s.completed_at else None,
+                "actual_inputs": _s.actual_inputs,
+                "actual_outputs": _s.actual_outputs,
+            }
+            if _s
+            else None
+        )
+
     # Match original API: add direct connection from every source item to traced item (for sourcemap arrows)
     traced_id_str = str(traced_item.id)
     exec_id_str = str(traced_item.source_execution_id) if traced_item.source_execution_id else None
@@ -3775,6 +3818,7 @@ def trace_inventory_backward(inventory_item_id: str):
             "process_name": None,
             "created_at": traced_item.created_at.isoformat() if traced_item.created_at else None,
             "extra_data": traced_extra,
+            "step_data": None,
         }
 
     source_items_without_traced = [item for item in all_result_items if item["id"] != str(traced_item.id)]

@@ -485,19 +485,18 @@
 
       const detailId = `sm-tl-detail-${idx}`;
 
-      // Build per-step rows for the header section
+      // Step rows: step name + completion date + "traced here" indicator (no inline IN/OUT tag lists)
       const stepsHtml = group.steps.map(step => {
-        const inHtml = step.froms.length
-          ? `<span class="sm-tl-io-tag sm-tl-io-tag--in">In</span><span class="sm-timeline-step-flow">${step.froms.map(i => smEsc(i.name)).join(', ')}</span>`
-          : '';
-        const outHtml = step.tos.length
-          ? `<span class="sm-tl-io-tag sm-tl-io-tag--out">Out</span><span class="sm-timeline-step-flow">${step.tos.map(i => smEsc(i.name)).join(', ')}</span>`
-          : '';
+        const isTracedHere = tracedItemId && step.froms.some(i => i.id === tracedItemId);
+        const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
+          ? step.tos[0].step_data.completed_at
+          : null;
         return `
           <div class="sm-timeline-step-row">
             <span class="sm-timeline-label">Step</span>
             ${step.stepName ? `<span class="sm-timeline-step-name">${smEsc(step.stepName)}</span>` : ''}
-            <span class="sm-tl-io-group">${inHtml}${inHtml && outHtml ? '<span class="sm-timeline-arrow">→</span>' : ''}${outHtml}</span>
+            ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
+            ${isTracedHere ? '<span class="sm-tl-traced-here">traced here</span>' : ''}
           </div>`;
       }).join('');
 
@@ -510,7 +509,6 @@
           <div class="sm-timeline-meta">
             <span class="sm-timeline-label">Process</span>
             <span class="sm-timeline-process">${smEsc(group.processName)}</span>
-            ${group.executionDate ? `<span class="sm-timeline-date">${smFmtDate(group.executionDate)}</span>` : ''}
           </div>
           ${stepsHtml ? `<div class="sm-timeline-steps-list">${stepsHtml}</div>` : ''}
           ${group.operator ? `<div class="sm-timeline-operator">
@@ -540,7 +538,10 @@
             section.appendChild(hdr);
           }
 
-          const addSubSection = (items, labelText, tagClass) => {
+          // step_data for the consuming step lives on the produced (tos) items
+          const consumingStepData = step.tos.length ? step.tos[0].step_data : null;
+
+          const addSubSection = (items, labelText, tagClass, getHistoricalQty) => {
             if (!items.length) return;
             const lbl = document.createElement('div');
             lbl.className = `sm-tl-io-label ${tagClass}`;
@@ -548,14 +549,26 @@
             section.appendChild(lbl);
             const grid = document.createElement('div');
             grid.className = 'sm-tl-detail-grid';
-            items.forEach(item => grid.appendChild(
-              smBuildItemCard(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id), group)
-            ));
+            items.forEach(item => {
+              const historicalQty = getHistoricalQty ? getHistoricalQty(item) : null;
+              grid.appendChild(smBuildItemCard(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id), group, { historicalQty }));
+            });
             section.appendChild(grid);
           };
 
-          addSubSection(step.froms, 'Consumed', 'sm-tl-io-label--in');
-          addSubSection(step.tos,   'Produced', 'sm-tl-io-label--out');
+          // Consumed: look up qty in the consuming step's actual_inputs by inventory_item_id
+          addSubSection(step.froms, 'Consumed', 'sm-tl-io-label--in', item => {
+            if (!consumingStepData || !consumingStepData.actual_inputs) return null;
+            const inp = consumingStepData.actual_inputs.find(i => i.inventory_item_id === item.id);
+            return inp ? `${smFmtQty(inp.quantity)}${inp.unit ? ' ' + inp.unit : ''}`.trim() : null;
+          });
+
+          // Produced: look up qty in the item's own step_data actual_outputs by name
+          addSubSection(step.tos, 'Produced', 'sm-tl-io-label--out', item => {
+            if (!item.step_data || !item.step_data.actual_outputs) return null;
+            const out = item.step_data.actual_outputs.find(o => o.name === item.name);
+            return out ? `${smFmtQty(out.quantity)}${out.unit ? ' ' + out.unit : ''}`.trim() : null;
+          });
 
           detailDiv.appendChild(section);
         });
@@ -616,7 +629,6 @@
         <div class="sm-tree-group__row">
           <span class="sm-tree-group__label-tag">Process</span>
           <span class="sm-tree-group__process">${smEsc(group.processName)}</span>
-          ${group.executionDate ? `<span class="sm-tree-group__date">${smFmtDate(group.executionDate)}</span>` : ''}
         </div>
         ${group.operator ? `<div class="sm-tree-group__row">
           <span class="sm-tree-group__label-tag">By</span>
@@ -636,30 +648,37 @@
           const stepLi = document.createElement('li');
           stepLi.className = 'sm-tree-item';
 
-          const fromLabel = step.froms.map(i => smEsc(i.name)).join(', ');
+          const isTracedHere = tracedItemId && step.froms.some(i => i.id === tracedItemId);
+          const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
+            ? step.tos[0].step_data.completed_at
+            : null;
           const stepLabel = document.createElement('div');
           stepLabel.className = 'sm-tree-step-label';
           stepLabel.innerHTML = `
             <span class="sm-tree-group__label-tag">Step</span>
             ${step.stepName ? `<span class="sm-tree-step-name">${smEsc(step.stepName)}</span>` : ''}
-            ${fromLabel ? `<span class="sm-tl-io-tag sm-tl-io-tag--in">In</span><span class="sm-tree-step-input">${fromLabel}</span>` : ''}
+            ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
+            ${isTracedHere ? '<span class="sm-tl-traced-here">traced here</span>' : ''}
           `;
           stepLi.appendChild(stepLabel);
 
-          // Items produced or transformed at this step (exclude root to avoid repeat)
-          const produced = [...new Map(
-            [...step.froms, ...step.tos]
-              .filter(i => i.id !== tracedItem.id)
-              .map(i => [i.id, i])
-          ).values()];
+          // Render froms (consumed) and tos (produced) as separate tree nodes with IO tags
+          const fromItems = step.froms.filter(i => i.id !== tracedItem.id);
+          const toItems   = step.tos.filter(i => i.id !== tracedItem.id);
 
-          if (produced.length) {
+          if (fromItems.length || toItems.length) {
             const producedUl = document.createElement('ul');
             producedUl.className = 'sm-tree-children';
-            produced.forEach(item => {
+            fromItems.forEach(item => {
               const itemLi = document.createElement('li');
               itemLi.className = 'sm-tree-item';
-              itemLi.appendChild(smBuildTreeNode(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id)));
+              itemLi.appendChild(smBuildTreeNode(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id), 'in'));
+              producedUl.appendChild(itemLi);
+            });
+            toItems.forEach(item => {
+              const itemLi = document.createElement('li');
+              itemLi.className = 'sm-tree-item';
+              itemLi.appendChild(smBuildTreeNode(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id), 'out'));
               producedUl.appendChild(itemLi);
             });
             stepLi.appendChild(producedUl);
@@ -720,10 +739,11 @@
     return container;
   }
 
-  function smBuildTreeNode(item, type, isShared) {
+  function smBuildTreeNode(item, type, isShared, ioTag) {
     const div = document.createElement('div');
     div.className = `sm-tree-node sm-tree-node--${type}${smIsCheckNeeded(item.id) ? ' sm-tree-node--check' : ''}`;
     div.innerHTML = `
+      ${ioTag ? `<span class="sm-tl-io-tag sm-tl-io-tag--${ioTag}">${ioTag === 'in' ? 'In' : 'Out'}</span>` : ''}
       <span class="sm-type-badge sm-type-badge--${type}">${smTypeLabelShort(item.inventory_type)}</span>
       <span class="sm-tree-node__name">${smEsc(item.name || 'Unknown')}</span>
       ${item.quantity != null ? `<span class="sm-tree-node__meta">${smFmtQty(item.quantity)}${item.unit ? ' ' + smEsc(item.unit) : ''}</span>` : ''}
@@ -812,14 +832,17 @@
   }
 
   /* ── Item card (used in timeline detail) ────────────────── */
-  function smBuildItemCard(item, type, isShared, execGroup) {
+  function smBuildItemCard(item, type, isShared, execGroup, options) {
+    const { historicalQty = null } = options || {};
     const card = document.createElement('div');
     card.className = `sm-item-card sm-item-card--${type}${smIsCheckNeeded(item.id) ? ' sm-item-card--check' : ''}`;
     card.dataset.itemId = item.id;
 
-    const qty = item.quantity != null ? `${smFmtQty(item.quantity)}${item.unit ? ' ' + item.unit : ''}` : null;
+    const currentQty = item.quantity != null ? `${smFmtQty(item.quantity)}${item.unit ? ' ' + item.unit : ''}` : null;
+    const displayQty = historicalQty !== null ? historicalQty : currentQty;
+    const qty = displayQty;
     const batch = item.supplier_batch_number ? `Batch ${item.supplier_batch_number}` : null;
-    const summary = [batch, qty].filter(Boolean).join(' · ');
+    const summary = [batch, displayQty].filter(Boolean).join(' · ');
 
     const pills = [];
     if (isShared) pills.push('<span class="sm-shared-pill">shared source</span>');
@@ -835,7 +858,12 @@
     if (item.inventory_type) rows.push(['Type', smTypeLabel(item.inventory_type), false]);
     if (item.supplier) rows.push(['Supplier', item.supplier, false]);
     if (item.supplier_batch_number) rows.push(['Batch number', item.supplier_batch_number, false]);
-    if (qty) rows.push(['Quantity', qty, false]);
+    if (historicalQty !== null) {
+      rows.push(['Recorded qty', historicalQty, false]);
+      if (currentQty && currentQty !== historicalQty) rows.push(['Current stock', currentQty, false]);
+    } else if (currentQty) {
+      rows.push(['Quantity', currentQty, false]);
+    }
     if (item.purchase_date) rows.push(['Purchase date', smFmtDate(item.purchase_date), false]);
     if (item.expiry_date) rows.push(['Expiry date', smFmtDate(item.expiry_date), isExpired]);
     if (item.ready_date) rows.push(['Ready date', smFmtDate(item.ready_date), false]);
@@ -1193,19 +1221,169 @@
     if (closeBtn) closeBtn.addEventListener('click', smCloseBatchModal);
   }
 
-  /* ── Metadata / person trace ────────────────────────────── */
+  /* ── Activity log (metadata traces: operator, date, etc.) ─── */
   function smTraceByPerson(person, execs) {
-    const execIds = new Set(execs.map(e => e.id));
-    const personItems = allInventoryForSearch.filter(it => it.execution_id && execIds.has(it.execution_id));
+    tracedItemId = null;
+    tracedItemName = '';
+    tracedItemBatch = '';
+    lastTraceResult = null;
+    showWastage = false;
+    smSetWastageChip(false);
+    smSetControlsVisible(true);
 
-    if (personItems.length) {
-      smShowBatchModal(`Operator: ${person}`, personItems);
-    } else if (allInventoryForSearch.length) {
-      // Best-effort: show modal with all inventory, note the context
-      const subtitle = document.getElementById('sm-modal-subtitle');
-      if (subtitle) subtitle.textContent = `Select an item to see ${person}'s executions`;
-      smShowBatchModal(`Operator: ${person} — select an item to trace`, allInventoryForSearch.slice(0, 20));
+    const input = document.getElementById('sm-search-input');
+    if (input) input.value = person;
+    smShowSearchClear();
+
+    smRenderActivityLog(execs, { type: 'operator', label: person });
+  }
+
+  function smBuildActivityGroups(execs) {
+    return execs
+      .map(exec => {
+        const process = allProcesses.find(p => p.id === exec.process_id);
+        const execItems = allInventoryForSearch.filter(it => it.source_execution_id === exec.id);
+
+        const stepMap = new Map();
+        execItems.forEach(item => {
+          const key = item.source_step_name || '';
+          if (!stepMap.has(key)) stepMap.set(key, { stepName: key, tos: [], froms: [] });
+          stepMap.get(key).tos.push(item);
+        });
+
+        return {
+          executionId: exec.id,
+          exec,
+          processName: process ? process.name : (exec.process_name || 'Unknown Process'),
+          executionDate: exec.created_at || exec.started_at || null,
+          operator: exec.completed_by || exec.created_by || null,
+          steps: [...stepMap.values()],
+        };
+      })
+      .filter(g => g.steps.length > 0)
+      .sort((a, b) => {
+        if (!a.executionDate) return 1;
+        if (!b.executionDate) return -1;
+        return new Date(a.executionDate) - new Date(b.executionDate);
+      });
+  }
+
+  function smRenderActivityLog(execs, context) {
+    const area = document.getElementById('sm-trace-area');
+    if (!area) return;
+    area.innerHTML = '';
+
+    const groups = smBuildActivityGroups(execs);
+
+    const header = document.createElement('div');
+    header.className = 'sm-impact-header';
+    const stepTotal = groups.reduce((t, g) => t + g.steps.length, 0);
+    header.innerHTML = `
+      <div class="sm-impact-header__left">
+        <div class="sm-impact-header__name">
+          <span class="sm-type-badge sm-type-badge--wip">${smEsc(context.type === 'operator' ? 'Operator' : 'Activity')}</span>
+          <span class="sm-impact-header__item-name">${smEsc(context.label)}</span>
+        </div>
+        <div class="sm-impact-header__stats">
+          <span class="sm-impact-stat">${execs.length} execution${execs.length !== 1 ? 's' : ''}</span>
+          ${stepTotal ? `<span class="sm-impact-stat">${stepTotal} step${stepTotal !== 1 ? 's' : ''}</span>` : ''}
+        </div>
+      </div>
+      <button class="sm-trace-clear" onclick="window.smClearTrace()">← Back to browse</button>
+    `;
+    area.appendChild(header);
+
+    if (!groups.length) {
+      area.innerHTML += smEmptyState('No production activity found.');
+      return;
     }
+
+    const tl = document.createElement('div');
+    tl.className = 'sm-timeline sm-activity-log';
+
+    groups.forEach((group, idx) => {
+      const isLast = idx === groups.length - 1;
+      const entry = document.createElement('div');
+      entry.className = 'sm-timeline-entry' + (isLast ? ' sm-timeline-entry--last' : '');
+      const detailId = `sm-act-detail-${idx}`;
+
+      const stepsHtml = group.steps.map(step => {
+        const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
+          ? step.tos[0].step_data.completed_at
+          : null;
+        return `
+          <div class="sm-timeline-step-row">
+            <span class="sm-timeline-label">Step</span>
+            ${step.stepName ? `<span class="sm-timeline-step-name">${smEsc(step.stepName)}</span>` : '<span class="sm-timeline-step-name">—</span>'}
+            ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
+          </div>`;
+      }).join('');
+
+      entry.innerHTML = `
+        <div class="sm-timeline-dot-col" aria-hidden="true">
+          <div class="sm-timeline-dot"></div>
+          ${!isLast ? '<div class="sm-timeline-line"></div>' : ''}
+        </div>
+        <div class="sm-timeline-content">
+          <div class="sm-timeline-meta">
+            <span class="sm-timeline-label">Process</span>
+            <span class="sm-timeline-process">${smEsc(group.processName)}</span>
+            ${group.executionDate ? `<span class="sm-timeline-date">${smFmtDate(group.executionDate)}</span>` : ''}
+          </div>
+          ${stepsHtml ? `<div class="sm-timeline-steps-list">${stepsHtml}</div>` : ''}
+          ${group.operator ? `<div class="sm-timeline-operator">
+            <span class="sm-timeline-label">Completed by</span>
+            <span>${smEsc(group.operator)}</span>
+          </div>` : ''}
+          <button class="sm-timeline-expand-btn" aria-expanded="false" aria-controls="${detailId}">Details ›</button>
+          <div class="sm-timeline-detail" id="${detailId}" hidden></div>
+        </div>
+      `;
+
+      const detailDiv = entry.querySelector(`#${detailId}`);
+      if (group.steps.some(s => s.tos.length)) {
+        group.steps.forEach(step => {
+          if (!step.tos.length) return;
+          const section = document.createElement('div');
+          section.className = 'sm-tl-step-section';
+          if (step.stepName) {
+            const hdr = document.createElement('div');
+            hdr.className = 'sm-tl-step-header';
+            hdr.textContent = step.stepName;
+            section.appendChild(hdr);
+          }
+          const lbl = document.createElement('div');
+          lbl.className = 'sm-tl-io-label sm-tl-io-label--out';
+          lbl.textContent = 'Produced';
+          section.appendChild(lbl);
+          const grid = document.createElement('div');
+          grid.className = 'sm-tl-detail-grid';
+          step.tos.forEach(item => {
+            const out = item.step_data && item.step_data.actual_outputs
+              ? item.step_data.actual_outputs.find(o => o.name === item.name)
+              : null;
+            const historicalQty = out ? `${smFmtQty(out.quantity)}${out.unit ? ' ' + out.unit : ''}`.trim() : null;
+            grid.appendChild(smBuildItemCard(item, smTypeClass(item.inventory_type), false, group, { historicalQty }));
+          });
+          section.appendChild(grid);
+          detailDiv.appendChild(section);
+        });
+      } else {
+        detailDiv.innerHTML = '<div class="sm-findings-empty" style="padding:8px 0">No items recorded for this execution.</div>';
+      }
+
+      entry.querySelector('.sm-timeline-expand-btn').addEventListener('click', function () {
+        const detail = document.getElementById(detailId);
+        const isOpen = !detail.hidden;
+        detail.hidden = isOpen;
+        this.setAttribute('aria-expanded', String(!isOpen));
+        this.textContent = isOpen ? 'Details ›' : 'Hide ‹';
+      });
+
+      tl.appendChild(entry);
+    });
+
+    area.appendChild(tl);
   }
 
   /* ── Controls binding ───────────────────────────────────── */
