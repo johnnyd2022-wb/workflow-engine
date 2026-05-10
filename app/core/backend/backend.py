@@ -496,29 +496,28 @@ def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
     from app.core.db.models.execution import Execution as ExecutionModel
     from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
 
-    step_uuid_by_str: dict[str, UUID] = {}
-    for it in items:
-        raw = it.get("source_execution_step_id")
-        uid = _parse_uuid(raw)
-        if uid:
-            step_uuid_by_str[raw] = uid
+    # Collect valid UUIDs; discard unparseable values rather than raising.
+    step_ids: set[UUID] = {uid for it in items if (uid := _parse_uuid(it.get("source_execution_step_id")))}
 
-    step_map: dict[str, ExecutionStepModel] = {}
-    if step_uuid_by_str:
+    # UUID-keyed map: avoids str/UUID mismatch at lookup time.
+    step_map: dict[UUID, ExecutionStepModel] = {}
+    if step_ids:
         for _s in (
             db_session.query(ExecutionStepModel)
             .join(ExecutionModel, ExecutionStepModel.execution_id == ExecutionModel.id)
-            .filter(ExecutionStepModel.id.in_(step_uuid_by_str.values()), ExecutionModel.org_id == org_id)
+            .filter(ExecutionStepModel.id.in_(step_ids), ExecutionModel.org_id == org_id)
             .all()
         ):
-            step_map[str(_s.id)] = _s
+            step_map[_s.id] = _s
 
     for _item in items:
-        _sid = _item.get("source_execution_step_id")
-        _s = step_map.get(_sid) if _sid else None
+        uid = _parse_uuid(_item.get("source_execution_step_id"))
+        _s = step_map.get(uid) if uid else None
+        if uid and uid in step_ids and _s is None:
+            logger.debug("_hydrate_step_data: ExecutionStep %s not found (org_id=%s)", uid, org_id)
         _item["step_data"] = (
             {
-                "completed_at": _s.completed_at.isoformat() if _s.completed_at else None,
+                "completed_at": _to_iso_timestamp(_s.completed_at),
                 "actual_inputs": _s.actual_inputs,
                 "actual_outputs": _s.actual_outputs,
             }

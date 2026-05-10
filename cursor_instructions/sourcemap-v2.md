@@ -180,8 +180,16 @@ Port `sourcemap.html` to extend `base_spa.html` so the page shares the standard 
 
 ### 7g — Wastage audit log
 - [x] Wastage view redesigned as a proper audit log grouped by day
-- [x] Each entry shows: item name, quantity, operator (`recorded_by`), time, Trace ↗ button
-- [x] **Gap**: no `reason`/`notes` field in `inventory_wastage` table — future migration needed to capture why items were wasted
+- [x] Each entry shows: item name, quantity, operator (`recorded_by`), time, reason, Trace ↗ button
+
+### 7h — Wastage reason field (full stack)
+- [x] DB migration: `wastage_reason_001` adds `reason VARCHAR(500) NULLABLE` to `inventory_wastage` (nullable for historical records, required for new records at API layer)
+- [x] `InventoryWastage` model: `reason` column with documented design rationale
+- [x] `WastageRepository.create_wastage_record`: `reason` parameter added
+- [x] `record_wastage` API: validates reason required + ≤500 chars + null-byte stripped
+- [x] `wastage_entries_payload_hash`: reason included in SHA-256 canonical JSON (normalized identically to API validation)
+- [x] `dispose.html` + `dispose_confirm.html`: reason textarea added; JS validates non-empty before submit
+- [x] Sourcemap audit log: reason displayed per entry with italic secondary style
 
 ---
 
