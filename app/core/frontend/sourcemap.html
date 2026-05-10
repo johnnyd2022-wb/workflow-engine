@@ -5,7 +5,7 @@
 {% block body_class %}sourcemap-page{% endblock %}
 
 {% block head_extras %}
-<link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}">
+<link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}?v=5">
 {% endblock %}
 
 {% block content %}
@@ -87,7 +87,6 @@
   <!-- Search bar (no dropdown — filters the browse grid inline) -->
   <div class="sm-search-bar">
     <div class="sm-search-wrap">
-      <svg class="sm-search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input
         type="text"
         id="sm-search-input"
@@ -204,5 +203,5 @@
   re-executes it when the content is swapped in via boost navigation.
   core-api.js is already loaded globally by base_spa.html.
 #}
-<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}"></script>
+<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}?v=5"></script>
 {% endblock %}

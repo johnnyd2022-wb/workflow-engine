@@ -20,12 +20,14 @@
   let tracedItemBatch = '';
   let lastTraceResult = null;
   let currentView = 'timeline';       // 'timeline' | 'map' | 'table'
-  let currentBrowseTab = 'inventory'; // 'inventory' | 'batches' | 'suppliers' | 'operators'
+  let currentBrowseTab = 'inventory'; // 'inventory' | 'batches' | 'suppliers' | 'operators' | 'activity'
   let showWastage = false;
   let currentFindingsTab = 'all';
   let allInventoryForSearch = [];
   let filterQuery = '';
   let filterTimeout = null;
+  let activityStartDate = '';
+  let activityEndDate = '';
 
   /* ── Boot ──────────────────────────────────────────────── */
   function smBoot() {
@@ -96,6 +98,7 @@
       { key: 'batches',   label: 'Batches' },
       { key: 'suppliers', label: 'Suppliers' },
       { key: 'operators', label: 'Operators' },
+      { key: 'activity',  label: 'Activity' },
     ];
 
     const tabStrip = document.createElement('div');
@@ -114,6 +117,8 @@
           b.classList.toggle('sm-browse-tab--active', b.dataset.browseTab === t.key);
           b.setAttribute('aria-selected', b.dataset.browseTab === t.key ? 'true' : 'false');
         });
+        // Activity tab uses block layout; all others use grid
+        grid.style.display = t.key === 'activity' ? 'block' : '';
         smRefreshBrowseCards(grid);
       });
       tabStrip.appendChild(btn);
@@ -214,13 +219,78 @@
         });
 
         if (!personMap.size) {
-          grid.innerHTML = smBrowseEmpty(q ? `No operators matching "${q}"` : 'No operator data recorded on executions.');
+          grid.innerHTML = smBrowseEmpty(q ? `No operators matching "${q}"` : 'No operator data recorded on executions yet.');
           return;
         }
 
         [...personMap.entries()]
           .sort(([a], [b]) => a.localeCompare(b))
           .forEach(([person, execs]) => grid.appendChild(smBuildOperatorBrowseCard(person, execs)));
+        break;
+      }
+
+      case 'activity': {
+        // Switch grid to block layout so the timeline renders full-width (not card grid)
+        grid.style.display = 'block';
+
+        const hasFilter = activityStartDate || activityEndDate;
+        const pickerDiv = document.createElement('div');
+        pickerDiv.className = 'sm-act-picker';
+        pickerDiv.innerHTML = `
+          <label class="sm-act-picker__label" for="sm-act-start">From</label>
+          <input type="date" class="sm-act-date-input" id="sm-act-start" value="${smEsc(activityStartDate)}">
+          <label class="sm-act-picker__label" for="sm-act-end">To</label>
+          <input type="date" class="sm-act-date-input" id="sm-act-end" value="${smEsc(activityEndDate)}">
+          <button class="sm-act-filter-btn" id="sm-act-apply">Show</button>
+          ${hasFilter ? '<button class="sm-act-clear-btn" id="sm-act-clear">Clear</button>' : ''}
+        `;
+        grid.appendChild(pickerDiv);
+
+        const startD = activityStartDate ? new Date(activityStartDate + 'T00:00:00') : null;
+        const endD   = activityEndDate   ? new Date(activityEndDate   + 'T23:59:59') : null;
+
+        let filtered = [...(allExecutions || [])];
+        if (q) {
+          filtered = filtered.filter(exec => {
+            const proc = allProcesses.find(p => p.id === exec.process_id);
+            const name = proc ? proc.name.toLowerCase() : '';
+            return name.includes(q) || (exec.completed_by || '').toLowerCase().includes(q);
+          });
+        }
+        if (startD) filtered = filtered.filter(e => new Date(e.started_at || e.created_at || 0) >= startD);
+        if (endD)   filtered = filtered.filter(e => new Date(e.started_at || e.created_at || 0) <= endD);
+        filtered.sort((a, b) => new Date(b.started_at || b.created_at || 0) - new Date(a.started_at || a.created_at || 0));
+
+        if (!filtered.length) {
+          const msg = (hasFilter || q)
+            ? (q ? `No activity matching "${q}"` : 'No activity in selected date range.')
+            : 'Pick a date range or use the search bar to browse production activity.';
+          grid.insertAdjacentHTML('beforeend', `<div class="sm-browse-empty" style="margin-top:16px">${smEsc(msg)}</div>`);
+        } else {
+          // Render inline activity timeline — same as operator tracing, no separate card step
+          const tl = smBuildInlineActivityTimeline(filtered);
+          grid.appendChild(tl);
+        }
+
+        // Wire controls
+        const applyBtn = pickerDiv.querySelector('#sm-act-apply');
+        const wireApply = () => {
+          activityStartDate = (pickerDiv.querySelector('#sm-act-start') || {}).value || '';
+          activityEndDate   = (pickerDiv.querySelector('#sm-act-end')   || {}).value || '';
+          smRefreshBrowseCards(grid);
+        };
+        if (applyBtn) applyBtn.addEventListener('click', wireApply);
+        const clearBtn = pickerDiv.querySelector('#sm-act-clear');
+        if (clearBtn) {
+          clearBtn.addEventListener('click', () => {
+            activityStartDate = '';
+            activityEndDate   = '';
+            smRefreshBrowseCards(grid);
+          });
+        }
+        pickerDiv.querySelectorAll('.sm-act-date-input').forEach(inp => {
+          inp.addEventListener('keydown', e => { if (e.key === 'Enter') wireApply(); });
+        });
         break;
       }
     }
@@ -336,6 +406,133 @@
     return card;
   }
 
+  /* Shared timeline builder used by both inline Activity tab and smRenderActivityLog */
+  function smBuildInlineActivityTimeline(execs) {
+    const groups = smBuildActivityGroups(execs);
+
+    const tl = document.createElement('div');
+    tl.className = 'sm-timeline sm-activity-log';
+    tl.style.marginTop = '16px';
+
+    if (!groups.length) {
+      tl.innerHTML = '<div class="sm-timeline-empty">No production steps recorded for these executions.</div>';
+      return tl;
+    }
+
+    groups.forEach((group, idx) => {
+      const isLast = idx === groups.length - 1;
+      const entry = document.createElement('div');
+      entry.className = 'sm-timeline-entry' + (isLast ? ' sm-timeline-entry--last' : '');
+      const detailId = `sm-act-tl-${idx}`;
+
+      const stepsHtml = group.steps.map(step => {
+        const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
+          ? step.tos[0].step_data.completed_at : null;
+        return `
+          <div class="sm-timeline-step-row">
+            <span class="sm-timeline-label">Step</span>
+            ${step.stepName ? `<span class="sm-timeline-step-name">${smEsc(step.stepName)}</span>` : '<span class="sm-timeline-step-name">—</span>'}
+            ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
+          </div>`;
+      }).join('');
+
+      entry.innerHTML = `
+        <div class="sm-timeline-dot-col" aria-hidden="true">
+          <div class="sm-timeline-dot"></div>
+          ${!isLast ? '<div class="sm-timeline-line"></div>' : ''}
+        </div>
+        <div class="sm-timeline-content">
+          <div class="sm-timeline-meta">
+            <span class="sm-timeline-label">Process</span>
+            <span class="sm-timeline-process">${smEsc(group.processName)}</span>
+            ${group.executionDate ? `<span class="sm-timeline-date">${smFmtDate(group.executionDate)}</span>` : ''}
+          </div>
+          ${stepsHtml ? `<div class="sm-timeline-steps-list">${stepsHtml}</div>` : ''}
+          ${group.operator ? `<div class="sm-timeline-operator">
+            <span class="sm-timeline-label">Completed by</span>
+            <span>${smEsc(group.operator)}</span>
+          </div>` : ''}
+          <button class="sm-timeline-expand-btn" aria-expanded="false" aria-controls="${detailId}">Details ›</button>
+          <div class="sm-timeline-detail" id="${detailId}" hidden></div>
+        </div>
+      `;
+
+      const detailDiv = entry.querySelector(`#${detailId}`);
+      if (group.steps.some(s => s.tos.length)) {
+        group.steps.forEach(step => {
+          if (!step.tos.length) return;
+          const section = document.createElement('div');
+          section.className = 'sm-tl-step-section';
+          if (step.stepName) {
+            const hdr = document.createElement('div');
+            hdr.className = 'sm-tl-step-header';
+            hdr.textContent = step.stepName;
+            section.appendChild(hdr);
+          }
+          const lbl = document.createElement('div');
+          lbl.className = 'sm-tl-io-label sm-tl-io-label--out';
+          lbl.textContent = 'Produced';
+          section.appendChild(lbl);
+          const grid2 = document.createElement('div');
+          grid2.className = 'sm-tl-detail-grid';
+          step.tos.forEach(item => {
+            const out = item.step_data && item.step_data.actual_outputs
+              ? item.step_data.actual_outputs.find(o => o.name === item.name) : null;
+            const historicalQty = out ? `${smFmtQty(out.quantity)}${out.unit ? ' ' + out.unit : ''}`.trim() : null;
+            grid2.appendChild(smBuildItemCard(item, smTypeClass(item.inventory_type), false, group, { historicalQty }));
+          });
+          section.appendChild(grid2);
+          detailDiv.appendChild(section);
+        });
+      } else {
+        detailDiv.innerHTML = '<div class="sm-findings-empty" style="padding:8px 0">No items recorded.</div>';
+      }
+
+      entry.querySelector('.sm-timeline-expand-btn').addEventListener('click', function () {
+        const detail = document.getElementById(detailId);
+        const isOpen = !detail.hidden;
+        detail.hidden = isOpen;
+        this.setAttribute('aria-expanded', String(!isOpen));
+        this.textContent = isOpen ? 'Details ›' : 'Hide ‹';
+      });
+
+      tl.appendChild(entry);
+    });
+
+    return tl;
+  }
+
+  function smBuildActivityExecutionCard(exec) {
+    const proc = allProcesses.find(p => p.id === exec.process_id);
+    const procName = proc ? proc.name : (exec.process_name || 'Unknown Process');
+    const operator = exec.completed_by || null;
+    const date = exec.started_at || exec.created_at;
+    const stepCount = (exec.execution_steps || []).length;
+    const statusLabel = { completed: 'Done', in_progress: 'In progress', pending: 'Pending', failed: 'Failed' }[exec.status] || exec.status || '';
+
+    const card = document.createElement('div');
+    card.className = 'sm-browse-card sm-browse-card--activity';
+    card.innerHTML = `
+      <div class="sm-browse-card__header">
+        <span class="sm-browse-card__type-label">${smEsc(statusLabel)}</span>
+      </div>
+      <div class="sm-browse-card__name">${smEsc(procName)}</div>
+      ${date ? `<div class="sm-browse-card__meta">${smFmtDate(date)}</div>` : ''}
+      ${operator ? `<div class="sm-browse-card__meta sm-browse-card__meta--muted">${smEsc(operator)}</div>` : ''}
+      ${stepCount ? `<div class="sm-browse-card__meta sm-browse-card__meta--muted">${stepCount} step${stepCount !== 1 ? 's' : ''}</div>` : ''}
+    `;
+
+    card.addEventListener('click', () => {
+      smRenderActivityLog([exec], { type: 'activity', label: procName });
+      const input = document.getElementById('sm-search-input');
+      if (input) { input.value = procName; filterQuery = procName; }
+      smShowSearchClear();
+      smSetControlsVisible(true);
+    });
+
+    return card;
+  }
+
   function smBrowseEmpty(msg) {
     return `<div class="sm-browse-empty">${smEsc(msg)}</div>`;
   }
@@ -394,7 +591,8 @@
 
     const allItems = traceResult.all_items || [];
     const connections = traceResult.connections || [];
-    const tracedItem = traceResult.raw_material || allItems[0];
+    // raw_material = forward trace root; traced_item = backward trace root
+    const tracedItem = traceResult.raw_material || traceResult.traced_item || allItems[0];
 
     if (!tracedItem) {
       area.innerHTML = smEmptyState('No items found for this trace.');
@@ -487,7 +685,10 @@
 
       // Step rows: step name + completion date + "traced here" indicator (no inline IN/OUT tag lists)
       const stepsHtml = group.steps.map(step => {
-        const isTracedHere = tracedItemId && step.froms.some(i => i.id === tracedItemId);
+        // "traced here" = the step where the traced item was consumed (froms) or produced (tos)
+        const isTracedHere = tracedItemId && (
+          step.froms.some(i => i.id === tracedItemId) || step.tos.some(i => i.id === tracedItemId)
+        );
         const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
           ? step.tos[0].step_data.completed_at
           : null;
@@ -648,7 +849,9 @@
           const stepLi = document.createElement('li');
           stepLi.className = 'sm-tree-item';
 
-          const isTracedHere = tracedItemId && step.froms.some(i => i.id === tracedItemId);
+          const isTracedHere = tracedItemId && (
+            step.froms.some(i => i.id === tracedItemId) || step.tos.some(i => i.id === tracedItemId)
+          );
           const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
             ? step.tos[0].step_data.completed_at
             : null;
@@ -1274,10 +1477,10 @@
     area.innerHTML = '';
 
     const groups = smBuildActivityGroups(execs);
+    const stepTotal = groups.reduce((t, g) => t + g.steps.length, 0);
 
     const header = document.createElement('div');
     header.className = 'sm-impact-header';
-    const stepTotal = groups.reduce((t, g) => t + g.steps.length, 0);
     header.innerHTML = `
       <div class="sm-impact-header__left">
         <div class="sm-impact-header__name">
@@ -1294,96 +1497,11 @@
     area.appendChild(header);
 
     if (!groups.length) {
-      area.innerHTML += smEmptyState('No production activity found.');
+      area.insertAdjacentHTML('beforeend', smEmptyState('No production activity found.'));
       return;
     }
 
-    const tl = document.createElement('div');
-    tl.className = 'sm-timeline sm-activity-log';
-
-    groups.forEach((group, idx) => {
-      const isLast = idx === groups.length - 1;
-      const entry = document.createElement('div');
-      entry.className = 'sm-timeline-entry' + (isLast ? ' sm-timeline-entry--last' : '');
-      const detailId = `sm-act-detail-${idx}`;
-
-      const stepsHtml = group.steps.map(step => {
-        const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
-          ? step.tos[0].step_data.completed_at
-          : null;
-        return `
-          <div class="sm-timeline-step-row">
-            <span class="sm-timeline-label">Step</span>
-            ${step.stepName ? `<span class="sm-timeline-step-name">${smEsc(step.stepName)}</span>` : '<span class="sm-timeline-step-name">—</span>'}
-            ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
-          </div>`;
-      }).join('');
-
-      entry.innerHTML = `
-        <div class="sm-timeline-dot-col" aria-hidden="true">
-          <div class="sm-timeline-dot"></div>
-          ${!isLast ? '<div class="sm-timeline-line"></div>' : ''}
-        </div>
-        <div class="sm-timeline-content">
-          <div class="sm-timeline-meta">
-            <span class="sm-timeline-label">Process</span>
-            <span class="sm-timeline-process">${smEsc(group.processName)}</span>
-            ${group.executionDate ? `<span class="sm-timeline-date">${smFmtDate(group.executionDate)}</span>` : ''}
-          </div>
-          ${stepsHtml ? `<div class="sm-timeline-steps-list">${stepsHtml}</div>` : ''}
-          ${group.operator ? `<div class="sm-timeline-operator">
-            <span class="sm-timeline-label">Completed by</span>
-            <span>${smEsc(group.operator)}</span>
-          </div>` : ''}
-          <button class="sm-timeline-expand-btn" aria-expanded="false" aria-controls="${detailId}">Details ›</button>
-          <div class="sm-timeline-detail" id="${detailId}" hidden></div>
-        </div>
-      `;
-
-      const detailDiv = entry.querySelector(`#${detailId}`);
-      if (group.steps.some(s => s.tos.length)) {
-        group.steps.forEach(step => {
-          if (!step.tos.length) return;
-          const section = document.createElement('div');
-          section.className = 'sm-tl-step-section';
-          if (step.stepName) {
-            const hdr = document.createElement('div');
-            hdr.className = 'sm-tl-step-header';
-            hdr.textContent = step.stepName;
-            section.appendChild(hdr);
-          }
-          const lbl = document.createElement('div');
-          lbl.className = 'sm-tl-io-label sm-tl-io-label--out';
-          lbl.textContent = 'Produced';
-          section.appendChild(lbl);
-          const grid = document.createElement('div');
-          grid.className = 'sm-tl-detail-grid';
-          step.tos.forEach(item => {
-            const out = item.step_data && item.step_data.actual_outputs
-              ? item.step_data.actual_outputs.find(o => o.name === item.name)
-              : null;
-            const historicalQty = out ? `${smFmtQty(out.quantity)}${out.unit ? ' ' + out.unit : ''}`.trim() : null;
-            grid.appendChild(smBuildItemCard(item, smTypeClass(item.inventory_type), false, group, { historicalQty }));
-          });
-          section.appendChild(grid);
-          detailDiv.appendChild(section);
-        });
-      } else {
-        detailDiv.innerHTML = '<div class="sm-findings-empty" style="padding:8px 0">No items recorded for this execution.</div>';
-      }
-
-      entry.querySelector('.sm-timeline-expand-btn').addEventListener('click', function () {
-        const detail = document.getElementById(detailId);
-        const isOpen = !detail.hidden;
-        detail.hidden = isOpen;
-        this.setAttribute('aria-expanded', String(!isOpen));
-        this.textContent = isOpen ? 'Details ›' : 'Hide ‹';
-      });
-
-      tl.appendChild(entry);
-    });
-
-    area.appendChild(tl);
+    area.appendChild(smBuildInlineActivityTimeline(execs));
   }
 
   /* ── Controls binding ───────────────────────────────────── */
