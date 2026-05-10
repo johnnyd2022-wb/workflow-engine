@@ -69,6 +69,24 @@
         {% endif %}
         </section>
 
+        {% if not error %}
+        <section class="spa-form-section" style="margin-top: 6px;" aria-labelledby="dispose-reason-title">
+          <h3 id="dispose-reason-title" class="spa-form-section-title">Reason for disposal</h3>
+          <p style="color: var(--text-secondary); margin: 0 0 10px; font-size: 0.875rem; line-height: 1.45;">
+            Required for audit trail — explain why this inventory is being disposed.
+          </p>
+          <textarea
+            id="dispose-reason"
+            class="spa-inp"
+            rows="3"
+            maxlength="500"
+            placeholder="e.g. Damaged in transit, failed quality check, expired stock…"
+            style="width: 100%; resize: vertical; font-size: 0.9375rem; box-sizing: border-box;"
+            required
+          ></textarea>
+        </section>
+        {% endif %}
+
         <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-top: 14px; flex-wrap: wrap;">
           <a href="/core/inventory/dispose" class="btn btn-secondary" style="min-height: 44px; text-decoration: none;">Cancel</a>
           <button
@@ -103,6 +121,16 @@
             return;
           }
 
+          var reasonEl = document.getElementById('dispose-reason');
+          var reason = reasonEl ? reasonEl.value.trim() : '';
+          if (!reason) {
+            if (typeof window.showNotification === 'function') {
+              window.showNotification('error', 'Reason required', 'Please enter a reason for this disposal.');
+            }
+            if (reasonEl) reasonEl.focus();
+            return;
+          }
+
           submitBtn.disabled = true;
           var prevText = submitBtn.textContent;
           submitBtn.textContent = 'Disposing...';
@@ -111,7 +139,7 @@
             throw new Error('CoreAPI.recordWastage is not available.');
           }
 
-          await window.CoreAPI.recordWastage([{ inventory_item_id: inventoryItemId, quantity_wasted: q }]);
+          await window.CoreAPI.recordWastage([{ inventory_item_id: inventoryItemId, quantity_wasted: q, reason: reason }]);
 
           window.location.href = '/core/inventory/dispose';
           // Note: we intentionally do not attempt to keep this page state; redirect guarantees fresh reload.

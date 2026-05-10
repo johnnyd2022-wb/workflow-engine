@@ -64,7 +64,7 @@ def parse_wastage_quantity(raw) -> tuple[Decimal | None, str | None]:
 def wastage_entries_payload_hash(entries: list[dict]) -> str:
     """
     Canonical SHA-256 of normalized entries for idempotency (sorted by item id).
-    Each entry must have inventory_item_id (UUID str) and quantity_wasted (Decimal).
+    Each entry must have inventory_item_id (UUID str), quantity_wasted (Decimal), and reason (str).
     Optional quantity_unit: unit of quantity_wasted (normalized); omit or empty = same as inventory line.
     """
     norm: list[dict[str, str]] = []
@@ -76,7 +76,7 @@ def wastage_entries_payload_hash(entries: list[dict]) -> str:
         q = q.quantize(INVENTORY_WASTAGE_QUANTIZE)
         raw_u = e.get("quantity_unit")
         qu = _wastage_unit_for_hash(raw_u)
-        norm.append({"inventory_item_id": iid, "quantity_wasted": str(q), "quantity_unit": qu})
+        norm.append({"inventory_item_id": iid, "quantity_wasted": str(q), "quantity_unit": qu, "reason": str(e.get("reason") or "")})
     norm.sort(key=lambda x: x["inventory_item_id"])
     canonical = json.dumps(norm, separators=(",", ":"), ensure_ascii=True, sort_keys=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

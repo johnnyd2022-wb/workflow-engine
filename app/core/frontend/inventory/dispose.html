@@ -162,6 +162,20 @@
             <p style="padding: 16px; color: var(--text-secondary);">Loading inventory...</p>
           </div>
         </section>
+        <div style="padding: 0 0 16px;">
+          <label for="dispose-bulk-reason" style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
+            Reason for disposal <span style="color: var(--error, #ef4444);">*</span>
+          </label>
+          <textarea
+            id="dispose-bulk-reason"
+            class="spa-inp"
+            rows="2"
+            maxlength="500"
+            placeholder="e.g. Damaged in transit, failed quality check, expired stock…"
+            style="width: 100%; resize: vertical; font-size: 0.9375rem; box-sizing: border-box;"
+            required
+          ></textarea>
+        </div>
         <div style="display: flex; gap: 12px; justify-content: center; align-items: center;">
           <button type="submit" id="dispose-inventory-submit" class="btn btn-primary" style="min-height: 44px;">Dispose of selected quantity of inventory items</button>
         </div>
@@ -357,6 +371,15 @@
 
       async function submitWastage() {
         if (!cardsContainer || !window.CoreAPI || !window.CoreAPI.recordWastage) return;
+        var reasonEl = document.getElementById('dispose-bulk-reason');
+        var reason = reasonEl ? reasonEl.value.trim() : '';
+        if (!reason) {
+          if (typeof window.showNotification === 'function') {
+            window.showNotification('error', 'Reason required', 'Please enter a reason for this disposal.');
+          }
+          if (reasonEl) reasonEl.focus();
+          return;
+        }
         var cards = cardsContainer.querySelectorAll('.wastage-card');
         var entries = [];
         cards.forEach(function (card) {
@@ -369,7 +392,7 @@
             val = max;
             if (input) input.value = String(max);
           }
-          entries.push({ inventory_item_id: id, quantity_wasted: val });
+          entries.push({ inventory_item_id: id, quantity_wasted: val, reason: reason });
         });
         if (!entries.length) {
           if (typeof window.showNotification === 'function') {

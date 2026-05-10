@@ -18,6 +18,7 @@ class WastageRepository:
         inventory_item_id: UUID,
         quantity_wasted: str,
         unit: str,
+        reason: str,
         recorded_by: str | None = None,
         recorded_at: datetime | None = None,
     ) -> InventoryWastage:
@@ -27,6 +28,7 @@ class WastageRepository:
             inventory_item_id=inventory_item_id,
             quantity_wasted=quantity_wasted,
             unit=unit,
+            reason=reason,
             recorded_by=recorded_by,
             recorded_at=recorded_at or datetime.utcnow(),
         )

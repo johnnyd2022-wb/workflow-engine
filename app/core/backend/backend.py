@@ -2962,7 +2962,7 @@ def record_wastage():
         idem_key = idem_key_raw.strip()
 
     parse_errors: list[str] = []
-    lines: list[tuple[int, UUID, Decimal, str | None]] = []
+    lines: list[tuple[int, UUID, Decimal, str | None, str]] = []
     seen_ids: set[UUID] = set()
 
     for idx, entry in enumerate(entries):
@@ -2994,7 +2994,14 @@ def record_wastage():
         if u_err:
             parse_errors.append(f"Entry {idx + 1}: {u_err}")
             continue
-        lines.append((idx + 1, item_id, waste_decimal, parsed_unit))
+        reason = (entry.get("reason") or "").strip()
+        if not reason:
+            parse_errors.append(f"Entry {idx + 1}: reason is required")
+            continue
+        if len(reason) > 500:
+            parse_errors.append(f"Entry {idx + 1}: reason must be 500 characters or fewer")
+            continue
+        lines.append((idx + 1, item_id, waste_decimal, parsed_unit, reason))
 
     if parse_errors:
         return (
@@ -3012,7 +3019,7 @@ def record_wastage():
 
     lines.sort(key=lambda t: t[1])
     hash_for_idem = wastage_entries_payload_hash(
-        [{"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or ""} for _i, item_id, w, u in lines]
+        [{"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or "", "reason": r} for _i, item_id, w, u, r in lines]
     )
 
     inventory_repo = InventoryRepository(db_session)
@@ -3046,9 +3053,9 @@ def record_wastage():
                 return jsonify(stored), existing.http_status
 
         validation_errors: list[str] = []
-        staged: list[tuple[InventoryItem, Decimal, int, str | None]] = []
+        staged: list[tuple[InventoryItem, Decimal, int, str | None, str]] = []
 
-        for entry_idx, item_id, waste_decimal, req_unit in lines:
+        for entry_idx, item_id, waste_decimal, req_unit, reason in lines:
             item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
             if not item:
                 validation_errors.append(f"Entry {entry_idx}: inventory item not found or access denied")
@@ -3076,7 +3083,7 @@ def record_wastage():
                     f"Entry {entry_idx}: quantity_wasted exceeds available quantity ({current_qty} {inv_unit} on hand)"
                 )
                 continue
-            staged.append((item, waste_in_inv, entry_idx, req_unit))
+            staged.append((item, waste_in_inv, entry_idx, req_unit, reason))
 
         if validation_errors:
             db_session.rollback()
@@ -3095,7 +3102,7 @@ def record_wastage():
 
         result_records = []
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.WASTAGE_RECORD):
-            for item, waste_decimal, _entry_idx, request_unit in staged:
+            for item, waste_decimal, _entry_idx, request_unit, reason in staged:
                 actual_waste = waste_decimal
                 current_qty = parse_stored_quantity_to_decimal(item.quantity)
                 new_qty = current_qty - actual_waste
@@ -3106,6 +3113,7 @@ def record_wastage():
                     inventory_item_id=item.id,
                     quantity_wasted=str(actual_waste),
                     unit=unit,
+                    reason=reason,
                     recorded_by=recorded_by,
                 )
                 db_session.add(record)
@@ -3135,6 +3143,7 @@ def record_wastage():
                         "item_name": item.name,
                         "quantity_wasted": str(actual_waste),
                         "unit": unit,
+                        "reason": reason,
                         "recorded_at": record.recorded_at.isoformat() if record.recorded_at else None,
                     }
                 )
@@ -3248,6 +3257,7 @@ def list_wastage():
                 "unit": r.unit,
                 "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
                 "recorded_by": r.recorded_by,
+                "reason": r.reason,
             }
         )
     return jsonify({"wastage_records": result}), 200

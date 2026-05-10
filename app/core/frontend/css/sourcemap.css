@@ -774,8 +774,8 @@
   margin-bottom: 24px;
 }
 
-/* ── Wastage view ────────────────────────────────────── */
-.sm-wastage-section {
+/* ── Wastage audit log ───────────────────────────────── */
+.sm-wastage-log {
   background: var(--bg-card, #fff);
   border: 1.5px solid var(--border-default, #e5e7eb);
   border-radius: 10px;
@@ -783,41 +783,99 @@
   margin-bottom: 24px;
 }
 
-.sm-wastage-header {
-  padding: 12px 14px;
+.sm-wastage-log__header {
+  padding: 12px 16px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary, #111827);
   background: var(--bg-secondary, #f9fafb);
+  border-bottom: 1.5px solid var(--border-default, #e5e7eb);
+}
+
+.sm-wastage-day { border-bottom: 1.5px solid var(--border-default, #e5e7eb); }
+.sm-wastage-day:last-child { border-bottom: none; }
+
+.sm-wastage-day__label {
+  padding: 7px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary, #9ca3af);
+  background: var(--bg-secondary, #f9fafb);
   border-bottom: 1px solid var(--border-light, #f3f4f6);
 }
 
-.sm-wastage-item {
+.sm-wastage-entry {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border-light, #f3f4f6);
+}
+.sm-wastage-entry:last-child { border-bottom: none; }
+
+.sm-wastage-entry__main {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-light, #f3f4f6);
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 5px;
 }
 
-.sm-wastage-item:last-child { border-bottom: none; }
-
-.sm-wastage-item__name {
+.sm-wastage-entry__name {
   flex: 1;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-primary, #111827);
 }
 
-.sm-wastage-qty {
-  font-size: 13px;
-  font-weight: 600;
+.sm-wastage-entry__qty {
+  font-size: 14px;
+  font-weight: 700;
   color: #dc2626;
+  font-variant-numeric: tabular-nums;
 }
 
-.sm-wastage-date {
-  font-size: 11px;
+.sm-wastage-entry__reason {
+  font-size: 13px;
   color: var(--text-secondary, #6b7280);
+  font-style: italic;
+  margin-bottom: 5px;
+}
+
+.sm-wastage-entry__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sm-wastage-entry__who {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+}
+
+.sm-wastage-entry__time {
+  font-size: 12px;
+  color: var(--text-tertiary, #9ca3af);
+  font-variant-numeric: tabular-nums;
+}
+
+.sm-wastage-entry__trace {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border-default, #e5e7eb);
+  border-radius: 5px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--primary, #3b82f6);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.sm-wastage-entry__trace:hover {
+  background: var(--bg-secondary, #f9fafb);
+  border-color: var(--primary, #3b82f6);
 }
 
 /* ── Batch entry modal ───────────────────────────────── */

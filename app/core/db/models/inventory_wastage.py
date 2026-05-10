@@ -26,6 +26,7 @@ class InventoryWastage(Base):
     unit = Column(String(50), nullable=False)  # Denormalized from item at time of record
     recorded_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     recorded_by = Column(String(255), nullable=True)  # User identifier for audit
+    reason = Column(String(500), nullable=True)  # Why the item was disposed (required via API for new records)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     organisation = relationship("Organisation", backref="inventory_wastage_records")

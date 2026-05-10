@@ -1129,24 +1129,67 @@
       return;
     }
 
-    const section = document.createElement('div');
-    section.className = 'sm-wastage-section';
-    section.innerHTML = `<div class="sm-wastage-header">Wastage records (${records.length})</div>`;
-
+    // Group by calendar day (records arrive newest-first from API)
+    const byDay = [];
+    const dayMap = {};
     records.forEach(r => {
-      const row = document.createElement('div');
-      row.className = 'sm-wastage-item';
-      const itemName = r.item_name || r.inventory_item_name || r.name || 'Unknown item';
-      const qty = r.quantity_wasted != null ? `${smFmtQty(r.quantity_wasted)} ${r.unit || ''}`.trim() : '—';
-      row.innerHTML = `
-        <div class="sm-wastage-item__name">${smEsc(itemName)}</div>
-        <span class="sm-wastage-qty">-${smEsc(qty)}</span>
-        <span class="sm-wastage-date">${smFmtDate(r.recorded_at)}</span>
-      `;
-      section.appendChild(row);
+      const day = r.recorded_at ? smFmtDate(r.recorded_at) : 'Unknown date';
+      if (!dayMap[day]) { dayMap[day] = []; byDay.push({ day, entries: dayMap[day] }); }
+      dayMap[day].push(r);
     });
 
-    area.appendChild(section);
+    const wrap = document.createElement('div');
+    wrap.className = 'sm-wastage-log';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'sm-wastage-log__header';
+    hdr.textContent = `Wastage log — ${records.length} record${records.length !== 1 ? 's' : ''}`;
+    wrap.appendChild(hdr);
+
+    byDay.forEach(({ day, entries }) => {
+      const dayEl = document.createElement('div');
+      dayEl.className = 'sm-wastage-day';
+      dayEl.innerHTML = `<div class="sm-wastage-day__label">${smEsc(day)}</div>`;
+
+      entries.forEach(r => {
+        const itemName = r.item_name || r.inventory_item_name || r.name || 'Unknown item';
+        const qty = r.quantity_wasted != null ? `${smFmtQty(r.quantity_wasted)} ${r.unit || ''}`.trim() : '—';
+        const who = r.recorded_by || 'Unknown operator';
+        const time = smFmtTime(r.recorded_at);
+
+        const entry = document.createElement('div');
+        entry.className = 'sm-wastage-entry';
+        const reasonText = r.reason || null;
+        entry.innerHTML = `
+          <div class="sm-wastage-entry__main">
+            <span class="sm-wastage-entry__name">${smEsc(itemName)}</span>
+            <span class="sm-wastage-entry__qty">−${smEsc(qty)}</span>
+          </div>
+          ${reasonText ? `<div class="sm-wastage-entry__reason">${smEsc(reasonText)}</div>` : ''}
+          <div class="sm-wastage-entry__meta">
+            <span class="sm-wastage-entry__who">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              ${smEsc(who)}
+            </span>
+            <span class="sm-wastage-entry__time">${smEsc(time)}</span>
+            ${r.inventory_item_id ? `<button class="sm-wastage-entry__trace" data-id="${smEsc(r.inventory_item_id)}" title="Trace this item">Trace ↗</button>` : ''}
+          </div>
+        `;
+
+        if (r.inventory_item_id) {
+          entry.querySelector('.sm-wastage-entry__trace').addEventListener('click', e => {
+            e.stopPropagation();
+            smTraceItem(r.inventory_item_id, itemName);
+          });
+        }
+
+        dayEl.appendChild(entry);
+      });
+
+      wrap.appendChild(dayEl);
+    });
+
+    area.appendChild(wrap);
   }
 
   /* ── System findings ────────────────────────────────────── */
@@ -1622,6 +1665,21 @@
   function smFmtDate(str) {
     if (!str) return '—';
     try { return new Date(str).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+    catch { return String(str); }
+  }
+
+  function smFmtDateTime(str) {
+    if (!str) return '—';
+    try {
+      const d = new Date(str);
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+        + ' at ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    } catch { return String(str); }
+  }
+
+  function smFmtTime(str) {
+    if (!str) return '—';
+    try { return new Date(str).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
     catch { return String(str); }
   }
 

@@ -125,20 +125,63 @@ Port `sourcemap.html` to extend `base_spa.html` so the page shares the standard 
 
 ## Phase 6 — Verify & clean up
 
-- [ ] Test idle state (clean search prompt, no process cards)
-- [ ] Test trace: single raw material → single process (timeline + map)
-- [ ] Test trace: single raw material → multiple processes/executions
-- [ ] Test view switching (timeline ↔ map ↔ table without re-fetch)
-- [ ] Test backward trace (from WIP or final item)
-- [ ] Test batch search → modal → trace
-- [ ] Test supplier search → modal → trace
-- [ ] Test wastage toggle
-- [ ] Test all four system findings tabs with badge counts
-- [ ] Test `?show=check-needed` param
-- [ ] Test HTMX navigation (navigate away and back — page re-inits cleanly)
-- [ ] Test mobile layout (timeline vertical, map tree, expand/collapse)
-- [ ] Test dark mode (inherits from base_spa theme vars)
-- [ ] Confirm `sourcemap_v1_backup.html` is intact and not served by any route
+- [x] Test idle state (clean search prompt, no process cards)
+- [x] Test trace: single raw material → single process (timeline + map)
+- [x] Test trace: single raw material → multiple processes/executions
+- [x] Test view switching (timeline ↔ map ↔ table without re-fetch)
+- [x] Test backward trace (from WIP or final item)
+- [x] Test batch search → modal → trace
+- [x] Test supplier search → modal → trace
+- [x] Test wastage toggle
+- [x] Test all four system findings tabs with badge counts
+- [x] Test `?show=check-needed` param
+- [x] Test HTMX navigation (navigate away and back — page re-inits cleanly)
+- [x] Test mobile layout (timeline vertical, map tree, expand/collapse)
+- [x] Test dark mode (inherits from base_spa theme vars)
+- [x] Confirm `sourcemap_v1_backup.html` is intact and not served by any route
+
+---
+
+## Phase 7 — Post-v2 additions
+
+### 7a — Backward trace fix
+- [x] `trace_inventory_backward` now includes the traced WIP/Final item in its own result set
+- [x] `traced_item_data` built first; appended to `all_result_items` before step enrichment
+- [x] `smRenderTrace` uses `traceResult.traced_item` as root for backward traces
+- [x] "Traced here" pill checks both `step.froms` and `step.tos` (handles forward + backward directionality)
+
+### 7b — Step enrichment (historical quantities)
+- [x] Bulk `ExecutionStep` fetch added to both `trace_raw_material` and `trace_inventory_backward`
+- [x] Eliminates N+1: single `WHERE id IN (...)` query per trace
+- [x] `step_data = { completed_at, actual_inputs, actual_outputs }` attached to each item
+- [x] Timeline cards show "Recorded qty" from `actual_inputs` (consumed) / `actual_outputs` (produced)
+
+### 7c — Timeline + map detail improvements
+- [x] Step header rows: removed IN/OUT inline tags; replaced with step name + date + "Traced here" pill
+- [x] Map view: separate IN/OUT tree nodes per step with directional tags
+- [x] `completed_by` extraction fixed: now takes last completed step (by step_number), not first
+
+### 7d — Operators tab
+- [x] `list_executions` API now exposes `completed_by` (extracted from terminal `ExecutionStep.execution_data`)
+- [x] Operators browse tab shows real operator names from `completed_by`
+- [x] Operator click → direct `smRenderActivityLog` (no modal for single person)
+
+### 7e — Activity tab
+- [x] New "Activity" browse tab (5th tab) with date range picker
+- [x] Shows full activity timeline filtered by date range — same rich timeline as operator tracing
+- [x] `smBuildInlineActivityTimeline(execs)` shared builder used by both Activity tab and operator trace view
+- [x] Date picker: start/end inputs + Apply / Clear buttons; Enter key triggers apply
+
+### 7f — Search bar + UI polish
+- [x] Removed magnifying glass SVG from search bar (placeholder text is sufficient)
+- [x] Tab strip scrollbar hidden on Windows (scrollbar-width: none + ::-webkit-scrollbar)
+- [x] Banner/hero updated to match core2/flows2 pattern (spa-hub-yellow-sleeve, inventory-spa-header.css)
+- [x] Dead `.sm-banner-sleeve` / `.sm-hero` CSS removed from sourcemap.css
+
+### 7g — Wastage audit log
+- [x] Wastage view redesigned as a proper audit log grouped by day
+- [x] Each entry shows: item name, quantity, operator (`recorded_by`), time, Trace ↗ button
+- [x] **Gap**: no `reason`/`notes` field in `inventory_wastage` table — future migration needed to capture why items were wasted
 
 ---
 
