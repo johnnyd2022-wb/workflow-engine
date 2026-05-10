@@ -5,17 +5,18 @@
 {% block body_class %}sourcemap-page{% endblock %}
 
 {% block head_extras %}
-<link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}?v=5">
+<link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}?v=6">
+<link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="max-content">
 
-  <!-- Page banner + hero -->
-  <div class="sm-banner-sleeve">
-    <div class="sm-banner-wrap">
-      <div class="sm-banner-art" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 96" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;max-height:120px;">
+  <!-- Page banner + hero — same pattern as core2 / flows2 -->
+  <div class="spa-hub-yellow-sleeve">
+    <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
+      <div class="inventory-spa-header__banner" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;max-height:120px;">
           <defs>
             <linearGradient id="smb-line1" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#0ea5e9"/>
@@ -41,47 +42,42 @@
               <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.14"/>
             </filter>
           </defs>
-          <!-- Ground shadow -->
-          <ellipse cx="120" cy="86" rx="104" ry="6" fill="#0f172a" opacity="0.06"/>
-          <!-- Connector paths: raw→wip, wip→final -->
-          <path d="M44 52 C 72 36, 96 60, 120 52" stroke="url(#smb-line1)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.9" stroke-dasharray="5,3"/>
-          <path d="M120 52 C 144 44, 168 68, 196 52" stroke="url(#smb-line2)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.9" stroke-dasharray="5,3"/>
-          <!-- Small trace dots along paths -->
-          <circle cx="76" cy="43" r="3" fill="#0ea5e9" opacity="0.55"/>
-          <circle cx="98" cy="55" r="2.5" fill="#06b6d4" opacity="0.5"/>
-          <circle cx="148" cy="46" r="3" fill="#06b6d4" opacity="0.5"/>
-          <circle cx="172" cy="60" r="2.5" fill="#10b981" opacity="0.55"/>
-          <!-- Nodes: Raw, WIP, Final -->
+          <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
+          <path d="M28 52 C 55 36, 75 60, 100 52" stroke="url(#smb-line1)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.9" stroke-dasharray="5,3"/>
+          <path d="M100 52 C 125 44, 145 68, 172 52" stroke="url(#smb-line2)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.9" stroke-dasharray="5,3"/>
+          <circle cx="58" cy="43" r="3" fill="#0ea5e9" opacity="0.55"/>
+          <circle cx="80" cy="55" r="2.5" fill="#06b6d4" opacity="0.5"/>
+          <circle cx="125" cy="46" r="3" fill="#06b6d4" opacity="0.5"/>
+          <circle cx="148" cy="60" r="2.5" fill="#10b981" opacity="0.55"/>
           <g filter="url(#smb-shadow)">
-            <circle cx="44" cy="52" r="18" fill="url(#smb-raw)"/>
-            <circle cx="120" cy="52" r="20" fill="url(#smb-wip)"/>
-            <circle cx="196" cy="52" r="18" fill="url(#smb-final)"/>
+            <circle cx="28" cy="52" r="16" fill="url(#smb-raw)"/>
+            <circle cx="100" cy="52" r="18" fill="url(#smb-wip)"/>
+            <circle cx="172" cy="52" r="16" fill="url(#smb-final)"/>
           </g>
-          <!-- Node 1: Input — down arrow into a receive tray -->
-          <line x1="44" y1="43" x2="44" y2="51" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
-          <path d="M 40.5 48.5 L 44 52 L 47.5 48.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
-          <path d="M 36 58 L 36 61 L 52 61 L 52 58" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
-          <!-- Node 2: Process — gear (two concentric rings + 6 teeth) -->
-          <circle cx="120" cy="52" r="3" fill="none" stroke="#fff" stroke-width="1.8" opacity="0.9"/>
-          <circle cx="120" cy="52" r="6" fill="none" stroke="#fff" stroke-width="1.8" opacity="0.9"/>
-          <line x1="120" y1="46" x2="120" y2="42.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="125.2" y1="49" x2="128.2" y2="47.3" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="125.2" y1="55" x2="128.2" y2="56.7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="120" y1="58" x2="120" y2="61.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="114.8" y1="55" x2="111.8" y2="56.7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="114.8" y1="49" x2="111.8" y2="47.3" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <!-- Node 3: Sale — price tag (pentagon + hole) -->
-          <path d="M 188 47 L 196 47 L 204 52 L 196 57 L 188 57 Z" stroke="#fff" stroke-width="1.8" fill="none" stroke-linejoin="round" opacity="0.9"/>
-          <circle cx="190.5" cy="52" r="1.8" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.9"/>
+          <!-- Node 1: Input — down arrow + tray -->
+          <line x1="28" y1="44" x2="28" y2="51" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+          <path d="M 24.5 48.5 L 28 52 L 31.5 48.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+          <path d="M 20 58 L 20 61 L 36 61 L 36 58" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+          <!-- Node 2: Process — gear -->
+          <circle cx="100" cy="52" r="3" fill="none" stroke="#fff" stroke-width="1.8" opacity="0.9"/>
+          <circle cx="100" cy="52" r="6" fill="none" stroke="#fff" stroke-width="1.8" opacity="0.9"/>
+          <line x1="100" y1="46" x2="100" y2="42.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+          <line x1="105.2" y1="49" x2="108.2" y2="47.3" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+          <line x1="105.2" y1="55" x2="108.2" y2="56.7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+          <line x1="100" y1="58" x2="100" y2="61.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+          <line x1="94.8" y1="55" x2="91.8" y2="56.7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+          <line x1="94.8" y1="49" x2="91.8" y2="47.3" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+          <!-- Node 3: Sale — price tag -->
+          <path d="M 164 47 L 172 47 L 180 52 L 172 57 L 164 57 Z" stroke="#fff" stroke-width="1.8" fill="none" stroke-linejoin="round" opacity="0.9"/>
+          <circle cx="166.5" cy="52" r="1.8" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.9"/>
         </svg>
       </div>
     </div>
   </div>
-  <section class="sm-hero spa-page-hero" aria-labelledby="sm-page-title">
-    <div class="sm-hero__text">
-      <h1 class="sm-hero__title page-title" id="sm-page-title">Source Map</h1>
-      <p class="sm-hero__sub page-subtitle">Trace materials through every step of production</p>
-    </div>
+
+  <section class="spa-form-section spa-page-hero" aria-labelledby="sm-page-title">
+    <h1 class="page-title" id="sm-page-title">Source Map</h1>
+    <p class="page-subtitle">Trace materials through every step of production</p>
   </section>
 
   <!-- Search bar (no dropdown — filters the browse grid inline) -->
@@ -203,5 +199,5 @@
   re-executes it when the content is swapped in via boost navigation.
   core-api.js is already loaded globally by base_spa.html.
 #}
-<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}?v=5"></script>
+<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}?v=6"></script>
 {% endblock %}
