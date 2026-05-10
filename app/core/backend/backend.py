@@ -496,8 +496,13 @@ def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
     from app.core.db.models.execution import Execution as ExecutionModel
     from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
 
-    # Collect valid UUIDs; discard unparseable values rather than raising.
-    step_ids: set[UUID] = {uid for it in items if (uid := _parse_uuid(it.get("source_execution_step_id")))}
+    # Parse UUIDs once; raw value → UUID map eliminates second-pass parsing in the hydration loop.
+    raw_to_uuid: dict[str, UUID] = {
+        raw: uid
+        for it in items
+        if (raw := it.get("source_execution_step_id")) and (uid := _parse_uuid(raw))
+    }
+    step_ids: set[UUID] = set(raw_to_uuid.values())
 
     # UUID-keyed map: avoids str/UUID mismatch at lookup time.
     step_map: dict[UUID, ExecutionStepModel] = {}
@@ -511,9 +516,9 @@ def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
             step_map[_s.id] = _s
 
     for _item in items:
-        uid = _parse_uuid(_item.get("source_execution_step_id"))
+        uid = raw_to_uuid.get(_item.get("source_execution_step_id"))
         _s = step_map.get(uid) if uid else None
-        if uid and uid in step_ids and _s is None:
+        if uid and _s is None:
             logger.debug("_hydrate_step_data: ExecutionStep %s not found (org_id=%s)", uid, org_id)
         _item["step_data"] = (
             {
