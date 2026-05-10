@@ -475,6 +475,17 @@ def _strip_incoming_execution_trace_keys(execution_data: dict | None) -> dict:
     return cleaned if isinstance(cleaned, dict) else {}
 
 
+def _safe_uuid(v: str | None) -> bool:
+    """Return True if v is a parseable UUID string. Used to guard UUID() calls on DB-sourced strings."""
+    if not v:
+        return False
+    try:
+        UUID(str(v))
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
 def _to_iso_timestamp(ts) -> str | None:
     """Normalize a timestamp to ISO format string for consistent API output."""
     if ts is None:
@@ -2994,7 +3005,7 @@ def record_wastage():
         if u_err:
             parse_errors.append(f"Entry {idx + 1}: {u_err}")
             continue
-        reason = (entry.get("reason") or "").strip()
+        reason = (entry.get("reason") or "").replace("\x00", "").strip()
         if not reason:
             parse_errors.append(f"Entry {idx + 1}: reason is required")
             continue
@@ -3673,13 +3684,24 @@ def trace_raw_material(raw_material_id: str):
     connected_items = result["items"]
     connections = result["connections"]
 
-    # Bulk-fetch ExecutionStep records so the frontend can show historical quantities and step timestamps
+    # Bulk-fetch ExecutionStep records so the frontend can show historical quantities and step timestamps.
+    # Join through Execution to enforce org_id — defense-in-depth in case upstream scoping ever drifts.
+    from app.core.db.models.execution import Execution as ExecutionModel
     from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
 
-    _step_ids = list({UUID(it["source_execution_step_id"]) for it in connected_items if it.get("source_execution_step_id")})
+    _step_ids = list({
+        UUID(it["source_execution_step_id"])
+        for it in connected_items
+        if it.get("source_execution_step_id") and _safe_uuid(it["source_execution_step_id"])
+    })
     _step_map: dict = {}
     if _step_ids:
-        for _s in db_session.query(ExecutionStepModel).filter(ExecutionStepModel.id.in_(_step_ids)).all():
+        for _s in (
+            db_session.query(ExecutionStepModel)
+            .join(ExecutionModel, ExecutionStepModel.execution_id == ExecutionModel.id)
+            .filter(ExecutionStepModel.id.in_(_step_ids), ExecutionModel.org_id == org_id)
+            .all()
+        ):
             _step_map[str(_s.id)] = _s
     for _item in connected_items:
         _sid = _item.get("source_execution_step_id")
@@ -3811,12 +3833,23 @@ def trace_inventory_backward(inventory_item_id: str):
 
     # Bulk-fetch ExecutionStep records so the frontend can show historical quantities and step timestamps.
     # all_result_items now includes the traced item, so its step_data is enriched too.
+    # Join through Execution to enforce org_id — defense-in-depth in case upstream scoping ever drifts.
+    from app.core.db.models.execution import Execution as ExecutionModel
     from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
 
-    _step_ids = list({UUID(it["source_execution_step_id"]) for it in all_result_items if it.get("source_execution_step_id")})
+    _step_ids = list({
+        UUID(it["source_execution_step_id"])
+        for it in all_result_items
+        if it.get("source_execution_step_id") and _safe_uuid(it["source_execution_step_id"])
+    })
     _step_map: dict = {}
     if _step_ids:
-        for _s in db_session.query(ExecutionStepModel).filter(ExecutionStepModel.id.in_(_step_ids)).all():
+        for _s in (
+            db_session.query(ExecutionStepModel)
+            .join(ExecutionModel, ExecutionStepModel.execution_id == ExecutionModel.id)
+            .filter(ExecutionStepModel.id.in_(_step_ids), ExecutionModel.org_id == org_id)
+            .all()
+        ):
             _step_map[str(_s.id)] = _s
     for _item in all_result_items:
         _sid = _item.get("source_execution_step_id")

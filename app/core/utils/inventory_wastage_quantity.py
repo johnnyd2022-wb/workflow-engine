@@ -76,7 +76,7 @@ def wastage_entries_payload_hash(entries: list[dict]) -> str:
         q = q.quantize(INVENTORY_WASTAGE_QUANTIZE)
         raw_u = e.get("quantity_unit")
         qu = _wastage_unit_for_hash(raw_u)
-        norm.append({"inventory_item_id": iid, "quantity_wasted": str(q), "quantity_unit": qu, "reason": str(e.get("reason") or "")})
+        norm.append({"inventory_item_id": iid, "quantity_wasted": str(q), "quantity_unit": qu, "reason": str(e.get("reason") or "").strip()})
     norm.sort(key=lambda x: x["inventory_item_id"])
     canonical = json.dumps(norm, separators=(",", ":"), ensure_ascii=True, sort_keys=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
