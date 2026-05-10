@@ -475,15 +475,56 @@ def _strip_incoming_execution_trace_keys(execution_data: dict | None) -> dict:
     return cleaned if isinstance(cleaned, dict) else {}
 
 
-def _safe_uuid(v: str | None) -> bool:
-    """Return True if v is a parseable UUID string. Used to guard UUID() calls on DB-sourced strings."""
+def _parse_uuid(v: str | None) -> UUID | None:
+    """Parse v as a UUID, returning None on any failure. Avoids double-parsing and 500s on malformed DB values."""
     if not v:
-        return False
+        return None
     try:
-        UUID(str(v))
-        return True
+        return UUID(str(v))
     except (ValueError, AttributeError):
-        return False
+        return None
+
+
+def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
+    """
+    Attach step_data to each item dict in-place.
+
+    Bulk-fetches ExecutionStep records for all items that have a source_execution_step_id,
+    joining through Execution to enforce org_id (defense-in-depth against upstream scoping drift).
+    Sets item["step_data"] = {completed_at, actual_inputs, actual_outputs} or None.
+    """
+    from app.core.db.models.execution import Execution as ExecutionModel
+    from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
+
+    step_uuid_by_str: dict[str, UUID] = {}
+    for it in items:
+        raw = it.get("source_execution_step_id")
+        uid = _parse_uuid(raw)
+        if uid:
+            step_uuid_by_str[raw] = uid
+
+    step_map: dict[str, ExecutionStepModel] = {}
+    if step_uuid_by_str:
+        for _s in (
+            db_session.query(ExecutionStepModel)
+            .join(ExecutionModel, ExecutionStepModel.execution_id == ExecutionModel.id)
+            .filter(ExecutionStepModel.id.in_(step_uuid_by_str.values()), ExecutionModel.org_id == org_id)
+            .all()
+        ):
+            step_map[str(_s.id)] = _s
+
+    for _item in items:
+        _sid = _item.get("source_execution_step_id")
+        _s = step_map.get(_sid) if _sid else None
+        _item["step_data"] = (
+            {
+                "completed_at": _s.completed_at.isoformat() if _s.completed_at else None,
+                "actual_inputs": _s.actual_inputs,
+                "actual_outputs": _s.actual_outputs,
+            }
+            if _s
+            else None
+        )
 
 
 def _to_iso_timestamp(ts) -> str | None:
@@ -3684,37 +3725,8 @@ def trace_raw_material(raw_material_id: str):
     connected_items = result["items"]
     connections = result["connections"]
 
-    # Bulk-fetch ExecutionStep records so the frontend can show historical quantities and step timestamps.
-    # Join through Execution to enforce org_id — defense-in-depth in case upstream scoping ever drifts.
-    from app.core.db.models.execution import Execution as ExecutionModel
-    from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
-
-    _step_ids = list({
-        UUID(it["source_execution_step_id"])
-        for it in connected_items
-        if it.get("source_execution_step_id") and _safe_uuid(it["source_execution_step_id"])
-    })
-    _step_map: dict = {}
-    if _step_ids:
-        for _s in (
-            db_session.query(ExecutionStepModel)
-            .join(ExecutionModel, ExecutionStepModel.execution_id == ExecutionModel.id)
-            .filter(ExecutionStepModel.id.in_(_step_ids), ExecutionModel.org_id == org_id)
-            .all()
-        ):
-            _step_map[str(_s.id)] = _s
-    for _item in connected_items:
-        _sid = _item.get("source_execution_step_id")
-        _s = _step_map.get(_sid) if _sid else None
-        _item["step_data"] = (
-            {
-                "completed_at": _s.completed_at.isoformat() if _s.completed_at else None,
-                "actual_inputs": _s.actual_inputs,
-                "actual_outputs": _s.actual_outputs,
-            }
-            if _s
-            else None
-        )
+    # Attach step_data to each item for historical quantities and step timestamps.
+    _hydrate_step_data(connected_items, db_session, org_id)
 
     # Match original API: add direct connection from raw material to every connected item (execution_id as link)
     raw_id_str = str(raw_material_uuid)
@@ -3831,38 +3843,8 @@ def trace_inventory_backward(inventory_item_id: str):
         }
         all_result_items.append(traced_item_data)
 
-    # Bulk-fetch ExecutionStep records so the frontend can show historical quantities and step timestamps.
-    # all_result_items now includes the traced item, so its step_data is enriched too.
-    # Join through Execution to enforce org_id — defense-in-depth in case upstream scoping ever drifts.
-    from app.core.db.models.execution import Execution as ExecutionModel
-    from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
-
-    _step_ids = list({
-        UUID(it["source_execution_step_id"])
-        for it in all_result_items
-        if it.get("source_execution_step_id") and _safe_uuid(it["source_execution_step_id"])
-    })
-    _step_map: dict = {}
-    if _step_ids:
-        for _s in (
-            db_session.query(ExecutionStepModel)
-            .join(ExecutionModel, ExecutionStepModel.execution_id == ExecutionModel.id)
-            .filter(ExecutionStepModel.id.in_(_step_ids), ExecutionModel.org_id == org_id)
-            .all()
-        ):
-            _step_map[str(_s.id)] = _s
-    for _item in all_result_items:
-        _sid = _item.get("source_execution_step_id")
-        _s = _step_map.get(_sid) if _sid else None
-        _item["step_data"] = (
-            {
-                "completed_at": _s.completed_at.isoformat() if _s.completed_at else None,
-                "actual_inputs": _s.actual_inputs,
-                "actual_outputs": _s.actual_outputs,
-            }
-            if _s
-            else None
-        )
+    # Attach step_data (including traced item itself, which is now in all_result_items).
+    _hydrate_step_data(all_result_items, db_session, org_id)
 
     # Add direct connections from every source item to traced item (for sourcemap execution grouping)
     traced_id_str = str(traced_item.id)
