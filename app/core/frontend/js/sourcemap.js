@@ -102,19 +102,19 @@
     ];
 
     const tabStrip = document.createElement('div');
-    tabStrip.className = 'sm-browse-tabs';
+    tabStrip.className = 'sm-browse-seg';
     tabStrip.setAttribute('role', 'tablist');
     tabs.forEach(t => {
       const btn = document.createElement('button');
-      btn.className = 'sm-browse-tab' + (t.key === currentBrowseTab ? ' sm-browse-tab--active' : '');
+      btn.className = 'sm-browse-seg__btn' + (t.key === currentBrowseTab ? ' sm-browse-seg__btn--active' : '');
       btn.dataset.browseTab = t.key;
       btn.textContent = t.label;
       btn.setAttribute('role', 'tab');
       btn.setAttribute('aria-selected', t.key === currentBrowseTab ? 'true' : 'false');
       btn.addEventListener('click', () => {
         currentBrowseTab = t.key;
-        tabStrip.querySelectorAll('.sm-browse-tab').forEach(b => {
-          b.classList.toggle('sm-browse-tab--active', b.dataset.browseTab === t.key);
+        tabStrip.querySelectorAll('.sm-browse-seg__btn').forEach(b => {
+          b.classList.toggle('sm-browse-seg__btn--active', b.dataset.browseTab === t.key);
           b.setAttribute('aria-selected', b.dataset.browseTab === t.key ? 'true' : 'false');
         });
         // Activity tab uses block layout; all others use grid
@@ -1109,18 +1109,18 @@
 
   /* ── Wastage view ───────────────────────────────────────── */
   async function smShowWastageView() {
-    smShowAreaLoading();
+    const inline = document.getElementById('sm-wastage-inline');
+    if (inline) inline.innerHTML = '<div class="sm-loading">Loading…</div>';
     try {
       const data = await CoreAPI.getWastageRecords();
-      const records = data.wastage_records || data.wastage || [];
-      smRenderWastage(records);
+      smRenderWastage(data.wastage_records || data.wastage || []);
     } catch (err) {
       console.error('[sourcemap] wastage load failed', err);
     }
   }
 
   function smRenderWastage(records) {
-    const area = document.getElementById('sm-trace-area');
+    const area = document.getElementById('sm-wastage-inline');
     if (!area) return;
     area.innerHTML = '';
 
@@ -1302,17 +1302,14 @@
   /* ── Table view ─────────────────────────────────────────── */
   function smUpdateTable(items, connections) {
     const wrap = document.getElementById('sm-table-wrap');
-    const empty = document.getElementById('sm-table-empty');
-    if (!wrap || !empty) return;
+    if (!wrap) return;
 
     if (!items || !items.length) {
       wrap.style.display = 'none';
-      empty.style.display = 'block';
       return;
     }
 
     wrap.style.display = 'block';
-    empty.style.display = 'none';
 
     const tbody = document.getElementById('sm-table-body');
     if (!tbody) return;
@@ -1562,7 +1559,6 @@
 
         const flowArea = document.getElementById('sm-trace-area');
         const tableWrap = document.getElementById('sm-table-wrap');
-        const tableEmpty = document.getElementById('sm-table-empty');
 
         if (view === 'table') {
           if (flowArea) flowArea.style.display = 'none';
@@ -1570,31 +1566,30 @@
             smUpdateTable(lastTraceResult.all_items || [], lastTraceResult.connections || []);
           } else {
             if (tableWrap) tableWrap.style.display = 'none';
-            if (tableEmpty) tableEmpty.style.display = 'block';
           }
         } else {
           if (flowArea) flowArea.style.display = '';
           if (tableWrap) tableWrap.style.display = 'none';
-          if (tableEmpty) tableEmpty.style.display = 'none';
 
           if (lastTraceResult) smRenderTrace(lastTraceResult);
-          else if (!showWastage) smRenderBrowseGrid();
+          else smRenderBrowseGrid();
         }
       });
     });
 
-    // Wastage chip
-    const wastageChip = document.getElementById('sm-wastage-chip');
-    if (wastageChip) {
-      wastageChip.addEventListener('click', () => {
+    // Wastage toggle (persistent bar, independent of trace state)
+    const wastageToggle = document.getElementById('sm-wastage-toggle');
+    const wastageTrack = document.getElementById('sm-wastage-track');
+    const wastageInline = document.getElementById('sm-wastage-inline');
+    if (wastageToggle && wastageInline) {
+      wastageToggle.addEventListener('click', () => {
         showWastage = !showWastage;
-        smSetWastageChip(showWastage);
-        if (showWastage) {
-          smShowWastageView();
-        } else {
-          if (lastTraceResult) smRenderTrace(lastTraceResult);
-          else smRenderBrowseGrid();
-        }
+        wastageToggle.setAttribute('aria-expanded', String(showWastage));
+        wastageToggle.setAttribute('aria-checked', String(showWastage));
+        if (wastageTrack) wastageTrack.classList.toggle('spa-advanced-toggle__track--on', showWastage);
+        wastageInline.style.display = showWastage ? '' : 'none';
+        if (showWastage) smShowWastageView();
+        else wastageInline.innerHTML = '';
       });
     }
 
@@ -1617,11 +1612,6 @@
     }
   }
 
-  function smSetWastageChip(active) {
-    const chip = document.getElementById('sm-wastage-chip');
-    if (!chip) return;
-    chip.classList.toggle('sm-wastage-chip--active', active);
-  }
 
   /* ── UI helpers ─────────────────────────────────────────── */
   function smShowAreaLoading() {

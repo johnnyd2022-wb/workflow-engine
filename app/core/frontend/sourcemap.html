@@ -5,7 +5,7 @@
 {% block body_class %}sourcemap-page{% endblock %}
 
 {% block head_extras %}
-<link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}?v=8">
+<link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}?v=10">
 <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
 {% endblock %}
 
@@ -78,6 +78,7 @@
   <section class="spa-form-section spa-page-hero" aria-labelledby="sm-page-title">
     <h1 class="page-title" id="sm-page-title">Source Map</h1>
     <p class="page-subtitle">Trace materials through every step of production</p>
+    <p class="sm-page-hint">Search above or click any card below to trace its journey</p>
   </section>
 
   <!-- Search bar (no dropdown — filters the browse grid inline) -->
@@ -102,11 +103,6 @@
       <button class="sm-view-btn" data-view="map" role="tab" aria-selected="false">Map</button>
       <button class="sm-view-btn" data-view="table" role="tab" aria-selected="false">Table</button>
     </div>
-
-    <button id="sm-wastage-chip" class="sm-wastage-chip" title="Show recorded wastage records">
-      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-      Wastage
-    </button>
 
     <div class="sm-legend" aria-label="Legend">
       <span class="sm-legend-item"><span class="sm-legend-dot sm-legend-dot--raw"></span> Raw</span>
@@ -137,9 +133,20 @@
       <tbody id="sm-table-body"></tbody>
     </table>
   </div>
-  <div id="sm-table-empty" class="sm-table-empty" style="display:none;">
-    Select an item above to see tabular trace data here.
+  <div class="sm-section-divider" role="separator"></div>
+
+  <!-- Wastage log toggle — always visible, independent of trace state -->
+  <div class="sm-wastage-bar">
+    <button id="sm-wastage-toggle" class="spa-advanced-toggle" aria-expanded="false" aria-controls="sm-wastage-inline" role="switch" aria-checked="false">
+      <span class="spa-advanced-toggle__label sm-wastage-toggle__label">View wastage log</span>
+      <span class="spa-advanced-toggle__track" id="sm-wastage-track">
+        <span class="spa-advanced-toggle__thumb"></span>
+      </span>
+    </button>
   </div>
+  <div id="sm-wastage-inline" style="display:none; padding-top: 12px;"></div>
+
+  <div class="sm-section-divider" role="separator"></div>
 
   <!-- System findings (collapsible, collapsed by default) -->
   <section class="sm-findings sm-findings--collapsed" id="sm-findings-section" aria-label="System findings">
@@ -199,5 +206,5 @@
   re-executes it when the content is swapped in via boost navigation.
   core-api.js is already loaded globally by base_spa.html.
 #}
-<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}?v=8"></script>
+<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}?v=10"></script>
 {% endblock %}

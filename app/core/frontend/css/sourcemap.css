@@ -140,25 +140,19 @@
   color: #fff;
 }
 
-.sm-wastage-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1.5px solid var(--border-default, #e5e7eb);
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary, #6b7280);
-  background: var(--bg-card, #fff);
-  cursor: pointer;
-  transition: all 0.15s;
+.sm-section-divider {
+  border-top: 1px solid var(--border-default, #e5e7eb);
+  margin: 20px 0;
 }
 
-.sm-wastage-chip--active {
-  background: #fef3c7;
-  border-color: #f59e0b;
-  color: #92400e;
+.sm-wastage-bar {
+  margin-bottom: 0;
+}
+
+.sm-wastage-toggle__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #111827);
 }
 
 .sm-legend {
@@ -1418,38 +1412,57 @@
   gap: 0;
 }
 
-.sm-browse-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1.5px solid var(--border-default, #e5e7eb);
-  margin-bottom: 16px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.sm-browse-tabs::-webkit-scrollbar { display: none; }
-
-.sm-browse-tab {
-  padding: 8px 16px;
+.sm-page-hint {
   font-size: 13px;
-  font-weight: 500;
-  border: none;
-  background: none;
-  color: var(--text-secondary, #6b7280);
-  cursor: pointer;
-  border-bottom: 2.5px solid transparent;
-  margin-bottom: -1.5px;
-  white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
+  color: var(--text-tertiary, #9ca3af);
+  margin: 4px 0 0;
 }
 
-.sm-browse-tab:hover { color: var(--text-primary, #111827); }
+.sm-browse-seg {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1.5px solid var(--border-default, #e5e7eb);
+  margin-bottom: 14px;
+  box-sizing: border-box;
+}
 
-.sm-browse-tab--active {
-  color: var(--primary, #3b82f6);
-  border-bottom-color: var(--primary, #3b82f6);
+.sm-browse-seg__btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 9px 4px;
+  min-height: 40px;
+  border: none;
+  border-left: 1px solid var(--border-default, #e5e7eb);
+  background: var(--bg-card, #fff);
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sm-browse-seg__btn:first-child { border-left: none; }
+.sm-browse-seg__btn:hover { background: var(--bg-secondary, #f9fafb); color: var(--text-primary, #111827); }
+
+/* Active state must beat hover on both desktop and sticky-hover mobile — no transition so switch is instant */
+.sm-browse-seg__btn--active,
+.sm-browse-seg__btn--active:hover,
+.sm-browse-seg__btn--active:focus {
+  background: var(--primary, #3b82f6);
+  color: #fff;
   font-weight: 600;
+}
+
+@media (min-width: 480px) {
+  .sm-browse-seg__btn { font-size: 13px; padding: 8px 8px; }
 }
 
 .sm-browse-grid {
