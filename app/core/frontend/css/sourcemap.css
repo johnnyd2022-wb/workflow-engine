@@ -1549,17 +1549,27 @@ html[data-spa-theme="dark"] .sm-banner-sleeve {
   margin-right: 4px;
 }
 
-.sm-timeline-steps {
+.sm-timeline-steps-list {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-secondary, #6b7280);
-  margin-bottom: 2px;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
 }
 
-.sm-timeline-step-names {
+.sm-timeline-step-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
   font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.sm-timeline-step-name {
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.sm-timeline-step-flow {
   color: var(--text-secondary, #6b7280);
 }
 
@@ -1570,6 +1580,106 @@ html[data-spa-theme="dark"] .sm-banner-sleeve {
   font-size: 12px;
   color: var(--text-secondary, #6b7280);
   margin-bottom: 4px;
+}
+
+/* ── Timeline: In/Out tags ───────────────────────────── */
+.sm-tl-io-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.sm-tl-io-tag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.sm-tl-io-tag--in {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.sm-tl-io-tag--out {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+html[data-spa-theme="dark"] .sm-tl-io-tag--in  { background: #1e3a5f; color: #93c5fd; }
+html[data-spa-theme="dark"] .sm-tl-io-tag--out { background: #14532d; color: #86efac; }
+
+/* ── Timeline: step sections in detail expand ────────── */
+.sm-tl-step-section {
+  margin-bottom: 16px;
+}
+
+.sm-tl-step-section:last-child {
+  margin-bottom: 0;
+}
+
+.sm-tl-step-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary, #9ca3af);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-light, #f3f4f6);
+}
+
+.sm-tl-io-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 8px 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sm-tl-io-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-light, #f3f4f6);
+}
+
+.sm-tl-io-label--in  { color: #1d4ed8; }
+.sm-tl-io-label--out { color: #15803d; }
+
+html[data-spa-theme="dark"] .sm-tl-io-label--in  { color: #93c5fd; }
+html[data-spa-theme="dark"] .sm-tl-io-label--out { color: #86efac; }
+
+.sm-tl-io-label--in:first-child  { margin-top: 0; }
+
+.sm-tree-step-input {
+  font-size: 11px;
+  color: var(--text-secondary, #6b7280);
+}
+
+/* ── Map: step labels in tree ────────────────────────── */
+.sm-tree-step-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: var(--bg-page, #f3f4f6);
+  border: 1px dashed var(--border-default, #e5e7eb);
+  border-radius: 5px;
+  margin-bottom: 2px;
+}
+
+.sm-tree-step-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
 }
 
 /* ── Findings collapse ───────────────────────────────── */

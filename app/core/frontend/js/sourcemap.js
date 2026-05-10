@@ -483,19 +483,23 @@
       const entry = document.createElement('div');
       entry.className = 'sm-timeline-entry' + (isLast ? ' sm-timeline-entry--last' : '');
 
-      // Flow summary line: names flowing left-to-right
-      const parts = [];
-      if (group.raws.length) parts.push(group.raws.map(r => smEsc(r.name)).join(', '));
-      if (group.wips.length) parts.push(group.wips.map(w => smEsc(w.name)).join(', '));
-      if (group.finals.length) parts.push(group.finals.map(f => smEsc(f.name)).join(', '));
-      const flowSummary = parts.join(' <span class="sm-timeline-arrow">→</span> ');
-
-      // Step names from connections (if available)
-      const stepNames = [...new Set(group.connections
-        .map(c => c.step_name || c.step_title || null)
-        .filter(Boolean))];
-
       const detailId = `sm-tl-detail-${idx}`;
+
+      // Build per-step rows for the header section
+      const stepsHtml = group.steps.map(step => {
+        const inHtml = step.froms.length
+          ? `<span class="sm-tl-io-tag sm-tl-io-tag--in">In</span><span class="sm-timeline-step-flow">${step.froms.map(i => smEsc(i.name)).join(', ')}</span>`
+          : '';
+        const outHtml = step.tos.length
+          ? `<span class="sm-tl-io-tag sm-tl-io-tag--out">Out</span><span class="sm-timeline-step-flow">${step.tos.map(i => smEsc(i.name)).join(', ')}</span>`
+          : '';
+        return `
+          <div class="sm-timeline-step-row">
+            <span class="sm-timeline-label">Step</span>
+            ${step.stepName ? `<span class="sm-timeline-step-name">${smEsc(step.stepName)}</span>` : ''}
+            <span class="sm-tl-io-group">${inHtml}${inHtml && outHtml ? '<span class="sm-timeline-arrow">→</span>' : ''}${outHtml}</span>
+          </div>`;
+      }).join('');
 
       entry.innerHTML = `
         <div class="sm-timeline-dot-col" aria-hidden="true">
@@ -508,42 +512,62 @@
             <span class="sm-timeline-process">${smEsc(group.processName)}</span>
             ${group.executionDate ? `<span class="sm-timeline-date">${smFmtDate(group.executionDate)}</span>` : ''}
           </div>
-          ${stepNames.length ? `<div class="sm-timeline-steps">
-            <span class="sm-timeline-label">Step${stepNames.length > 1 ? 's' : ''}</span>
-            <span class="sm-timeline-step-names">${stepNames.map(s => smEsc(s)).join(' → ')}</span>
-          </div>` : ''}
+          ${stepsHtml ? `<div class="sm-timeline-steps-list">${stepsHtml}</div>` : ''}
           ${group.operator ? `<div class="sm-timeline-operator">
             <span class="sm-timeline-label">Completed by</span>
             <span>${smEsc(group.operator)}</span>
           </div>` : ''}
-          <div class="sm-timeline-flow-summary">${flowSummary}</div>
           <button class="sm-timeline-expand-btn" aria-expanded="false" aria-controls="${detailId}">Details ›</button>
           <div class="sm-timeline-detail" id="${detailId}" hidden></div>
         </div>
       `;
 
-      // Build item card detail section with real DOM nodes (preserves click handlers)
+      // Build detail organised by step (preserves click handlers via real DOM nodes)
       const detailDiv = entry.querySelector(`#${detailId}`);
-      const detailGrid = document.createElement('div');
-      detailGrid.className = 'sm-tl-detail-grid';
+      const hasStepData = group.steps.some(s => s.froms.length || s.tos.length);
 
-      [
-        { items: group.raws, type: 'raw', label: 'Raw Materials' },
-        { items: group.wips, type: 'wip', label: 'Work in Progress' },
-        { items: group.finals, type: 'final', label: 'Final Products' },
-      ].forEach(({ items, type, label }) => {
-        if (!items.length) return;
-        const col = document.createElement('div');
-        col.className = 'sm-tl-detail-col';
-        const colLabel = document.createElement('div');
-        colLabel.className = 'sm-tl-detail-label';
-        colLabel.textContent = label;
-        col.appendChild(colLabel);
-        items.forEach(item => col.appendChild(smBuildItemCard(item, type, sharedSourceIds.has(item.id), group)));
-        detailGrid.appendChild(col);
-      });
+      if (hasStepData) {
+        group.steps.forEach(step => {
+          if (!step.froms.length && !step.tos.length) return;
 
-      detailDiv.appendChild(detailGrid);
+          const section = document.createElement('div');
+          section.className = 'sm-tl-step-section';
+
+          if (step.stepName) {
+            const hdr = document.createElement('div');
+            hdr.className = 'sm-tl-step-header';
+            hdr.textContent = step.stepName;
+            section.appendChild(hdr);
+          }
+
+          const addSubSection = (items, labelText, tagClass) => {
+            if (!items.length) return;
+            const lbl = document.createElement('div');
+            lbl.className = `sm-tl-io-label ${tagClass}`;
+            lbl.textContent = labelText;
+            section.appendChild(lbl);
+            const grid = document.createElement('div');
+            grid.className = 'sm-tl-detail-grid';
+            items.forEach(item => grid.appendChild(
+              smBuildItemCard(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id), group)
+            ));
+            section.appendChild(grid);
+          };
+
+          addSubSection(step.froms, 'Consumed', 'sm-tl-io-label--in');
+          addSubSection(step.tos,   'Produced', 'sm-tl-io-label--out');
+
+          detailDiv.appendChild(section);
+        });
+      } else {
+        // Fallback: flat list when no step data available
+        const grid = document.createElement('div');
+        grid.className = 'sm-tl-detail-grid';
+        [...group.raws, ...group.wips, ...group.finals].forEach(item => {
+          grid.appendChild(smBuildItemCard(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id), group));
+        });
+        detailDiv.appendChild(grid);
+      }
 
       entry.querySelector('.sm-timeline-expand-btn').addEventListener('click', function () {
         const detail = document.getElementById(detailId);
@@ -586,10 +610,6 @@
       const groupLi = document.createElement('li');
       groupLi.className = 'sm-tree-item';
 
-      const stepNames = [...new Set((group.connections || [])
-        .map(c => c.step_name || c.step_title || null)
-        .filter(Boolean))];
-
       const groupLabel = document.createElement('div');
       groupLabel.className = 'sm-tree-group-label';
       groupLabel.innerHTML = `
@@ -598,10 +618,6 @@
           <span class="sm-tree-group__process">${smEsc(group.processName)}</span>
           ${group.executionDate ? `<span class="sm-tree-group__date">${smFmtDate(group.executionDate)}</span>` : ''}
         </div>
-        ${stepNames.length ? `<div class="sm-tree-group__row">
-          <span class="sm-tree-group__label-tag">Step${stepNames.length > 1 ? 's' : ''}</span>
-          <span class="sm-tree-group__steps">${stepNames.map(s => smEsc(s)).join(' → ')}</span>
-        </div>` : ''}
         ${group.operator ? `<div class="sm-tree-group__row">
           <span class="sm-tree-group__label-tag">By</span>
           <span class="sm-tree-group__operator">${smEsc(group.operator)}</span>
@@ -609,41 +625,84 @@
       `;
       groupLi.appendChild(groupLabel);
 
-      if (group.wips.length) {
-        const wipUl = document.createElement('ul');
-        wipUl.className = 'sm-tree-children';
+      // Render steps individually; fall back to flat WIP/Final list if no step data
+      const namedSteps = group.steps.filter(s => s.froms.length || s.tos.length);
 
-        group.wips.forEach(wip => {
-          const wipLi = document.createElement('li');
-          wipLi.className = 'sm-tree-item';
-          wipLi.appendChild(smBuildTreeNode(wip, 'wip', sharedSourceIds.has(wip.id)));
+      if (namedSteps.length) {
+        const stepsUl = document.createElement('ul');
+        stepsUl.className = 'sm-tree-children';
 
-          if (group.finals.length) {
-            const finalUl = document.createElement('ul');
-            finalUl.className = 'sm-tree-children';
-            group.finals.forEach(fin => {
-              const finLi = document.createElement('li');
-              finLi.className = 'sm-tree-item';
-              finLi.appendChild(smBuildTreeNode(fin, 'final', false));
-              finalUl.appendChild(finLi);
+        namedSteps.forEach(step => {
+          const stepLi = document.createElement('li');
+          stepLi.className = 'sm-tree-item';
+
+          const fromLabel = step.froms.map(i => smEsc(i.name)).join(', ');
+          const stepLabel = document.createElement('div');
+          stepLabel.className = 'sm-tree-step-label';
+          stepLabel.innerHTML = `
+            <span class="sm-tree-group__label-tag">Step</span>
+            ${step.stepName ? `<span class="sm-tree-step-name">${smEsc(step.stepName)}</span>` : ''}
+            ${fromLabel ? `<span class="sm-tl-io-tag sm-tl-io-tag--in">In</span><span class="sm-tree-step-input">${fromLabel}</span>` : ''}
+          `;
+          stepLi.appendChild(stepLabel);
+
+          // Items produced or transformed at this step (exclude root to avoid repeat)
+          const produced = [...new Map(
+            [...step.froms, ...step.tos]
+              .filter(i => i.id !== tracedItem.id)
+              .map(i => [i.id, i])
+          ).values()];
+
+          if (produced.length) {
+            const producedUl = document.createElement('ul');
+            producedUl.className = 'sm-tree-children';
+            produced.forEach(item => {
+              const itemLi = document.createElement('li');
+              itemLi.className = 'sm-tree-item';
+              itemLi.appendChild(smBuildTreeNode(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id)));
+              producedUl.appendChild(itemLi);
             });
-            wipLi.appendChild(finalUl);
+            stepLi.appendChild(producedUl);
           }
 
-          wipUl.appendChild(wipLi);
+          stepsUl.appendChild(stepLi);
         });
 
-        groupLi.appendChild(wipUl);
-      } else if (group.finals.length) {
-        const finalUl = document.createElement('ul');
-        finalUl.className = 'sm-tree-children';
-        group.finals.forEach(fin => {
-          const finLi = document.createElement('li');
-          finLi.className = 'sm-tree-item';
-          finLi.appendChild(smBuildTreeNode(fin, 'final', false));
-          finalUl.appendChild(finLi);
-        });
-        groupLi.appendChild(finalUl);
+        groupLi.appendChild(stepsUl);
+      } else {
+        // Fallback: flat WIP → Final structure
+        if (group.wips.length) {
+          const wipUl = document.createElement('ul');
+          wipUl.className = 'sm-tree-children';
+          group.wips.forEach(wip => {
+            const wipLi = document.createElement('li');
+            wipLi.className = 'sm-tree-item';
+            wipLi.appendChild(smBuildTreeNode(wip, 'wip', sharedSourceIds.has(wip.id)));
+            if (group.finals.length) {
+              const finalUl = document.createElement('ul');
+              finalUl.className = 'sm-tree-children';
+              group.finals.forEach(fin => {
+                const finLi = document.createElement('li');
+                finLi.className = 'sm-tree-item';
+                finLi.appendChild(smBuildTreeNode(fin, 'final', false));
+                finalUl.appendChild(finLi);
+              });
+              wipLi.appendChild(finalUl);
+            }
+            wipUl.appendChild(wipLi);
+          });
+          groupLi.appendChild(wipUl);
+        } else if (group.finals.length) {
+          const finalUl = document.createElement('ul');
+          finalUl.className = 'sm-tree-children';
+          group.finals.forEach(fin => {
+            const finLi = document.createElement('li');
+            finLi.className = 'sm-tree-item';
+            finLi.appendChild(smBuildTreeNode(fin, 'final', false));
+            finalUl.appendChild(finLi);
+          });
+          groupLi.appendChild(finalUl);
+        }
       }
 
       const otherRaws = group.raws.filter(r => r.id !== tracedItem.id);
@@ -677,6 +736,8 @@
   /* ── Build execution groups ─────────────────────────────── */
   function smBuildExecutionGroups(allItems, connections) {
     const itemMap = new Map(allItems.map(it => [it.id, it]));
+    // Preserve all_items order so we can sort steps chronologically
+    const itemOrder = new Map(allItems.map((it, i) => [it.id, i]));
 
     const execMap = new Map();
     connections.forEach(conn => {
@@ -694,6 +755,38 @@
       const process = exec ? allProcesses.find(p => p.id === exec.process_id) : null;
       const items = [...g.itemIds].map(id => itemMap.get(id)).filter(Boolean);
 
+      // Steps are derived from items: each non-raw item carries source_execution_id + source_step_name
+      // Group produced items by the step that created them within this execution
+      const stepMap = new Map();
+      items.forEach(item => {
+        if (item.source_execution_id !== eid) return;
+        const key = item.source_step_name || '';
+        if (!stepMap.has(key)) stepMap.set(key, { stepName: item.source_step_name || '', toIds: new Set(), fromIds: new Set() });
+        stepMap.get(key).toIds.add(item.id);
+      });
+
+      // Sort steps by earliest produced item position in all_items (creation order)
+      const steps = [...stepMap.values()]
+        .map(s => ({
+          stepName: s.stepName,
+          tos:   [...s.toIds].map(id => itemMap.get(id)).filter(Boolean),
+          froms: [], // derived below from step order — avoids synthetic connection noise
+        }))
+        .sort((a, b) => {
+          const aMin = Math.min(...a.tos.map(i => itemOrder.get(i.id) ?? Infinity));
+          const bMin = Math.min(...b.tos.map(i => itemOrder.get(i.id) ?? Infinity));
+          return aMin - bMin;
+        });
+
+      // Derive froms from step order: step[0] consumes external inputs; step[N] consumes step[N-1]'s outputs.
+      // This removes synthetic raw→item edges that would otherwise appear as spurious inputs to every step.
+      const producedInExec = new Set(steps.flatMap(s => s.tos.map(i => i.id)));
+      steps.forEach((step, i) => {
+        step.froms = i === 0
+          ? items.filter(it => !producedInExec.has(it.id))   // items not produced by any step here
+          : [...steps[i - 1].tos];                            // previous step's outputs
+      });
+
       groups.push({
         executionId: eid,
         exec,
@@ -705,6 +798,7 @@
         wips:   items.filter(it => it.inventory_type === 'work_in_progress'),
         finals: items.filter(it => it.inventory_type === 'final_product'),
         connections: g.connections,
+        steps,
       });
     });
 

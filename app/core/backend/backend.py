@@ -3623,10 +3623,10 @@ def delete_inventory_item(item_id):
 @core_bp.route("/api/core/inventory/trace/<raw_material_id>", methods=["GET"])
 @requires_auth
 def trace_raw_material(raw_material_id: str):
-    """Trace forward from a raw material to find all connected intermediates and final products
+    """Trace forward from a raw material to find all connected intermediates and final products.
 
-    Uses DAG traversal to find all inventory items that trace back to this raw material.
-    Returns only items with quantity > 0, except for the raw material itself (if consumed).
+    Returns all items in the production chain regardless of current quantity — zero-quantity
+    intermediates must be visible for a complete audit trail.
     """
     from app.core.backend.dagtraversal import trace_forward, validate_item_uuid
     from app.core.db.models.inventory_item import InventoryItem
@@ -3648,7 +3648,7 @@ def trace_raw_material(raw_material_id: str):
         org_id,
         db_session,
         raw_material_uuid,
-        include_quantity_filter=True,
+        include_quantity_filter=False,
         root_item_id=raw_material_uuid,
     )
     connected_items = result["items"]
@@ -3709,10 +3709,10 @@ def trace_raw_material(raw_material_id: str):
 @core_bp.route("/api/core/inventory/trace-backward/<inventory_item_id>", methods=["GET"])
 @requires_auth
 def trace_inventory_backward(inventory_item_id: str):
-    """Trace backward from any inventory item (raw, intermediate, or final) to find all source items
+    """Trace backward from any inventory item (raw, intermediate, or final) to find all source items.
 
-    Uses DAG traversal to find all inventory items that contributed to this item.
-    Returns only items with quantity > 0, except for the traced item itself (if consumed).
+    Returns all items in the production chain regardless of current quantity — zero-quantity
+    intermediates must be visible for a complete audit trail.
     """
     from app.core.backend.dagtraversal import trace_backward, validate_item_uuid
     from app.core.db.models.inventory_item import InventoryItem
@@ -3732,7 +3732,7 @@ def trace_inventory_backward(inventory_item_id: str):
         org_id,
         db_session,
         item_uuid,
-        include_quantity_filter=True,
+        include_quantity_filter=False,
         traced_item_id=item_uuid,
     )
     all_result_items = result["items"]
