@@ -586,12 +586,26 @@
       const groupLi = document.createElement('li');
       groupLi.className = 'sm-tree-item';
 
+      const stepNames = [...new Set((group.connections || [])
+        .map(c => c.step_name || c.step_title || null)
+        .filter(Boolean))];
+
       const groupLabel = document.createElement('div');
       groupLabel.className = 'sm-tree-group-label';
       groupLabel.innerHTML = `
-        <span class="sm-tree-group__process">${smEsc(group.processName)}</span>
-        ${group.executionDate ? `<span class="sm-tree-group__date">${smFmtDate(group.executionDate)}</span>` : ''}
-        ${group.operator ? `<span class="sm-tree-group__operator">${smEsc(group.operator)}</span>` : ''}
+        <div class="sm-tree-group__row">
+          <span class="sm-tree-group__label-tag">Process</span>
+          <span class="sm-tree-group__process">${smEsc(group.processName)}</span>
+          ${group.executionDate ? `<span class="sm-tree-group__date">${smFmtDate(group.executionDate)}</span>` : ''}
+        </div>
+        ${stepNames.length ? `<div class="sm-tree-group__row">
+          <span class="sm-tree-group__label-tag">Step${stepNames.length > 1 ? 's' : ''}</span>
+          <span class="sm-tree-group__steps">${stepNames.map(s => smEsc(s)).join(' → ')}</span>
+        </div>` : ''}
+        ${group.operator ? `<div class="sm-tree-group__row">
+          <span class="sm-tree-group__label-tag">By</span>
+          <span class="sm-tree-group__operator">${smEsc(group.operator)}</span>
+        </div>` : ''}
       `;
       groupLi.appendChild(groupLabel);
 
