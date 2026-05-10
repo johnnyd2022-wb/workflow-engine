@@ -475,6 +475,62 @@ def _strip_incoming_execution_trace_keys(execution_data: dict | None) -> dict:
     return cleaned if isinstance(cleaned, dict) else {}
 
 
+def _parse_uuid(v: str | None) -> UUID | None:
+    """Parse v as a UUID, returning None on any failure. Avoids double-parsing and 500s on malformed DB values."""
+    if not v:
+        return None
+    try:
+        return UUID(str(v))
+    except (ValueError, AttributeError):
+        return None
+
+
+def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
+    """
+    Attach step_data to each item dict in-place.
+
+    Bulk-fetches ExecutionStep records for all items that have a source_execution_step_id,
+    joining through Execution to enforce org_id (defense-in-depth against upstream scoping drift).
+    Sets item["step_data"] = {completed_at, actual_inputs, actual_outputs} or None.
+    """
+    from app.core.db.models.execution import Execution as ExecutionModel
+    from app.core.db.models.execution_step import ExecutionStep as ExecutionStepModel
+
+    # Parse UUIDs once; raw value → UUID map eliminates second-pass parsing in the hydration loop.
+    raw_to_uuid: dict[str, UUID] = {
+        raw: uid
+        for it in items
+        if (raw := it.get("source_execution_step_id")) and (uid := _parse_uuid(raw))
+    }
+    step_ids: set[UUID] = set(raw_to_uuid.values())
+
+    # UUID-keyed map: avoids str/UUID mismatch at lookup time.
+    step_map: dict[UUID, ExecutionStepModel] = {}
+    if step_ids:
+        for _s in (
+            db_session.query(ExecutionStepModel)
+            .join(ExecutionModel, ExecutionStepModel.execution_id == ExecutionModel.id)
+            .filter(ExecutionStepModel.id.in_(step_ids), ExecutionModel.org_id == org_id)
+            .all()
+        ):
+            step_map[_s.id] = _s
+
+    for _item in items:
+        uid = raw_to_uuid.get(_item.get("source_execution_step_id"))
+        _s = step_map.get(uid) if uid else None
+        if uid and _s is None:
+            logger.debug("_hydrate_step_data: ExecutionStep %s not found (org_id=%s)", uid, org_id)
+        _item["step_data"] = (
+            {
+                "completed_at": _to_iso_timestamp(_s.completed_at),
+                "actual_inputs": _s.actual_inputs,
+                "actual_outputs": _s.actual_outputs,
+            }
+            if _s
+            else None
+        )
+
+
 def _to_iso_timestamp(ts) -> str | None:
     """Normalize a timestamp to ISO format string for consistent API output."""
     if ts is None:
@@ -1659,6 +1715,13 @@ def list_executions():
         total_steps = execution.total_steps or len(execution_steps) if execution_steps else 0
         progress = (len(completed_steps) / total_steps * 100) if total_steps > 0 else 0
 
+        # Extract completed_by from the last completed step (highest step_number = who finished the execution)
+        completed_by = None
+        for _es in reversed(execution_steps_sorted):
+            if _es.execution_data and _es.execution_data.get("completed_by"):
+                completed_by = _es.execution_data["completed_by"]
+                break
+
         steps_payload = [
             {
                 "id": str(es.id),
@@ -1689,6 +1752,8 @@ def list_executions():
                 "total_steps": total_steps,
                 "execution_steps": steps_payload,
                 "evidence": evidence_by_execution.get(str(execution.id), []),
+                "completed_by": completed_by,
+                "created_at": execution.created_at.isoformat() if execution.created_at else None,
             }
         )
 
@@ -2953,7 +3018,7 @@ def record_wastage():
         idem_key = idem_key_raw.strip()
 
     parse_errors: list[str] = []
-    lines: list[tuple[int, UUID, Decimal, str | None]] = []
+    lines: list[tuple[int, UUID, Decimal, str | None, str]] = []
     seen_ids: set[UUID] = set()
 
     for idx, entry in enumerate(entries):
@@ -2985,7 +3050,14 @@ def record_wastage():
         if u_err:
             parse_errors.append(f"Entry {idx + 1}: {u_err}")
             continue
-        lines.append((idx + 1, item_id, waste_decimal, parsed_unit))
+        reason = (entry.get("reason") or "").replace("\x00", "").strip()
+        if not reason:
+            parse_errors.append(f"Entry {idx + 1}: reason is required")
+            continue
+        if len(reason) > 500:
+            parse_errors.append(f"Entry {idx + 1}: reason must be 500 characters or fewer")
+            continue
+        lines.append((idx + 1, item_id, waste_decimal, parsed_unit, reason))
 
     if parse_errors:
         return (
@@ -3003,7 +3075,7 @@ def record_wastage():
 
     lines.sort(key=lambda t: t[1])
     hash_for_idem = wastage_entries_payload_hash(
-        [{"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or ""} for _i, item_id, w, u in lines]
+        [{"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or "", "reason": r} for _i, item_id, w, u, r in lines]
     )
 
     inventory_repo = InventoryRepository(db_session)
@@ -3037,9 +3109,9 @@ def record_wastage():
                 return jsonify(stored), existing.http_status
 
         validation_errors: list[str] = []
-        staged: list[tuple[InventoryItem, Decimal, int, str | None]] = []
+        staged: list[tuple[InventoryItem, Decimal, int, str | None, str]] = []
 
-        for entry_idx, item_id, waste_decimal, req_unit in lines:
+        for entry_idx, item_id, waste_decimal, req_unit, reason in lines:
             item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
             if not item:
                 validation_errors.append(f"Entry {entry_idx}: inventory item not found or access denied")
@@ -3067,7 +3139,7 @@ def record_wastage():
                     f"Entry {entry_idx}: quantity_wasted exceeds available quantity ({current_qty} {inv_unit} on hand)"
                 )
                 continue
-            staged.append((item, waste_in_inv, entry_idx, req_unit))
+            staged.append((item, waste_in_inv, entry_idx, req_unit, reason))
 
         if validation_errors:
             db_session.rollback()
@@ -3086,7 +3158,7 @@ def record_wastage():
 
         result_records = []
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.WASTAGE_RECORD):
-            for item, waste_decimal, _entry_idx, request_unit in staged:
+            for item, waste_decimal, _entry_idx, request_unit, reason in staged:
                 actual_waste = waste_decimal
                 current_qty = parse_stored_quantity_to_decimal(item.quantity)
                 new_qty = current_qty - actual_waste
@@ -3097,6 +3169,7 @@ def record_wastage():
                     inventory_item_id=item.id,
                     quantity_wasted=str(actual_waste),
                     unit=unit,
+                    reason=reason,
                     recorded_by=recorded_by,
                 )
                 db_session.add(record)
@@ -3126,6 +3199,7 @@ def record_wastage():
                         "item_name": item.name,
                         "quantity_wasted": str(actual_waste),
                         "unit": unit,
+                        "reason": reason,
                         "recorded_at": record.recorded_at.isoformat() if record.recorded_at else None,
                     }
                 )
@@ -3239,6 +3313,7 @@ def list_wastage():
                 "unit": r.unit,
                 "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
                 "recorded_by": r.recorded_by,
+                "reason": r.reason,
             }
         )
     return jsonify({"wastage_records": result}), 200
@@ -3623,10 +3698,10 @@ def delete_inventory_item(item_id):
 @core_bp.route("/api/core/inventory/trace/<raw_material_id>", methods=["GET"])
 @requires_auth
 def trace_raw_material(raw_material_id: str):
-    """Trace forward from a raw material to find all connected intermediates and final products
+    """Trace forward from a raw material to find all connected intermediates and final products.
 
-    Uses DAG traversal to find all inventory items that trace back to this raw material.
-    Returns only items with quantity > 0, except for the raw material itself (if consumed).
+    Returns all items in the production chain regardless of current quantity — zero-quantity
+    intermediates must be visible for a complete audit trail.
     """
     from app.core.backend.dagtraversal import trace_forward, validate_item_uuid
     from app.core.db.models.inventory_item import InventoryItem
@@ -3648,11 +3723,14 @@ def trace_raw_material(raw_material_id: str):
         org_id,
         db_session,
         raw_material_uuid,
-        include_quantity_filter=True,
+        include_quantity_filter=False,
         root_item_id=raw_material_uuid,
     )
     connected_items = result["items"]
     connections = result["connections"]
+
+    # Attach step_data to each item for historical quantities and step timestamps.
+    _hydrate_step_data(connected_items, db_session, org_id)
 
     # Match original API: add direct connection from raw material to every connected item (execution_id as link)
     raw_id_str = str(raw_material_uuid)
@@ -3688,6 +3766,7 @@ def trace_raw_material(raw_material_id: str):
         "process_name": None,
         "created_at": raw_material.created_at.isoformat() if raw_material.created_at else None,
         "extra_data": raw_material.extra_data if raw_material.extra_data else {},
+        "step_data": None,
     }
     if not any(item["id"] == str(raw_material.id) for item in connected_items):
         connected_items.insert(0, raw_material_data)
@@ -3709,10 +3788,10 @@ def trace_raw_material(raw_material_id: str):
 @core_bp.route("/api/core/inventory/trace-backward/<inventory_item_id>", methods=["GET"])
 @requires_auth
 def trace_inventory_backward(inventory_item_id: str):
-    """Trace backward from any inventory item (raw, intermediate, or final) to find all source items
+    """Trace backward from any inventory item (raw, intermediate, or final) to find all source items.
 
-    Uses DAG traversal to find all inventory items that contributed to this item.
-    Returns only items with quantity > 0, except for the traced item itself (if consumed).
+    Returns all items in the production chain regardless of current quantity — zero-quantity
+    intermediates must be visible for a complete audit trail.
     """
     from app.core.backend.dagtraversal import trace_backward, validate_item_uuid
     from app.core.db.models.inventory_item import InventoryItem
@@ -3732,25 +3811,14 @@ def trace_inventory_backward(inventory_item_id: str):
         org_id,
         db_session,
         item_uuid,
-        include_quantity_filter=True,
+        include_quantity_filter=False,
         traced_item_id=item_uuid,
     )
     all_result_items = result["items"]
     connections = result["connections"]
 
-    # Match original API: add direct connection from every source item to traced item (for sourcemap arrows)
-    traced_id_str = str(traced_item.id)
-    exec_id_str = str(traced_item.source_execution_id) if traced_item.source_execution_id else None
-    if exec_id_str:
-        existing_to_traced = {c["from_id"] for c in connections if c.get("to_id") == traced_id_str}
-        for item in all_result_items:
-            if item["id"] == traced_id_str:
-                continue
-            if item["id"] not in existing_to_traced:
-                connections.append({"from_id": item["id"], "to_id": traced_id_str, "execution_id": exec_id_str})
-                existing_to_traced.add(item["id"])
-
-    # Traced item data: use enriched entry from result if present, else build from ORM
+    # Build traced_item_data first; add it to all_result_items so step enrichment and connection
+    # filtering both include it. trace_backward only returns SOURCE items, not the traced item itself.
     traced_item_data = next(
         (item for item in all_result_items if item["id"] == str(traced_item.id)),
         None,
@@ -3775,7 +3843,24 @@ def trace_inventory_backward(inventory_item_id: str):
             "process_name": None,
             "created_at": traced_item.created_at.isoformat() if traced_item.created_at else None,
             "extra_data": traced_extra,
+            "step_data": None,
         }
+        all_result_items.append(traced_item_data)
+
+    # Attach step_data (including traced item itself, which is now in all_result_items).
+    _hydrate_step_data(all_result_items, db_session, org_id)
+
+    # Add direct connections from every source item to traced item (for sourcemap execution grouping)
+    traced_id_str = str(traced_item.id)
+    exec_id_str = str(traced_item.source_execution_id) if traced_item.source_execution_id else None
+    if exec_id_str:
+        existing_to_traced = {c["from_id"] for c in connections if c.get("to_id") == traced_id_str}
+        for item in all_result_items:
+            if item["id"] == traced_id_str:
+                continue
+            if item["id"] not in existing_to_traced:
+                connections.append({"from_id": item["id"], "to_id": traced_id_str, "execution_id": exec_id_str})
+                existing_to_traced.add(item["id"])
 
     source_items_without_traced = [item for item in all_result_items if item["id"] != str(traced_item.id)]
     raw_materials = [
@@ -3785,11 +3870,11 @@ def trace_inventory_backward(inventory_item_id: str):
         item for item in source_items_without_traced if item["inventory_type"] == InventoryType.WORK_IN_PROGRESS.value
     ]
 
-    # Only return connections where both from_id and to_id are inventory item IDs in the response.
-    # Prevents the source map table from showing "TO <uuid>" when an ID is missing (e.g. execution_id).
-    backward_item_ids = {item["id"] for item in all_result_items}
+    # Only return connections where both endpoints are items in the response (prevents TO <uuid> display).
+    # all_result_items now includes traced_item so connections to it are preserved.
+    all_item_ids = {item["id"] for item in all_result_items}
     connections = [
-        c for c in connections if c.get("from_id") in backward_item_ids and c.get("to_id") in backward_item_ids
+        c for c in connections if c.get("from_id") in all_item_ids and c.get("to_id") in all_item_ids
     ]
 
     return jsonify(
@@ -3797,7 +3882,7 @@ def trace_inventory_backward(inventory_item_id: str):
             "traced_item": traced_item_data,
             "raw_materials": raw_materials,
             "intermediates": intermediates,
-            "all_items": source_items_without_traced,
+            "all_items": all_result_items,
             "connections": connections,
         }
     ), 200
