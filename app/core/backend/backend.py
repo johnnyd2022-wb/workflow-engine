@@ -1659,9 +1659,9 @@ def list_executions():
         total_steps = execution.total_steps or len(execution_steps) if execution_steps else 0
         progress = (len(completed_steps) / total_steps * 100) if total_steps > 0 else 0
 
-        # Extract completed_by from steps' execution_data (set when a step is completed by a user)
+        # Extract completed_by from the last completed step (highest step_number = who finished the execution)
         completed_by = None
-        for _es in execution_steps_sorted:
+        for _es in reversed(execution_steps_sorted):
             if _es.execution_data and _es.execution_data.get("completed_by"):
                 completed_by = _es.execution_data["completed_by"]
                 break
