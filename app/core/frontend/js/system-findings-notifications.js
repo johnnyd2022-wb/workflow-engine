@@ -5,6 +5,8 @@
 (function () {
   'use strict';
 
+  var currentTab = 'active';
+
   var CATEGORY_LABELS = {
     expired_materials: 'Expired raw materials',
     output_expiry: 'Custom output expiry',
@@ -207,7 +209,7 @@
     }
   }
 
-  function ensureEmptyState(visibleCount) {
+  function ensureEmptyState(visibleCount, msg) {
     var body = document.getElementById('system-findings-banner-body');
     if (!body) return;
 
@@ -217,10 +219,10 @@
       if (!emptyEl) {
         emptyEl = document.createElement('div');
         emptyEl.id = 'system-findings-notifications-empty';
-        emptyEl.textContent = 'No system notifications right now.';
         emptyEl.className = 'notification-page__empty';
         body.appendChild(emptyEl);
       }
+      emptyEl.textContent = msg || 'No system notifications right now.';
     } else if (emptyEl) {
       emptyEl.remove();
     }
@@ -353,7 +355,7 @@
     inner.appendChild(field);
   }
 
-  function appendOverflowMenu(inner, checkId, itemKey, todayKey, onChange) {
+  function appendOverflowMenu(inner, checkId, itemKey, todayKey, onChange, archiveStatus) {
     var wrap = document.createElement('div');
     wrap.className = 'notifications-list-item__overflow';
 
@@ -370,21 +372,36 @@
     menu.setAttribute('role', 'menu');
     menu.hidden = true;
 
-    var snoozeItem = createOverflowMenuItem('Snooze for today', function (ev) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      sessionStorage.setItem(ignoreKey(checkId, itemKey), todayKey);
-      onChange();
-    });
-    snoozeItem.setAttribute('role', 'menuitem');
+    if (archiveStatus) {
+      var restoreItem = createOverflowMenuItem('Restore to active', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        sessionStorage.removeItem(ignoreKey(checkId, itemKey));
+        sessionStorage.removeItem(dismissedKey(checkId, itemKey));
+        onChange();
+      });
+      restoreItem.setAttribute('role', 'menuitem');
+      menu.appendChild(restoreItem);
+    } else {
+      var snoozeItem = createOverflowMenuItem('Snooze for today', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        sessionStorage.setItem(ignoreKey(checkId, itemKey), todayKey);
+        onChange();
+      });
+      snoozeItem.setAttribute('role', 'menuitem');
 
-    var hideItem = createOverflowMenuItem('Hide', function (ev) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      sessionStorage.setItem(dismissedKey(checkId, itemKey), '1');
-      onChange();
-    });
-    hideItem.setAttribute('role', 'menuitem');
+      var hideItem = createOverflowMenuItem('Hide', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        sessionStorage.setItem(dismissedKey(checkId, itemKey), '1');
+        onChange();
+      });
+      hideItem.setAttribute('role', 'menuitem');
+
+      menu.appendChild(snoozeItem);
+      menu.appendChild(hideItem);
+    }
 
     toggle.addEventListener('click', function (ev) {
       ev.preventDefault();
@@ -395,8 +412,6 @@
       toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     });
 
-    menu.appendChild(snoozeItem);
-    menu.appendChild(hideItem);
     wrap.appendChild(toggle);
     wrap.appendChild(menu);
     inner.appendChild(wrap);
@@ -685,9 +700,27 @@
 
     var inner = document.createElement('div');
     inner.className = 'notifications-list-item__inner';
-    appendOverflowMenu(inner, record.checkId, record.itemKey, todayKey, onChange);
+    appendOverflowMenu(inner, record.checkId, record.itemKey, todayKey, onChange, record.archiveStatus || null);
 
-    appendLabeledField(inner, 'Date triggered:', record.triggeredDateText || 'Unknown', false, 'notifications-list-item__field--date');
+    if (record.archiveStatus) {
+      var statusEl = document.createElement('span');
+      statusEl.className = 'notif-archive-status notif-archive-status--' + record.archiveStatus;
+      statusEl.textContent = record.archiveStatus === 'snoozed' ? 'Snoozed until tomorrow' : 'Hidden';
+      var dateField = document.createElement('div');
+      dateField.className = 'notifications-list-item__field notifications-list-item__field--date';
+      var dateVal = document.createElement('span');
+      dateVal.className = 'notifications-list-item__value';
+      dateVal.style.display = 'flex';
+      dateVal.style.alignItems = 'center';
+      dateVal.style.gap = '8px';
+      dateVal.style.flexWrap = 'wrap';
+      dateVal.appendChild(document.createTextNode(record.triggeredDateText || 'Unknown'));
+      dateVal.appendChild(statusEl);
+      dateField.appendChild(dateVal);
+      inner.appendChild(dateField);
+    } else {
+      appendLabeledField(inner, 'Date triggered:', record.triggeredDateText || 'Unknown', false, 'notifications-list-item__field--date');
+    }
     appendLabeledField(
       inner,
       'System finding:',
@@ -719,6 +752,174 @@
     return li;
   }
 
+  function buildArchivedRecords(findings, todayKey) {
+    var allRecords = [];
+
+    findings.forEach(function (f) {
+      var checkId = f && f.check_id != null ? String(f.check_id) : '';
+      if (!checkId) return;
+      var data = f.data && typeof f.data === 'object' ? f.data : {};
+
+      function tryAdd(itemKey, buildFn) {
+        if (!itemKey) return;
+        var snoozed = isIgnoredToday(checkId, itemKey, todayKey);
+        var hidden = isDismissed(checkId, itemKey);
+        if (!snoozed && !hidden) return;
+        var rec = buildFn();
+        if (!rec) return;
+        rec.archiveStatus = hidden ? 'hidden' : 'snoozed';
+        allRecords.push(rec);
+      }
+
+      if (checkId === 'expired_materials') {
+        var expired = Array.isArray(data.expired_raw_materials) ? data.expired_raw_materials : [];
+        var impactedAll = Array.isArray(data.impacted_items) ? data.impacted_items : [];
+        expired.forEach(function (raw) {
+          var rawId = raw && raw.id != null ? String(raw.id) : null;
+          tryAdd(rawId, function () {
+            var dateStr = raw.created_at || raw.purchase_date || raw.expiry_date;
+            var impacted = impactedAll.filter(function (it) {
+              return it && String(it.expired_raw_material_id) === rawId;
+            });
+            var impactedLine = safeUnique(impacted.map(function (x) { return String(x.name || x.id || ''); })).join(', ');
+            return {
+              checkId: checkId, itemKey: rawId, sortMs: parseDateMs(dateStr) || 0,
+              triggeredDateText: resolveTriggeredDateText(raw, f, data),
+              systemFinding: categoryLabel(checkId),
+              summaryText: 'Inventory item ' + fallbackText(raw.name || rawId, 'Unknown item') + ' expired on ' + formatDate(dateStr) + '.',
+              detailText: '', detailDateCaption: null, detailDateText: null,
+              itemName: raw.name || rawId,
+              extraFields: impactedLine ? [{ label: 'Impacted downstream items:', value: impactedLine }] : [],
+              actions: [
+                { type: 'link', href: '/core/sourcemap?show=check-needed', label: 'Review in Sourcemap', boost: false },
+                { type: 'button', label: 'Dispose of inventory item', action: 'dispose-expired', rawId: rawId }
+              ]
+            };
+          });
+        });
+        return;
+      }
+
+      if (checkId === 'output_expiry') {
+        var oeItems = Array.isArray(data.output_expiry_items) ? data.output_expiry_items : [];
+        var seenOe = new Set();
+        oeItems.forEach(function (x) {
+          var ik = itemKeyOutputExpiry(x);
+          if (!ik || seenOe.has(ik)) return;
+          seenOe.add(ik);
+          tryAdd(ik, function () {
+            var expStr = x && (x.expiry_at || x.expiry_date) ? String(x.expiry_at || x.expiry_date) : '';
+            var name = (x && x.item_name) ? String(x.item_name) : (x.inventory_item_id || '—');
+            var pid = x && x.process_id != null ? String(x.process_id).trim() : '';
+            var actions = pid ? [{ type: 'link', href: '/core/flows?id=' + encodeURIComponent(pid), label: 'Open process', boost: false }] : [];
+            return {
+              checkId: checkId, itemKey: ik, sortMs: parseDateMs(expStr) || 0,
+              triggeredDateText: resolveTriggeredDateText(x, f, data),
+              systemFinding: categoryLabel(checkId),
+              summaryText: 'Inventory item ' + fallbackText(name, 'Unknown item') + ' has an output expiry date of ' + formatDate(expStr) + '.',
+              detailText: '', detailDateCaption: null, detailDateText: null,
+              itemName: name, extraFields: [], actions: actions
+            };
+          });
+        });
+        return;
+      }
+
+      if (checkId === 'output_ready_date') {
+        var orItems = Array.isArray(data.output_ready_date_items) ? data.output_ready_date_items : [];
+        var seenOr = new Set();
+        orItems.forEach(function (x) {
+          var ik = itemKeyOutputReady(x);
+          if (!ik || seenOr.has(ik)) return;
+          seenOr.add(ik);
+          tryAdd(ik, function () {
+            var rd = x && x.ready_date ? String(x.ready_date) : '';
+            var name = (x && x.item_name) ? String(x.item_name) : (x.inventory_item_id || '—');
+            var pid = x && x.process_id != null ? String(x.process_id).trim() : '';
+            var actions = pid ? [{ type: 'link', href: '/core/flows?id=' + encodeURIComponent(pid), label: 'Open process', boost: false }] : [];
+            return {
+              checkId: checkId, itemKey: ik, sortMs: parseDateMs(rd) || 0,
+              triggeredDateText: resolveTriggeredDateText(x, f, data),
+              systemFinding: categoryLabel(checkId),
+              summaryText: fallbackText(name, 'This item') + ' is set to be ready from ' + formatDate(rd) + '.',
+              detailText: '', detailDateCaption: null, detailDateText: null,
+              itemName: name, extraFields: [], actions: actions
+            };
+          });
+        });
+        return;
+      }
+
+      if (checkId === 'untracked_items') {
+        var untracked = Array.isArray(data.untracked_items) ? data.untracked_items : [];
+        untracked.forEach(function (u) {
+          var ik = itemKeyUntracked(u);
+          tryAdd(ik, function () {
+            var created = u && u.created_at ? String(u.created_at) : '';
+            var name = (u && u.name) ? String(u.name) : (u.id || '—');
+            var processId = (u.process_id != null && String(u.process_id).trim() !== '') ? String(u.process_id) : '';
+            var processName = u.process_name ? String(u.process_name) : '';
+            var stepName = (u.producing_step_name || u.step_name || '');
+            var untrackedActions = [];
+            if (processId) {
+              untrackedActions.push({ type: 'reconcile', href: '#', label: 'Go to process step to execute and reconcile', processId: processId, processName: processName, stepName: stepName });
+            }
+            untrackedActions.push({ type: 'link', href: '/core/sourcemap?show=check-needed', label: processId ? 'Review in Sourcemap' : 'Find process step in Sourcemap', boost: false });
+            return {
+              checkId: checkId, itemKey: ik, sortMs: parseDateMs(created) || 0,
+              triggeredDateText: resolveTriggeredDateText(u, f, data),
+              systemFinding: categoryLabel(checkId),
+              summaryText: 'Inventory item ' + fallbackText(name, 'Unknown item') + ' is currently untracked in inventory.',
+              detailText: '', detailDateCaption: null, detailDateText: null,
+              itemName: name, extraFields: [], actions: untrackedActions
+            };
+          });
+        });
+        return;
+      }
+
+      var genKey = 'gen_' + checkId;
+      tryAdd(genKey, function () {
+        var msg = (f && f.text != null) ? String(f.text) : checkId;
+        return {
+          checkId: checkId, itemKey: genKey, sortMs: 0,
+          triggeredDateText: resolveTriggeredDateText(null, f, data),
+          systemFinding: categoryLabel(checkId),
+          summaryText: msg, detailText: '', detailDateCaption: null, detailDateText: null,
+          itemName: null, extraFields: [], actions: []
+        };
+      });
+    });
+
+    allRecords.sort(function (a, b) { return (b.sortMs || 0) - (a.sortMs || 0); });
+    return allRecords;
+  }
+
+  function updateTabBadges() {}
+
+  function setActiveTab(tab) {
+    currentTab = tab;
+    var tabs = document.querySelectorAll('[data-notif-tab]');
+    tabs.forEach(function (btn) {
+      var isActive = btn.getAttribute('data-notif-tab') === tab;
+      btn.classList.remove('notif-view-btn--active');
+      if (isActive) btn.classList.add('notif-view-btn--active');
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    renderCards();
+  }
+
+  function bindTabHandlers() {
+    var wrap = document.querySelector('.notif-view-toggle');
+    if (!wrap) return;
+    wrap.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest('[data-notif-tab]');
+      if (!btn) return;
+      var tab = btn.getAttribute('data-notif-tab');
+      if (tab && tab !== currentTab) setActiveTab(tab);
+    });
+  }
+
   async function renderCards() {
     var listEl = document.getElementById('system-findings-list');
     var bannerBody = document.getElementById('system-findings-banner-body');
@@ -732,7 +933,11 @@
 
     var todayKey = todayDateKey();
     var findings = await fetchFindings();
-    var records = buildNotificationRecords(findings, todayKey);
+
+    var activeRecords = buildNotificationRecords(findings, todayKey);
+    var archiveRecords = buildArchivedRecords(findings, todayKey);
+
+    var records = currentTab === 'archive' ? archiveRecords : activeRecords;
 
     var categoryFilter = getActiveNotificationCategoryFilter();
     if (categoryFilter) {
@@ -752,7 +957,10 @@
       listEl.appendChild(renderLi(rec, todayKey, onChange));
     });
 
-    ensureEmptyState(records.length);
+    var emptyMsg = currentTab === 'archive'
+      ? 'Nothing archived. Snoozed or hidden notifications will appear here.'
+      : 'No system notifications right now.';
+    ensureEmptyState(records.length, emptyMsg);
 
     if (window.SystemFindingsNotifications && typeof window.SystemFindingsNotifications.refreshBadge === 'function') {
       window.SystemFindingsNotifications.refreshBadge();
@@ -761,6 +969,7 @@
 
   function init() {
     bindOverflowMenuHandlers();
+    bindTabHandlers();
     renderCards();
   }
 

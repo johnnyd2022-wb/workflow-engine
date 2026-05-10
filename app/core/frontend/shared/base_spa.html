@@ -26,6 +26,10 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-add-manual.css') }}">
   {# Dashboard: rules are scoped to .workflow-dashboard; inert on other pages. Kept here so HTMX #page-content swaps still have the sheet. #}
   <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='dashboard_spa.css') }}">
+  {# Settings: rules use body.settings-page so inert elsewhere. Global so HTMX swaps keep the sheet. #}
+  <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='settings_spa.css') }}">
+  {# Inventory spa header: used across many pages (core, integrations, settings, notifications). Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -567,6 +571,19 @@
       }
       if (tgt && tgt.id === 'page-content' && typeof window.syncSpaThemeToggle === 'function') {
         window.syncSpaThemeToggle();
+      }
+      if (tgt && tgt.id === 'page-content') {
+        // Sync body classes for HTMX boost navigation (CSS scoped to body classes needs this).
+        var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
+        var pageBodyClasses = ['settings-page', 'dashboard-page'];
+        pageBodyClasses.forEach(function (cls) { document.body.classList.remove(cls); });
+        if (path === '/workflow-engine/settings') {
+          document.body.classList.add('settings-page');
+          if (typeof window.initAccountInfo === 'function') {
+            window.initAccountInfo('account-info-container');
+          }
+        }
+        if (path === '/workflow-engine/dashboard') document.body.classList.add('dashboard-page');
       }
       if (!tgt || tgt.id !== 'page-content') return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';

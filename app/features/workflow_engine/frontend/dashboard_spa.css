@@ -1,14 +1,27 @@
 /*
  * Workflow Engine dashboard: palette + components.
- * Surface colors are exposed on :root for base_spa (#page-content / .main-content) so normal
- * padding reads as the same gradient/solid — no padding overrides.
+ * dashboard-page body class is set by dashboard.html and synced in HTMX afterSettle.
  */
+
+/* Remove #page-content padding so the dark dashboard fills flush to the topbar in both themes. */
+body.dashboard-page #page-content.page-content {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Ensure the dashboard fills the full height of #page-content. */
+body.dashboard-page #page-content .workflow-dashboard {
+  min-height: 100%;
+}
 :root {
   --workflow-dashboard-surface-start: hsl(218, 52%, 11%);
   --workflow-dashboard-surface-end: hsl(219, 37%, 14%);
 }
 
 .workflow-dashboard {
+  padding: clamp(16px, 2.5vw, 32px) clamp(12px, 2vw, 24px);
   --color-midnight: var(--workflow-dashboard-surface-start);
   --color-midnight-gradient: var(--workflow-dashboard-surface-end);
   --color-graphite: hsl(218, 27%, 16%);

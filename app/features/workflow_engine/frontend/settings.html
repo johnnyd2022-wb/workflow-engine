@@ -6,201 +6,7 @@
 
 {% block head_extras %}
   <meta name="description" content="Configure your account and preferences">
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
-  <style>
-    /* Settings page: form and card overrides using styles2 tokens; responsive like process-flow-spa */
-    .settings-page .page-content { padding: 16px; }
-    @media (min-width: 768px) { .settings-page .page-content { padding: 24px; } }
-    @media (min-width: 1280px) { .settings-page .page-content { padding: 32px; } }
-    .settings-page .max-content { max-width: 1280px; margin: 0 auto; width: 100%; }
-    .settings-page .settings-card { margin-bottom: 1.5rem; }
-    .settings-page .settings-card:last-of-type { margin-bottom: 0; }
-    .settings-page .form-group { margin-bottom: 1rem; }
-    .settings-page .form-label { display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px; }
-    .settings-page .form-input { width: 100%; max-width: 400px; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 14px; }
-    .settings-page .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px hsla(210, 100%, 50%, 0.15); }
-    .settings-page select.form-input { cursor: pointer; }
-    .settings-page .text-error { color: var(--error); font-size: 0.875rem; }
-    .settings-page .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .settings-page .toggle-label { font-weight: 600; margin-bottom: 0.25rem; }
-    .settings-page .toggle-desc { font-size: 0.875rem; color: var(--text-secondary); }
-    .settings-page .switch { position: relative; width: 48px; height: 24px; flex-shrink: 0; }
-    .settings-page .switch input { opacity: 0; width: 0; height: 0; }
-    .settings-page .switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border-default); border-radius: 24px; transition: 0.3s; }
-    .settings-page .switch-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; box-shadow: var(--shadow-sm); }
-    .settings-page .switch input:checked + .switch-slider { background: var(--primary); }
-    .settings-page .switch input:checked + .switch-slider:before { transform: translateX(24px); }
-    @media (max-width: 767px) {
-      .settings-page .toggle-row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-      }
-      .settings-page .toggle-row .switch {
-        align-self: flex-end;
-      }
-      .settings-page .form-input { max-width: 100%; }
-    }
-    /* Modals and notifications that still use .glass-card */
-    .settings-page .glass-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); }
-    /* Long-session warning banner (non-blocking; same pattern as flows2 compliance banner) */
-    .long-session-banner {
-      background: linear-gradient(135deg, hsl(38, 92%, 50%, 0.12) 0%, hsl(25, 95%, 53%, 0.08) 100%);
-      border-bottom: 1px solid hsl(38, 92%, 50%, 0.35);
-      padding: 12px 24px;
-      margin: 0;
-    }
-    .long-session-banner-content {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    .long-session-banner-icon {
-      font-size: 1.25rem;
-      color: hsl(38, 92%, 40%);
-      flex-shrink: 0;
-    }
-    .long-session-banner-message {
-      flex: 1;
-      margin: 0;
-      font-size: 14px;
-      color: var(--text-primary, #1a1a1a);
-    }
-    .long-session-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
-
-    /* ---- Visual-only refresh: flows2-style crisp containers + divider rows ---- */
-
-    .settings-page .settings-card.card {
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
-      background: rgba(255, 255, 255, 0.72);
-      overflow: hidden; /* keeps divider lines crisp */
-    }
-    .settings-page .settings-card .card-header {
-      padding-bottom: 10px !important;
-    }
-    .settings-page .settings-card .card-content {
-      padding-top: 0 !important;
-    }
-
-    /* Turn form groups into a clean stack with dividers (no behavioral changes) */
-    .settings-page .settings-section-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-      width: 100%;
-    }
-    .settings-page .settings-section-list > .form-group,
-    .settings-page .settings-section-list > .toggle-row,
-    .settings-page .settings-section-list > .spa-divider-row {
-      padding: 14px 0;
-      margin: 0;
-      border: none;
-      border-radius: 0;
-      background: transparent;
-    }
-    .settings-page .settings-section-list > .form-group + .form-group,
-    .settings-page .settings-section-list > .toggle-row + .toggle-row,
-    .settings-page .settings-section-list > .spa-divider-row + .spa-divider-row,
-    .settings-page .settings-section-list > .form-group + .toggle-row,
-    .settings-page .settings-section-list > .toggle-row + .form-group,
-    .settings-page .settings-section-list > .form-group + .spa-divider-row,
-    .settings-page .settings-section-list > .spa-divider-row + .form-group,
-    .settings-page .settings-section-list > .toggle-row + .spa-divider-row,
-    .settings-page .settings-section-list > .spa-divider-row + .toggle-row {
-      border-top: 1px solid rgba(15, 23, 42, 0.06);
-    }
-
-    /* Toggle row: remove boxed card feel, keep layout */
-    .settings-page .toggle-row {
-      border: none;
-      background: transparent;
-      padding-left: 0;
-      padding-right: 0;
-    }
-
-    /* Minor tightening so labels align like flows2 stacks */
-    .settings-page .form-group { margin-bottom: 0; }
-    .settings-page .form-input { max-width: 520px; }
-
-    /* Mobile polish */
-    @media (max-width: 640px) {
-      .long-session-banner { padding: 12px 16px; }
-      .settings-page .settings-section-list > .form-group,
-      .settings-page .settings-section-list > .toggle-row,
-      .settings-page .settings-section-list > .spa-divider-row {
-        padding: 12px 0;
-      }
-      /* Session timeout row: avoid cramped 100px/110px inputs on small screens */
-      #session-timeout-input,
-      #session-timeout-unit {
-        width: 100% !important;
-      }
-    }
-
-    .settings-page .settings-2fa-block {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      width: 100%;
-    }
-    .settings-page .settings-2fa-status {
-      margin: 0;
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-    }
-    .settings-page .settings-2fa-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      width: 100%;
-    }
-    @media (min-width: 768px) {
-      .settings-page .settings-2fa-actions {
-        align-items: center;
-      }
-    }
-
-    /* Tablet / desktop: stack card content + form groups so buttons can align-self centre (same min-width as Update Password) */
-    @media (min-width: 768px) {
-      body.settings-page #page-content .settings-card > .card-content {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-      }
-      body.settings-page #page-content #password-reset-form {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        width: 100%;
-      }
-      body.settings-page #page-content .settings-card .form-group {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-      }
-      body.settings-page #page-content .settings-card .btn.btn-primary,
-      body.settings-page #page-content .settings-card .btn.btn-secondary {
-        align-self: center;
-        width: fit-content;
-        min-width: 260px;
-        max-width: 100%;
-        box-sizing: border-box;
-      }
-    }
-
-    /* Mobile: full-width primary/secondary in settings cards (incl. 2FA) */
-    @media (max-width: 767px) {
-      body.settings-page #page-content .settings-card .btn.btn-primary,
-      body.settings-page #page-content .settings-card .btn.btn-secondary {
-        width: 100%;
-        box-sizing: border-box;
-      }
-    }
-  </style>
+  {# CSS moved to settings_spa.css and inventory-spa-header.css — both loaded globally in base_spa.html. #}
 {% endblock %}
 
 {% block topbar %}{% endblock %}
@@ -645,6 +451,20 @@
       </div>
     </div>
   </div>
+  <script>
+    (function () {
+      function initSettings() {
+        if (typeof window.initAccountInfo === 'function') {
+          window.initAccountInfo('account-info-container');
+        }
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSettings);
+      } else {
+        initSettings();
+      }
+    })();
+  </script>
 
 {% endblock %}
 
