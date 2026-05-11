@@ -177,6 +177,7 @@ def signup():
         # Create session - stores user_id, org_id, user_email, org_name
         auth_service = AuthService(db)
         session_data = auth_service.generate_session(user)
+        rotate_session()
         session.update(session_data)
 
         # Extract values before any potential session issues

@@ -401,6 +401,61 @@
     .notifications-category-filter-strip__clear:hover {
       text-decoration: underline;
     }
+
+    /* ---- Notification view toggle — mirrors .sm-view-toggle / .sm-view-btn from sourcemap.css ---- */
+    .notif-view-wrap {
+      padding: 12px 0 4px;
+    }
+
+    .notif-view-toggle {
+      display: inline-flex;
+      border: 1.5px solid var(--border-default, #e5e7eb);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+
+    .notif-view-btn {
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      background: var(--bg-card, #fff);
+      color: var(--text-secondary, #6b7280);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      font-family: inherit;
+    }
+
+    .notif-view-btn + .notif-view-btn {
+      border-left: 1px solid var(--border-default, #e5e7eb);
+    }
+
+    .notif-view-btn--active {
+      background: var(--primary, #3b82f6);
+      color: #fff;
+    }
+
+    /* Archive status pill shown next to the date in archived items */
+    .notif-archive-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .notif-archive-status--snoozed {
+      background: hsl(38, 95%, 94%);
+      color: hsl(28, 80%, 38%);
+    }
+
+    .notif-archive-status--hidden {
+      background: var(--bg-secondary, #f3f4f6);
+      color: var(--text-secondary, #6b7280);
+    }
   </style>
 {% endblock %}
 
@@ -415,6 +470,24 @@
         <p class="notifications-hero__tagline">See every active system finding in one place—expired materials, output dates, untracked inventory, and more</p>
       </div>
       <div class="card-content notifications-card__content">
+        <div class="notif-view-wrap">
+          <div class="notif-view-toggle" role="group" aria-label="Notification view">
+            <button
+              class="notif-view-btn notif-view-btn--active"
+              id="notif-tab-active"
+              data-notif-tab="active"
+              type="button"
+              aria-pressed="true"
+            >Active</button>
+            <button
+              class="notif-view-btn"
+              id="notif-tab-archive"
+              data-notif-tab="archive"
+              type="button"
+              aria-pressed="false"
+            >Archive</button>
+          </div>
+        </div>
         <div class="spa-card-form" style="gap: 0;">
           {% include 'shared/system-findings-banner.html' %}
         </div>

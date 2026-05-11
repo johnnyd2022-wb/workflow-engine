@@ -4,7 +4,7 @@
 
 {% block head_extras %}
   <meta name="description" content="Accounting integrations for biz-e">
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  {# inventory-spa-header.css loaded globally in base_spa.html for HTMX boost compatibility. #}
 {% endblock %}
 
 {% block topbar %}{% endblock %}
