@@ -3,6 +3,7 @@
 import os
 
 from flask import Flask, jsonify, redirect, request, send_from_directory, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
@@ -244,5 +245,8 @@ def create_app():
                 return ""
 
             return dict(csrf_token=csrf_token)
+
+    # Trust Cloudflare's forwarded headers (1 proxy hop)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     return app
