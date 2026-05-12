@@ -4079,3 +4079,450 @@ def get_metrics():
         ),
         200,
     )
+
+
+# ---------------------------------------------------------------------------
+# Entity Event Endpoints — Summary, Story, and Sourcemap
+# ---------------------------------------------------------------------------
+
+
+def _parse_entity_type(entity_type: str) -> str | None:
+    """Validate entity_type is one we support."""
+    valid = {"inventory_item", "execution", "process", "user"}
+    return entity_type if entity_type in valid else None
+
+
+def _event_to_dict(ev) -> dict:
+    return {
+        "id": str(ev.id),
+        "event_type": ev.event_type,
+        "at": ev.created_at.isoformat() if ev.created_at else None,
+        "actor": ev.actor_label,
+        "actor_type": ev.actor_type,
+        "payload": ev.payload,
+        "diff": ev.diff,
+        "causation_id": str(ev.causation_id) if ev.causation_id else None,
+    }
+
+
+def _human_summary(ev) -> str:
+    et = ev.event_type
+    p = ev.payload or {}
+    actor = ev.actor_label or "System"
+    if et == "inventory_item.created":
+        method = p.get("add_method", "manual")
+        return f"Added by {actor} via {method.replace('_', ' ')}"
+    if et == "inventory_item.quantity_adjusted":
+        return f"Quantity adjusted: {p.get('quantity_before')} → {p.get('quantity_after')} {p.get('unit', '')} by {actor}"
+    if et == "inventory_item.consumed":
+        qty = p.get("quantity_consumed", "?")
+        unit = p.get("unit", "")
+        step = p.get("step_name", "")
+        return f"{qty} {unit} consumed in {step} by {actor}"
+    if et == "inventory_item.produced":
+        qty = p.get("quantity_produced", "?")
+        unit = p.get("unit", "")
+        return f"{qty} {unit} produced by {actor}"
+    if et == "inventory_item.wasted":
+        qty = p.get("quantity_wasted", "?")
+        unit = p.get("unit", "")
+        reason = p.get("reason", "")
+        return f"{qty} {unit} wasted — {reason} by {actor}"
+    if et == "inventory_item.updated":
+        return f"Updated by {actor}"
+    if et == "inventory_item.deleted":
+        return f"Deleted by {actor}"
+    if et == "execution.created":
+        return f"Execution started by {actor}"
+    if et == "execution.step_completed":
+        step = p.get("step_name", f"Step {p.get('step_number','?')}")
+        return f"{step} completed by {actor}"
+    if et == "execution.completed":
+        return f"Execution completed by {actor}"
+    if et == "process.created":
+        return f"Process created by {actor}"
+    if et == "process.updated":
+        return f"Process updated by {actor}"
+    if et == "process.step_added":
+        step = (p.get("step") or {}).get("name", "step")
+        return f"Step '{step}' added by {actor}"
+    if et == "process.step_updated":
+        step = (p.get("step") or {}).get("name", "step")
+        return f"Step '{step}' updated by {actor}"
+    if et == "process.step_deleted":
+        step = (p.get("deleted_step") or {}).get("name", "step")
+        return f"Step '{step}' deleted by {actor}"
+    if et == "user.created":
+        return f"Account created — {p.get('email', '')}"
+    if et == "user.login":
+        method = "with 2FA" if p.get("2fa_used") else "with password"
+        return f"Logged in {method} from {p.get('ip', '?')}"
+    if et == "user.login_failed":
+        return f"Login failed from {p.get('ip', '?')} (attempt {p.get('failed_attempts', '?')})"
+    if et == "user.2fa_enabled":
+        return f"Two-factor authentication enabled by {actor}"
+    if et == "user.2fa_disabled":
+        return f"Two-factor authentication disabled by {actor}"
+    return et.replace(".", " — ").replace("_", " ").capitalize()
+
+
+@core_bp.route("/api/core/entities/<entity_type>/<entity_id>/story", methods=["GET"])
+@requires_auth
+def entity_story(entity_type: str, entity_id: str):
+    """Full event timeline for a single entity, ordered chronologically.
+
+    Used when drilling into a card to see its complete audit history.
+    """
+    from app.core.db.models.entity_event import EntityEvent
+
+    etype = _parse_entity_type(entity_type)
+    if not etype:
+        return jsonify({"error": "Invalid entity_type"}), 400
+
+    try:
+        eid = UUID(entity_id)
+    except ValueError:
+        return jsonify({"error": "Invalid entity_id"}), 400
+
+    org_id = UUID(g.org_id)
+    limit = min(int(request.args.get("limit", 200)), 500)
+    offset = int(request.args.get("offset", 0))
+
+    db = db_session()
+    events = (
+        db.query(EntityEvent)
+        .filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid)
+        .order_by(EntityEvent.created_at.asc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    total = (
+        db.query(EntityEvent)
+        .filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid)
+        .count()
+    )
+
+    return jsonify({
+        "entity_id": str(eid),
+        "entity_type": etype,
+        "total": total,
+        "offset": offset,
+        "events": [
+            {**_event_to_dict(ev), "summary": _human_summary(ev)}
+            for ev in events
+        ],
+    }), 200
+
+
+@core_bp.route("/api/core/entities/<entity_type>/<entity_id>/summary", methods=["GET"])
+@requires_auth
+def entity_summary_detail(entity_type: str, entity_id: str):
+    """Rich computed summary for a single entity card detail view.
+
+    Queries entity_events directly (more detail than the pre-computed summary table).
+    """
+    from app.core.db.models.entity_event import EntityEvent
+    from app.core.db.models.entity_event_summary import EntityEventSummary
+
+    etype = _parse_entity_type(entity_type)
+    if not etype:
+        return jsonify({"error": "Invalid entity_type"}), 400
+
+    try:
+        eid = UUID(entity_id)
+    except ValueError:
+        return jsonify({"error": "Invalid entity_id"}), 400
+
+    org_id = UUID(g.org_id)
+    db = db_session()
+
+    # Pull pre-computed summary
+    summary_row = db.query(EntityEventSummary).filter(EntityEventSummary.entity_id == eid).first()
+    summary = summary_row.summary if summary_row else {}
+
+    # Pull most recent 10 events for "recent_events" display
+    recent = (
+        db.query(EntityEvent)
+        .filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid)
+        .order_by(EntityEvent.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    return jsonify({
+        "entity_id": str(eid),
+        "entity_type": etype,
+        "summary": summary,
+        "recent_events": [
+            {**_event_to_dict(ev), "summary": _human_summary(ev)}
+            for ev in reversed(recent)
+        ],
+    }), 200
+
+
+@core_bp.route("/api/core/sourcemap/objects", methods=["GET"])
+@requires_auth
+def sourcemap_objects():
+    """Lightweight paginated index of all traceable entities.
+
+    Returns just enough for selectors — no joins to steps or execution_steps.
+    """
+    org_id = UUID(g.org_id)
+    db = db_session()
+
+    page = max(1, int(request.args.get("page", 1)))
+    limit = min(int(request.args.get("limit", 50)), 200)
+    offset = (page - 1) * limit
+    q = request.args.get("q", "").strip()
+    entity_type_filter = request.args.get("type", "").strip()
+
+    objects = []
+    total = 0
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.process import Process
+
+    if not entity_type_filter or entity_type_filter == "inventory_item":
+        inv_q = db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+        if q:
+            inv_q = inv_q.filter(InventoryItem.name.ilike(f"%{q}%"))
+        inv_count = inv_q.count()
+        total += inv_count
+        for item in inv_q.order_by(InventoryItem.created_at.desc()).offset(offset if not entity_type_filter else 0).limit(limit).all():
+            objects.append({
+                "id": str(item.id),
+                "type": "inventory_item",
+                "label": item.display_label or item.name,
+                "sublabel": f"{item.inventory_type.replace('_', ' ').title()} · {item.quantity} {item.unit}",
+                "discriminators": {
+                    "supplier": item.supplier,
+                    "batch_number": item.supplier_batch_number,
+                    "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+                    "quantity": str(item.quantity),
+                    "unit": item.unit,
+                },
+                "traceable_since": item.created_at.isoformat() if item.created_at else None,
+                "is_consumed": str(item.quantity) == "0.0000",
+            })
+
+    if not entity_type_filter or entity_type_filter == "execution":
+        exec_q = db.query(Execution).filter(Execution.org_id == org_id)
+        exec_count = exec_q.count()
+        total += exec_count
+        for ex in exec_q.order_by(Execution.created_at.desc()).limit(limit).all():
+            objects.append({
+                "id": str(ex.id),
+                "type": "execution",
+                "label": f"Execution #{str(ex.id)[:8]}",
+                "sublabel": f"{ex.status.value.replace('_', ' ').title()} · {ex.total_steps or '?'} steps",
+                "discriminators": {
+                    "process_id": str(ex.process_id),
+                    "status": ex.status.value,
+                    "started_at": ex.started_at.isoformat() if ex.started_at else None,
+                },
+                "traceable_since": ex.created_at.isoformat() if ex.created_at else None,
+            })
+
+    if not entity_type_filter or entity_type_filter == "process":
+        proc_q = db.query(Process).filter(Process.org_id == org_id)
+        if q:
+            proc_q = proc_q.filter(Process.name.ilike(f"%{q}%"))
+        proc_count = proc_q.count()
+        total += proc_count
+        for proc in proc_q.order_by(Process.created_at.desc()).limit(limit).all():
+            objects.append({
+                "id": str(proc.id),
+                "type": "process",
+                "label": proc.name,
+                "sublabel": f"{'Draft' if proc.is_draft else 'Published'} · {proc.category.value if proc.category else 'Uncategorised'}",
+                "discriminators": {
+                    "category": proc.category.value if proc.category else None,
+                    "is_draft": proc.is_draft,
+                },
+                "traceable_since": proc.created_at.isoformat() if proc.created_at else None,
+            })
+
+    return jsonify({"objects": objects[:limit], "total": total, "page": page}), 200
+
+
+@core_bp.route("/api/core/sourcemap/trace", methods=["POST"])
+@requires_auth
+def sourcemap_trace():
+    """On-demand DAG traversal — current state or temporal (with as_of).
+
+    Routes to DAGTracer (current) or TemporalDAGTracer (historical).
+    """
+    data = request.get_json() or {}
+    root_type = data.get("root_type", "inventory_item")
+    root_id_str = data.get("root_id")
+    as_of_str = data.get("as_of")
+    depth = min(int(data.get("depth", 5)), 10)
+
+    if not root_id_str:
+        return jsonify({"error": "root_id is required"}), 400
+
+    try:
+        root_id = UUID(root_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid root_id"}), 400
+
+    org_id = UUID(g.org_id)
+    db = db_session()
+
+    # Temporal trace — use as_of if provided
+    if as_of_str:
+        try:
+            from datetime import timezone as _tz
+            as_of = datetime.fromisoformat(as_of_str.replace("Z", "+00:00"))
+        except ValueError:
+            return jsonify({"error": "Invalid as_of datetime format"}), 400
+
+        from app.core.db.models.entity_event import EntityEvent
+
+        # Build temporal graph from entity_events
+        # Find all step_completed events before as_of to get edges
+        step_events = (
+            db.query(EntityEvent)
+            .filter(
+                EntityEvent.org_id == org_id,
+                EntityEvent.event_type == "execution.step_completed",
+                EntityEvent.created_at <= as_of,
+            )
+            .order_by(EntityEvent.created_at.asc())
+            .all()
+        )
+
+        # Build graph nodes and edges from events
+        nodes = {}
+        edges = []
+
+        for ev in step_events:
+            p = ev.payload or {}
+            exec_id = p.get("execution_id")
+            consumed = p.get("items_consumed") or []
+            produced = p.get("items_produced") or []
+
+            for c in consumed:
+                item_id = c.get("item_id")
+                if item_id:
+                    edges.append({
+                        "from": item_id,
+                        "to": exec_id,
+                        "relationship": "consumed_by",
+                        "execution_id": exec_id,
+                        "at": ev.created_at.isoformat() if ev.created_at else None,
+                    })
+
+            for prod in produced:
+                item_id = prod.get("item_id")
+                if item_id:
+                    edges.append({
+                        "from": exec_id,
+                        "to": item_id,
+                        "relationship": "produced",
+                        "execution_id": exec_id,
+                        "at": ev.created_at.isoformat() if ev.created_at else None,
+                    })
+
+        # Get state of root entity at as_of
+        root_event = (
+            db.query(EntityEvent)
+            .filter(
+                EntityEvent.entity_id == root_id,
+                EntityEvent.created_at <= as_of,
+            )
+            .order_by(EntityEvent.created_at.desc())
+            .limit(1)
+            .first()
+        )
+
+        root_node = {
+            "id": str(root_id),
+            "type": root_type,
+            "state": root_event.payload if root_event else None,
+        }
+
+        # Filter edges to those connected to root (BFS, depth-limited)
+        connected = {str(root_id)}
+        for _ in range(depth):
+            new_conn = set()
+            for e in edges:
+                if e["from"] in connected:
+                    new_conn.add(e["to"])
+                if e["to"] in connected:
+                    new_conn.add(e["from"])
+            if not new_conn - connected:
+                break
+            connected |= new_conn
+
+        filtered_edges = [e for e in edges if e["from"] in connected and e["to"] in connected]
+
+        # Build story: all events touching these entities
+        story_events = (
+            db.query(EntityEvent)
+            .filter(
+                EntityEvent.org_id == org_id,
+                EntityEvent.entity_id.in_([UUID(n) for n in connected if _is_valid_uuid(n)]),
+                EntityEvent.created_at <= as_of,
+            )
+            .order_by(EntityEvent.created_at.asc())
+            .limit(100)
+            .all()
+        )
+
+        story = [
+            {
+                "at": ev.created_at.isoformat() if ev.created_at else None,
+                "event_type": ev.event_type,
+                "entity_id": str(ev.entity_id),
+                "summary": _human_summary(ev),
+                "actor": ev.actor_label,
+            }
+            for ev in story_events
+        ]
+
+        return jsonify({
+            "root": root_node,
+            "nodes": [{"id": n, "type": "unknown"} for n in connected],
+            "edges": filtered_edges,
+            "as_of": as_of_str,
+            "is_current": False,
+            "story": story,
+        }), 200
+
+    # Current state trace — use existing DAGTracer
+    from app.core.db.models.inventory_item import InventoryItem
+    item = db.query(InventoryItem).filter(InventoryItem.id == root_id, InventoryItem.org_id == org_id).first()
+    if not item:
+        return jsonify({"error": "Item not found"}), 404
+
+    try:
+        from app.features.workflow_engine.dagtraversal import trace_backward, trace_forward
+        result_fwd = trace_forward(str(root_id), db, org_id=str(org_id))
+        result_bwd = trace_backward(str(root_id), db, org_id=str(org_id))
+
+        all_nodes = {n["id"]: n for n in (result_fwd.nodes + result_bwd.nodes)}
+        all_edges = list({(e["from_id"], e["to_id"]): e for e in (result_fwd.edges + result_bwd.edges)}.values())
+
+        return jsonify({
+            "root": {"id": str(root_id), "type": "inventory_item", "label": item.display_label or item.name},
+            "nodes": list(all_nodes.values()),
+            "edges": [{"from": e["from_id"], "to": e["to_id"], "execution_id": e.get("execution_id")} for e in all_edges],
+            "as_of": None,
+            "is_current": True,
+            "story": [],
+        }), 200
+    except Exception:
+        logger.exception("Trace failed")
+        return jsonify({"error": "Trace failed"}), 500
+
+
+def _is_valid_uuid(v: str) -> bool:
+    try:
+        UUID(v)
+        return True
+    except (ValueError, AttributeError):
+        return False
