@@ -105,8 +105,8 @@ def landing_diagram():
 @app.route("/dashboard")
 @requires_auth
 def dashboard():
-    """Alias for the workflow-engine dashboard (SPA shell + shared sidebar)."""
-    return redirect("/workflow-engine/dashboard")
+    """Alias for the core dashboard."""
+    return redirect("/core/dashboard")
 
 
 @app.route("/healthcheck")
