@@ -169,9 +169,10 @@ def create_app():
         # Prevent MIME type sniffing (forces browsers to respect Content-Type)
         response.headers["X-Content-Type-Options"] = "nosniff"
 
-        # Prevent clickjacking: DENY by default; allow SAMEORIGIN only for process-docs download (PDF preview in execution modal)
+        # Prevent clickjacking: DENY by default; SAMEORIGIN for process-docs download and the
+        # landing diagram (embedded as an iframe on the landing page).
         path = (request.path or "").strip()
-        if "/api/core/process-docs/" in path and path.rstrip("/").endswith("/download"):
+        if ("/api/core/process-docs/" in path and path.rstrip("/").endswith("/download")) or path == "/landing-diagram":
             response.headers["X-Frame-Options"] = "SAMEORIGIN"
         else:
             response.headers["X-Frame-Options"] = "DENY"
@@ -180,16 +181,26 @@ def create_app():
         response.headers["X-XSS-Protection"] = "1; mode=block"
 
         # Content Security Policy - balance security with functionality
-        # Allow Google Fonts, inline styles, and inline scripts (required for current frontend)
-        # Note: For production, consider using nonces for inline scripts instead of 'unsafe-inline'
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
-            "img-src 'self' data:; "
-            "connect-src 'self'"
-        )
+        # /landing-diagram is a self-contained bundled app that unpacks base64 assets into blob URLs
+        # at runtime, so it needs blob: in script-src, style-src, and font-src.
+        if path == "/landing-diagram":
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self' blob:; "
+                "style-src 'self' 'unsafe-inline' blob:; "
+                "font-src 'self' blob:; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
+                "img-src 'self' data: blob:; "
+                "connect-src 'self' blob:"
+            )
+        else:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
+                "img-src 'self' data:; "
+                "connect-src 'self'"
+            )
 
         # HSTS (HTTP Strict Transport Security) - Force HTTPS for 1 year
         # This prevents protocol downgrade attacks and cookie hijacking
