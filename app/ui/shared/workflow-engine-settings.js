@@ -9,7 +9,7 @@ function _weNormalizePathname(pathname) {
 
 function _isWorkflowEngineSettingsRoute() {
   const p = _weNormalizePathname(window.location.pathname);
-  return p === '/workflow-engine/settings';
+  return p === '/core/settings';
 }
 
 async function _weFetchJson(url) {

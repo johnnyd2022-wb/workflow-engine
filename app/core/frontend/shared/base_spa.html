@@ -25,9 +25,23 @@
   {# Add-inventory manual: rules use :has(.add-inventory-manual-root); must be global for HTMX #page-content swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-add-manual.css') }}">
   {# Dashboard: rules are scoped to .workflow-dashboard; inert on other pages. Kept here so HTMX #page-content swaps still have the sheet. #}
-  <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='dashboard_spa.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='dashboard_spa.css') }}">
   {# Settings: rules use body.settings-page so inert elsewhere. Global so HTMX swaps keep the sheet. #}
-  <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='settings_spa.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='settings_spa.css') }}">
+  {# Sourcemap: scoped to .sm-* classes; inert elsewhere. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}">
+  {# Flows2: scoped to flows2 page classes. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='flows2.css') }}">
+  {# Notifications page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='notifications.css') }}">
+  {# Processes list page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='processes-list.css') }}">
+  {# Inventory view page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-view.css') }}">
+  {# Inventory dispose page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-dispose.css') }}">
+  {# Core2 page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='core2.css') }}">
   {# Inventory spa header: used across many pages (core, integrations, settings, notifications). Global for HTMX swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -390,9 +404,9 @@
       var p = (pathname || '').replace(/\/$/, '') || '/';
       return (
         p === '/core' ||
-        p === '/workflow-engine/dashboard' ||
-        p === '/workflow-engine/integrations' ||
-        p === '/workflow-engine/settings'
+        p === '/core/dashboard' ||
+        p === '/core/integrations' ||
+        p === '/core/settings'
       );
     }
     window.spaBannerBackIsMainTab = spaBannerBackIsMainTab;
@@ -577,13 +591,13 @@
         var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
         var pageBodyClasses = ['settings-page', 'dashboard-page'];
         pageBodyClasses.forEach(function (cls) { document.body.classList.remove(cls); });
-        if (path === '/workflow-engine/settings') {
+        if (path === '/core/settings') {
           document.body.classList.add('settings-page');
           if (typeof window.initAccountInfo === 'function') {
             window.initAccountInfo('account-info-container');
           }
         }
-        if (path === '/workflow-engine/dashboard') document.body.classList.add('dashboard-page');
+        if (path === '/core/dashboard') document.body.classList.add('dashboard-page');
       }
       if (!tgt || tgt.id !== 'page-content') return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';

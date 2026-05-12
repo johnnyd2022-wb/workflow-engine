@@ -1619,6 +1619,21 @@
     if (area) area.innerHTML = '<div class="sm-loading">Loading…</div>';
   }
 
+  function smSetWastageChip(active) {
+    const wastageToggle = document.getElementById('sm-wastage-toggle');
+    const wastageTrack = document.getElementById('sm-wastage-track');
+    const wastageInline = document.getElementById('sm-wastage-inline');
+    if (wastageToggle) {
+      wastageToggle.setAttribute('aria-expanded', String(active));
+      wastageToggle.setAttribute('aria-checked', String(active));
+    }
+    if (wastageTrack) wastageTrack.classList.toggle('spa-advanced-toggle__track--on', active);
+    if (wastageInline) {
+      wastageInline.style.display = active ? '' : 'none';
+      if (!active) wastageInline.innerHTML = '';
+    }
+  }
+
   function smEmptyState(msg) {
     return `
       <div class="sm-empty-state">

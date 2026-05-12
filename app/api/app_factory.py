@@ -58,17 +58,6 @@ def create_app():
 
     app.register_blueprint(core_bp)
 
-    # Register existing feature blueprints conditionally
-    if config.crm_enabled:
-        from features.crm.backend.backend import crm_bp
-
-        app.register_blueprint(crm_bp)
-
-    if config.workflow_engine_enabled:
-        from features.workflow_engine.backend.backend import workflow_engine_bp
-
-        app.register_blueprint(workflow_engine_bp)
-
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
     @limiter.exempt
@@ -131,8 +120,6 @@ def create_app():
     # API/auth calls get JSON so the client can show errors and avoid redirect loops.
     @app.errorhandler(401)
     def handle_unauthorized(e):
-        session.clear()
-        session.modified = True
         if request.path.startswith("/auth/") and request.method != "GET":
             return jsonify({"error": "Authentication required", "message": "Session expired or not authenticated"}), 401
         accepts_html = "text/html" in (request.headers.get("Accept") or "")

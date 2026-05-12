@@ -1,0 +1,49 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Notifications{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Review system findings and notifications. Resolve issues or hide items you have already handled.">
+{% endblock %}
+
+{% block content %}
+  <div id="notifications-page-marker" hidden aria-hidden="true"></div>
+  <div class="max-content">
+    {% include 'shared/notifications_hub_banner.html' %}
+
+    <section class="card spa-primary-flat notifications-card" aria-labelledby="notifications-title">
+      <div class="card-header notifications-hero__header">
+        <h1 id="notifications-title" class="card-title">Notifications</h1>
+        <p class="notifications-hero__tagline">See every active system finding in one place—expired materials, output dates, untracked inventory, and more</p>
+      </div>
+      <div class="card-content notifications-card__content">
+        <div class="notif-view-wrap">
+          <div class="notif-view-toggle" role="group" aria-label="Notification view">
+            <button
+              class="notif-view-btn notif-view-btn--active"
+              id="notif-tab-active"
+              data-notif-tab="active"
+              type="button"
+              aria-pressed="true"
+            >Active</button>
+            <button
+              class="notif-view-btn"
+              id="notif-tab-archive"
+              data-notif-tab="archive"
+              type="button"
+              aria-pressed="false"
+            >Archive</button>
+          </div>
+        </div>
+        <div class="spa-card-form" style="gap: 0;">
+          {% include 'shared/system-findings-banner.html' %}
+        </div>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('core.serve_core_js', filename='system-findings-notifications.js') }}"></script>
+{% endblock %}
+
