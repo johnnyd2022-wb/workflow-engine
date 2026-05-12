@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.backend.event_writer import EventWriter
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.domain.inventory_quantity_guard import (
     InventoryQuantityWriteReason,
@@ -26,6 +27,49 @@ def _parse_quantity(value: object | None) -> Decimal | None:
         return Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError):
         return None
+
+
+def _item_snapshot(item: InventoryItem) -> dict:
+    return {
+        "id": str(item.id),
+        "org_id": str(item.org_id),
+        "name": item.name,
+        "quantity": str(item.quantity),
+        "unit": item.unit,
+        "inventory_type": item.inventory_type,
+        "supplier": item.supplier,
+        "barcode": item.barcode,
+        "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+        "supplier_batch_number": item.supplier_batch_number,
+        "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+        "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
+        "source_execution_step_id": str(item.source_execution_step_id) if item.source_execution_step_id else None,
+        "source_output_id": str(item.source_output_id) if item.source_output_id else None,
+        "source_step_name": item.source_step_name,
+        "extra_data": item.extra_data or {},
+        "display_label": item.display_label,
+    }
+
+
+def _detect_add_method(extra_data: dict | None, source_execution_id) -> str:
+    """Infer how an item was added from its metadata."""
+    extra = extra_data or {}
+    if source_execution_id:
+        return "execution_output"
+    if extra.get("barcode_scan"):
+        return "barcode_scan"
+    if extra.get("csv_import"):
+        return "csv_import"
+    return "manual"
+
+
+def _build_display_label(item: InventoryItem) -> str:
+    parts = [item.name]
+    if item.supplier_batch_number:
+        parts.append(f"Batch #{item.supplier_batch_number}")
+    if item.quantity is not None:
+        parts.append(f"{item.quantity} {item.unit}")
+    return " · ".join(parts)
 
 
 class InventoryRepository:
@@ -64,7 +108,7 @@ class InventoryRepository:
         extra_data: dict | None = None,
         commit: bool = True,
     ) -> InventoryItem:
-        """Create a new inventory item. If commit=False, caller is responsible for commit (e.g. atomic reconciliation)."""
+        """Create a new inventory item. If commit=False, caller is responsible for commit."""
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_CREATE):
             item = InventoryItem(
                 org_id=org_id,
@@ -83,9 +127,23 @@ class InventoryRepository:
                 source_step_name=source_step_name,
                 extra_data=extra_data or {},
             )
+            item.display_label = _build_display_label(item)
             self.db.add(item)
             self.db.flush()
             _ = item.id
+
+            add_method = _detect_add_method(extra_data, source_execution_id)
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="inventory_item.created",
+                entity_type="inventory_item",
+                entity_id=item.id,
+                payload={
+                    **_item_snapshot(item),
+                    "add_method": add_method,
+                },
+            )
+
             if commit:
                 self.db.commit()
         return item
@@ -98,9 +156,7 @@ class InventoryRepository:
         extra_data_merge: dict | None = None,
         commit: bool = True,
     ) -> InventoryItem | None:
-        """Add quantity to an existing inventory item (e.g. repeat barcode scan). Merges extra_data_merge into item.extra_data.
-        Uses SELECT ... FOR UPDATE to avoid lost updates under concurrent add-quantity for the same item.
-        """
+        """Add quantity to an existing inventory item. Uses SELECT FOR UPDATE to avoid race conditions."""
         item = self.get_inventory_item_by_id_for_update(item_id, org_id)
         if not item:
             return None
@@ -110,10 +166,12 @@ class InventoryRepository:
             if commit:
                 self.db.commit()
             return item
+
+        quantity_before = str(current)
+
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_ADD_QUANTITY):
             item.quantity = coerce_stored_quantity(current + add_val)
             if extra_data_merge:
-                # Merge audit etc. into extra_data; for high volume consider a relational InventoryAuditEntry table
                 merged = dict(item.extra_data or {})
                 for key, value in extra_data_merge.items():
                     if key == "inventory_audit_history" and isinstance(value, list):
@@ -122,6 +180,22 @@ class InventoryRepository:
                     else:
                         merged[key] = value
                 item.extra_data = merged
+
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="inventory_item.quantity_adjusted",
+                entity_type="inventory_item",
+                entity_id=item.id,
+                payload={
+                    **_item_snapshot(item),
+                    "quantity_before": quantity_before,
+                    "quantity_after": str(item.quantity),
+                    "delta": str(add_val),
+                    "reason": InventoryQuantityWriteReason.REPOSITORY_ADD_QUANTITY.value,
+                },
+                diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+            )
+
             if commit:
                 self.db.commit()
         self.db.expire(item, ["updated_at"])
@@ -136,7 +210,7 @@ class InventoryRepository:
         return query.first()
 
     def get_inventory_item_by_id_for_update(self, item_id: UUID, org_id: UUID) -> InventoryItem | None:
-        """Get inventory item by ID with row-level lock (FOR UPDATE). Use for reconciliation to avoid race conditions."""
+        """Get inventory item by ID with row-level lock (FOR UPDATE)."""
         return (
             self.db.query(InventoryItem)
             .filter(InventoryItem.id == item_id, InventoryItem.org_id == org_id)
@@ -152,10 +226,6 @@ class InventoryRepository:
         process_id: UUID | None = None,
         quantity_gt_zero: bool = True,
     ) -> list[InventoryItem]:
-        """
-        Query untracked inventory items: extra_data.untracked == True, optionally filtered by name, unit, process.
-        When quantity_gt_zero is True (default), only returns items with quantity > 0 (for checks and matching).
-        """
         from app.core.db.models.execution import Execution
 
         query = (
@@ -187,10 +257,8 @@ class InventoryRepository:
         if inventory_type:
             query = query.filter(InventoryItem.inventory_type == inventory_type)
         if process_id:
-            # Filter by process through execution
             from app.core.db.models.execution import Execution
 
-            # Also include manually-added untracked items that are tagged to a process in extra_data.
             tagged_pid = InventoryItem.extra_data["producing_process_id"].astext == str(process_id)
             query = query.outerjoin(Execution, InventoryItem.source_execution_id == Execution.id).filter(
                 or_(Execution.process_id == process_id, tagged_pid)
@@ -207,35 +275,68 @@ class InventoryRepository:
         extra_data: dict | None = None,
         commit: bool = True,
     ) -> InventoryItem | None:
-        """Update inventory item (must belong to org). If commit=False, caller is responsible for commit."""
+        """Update inventory item (must belong to org)."""
         item = self.get_inventory_item_by_id(item_id, org_id)
         if not item:
             return None
 
-        if name is not None:
+        diff: dict = {}
+        if name is not None and name != item.name:
+            diff["name"] = {"before": item.name, "after": name}
             item.name = name
-        if unit is not None:
+        if unit is not None and unit != item.unit:
+            diff["unit"] = {"before": item.unit, "after": unit}
             item.unit = unit
         if extra_data is not None:
             item.extra_data = extra_data
 
         if quantity is not None:
+            qty_before = str(item.quantity)
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_UPDATE):
                 item.quantity = coerce_stored_quantity(quantity)
+                if str(item.quantity) != qty_before:
+                    diff["quantity"] = {"before": qty_before, "after": str(item.quantity)}
+
+                ew = EventWriter(self.db, org_id)
+                ew.emit(
+                    event_type="inventory_item.updated",
+                    entity_type="inventory_item",
+                    entity_id=item.id,
+                    payload=_item_snapshot(item),
+                    diff=diff or None,
+                )
                 if commit:
                     self.db.commit()
-        elif commit:
-            self.db.commit()
+        else:
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="inventory_item.updated",
+                entity_type="inventory_item",
+                entity_id=item.id,
+                payload=_item_snapshot(item),
+                diff=diff or None,
+            )
+            if commit:
+                self.db.commit()
+
         self.db.expire(item, ["updated_at"])
         _ = item.updated_at
         return item
 
     def delete_inventory_item(self, item_id: UUID, org_id: UUID) -> bool:
-        """Delete inventory item"""
+        """Delete inventory item — emits tombstone event before deletion."""
         item = self.get_inventory_item_by_id(item_id, org_id)
         if not item:
             return False
 
+        snapshot = _item_snapshot(item)
+        ew = EventWriter(self.db, org_id)
+        ew.emit(
+            event_type="inventory_item.deleted",
+            entity_type="inventory_item",
+            entity_id=item.id,
+            payload=snapshot,
+        )
         self.db.delete(item)
         self.db.commit()
         return True
