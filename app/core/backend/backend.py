@@ -604,7 +604,7 @@ def core():
     """Serve the core2.html frontend page"""
     user_email = getattr(g, "user_email", None)
     show_reset_db = config.environment in ("test", "local") and user_email == DEMO_USER_EMAIL
-    return render_template("core2.html", active_page="core", show_reset_db=show_reset_db)
+    return render_template("core/core2.html", active_page="core", show_reset_db=show_reset_db)
 
 
 @core_bp.route("/core/inventory/add", methods=["GET"])
@@ -988,7 +988,7 @@ def flows_create_next_steps_page():
 @requires_auth
 def notifications_page():
     """Serve system notifications (system findings) as a card list."""
-    return render_template("notifications.html", active_page="core")
+    return render_template("notifications/notifications.html", active_page="core")
 
 
 @core_bp.route("/core/processes", methods=["GET"])
@@ -1002,7 +1002,7 @@ def processes_list_page():
 @requires_auth
 def sourcemap():
     """Serve the sourcemap.html frontend page"""
-    return render_template("sourcemap.html", active_page="core")
+    return render_template("sourcemap/sourcemap.html", active_page="core")
 
 
 @core_bp.route("/static/js/<filename>")

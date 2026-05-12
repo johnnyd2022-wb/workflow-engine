@@ -131,8 +131,6 @@ def create_app():
     # API/auth calls get JSON so the client can show errors and avoid redirect loops.
     @app.errorhandler(401)
     def handle_unauthorized(e):
-        session.clear()
-        session.modified = True
         if request.path.startswith("/auth/") and request.method != "GET":
             return jsonify({"error": "Authentication required", "message": "Session expired or not authenticated"}), 401
         accepts_html = "text/html" in (request.headers.get("Accept") or "")

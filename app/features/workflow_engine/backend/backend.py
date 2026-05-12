@@ -193,7 +193,7 @@ def parent_processes():
 @requires_auth
 def dashboard():
     """Render the dashboard page"""
-    return render_template("dashboard.html", active_page="dashboard")
+    return render_template("dashboard/dashboard.html", active_page="dashboard")
 
 
 @workflow_engine_bp.route("/workflow-engine/compliance")
@@ -207,14 +207,14 @@ def compliance():
 @requires_auth
 def integrations():
     """Render the integrations page"""
-    return render_template("integrations.html", active_page="integrations")
+    return render_template("integrations/integrations.html", active_page="integrations")
 
 
 @workflow_engine_bp.route("/workflow-engine/settings")
 @requires_auth
 def settings():
     """Render the settings page"""
-    return render_template("settings.html", active_page="settings")
+    return render_template("settings/settings.html", active_page="settings")
 
 
 @workflow_engine_bp.route("/workflow-engine/flow-engine1")

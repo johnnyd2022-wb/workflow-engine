@@ -25,9 +25,21 @@
   {# Add-inventory manual: rules use :has(.add-inventory-manual-root); must be global for HTMX #page-content swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-add-manual.css') }}">
   {# Dashboard: rules are scoped to .workflow-dashboard; inert on other pages. Kept here so HTMX #page-content swaps still have the sheet. #}
-  <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='dashboard_spa.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='dashboard_spa.css') }}">
   {# Settings: rules use body.settings-page so inert elsewhere. Global so HTMX swaps keep the sheet. #}
-  <link rel="stylesheet" href="{{ url_for('workflow_engine.static', filename='settings_spa.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='settings_spa.css') }}">
+  {# Sourcemap: scoped to .sm-* classes; inert elsewhere. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='sourcemap.css') }}">
+  {# Flows2: scoped to flows2 page classes. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='flows2.css') }}">
+  {# Notifications page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='notifications.css') }}">
+  {# Processes list page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='processes-list.css') }}">
+  {# Inventory view page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-view.css') }}">
+  {# Inventory dispose page styles. Global for HTMX swaps. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='inventory-dispose.css') }}">
   {# Inventory spa header: used across many pages (core, integrations, settings, notifications). Global for HTMX swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
