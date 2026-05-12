@@ -8,7 +8,7 @@ Rules:
 - Abort early on invalid or inactive users or missing tenant.
 """
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from flask import abort, current_app, g, request, session
 
@@ -30,6 +30,9 @@ PUBLIC_ENDPOINTS = {
 def setup_tenant_context(app):
     @app.before_request
     def load_tenant_context():
+        # Unique ID for this HTTP request — shared by all events emitted during it
+        g.correlation_id = uuid4()
+
         # Safe defaults
         g.current_user = None
         g.current_org = None
