@@ -4402,120 +4402,33 @@ def sourcemap_trace():
     # Temporal trace — use as_of if provided
     if as_of_str:
         try:
-            from datetime import timezone as _tz
             as_of = datetime.fromisoformat(as_of_str.replace("Z", "+00:00"))
         except ValueError:
             return jsonify({"error": "Invalid as_of datetime format"}), 400
 
-        from app.core.db.models.entity_event import EntityEvent
+        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
 
-        # Build temporal graph from entity_events
-        # Find all step_completed events before as_of to get edges
-        step_events = (
-            db.query(EntityEvent)
-            .filter(
-                EntityEvent.org_id == org_id,
-                EntityEvent.event_type == "execution.step_completed",
-                EntityEvent.created_at <= as_of,
-            )
-            .order_by(EntityEvent.created_at.asc())
-            .all()
-        )
+        tracer = TemporalDAGTracer(db, org_id, as_of, max_depth=depth)
+        result = tracer.trace(root_id, root_type)
 
-        # Build graph nodes and edges from events
-        nodes = {}
-        edges = []
-
-        for ev in step_events:
-            p = ev.payload or {}
-            exec_id = p.get("execution_id")
-            consumed = p.get("items_consumed") or []
-            produced = p.get("items_produced") or []
-
-            for c in consumed:
-                item_id = c.get("item_id")
-                if item_id:
-                    edges.append({
-                        "from": item_id,
-                        "to": exec_id,
-                        "relationship": "consumed_by",
-                        "execution_id": exec_id,
-                        "at": ev.created_at.isoformat() if ev.created_at else None,
-                    })
-
-            for prod in produced:
-                item_id = prod.get("item_id")
-                if item_id:
-                    edges.append({
-                        "from": exec_id,
-                        "to": item_id,
-                        "relationship": "produced",
-                        "execution_id": exec_id,
-                        "at": ev.created_at.isoformat() if ev.created_at else None,
-                    })
-
-        # Get state of root entity at as_of
-        root_event = (
-            db.query(EntityEvent)
-            .filter(
-                EntityEvent.entity_id == root_id,
-                EntityEvent.created_at <= as_of,
-            )
-            .order_by(EntityEvent.created_at.desc())
-            .limit(1)
-            .first()
-        )
-
-        root_node = {
-            "id": str(root_id),
-            "type": root_type,
-            "state": root_event.payload if root_event else None,
-        }
-
-        # Filter edges to those connected to root (BFS, depth-limited)
-        connected = {str(root_id)}
-        for _ in range(depth):
-            new_conn = set()
-            for e in edges:
-                if e["from"] in connected:
-                    new_conn.add(e["to"])
-                if e["to"] in connected:
-                    new_conn.add(e["from"])
-            if not new_conn - connected:
-                break
-            connected |= new_conn
-
-        filtered_edges = [e for e in edges if e["from"] in connected and e["to"] in connected]
-
-        # Build story: all events touching these entities
-        story_events = (
-            db.query(EntityEvent)
-            .filter(
-                EntityEvent.org_id == org_id,
-                EntityEvent.entity_id.in_([UUID(n) for n in connected if _is_valid_uuid(n)]),
-                EntityEvent.created_at <= as_of,
-            )
-            .order_by(EntityEvent.created_at.asc())
-            .limit(100)
-            .all()
-        )
-
+        # Annotate timeline with human summaries
+        from app.core.db.models.entity_event import EntityEvent as _EE_Trace
         story = [
             {
-                "at": ev.created_at.isoformat() if ev.created_at else None,
-                "event_type": ev.event_type,
-                "entity_id": str(ev.entity_id),
-                "summary": _human_summary(ev),
-                "actor": ev.actor_label,
+                "at": item["at"],
+                "event_type": item["event_type"],
+                "entity_id": item["entity_id"],
+                "summary": item["event_type"].replace(".", " — ").replace("_", " ").capitalize(),
+                "actor": item.get("actor"),
             }
-            for ev in story_events
+            for item in result["timeline"]
         ]
 
         return jsonify({
-            "root": root_node,
-            "nodes": [{"id": n, "type": "unknown"} for n in connected],
-            "edges": filtered_edges,
-            "as_of": as_of_str,
+            "root": next((n for n in result["nodes"] if n["is_root"]), result["nodes"][0] if result["nodes"] else {}),
+            "nodes": result["nodes"],
+            "edges": result["edges"],
+            "as_of": result["as_of"],
             "is_current": False,
             "story": story,
         }), 200

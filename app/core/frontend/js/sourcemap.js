@@ -1103,8 +1103,99 @@
       </div>
     `;
 
-    card.addEventListener('click', () => card.classList.toggle('sm-item-card--expanded'));
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.sm-story-btn')) return;
+      card.classList.toggle('sm-item-card--expanded');
+    });
+
+    if (item.id) {
+      const storyBtn = document.createElement('button');
+      storyBtn.type = 'button';
+      storyBtn.className = 'sm-story-btn';
+      storyBtn.textContent = 'Audit history';
+      storyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        smOpenStoryPanel(item.id, item.name || 'Item');
+      });
+      card.appendChild(storyBtn);
+    }
+
     return card;
+  }
+
+  /* ── Entity story panel (slide-in drawer) ───────────────── */
+  function smEnsureStoryPanel() {
+    let panel = document.getElementById('sm-story-panel');
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = 'sm-story-panel';
+    panel.className = 'sm-story-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'false');
+    panel.setAttribute('aria-label', 'Audit history');
+    panel.innerHTML = `
+      <div class="sm-story-panel__header">
+        <span class="sm-story-panel__title" id="sm-story-panel-title"></span>
+        <button class="sm-story-panel__close" id="sm-story-panel-close" aria-label="Close">×</button>
+      </div>
+      <div class="sm-story-panel__body" id="sm-story-panel-body">
+        <div class="sm-loading">Loading…</div>
+      </div>
+    `;
+    document.body.appendChild(panel);
+    document.getElementById('sm-story-panel-close').addEventListener('click', smCloseStoryPanel);
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    return panel;
+  }
+
+  function smOpenStoryPanel(itemId, itemName) {
+    const panel = smEnsureStoryPanel();
+    const title = document.getElementById('sm-story-panel-title');
+    const body = document.getElementById('sm-story-panel-body');
+    if (title) title.textContent = itemName;
+    if (body) body.innerHTML = '<div class="sm-loading">Loading…</div>';
+    panel.classList.add('sm-story-panel--open');
+    document.body.classList.add('sm-story-panel-active');
+
+    fetch(`/api/core/entities/inventory_item/${encodeURIComponent(itemId)}/story`, { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((data) => {
+        const events = data.events || [];
+        if (!body) return;
+        if (!events.length) {
+          body.innerHTML = '<p class="sm-story-panel__empty">No history recorded yet.</p>';
+          return;
+        }
+        const ol = document.createElement('ol');
+        ol.className = 'sm-story-timeline';
+        events.forEach((ev) => {
+          const li = document.createElement('li');
+          li.className = 'sm-story-timeline__item';
+          const dot = document.createElement('span');
+          dot.className = 'sm-story-timeline__dot';
+          const text = document.createElement('span');
+          text.className = 'sm-story-timeline__text';
+          text.textContent = ev.summary || ev.event_type;
+          const time = document.createElement('span');
+          time.className = 'sm-story-timeline__time';
+          time.textContent = ev.at ? new Date(ev.at).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+          li.appendChild(dot);
+          li.appendChild(text);
+          li.appendChild(time);
+          ol.appendChild(li);
+        });
+        body.innerHTML = '';
+        body.appendChild(ol);
+      })
+      .catch(() => {
+        if (body) body.innerHTML = '<p class="sm-story-panel__empty">Could not load history.</p>';
+      });
+  }
+
+  function smCloseStoryPanel() {
+    const panel = document.getElementById('sm-story-panel');
+    if (panel) panel.classList.remove('sm-story-panel--open');
+    document.body.classList.remove('sm-story-panel-active');
   }
 
   /* ── Wastage view ───────────────────────────────────────── */
