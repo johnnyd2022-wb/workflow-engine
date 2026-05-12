@@ -24,13 +24,20 @@
   <!-- Styles -->
   <link rel="stylesheet" href="/static/css/styles_2.css">
   <style>
+    :root {
+      --color-midnight: #0D0D0D;
+      --color-midnight-gradient: #111111;
+      --background: #0D0D0D;
+      --glass-overlay: rgba(38, 38, 38, 0.9);
+      --glass-border: rgba(255, 255, 255, 0.1);
+    }
     .momo-trust-display-regular {
       font-family: "Momo Trust Display", sans-serif;
       font-weight: 400;
       font-style: normal;
     }
     .gradient-text {
-      background: linear-gradient(135deg, #ffffff 0%, #2DD4BF 100%);
+      background: linear-gradient(135deg, #6EE7B7 0%, #2DD4BF 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -41,10 +48,15 @@
     @media (max-width: 640px) {
       .hero-heading { font-size: 2rem; }
       .features-heading { font-size: 1.875rem; }
-      .social-proof-row { flex-wrap: wrap; gap: 0.75rem 1.25rem; }
+      .social-proof-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 0;
+      }
       .social-proof-divider { display: none; }
-      .hero-buttons-row { flex-direction: column; }
-      .hero-buttons-row .btn { width: 100%; justify-content: center; }
+      .social-proof-row > div { padding: 0 0.25rem; }
+      .social-proof-row .text-3xl { font-size: 1.1rem; }
+      .social-proof-row .text-sm { font-size: 0.65rem; line-height: 1.3; }
       .cta-card-inner { padding: 1.5rem !important; }
     }
   </style>
@@ -131,8 +143,8 @@
     <div class="container">
       <div class="text-center mb-8 animate-fade-in">
         <h2 class="text-4xl md-text-5xl momo-trust-display-regular features-heading mb-4">
-          Everything you need for
-          <span class="gradient-text">clear and reliable operational insights</span>
+          Everything you need for<br>
+          <span style="color: #2DD4BF;">clear and reliable operational insights</span>
         </h2>
         <p class="text-xl text-muted mx-auto" style="max-width: 42rem;">
           <span class="momo-trust-display-regular">biz-e</span> is not a reporting tool, ERP module, or documentation system. It captures how work is actually completed in real time.
