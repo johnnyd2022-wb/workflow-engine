@@ -906,8 +906,8 @@
           const data = await response.json();
           
           if (response.ok) {
-            // Success - close modal WITHOUT cancelling session (session is now authenticated)
-            closeModal('loginModal', { skipCancel: true });
+            // Success - close modal and redirect
+            closeModal('loginModal');
             showSuccessMessage('Signed in successfully!');
             setTimeout(() => {
               window.location.href = '/dashboard';
@@ -980,8 +980,8 @@
                 submitButton.disabled = false;
               }
             } else {
-              // Success - close modal WITHOUT cancelling session (session is now authenticated)
-              closeModal('loginModal', { skipCancel: true });
+              // Success - close modal and redirect
+              closeModal('loginModal');
               showSuccessMessage('Signed in successfully!');
               setTimeout(() => {
                 window.location.href = '/dashboard';
@@ -1146,35 +1146,14 @@
       document.getElementById('hero-buttons-authenticated').style.display = 'none';
     }
     
-    async function openModal(modalId) {
+    function openModal(modalId) {
       const modal = document.getElementById(modalId);
       if (modal) {
-        // If opening login modal, reset UI state and clear any pending 2FA session
         if (modalId === 'loginModal') {
-          // CRITICAL: Clear backend state FIRST, then reset UI
-          try {
-            await fetch('/auth/2fa/cancel', {
-              method: 'POST',
-              credentials: 'include',
-              headers: {
-                'Content-Type': 'application/json',
-              }
-            });
-          } catch (err) {
-            // Silently fail - backend will clear on next login attempt
-          }
-          
-          // Now reset UI state
           resetLoginModalUI();
-          
-          // Show modal
           modal.classList.add('active');
           document.body.style.overflow = 'hidden';
-          
-          // Reset again after modal is visible (defensive - ensures state is correct)
-          setTimeout(() => {
-            resetLoginModalUI();
-          }, 50);
+          setTimeout(() => { resetLoginModalUI(); }, 50);
         } else if (modalId === 'signupModal') {
           // Reset signup modal UI state when opening
           resetSignupModalUI();
@@ -1307,28 +1286,14 @@
       }
     }
     
-    function closeModal(modalId, opts = {}) {
+    function closeModal(modalId) {
       const modal = document.getElementById(modalId);
       if (modal) {
         modal.classList.remove('active');
         document.body.style.overflow = '';
 
-        // Reset login modal if applicable
         if (modalId === 'loginModal') {
           resetLoginModalUI();
-
-          // Clear pending 2FA session on backend — skip if already authenticated
-          // (calling cancel after successful login would wipe the authenticated session)
-          if (opts.skipCancel) return;
-          fetch('/auth/2fa/cancel', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-            }
-          }).catch(() => {
-            // Silently fail - backend will clear on next login attempt
-          });
         } else if (modalId === 'signupModal') {
           // Reset signup modal - clear form, errors, and warnings
           resetSignupModalUI();
