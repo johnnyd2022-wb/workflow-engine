@@ -402,9 +402,9 @@
       var p = (pathname || '').replace(/\/$/, '') || '/';
       return (
         p === '/core' ||
-        p === '/workflow-engine/dashboard' ||
-        p === '/workflow-engine/integrations' ||
-        p === '/workflow-engine/settings'
+        p === '/core/dashboard' ||
+        p === '/core/integrations' ||
+        p === '/core/settings'
       );
     }
     window.spaBannerBackIsMainTab = spaBannerBackIsMainTab;
@@ -589,13 +589,13 @@
         var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
         var pageBodyClasses = ['settings-page', 'dashboard-page'];
         pageBodyClasses.forEach(function (cls) { document.body.classList.remove(cls); });
-        if (path === '/workflow-engine/settings') {
+        if (path === '/core/settings') {
           document.body.classList.add('settings-page');
           if (typeof window.initAccountInfo === 'function') {
             window.initAccountInfo('account-info-container');
           }
         }
-        if (path === '/workflow-engine/dashboard') document.body.classList.add('dashboard-page');
+        if (path === '/core/dashboard') document.body.classList.add('dashboard-page');
       }
       if (!tgt || tgt.id !== 'page-content') return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';

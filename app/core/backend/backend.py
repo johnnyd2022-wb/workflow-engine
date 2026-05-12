@@ -607,6 +607,24 @@ def core():
     return render_template("core/core2.html", active_page="core", show_reset_db=show_reset_db)
 
 
+@core_bp.route("/core/dashboard", methods=["GET"])
+@requires_auth
+def dashboard():
+    return render_template("dashboard/dashboard.html", active_page="dashboard")
+
+
+@core_bp.route("/core/integrations", methods=["GET"])
+@requires_auth
+def integrations():
+    return render_template("integrations/integrations.html", active_page="integrations")
+
+
+@core_bp.route("/core/settings", methods=["GET"])
+@requires_auth
+def settings():
+    return render_template("settings/settings.html", active_page="settings")
+
+
 @core_bp.route("/core/inventory/add", methods=["GET"])
 @requires_auth
 def inventory_add_hub():
