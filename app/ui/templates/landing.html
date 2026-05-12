@@ -906,8 +906,8 @@
           const data = await response.json();
           
           if (response.ok) {
-            // Success - close modal and redirect
-            closeModal('loginModal');
+            // Success - close modal WITHOUT cancelling session (session is now authenticated)
+            closeModal('loginModal', { skipCancel: true });
             showSuccessMessage('Signed in successfully!');
             setTimeout(() => {
               window.location.href = '/dashboard';
@@ -980,8 +980,8 @@
                 submitButton.disabled = false;
               }
             } else {
-              // Success - close modal and redirect
-              closeModal('loginModal');
+              // Success - close modal WITHOUT cancelling session (session is now authenticated)
+              closeModal('loginModal', { skipCancel: true });
               showSuccessMessage('Signed in successfully!');
               setTimeout(() => {
                 window.location.href = '/dashboard';
@@ -1307,17 +1307,19 @@
       }
     }
     
-    function closeModal(modalId) {
+    function closeModal(modalId, opts = {}) {
       const modal = document.getElementById(modalId);
       if (modal) {
         modal.classList.remove('active');
         document.body.style.overflow = '';
-        
+
         // Reset login modal if applicable
         if (modalId === 'loginModal') {
           resetLoginModalUI();
-          
-          // Clear pending 2FA session on backend (fire and forget)
+
+          // Clear pending 2FA session on backend — skip if already authenticated
+          // (calling cancel after successful login would wipe the authenticated session)
+          if (opts.skipCancel) return;
           fetch('/auth/2fa/cancel', {
             method: 'POST',
             credentials: 'include',
