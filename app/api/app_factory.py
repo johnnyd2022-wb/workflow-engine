@@ -58,17 +58,6 @@ def create_app():
 
     app.register_blueprint(core_bp)
 
-    # Register existing feature blueprints conditionally
-    if config.crm_enabled:
-        from features.crm.backend.backend import crm_bp
-
-        app.register_blueprint(crm_bp)
-
-    if config.workflow_engine_enabled:
-        from features.workflow_engine.backend.backend import workflow_engine_bp
-
-        app.register_blueprint(workflow_engine_bp)
-
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
     @limiter.exempt
