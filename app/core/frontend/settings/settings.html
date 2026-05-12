@@ -492,7 +492,6 @@
       // Check URL for session_expired parameter
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('session_expired') === 'true') {
-        console.log('[Session Timeout] Detected session_expired parameter in URL');
         // Remove the parameter from URL (clean URL)
         const newUrl = window.location.pathname;
         window.history.replaceState({}, '', newUrl);
@@ -514,7 +513,6 @@
         // Check if the page body contains only JSON error (session expired)
         const bodyText = document.body ? document.body.textContent.trim() : '';
         if (bodyText.startsWith('{') && bodyText.includes('"error"') && bodyText.includes('Session expired')) {
-          console.log('[Session Timeout] Detected JSON error on page load');
           // Clear the page content and show modal
           document.body.innerHTML = '';
           showSessionTimeoutModal();
@@ -554,7 +552,6 @@
         event.message.includes('401') ||
         event.message.includes('Unauthorized')
       )) {
-        console.log('[Session Timeout] Suppressing error:', event.message);
         event.preventDefault();
         // Show modal if not already showing
         const modal = document.getElementById('sessionTimeoutModal');
@@ -574,7 +571,6 @@
         (reason.status === 401) ||
         (reason.message && (reason.message.includes('401') || reason.message.includes('Session expired')))
       )) {
-        console.log('[Session Timeout] Suppressing unhandled rejection:', reason);
         event.preventDefault();
         // Show modal if not already showing
         const modal = document.getElementById('sessionTimeoutModal');
@@ -656,6 +652,58 @@
       }, 1000);
     }
     
+    // Handle 401 responses globally — installed before initial fetch calls so all requests are covered
+    (function() {
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        try {
+          const response = await originalFetch.apply(this, args);
+          
+          // Check for 401 responses (session expired) - do this BEFORE any JSON parsing
+          if (response.status === 401) {
+            // Get the URL from args (could be string or Request object)
+            const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || args[0]?.href || '');
+            const path = window.location.pathname;
+            
+            // Only show modal for authenticated endpoints, not login/signup
+            const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/signup');
+            const isLandingPage = path === '/' || path.includes('login');
+            
+            if (!isAuthEndpoint && !isLandingPage) {
+              // Session expired - show modal IMMEDIATELY
+              
+              // Show modal right away
+              showSessionTimeoutModal();
+              
+              // Wrap response to prevent JSON parsing errors from displaying
+              // Use Proxy to intercept .json() calls and return empty object
+              const wrappedResponse = new Proxy(response, {
+                get: function(target, prop) {
+                  if (prop === 'json') {
+                    // Return a function that returns empty object instead of parsing
+                    return async function() {
+                      return {};
+                    };
+                  }
+                  // Return all other properties/methods normally
+                  const value = target[prop];
+                  return typeof value === 'function' ? value.bind(target) : value;
+                }
+              });
+              
+              // Return the wrapped response - prevents JSON parsing errors
+              return wrappedResponse;
+            }
+          }
+          
+          return response;
+        } catch (error) {
+          // Re-throw the error
+          throw error;
+        }
+      };
+    })();
+
     // Check on page load
     checkIncompleteEnrollment();
     
@@ -1951,60 +1999,7 @@
       }
     }, ACTIVITY_CHECK_INTERVAL);
     
-    // Handle 401 responses globally (session expired) - MUST be set up BEFORE other code
-    // This intercepts ALL fetch calls before any other code runs
-    (function() {
-      const originalFetch = window.fetch;
-      window.fetch = async function(...args) {
-        try {
-          const response = await originalFetch.apply(this, args);
-          
-          // Check for 401 responses (session expired) - do this BEFORE any JSON parsing
-          if (response.status === 401) {
-            // Get the URL from args (could be string or Request object)
-            const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || args[0]?.href || '');
-            const path = window.location.pathname;
-            
-            // Only show modal for authenticated endpoints, not login/signup
-            const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/signup');
-            const isLandingPage = path === '/' || path.includes('login');
-            
-            if (!isAuthEndpoint && !isLandingPage) {
-              // Session expired - show modal IMMEDIATELY
-              console.log('[Session Timeout] 401 detected, showing modal. URL:', url, 'Path:', path);
-              
-              // Show modal right away
-              showSessionTimeoutModal();
-              
-              // Wrap response to prevent JSON parsing errors from displaying
-              // Use Proxy to intercept .json() calls and return empty object
-              const wrappedResponse = new Proxy(response, {
-                get: function(target, prop) {
-                  if (prop === 'json') {
-                    // Return a function that returns empty object instead of parsing
-                    return async function() {
-                      console.log('[Session Timeout] Preventing JSON parse for 401 - returning empty object');
-                      return {};
-                    };
-                  }
-                  // Return all other properties/methods normally
-                  const value = target[prop];
-                  return typeof value === 'function' ? value.bind(target) : value;
-                }
-              });
-              
-              // Return the wrapped response - prevents JSON parsing errors
-              return wrappedResponse;
-            }
-          }
-          
-          return response;
-        } catch (error) {
-          // Re-throw the error
-          throw error;
-        }
-      };
-    })();
+
     
     // Session timeout notification modal
     let sessionTimeoutTimer = null;
@@ -2021,6 +2016,7 @@
       const modal = document.getElementById('sessionTimeoutModal');
       const countdownEl = document.getElementById('sessionTimeoutCountdown');
       if (!modal) return;
+      if (modal.classList.contains('active')) return;
       
       // Clear any existing timer
       if (sessionTimeoutTimer) {
@@ -2048,5 +2044,15 @@
         }
       }, 1000);
     }
+
+    // Clear sensitive sessionStorage if user navigates away mid-enrollment (only step 4 needs persistence)
+    document.addEventListener('htmx:beforeSwap', function() {
+      if (window.location.pathname === '/core/settings') {
+        if (sessionStorage.getItem('2fa_enrollment_step') !== '4') {
+          sessionStorage.removeItem('2fa_backup_codes');
+          sessionStorage.removeItem('2fa_enrollment_step');
+        }
+      }
+    });
   </script>
 {% endblock %}
