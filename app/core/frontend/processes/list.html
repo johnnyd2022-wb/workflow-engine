@@ -55,6 +55,12 @@
         return d.innerHTML;
       }
 
+      function fmtDate(iso) {
+        if (!iso) return null;
+        try { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
+        catch (e) { return iso.slice(0, 10); }
+      }
+
       function render(processes) {
         var loading = document.getElementById('processes-list-loading');
         var empty = document.getElementById('processes-list-empty');
@@ -76,11 +82,25 @@
             var done = typeof p.completed_executions === 'number' ? p.completed_executions : 0;
             var draft = p.is_draft ? ' · Draft' : '';
             var meta = steps + ' step' + (steps === 1 ? '' : 's') + ' · ' + active + ' active · ' + done + ' completed' + draft;
+            var es = p.event_summary || null;
+            var auditLine = '';
+            if (es) {
+              var parts = [];
+              if (es.current_version && es.current_version > 1) parts.push('v' + es.current_version);
+              if (es.last_modified_by && es.last_modified_at) {
+                parts.push('Last edited by ' + es.last_modified_by + ' · ' + fmtDate(es.last_modified_at));
+              } else if (es.created_by && es.created_at) {
+                parts.push('Created by ' + es.created_by + ' · ' + fmtDate(es.created_at));
+              }
+              if (es.total_runs > 0) parts.push(es.total_runs + ' run' + (es.total_runs === 1 ? '' : 's'));
+              if (parts.length) auditLine = '<p class="processes-list-item__audit">' + esc(parts.join(' · ')) + '</p>';
+            }
             return (
               '<a href="' + esc(href) + '" class="processes-list-item">' +
                 '<div class="processes-list-item__main">' +
                   '<p class="processes-list-item__name">' + esc(p.name || 'Untitled') + '</p>' +
                   '<p class="processes-list-item__meta">' + esc(meta) + '</p>' +
+                  auditLine +
                 '</div>' +
                 '<span class="processes-list-item__arrow" aria-hidden="true">' +
                   '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +

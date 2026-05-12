@@ -947,6 +947,39 @@
       line-height: 1.6;
       color: var(--text-secondary, #6b7280);
     }
+    .flows2-audit-timeline {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .flows2-audit-timeline__item {
+      display: grid;
+      grid-template-columns: 10px 1fr auto;
+      align-items: baseline;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border-light, #f3f4f6);
+      font-size: 0.8125rem;
+    }
+    .flows2-audit-timeline__item:last-child { border-bottom: none; }
+    .flows2-audit-timeline__dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--primary, #3b82f6);
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .flows2-audit-timeline__text { color: var(--text-primary, #111827); line-height: 1.4; }
+    .flows2-audit-timeline__time {
+      font-size: 0.7rem;
+      color: var(--text-tertiary, #9ca3af);
+      white-space: nowrap;
+    }
+    html[data-spa-theme="dark"] .flows2-audit-timeline__text { color: var(--text-primary, #f3f4f6); }
+    html[data-spa-theme="dark"] .flows2-audit-timeline__item { border-color: var(--border-light, rgba(255,255,255,0.08)); }
 
 /* Notification toast animation */
     @keyframes slideInRight {

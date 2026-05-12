@@ -122,6 +122,12 @@
     .processes-list-item:hover .processes-list-item__arrow {
       color: var(--primary, #3b82f6);
     }
+    .processes-list-item__audit {
+      font-size: 0.75rem;
+      color: var(--text-tertiary, #9ca3af);
+      margin: 3px 0 0 0;
+      line-height: 1.4;
+    }
     .processes-list-empty {
       padding: 24px 0;
       text-align: center;

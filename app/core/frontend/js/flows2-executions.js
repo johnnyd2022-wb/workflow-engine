@@ -599,6 +599,9 @@
       const headerLeft = document.createElement('div');
       headerLeft.style.cssText = 'flex: 1; min-width: 0;';
       
+      const es = execution.event_summary || null;
+      const startedByLabel = (es && es.created_by) ? es.created_by : user.username;
+
       if (status === 'active') {
         if (nextStepHeaderEl) headerLeft.appendChild(nextStepHeaderEl);
         const startedEl = document.createElement('div');
@@ -608,7 +611,7 @@
         headerLeft.appendChild(startedEl);
         const byEl = document.createElement('div');
         byEl.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;';
-        byEl.textContent = `Started by: ${user.username}`;
+        byEl.textContent = `Started by: ${startedByLabel}`;
         headerLeft.appendChild(byEl);
         if (nextStepBtnWrap) headerLeft.appendChild(nextStepBtnWrap);
         flows2AppendExecutionProgressBlock(headerLeft, progressColor, progress, { marginTop: '12px' });
@@ -623,6 +626,21 @@
         compEl.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin-bottom: 2px;';
         compEl.textContent = `Completed: ${completedDate || startDate}`;
         headerLeft.appendChild(compEl);
+        const startedByEl = document.createElement('div');
+        startedByEl.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-bottom: 2px;';
+        startedByEl.textContent = `Started by: ${startedByLabel}`;
+        headerLeft.appendChild(startedByEl);
+        if (es && es.steps_completed > 0) {
+          const stepsEl = document.createElement('div');
+          stepsEl.style.cssText = 'font-size: 12px; color: var(--text-tertiary, #9ca3af);';
+          const itemsC = (es.items_consumed || []).length;
+          const itemsP = (es.items_produced || []).length;
+          let stepsText = `${es.steps_completed} step${es.steps_completed !== 1 ? 's' : ''} completed`;
+          if (itemsC > 0) stepsText += ` · ${itemsC} input${itemsC !== 1 ? 's' : ''} consumed`;
+          if (itemsP > 0) stepsText += ` · ${itemsP} output${itemsP !== 1 ? 's' : ''} produced`;
+          stepsEl.textContent = stepsText;
+          headerLeft.appendChild(stepsEl);
+        }
       }
       
       const headerRight = document.createElement('div');

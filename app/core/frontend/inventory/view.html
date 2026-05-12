@@ -111,6 +111,7 @@
 
       const TYPE_LABEL = { raw_material: 'Raw', work_in_progress: 'Intermediate', final_product: 'Final' };
       const TYPE_CLASS = { raw_material: 'inv-view-type--raw', work_in_progress: 'inv-view-type--wip', final_product: 'inv-view-type--final' };
+      const ADD_METHOD_LABEL = { manual: 'Manual', barcode_scan: 'Barcode', csv_import: 'CSV import', execution_output: 'Process output' };
 
       let allItems = [];
 
@@ -149,6 +150,84 @@
         } catch (e) {
           return '';
         }
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return '—';
+        try {
+          return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        } catch (e) { return iso.slice(0, 10); }
+      }
+
+      function buildAuditBadges(es) {
+        if (!es) return '';
+        const parts = [];
+        const method = es.add_method;
+        if (method && method !== 'manual') {
+          parts.push('<span class="inv-audit-badge inv-audit-badge--method">' + esc(ADD_METHOD_LABEL[method] || method) + '</span>');
+        }
+        const tc = parseInt(es.times_consumed || 0);
+        if (tc > 0) {
+          parts.push('<span class="inv-audit-badge inv-audit-badge--consumed">Used ' + tc + 'x</span>');
+        }
+        const wc = parseInt(es.wastage_event_count || 0);
+        if (wc > 0) {
+          parts.push('<span class="inv-audit-badge inv-audit-badge--wasted">' + wc + ' wastage</span>');
+        }
+        return parts.length ? '<div class="inv-audit-badges">' + parts.join('') + '</div>' : '';
+      }
+
+      function buildAuditMeta(es) {
+        if (!es) return '';
+        const lines = [];
+        if (es.created_by) {
+          lines.push('<span class="inv-audit-meta__item">Added by <strong>' + esc(es.created_by) + '</strong> · ' + fmtDate(es.created_at) + '</span>');
+        }
+        if (es.last_consumed_at) {
+          lines.push('<span class="inv-audit-meta__item">Last used ' + fmtDate(es.last_consumed_at) + (es.last_consumed_execution ? ' in <em>' + esc(es.last_consumed_execution) + '</em>' : '') + '</span>');
+        }
+        return lines.length ? '<div class="inv-audit-meta">' + lines.join('') + '</div>' : '';
+      }
+
+      function buildHistoryToggle(itemId) {
+        return '<details class="inv-audit-history" data-item-id="' + esc(itemId) + '">' +
+          '<summary class="inv-audit-history__toggle">Audit history</summary>' +
+          '<div class="inv-audit-history__body" data-loaded="false"><span class="inv-audit-history__loading">Loading…</span></div>' +
+          '</details>';
+      }
+
+      function wireHistoryToggles(container) {
+        container.querySelectorAll('.inv-audit-history').forEach(function (det) {
+          det.addEventListener('toggle', function () {
+            if (!det.open) return;
+            const body = det.querySelector('.inv-audit-history__body');
+            if (!body || body.dataset.loaded === 'true') return;
+            const itemId = det.dataset.itemId;
+            fetch('/api/core/entities/inventory_item/' + encodeURIComponent(itemId) + '/story', { credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                body.dataset.loaded = 'true';
+                const events = (data.events || []);
+                if (!events.length) {
+                  body.innerHTML = '<span class="inv-audit-history__empty">No history recorded yet.</span>';
+                  return;
+                }
+                body.innerHTML = '<ol class="inv-audit-timeline">' +
+                  events.map(function (ev) {
+                    return '<li class="inv-audit-timeline__item">' +
+                      '<span class="inv-audit-timeline__dot"></span>' +
+                      '<span class="inv-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
+                      '<span class="inv-audit-timeline__time">' + fmtDate(ev.at) + '</span>' +
+                      '</li>';
+                  }).join('') +
+                  '</ol>';
+              })
+              .catch(function () {
+                body.dataset.loaded = 'true';
+                body.innerHTML = '<span class="inv-audit-history__empty">Could not load history.</span>';
+              });
+          });
+        });
       }
 
       function populateSelect(sel, values, emptyLabel) {
@@ -318,12 +397,15 @@
             const metaBlock = metaStr.length > 2
               ? '<details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--primary,#3b82f6);font-size:0.875rem;">Metadata</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
               : '';
+            const es = item.event_summary || null;
             return (
               '<article class="inv-view-card">' +
                 '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
                   '<strong style="font-size:1rem;">' + esc(item.name) + '</strong>' +
                   '<span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span>' +
                 '</div>' +
+                buildAuditBadges(es) +
+                buildAuditMeta(es) +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Supplier</span><span class="inv-view-card__val">' + esc(item.supplier || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Batch</span><span class="inv-view-card__val">' + esc(item.supplier_batch_number || '—') + '</span></div>' +
@@ -332,9 +414,11 @@
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Process</span><span class="inv-view-card__val">' + esc(item.process_name || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Barcode</span><span class="inv-view-card__val">' + esc(item.barcode || '—') + '</span></div>' +
                 metaBlock +
+                (item.id ? buildHistoryToggle(item.id) : '') +
               '</article>'
             );
           }).join('');
+          wireHistoryToggles(cardsEl);
         }
       }
 

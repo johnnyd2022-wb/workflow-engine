@@ -1217,6 +1217,14 @@ def list_processes():
     for e in all_executions:
         execs_by_process[e.process_id].append(e)
 
+    # Batch-load process event summaries
+    from app.core.db.models.entity_event_summary import EntityEventSummary as _EES_P
+    proc_ids_all = [p.id for p in processes]
+    proc_summary_by_id: dict = {}
+    if proc_ids_all:
+        proc_ees = db_session.query(_EES_P).filter(_EES_P.entity_id.in_(proc_ids_all)).all()
+        proc_summary_by_id = {str(r.entity_id): r.summary for r in proc_ees}
+
     result = []
     for process in processes:
         proc_execs = execs_by_process.get(process.id, [])
@@ -1235,6 +1243,7 @@ def list_processes():
             "active_executions": active_count,
             "completed_executions": completed_count,
             "created_at": process.created_at.isoformat() if process.created_at else None,
+            "event_summary": proc_summary_by_id.get(str(process.id)),
         }
 
         if include_steps:
@@ -1751,6 +1760,14 @@ def list_executions():
     executions_by_id = {str(e.id): e for e in executions}
     evidence_by_execution = list_evidence_for_executions_batch([e.id for e in executions], org_id, executions_by_id)
 
+    # Batch-load execution event summaries
+    from app.core.db.models.entity_event_summary import EntityEventSummary as _EES_E
+    exec_ids_all = [e.id for e in executions]
+    exec_summary_by_id: dict = {}
+    if exec_ids_all:
+        exec_ees = db_session.query(_EES_E).filter(_EES_E.entity_id.in_(exec_ids_all)).all()
+        exec_summary_by_id = {str(r.entity_id): r.summary for r in exec_ees}
+
     result = []
     for execution in executions:
         execution_steps = execution.execution_steps if execution.execution_steps else []
@@ -1814,6 +1831,7 @@ def list_executions():
                 "evidence": evidence_by_execution.get(str(execution.id), []),
                 "completed_by": completed_by,
                 "created_at": execution.created_at.isoformat() if execution.created_at else None,
+                "event_summary": exec_summary_by_id.get(str(execution.id)),
             }
         )
 
@@ -2655,6 +2673,14 @@ def list_inventory():
             )
             process_by_id = {p.id: p for p in loaded_procs}
 
+    # Batch-load event summaries for card enrichment (single query, no N+1)
+    from app.core.db.models.entity_event_summary import EntityEventSummary as _EES
+    item_ids_all = [item.id for item in items]
+    event_summary_by_id: dict = {}
+    if item_ids_all:
+        ees_rows = db_session.query(_EES).filter(_EES.entity_id.in_(item_ids_all)).all()
+        event_summary_by_id = {str(r.entity_id): r.summary for r in ees_rows}
+
     result = []
     for item in items:
         # Filter out items with zero or negative quantity
@@ -2972,6 +2998,7 @@ def list_inventory():
                 "extra_data": _bound_inventory_extra_data_for_list_response(extra_data),
                 "system_findings": findings_by_id.get(str(item.id), []),
                 "ready_date_display": ready_date_display,
+                "event_summary": event_summary_by_id.get(str(item.id)),
             }
         )
 

@@ -126,13 +126,55 @@
             </p>
 
             <section class="flows2-audit-log" aria-labelledby="flows2-audit-log-heading">
-              <details class="flows2-audit-log__details">
-                <summary class="flows2-audit-log__summary" id="flows2-audit-log-heading">Audit log</summary>
-                <div class="flows2-audit-log__body">
-                  <p class="flows2-audit-log__placeholder">Coming soon - all operations for this process will be recorded here</p>
+              <details class="flows2-audit-log__details" id="flows2-audit-log-details">
+                <summary class="flows2-audit-log__summary" id="flows2-audit-log-heading">Audit history</summary>
+                <div class="flows2-audit-log__body" id="flows2-audit-log-body" data-loaded="false">
+                  <p class="flows2-audit-log__placeholder">Loading…</p>
                 </div>
               </details>
             </section>
+            <script>
+              (function () {
+                var det = document.getElementById('flows2-audit-log-details');
+                if (!det) return;
+                det.addEventListener('toggle', function () {
+                  if (!det.open) return;
+                  var body = document.getElementById('flows2-audit-log-body');
+                  if (!body || body.dataset.loaded === 'true') return;
+                  var pid = window.processId;
+                  if (!pid) { body.innerHTML = '<p class="flows2-audit-log__placeholder">Process not loaded.</p>'; return; }
+                  fetch('/api/core/entities/process/' + encodeURIComponent(pid) + '/story', { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                      body.dataset.loaded = 'true';
+                      var events = data.events || [];
+                      if (!events.length) {
+                        body.innerHTML = '<p class="flows2-audit-log__placeholder">No history recorded yet.</p>';
+                        return;
+                      }
+                      function esc(s) { var d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
+                      function fmtDate(iso) {
+                        if (!iso) return '';
+                        try { return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+                        catch (e) { return iso.slice(0, 10); }
+                      }
+                      body.innerHTML = '<ol class="flows2-audit-timeline">' +
+                        events.map(function (ev) {
+                          return '<li class="flows2-audit-timeline__item">' +
+                            '<span class="flows2-audit-timeline__dot"></span>' +
+                            '<span class="flows2-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
+                            '<span class="flows2-audit-timeline__time">' + esc(fmtDate(ev.at)) + '</span>' +
+                            '</li>';
+                        }).join('') +
+                        '</ol>';
+                    })
+                    .catch(function () {
+                      body.dataset.loaded = 'true';
+                      body.innerHTML = '<p class="flows2-audit-log__placeholder">Could not load history.</p>';
+                    });
+                });
+              })();
+            </script>
           </div>
 
           <!-- Batches (was Executions) -->
