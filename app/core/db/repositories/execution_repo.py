@@ -5,9 +5,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.backend.event_writer import EventWriter
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.process import Process
+from app.core.db.models.process_version import ProcessVersion
 from app.core.db.models.step import Step
 
 
@@ -69,6 +71,45 @@ class ExecutionRepository:
                 execution_steps[0].status = ExecutionStepStatus.READY
 
             execution.status = ExecutionStatus.IN_PROGRESS
+
+            # Link to the current process version snapshot
+            latest_version = (
+                self.db.query(ProcessVersion)
+                .filter(ProcessVersion.process_id == process_id)
+                .order_by(ProcessVersion.version_number.desc())
+                .first()
+            )
+            if latest_version:
+                execution.process_version_id = latest_version.id
+
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="execution.created",
+                entity_type="execution",
+                entity_id=execution.id,
+                payload={
+                    "execution_id": str(execution.id),
+                    "process_id": str(process_id),
+                    "process_version_id": str(latest_version.id) if latest_version else None,
+                    "process_version_number": latest_version.version_number if latest_version else None,
+                    "process_version_date": latest_version.created_at.isoformat() if latest_version else None,
+                    "total_steps": total_steps,
+                    "status": ExecutionStatus.IN_PROGRESS.value,
+                },
+            )
+            # Also emit on the process entity so process summary tracks run counts
+            if latest_version:
+                ew.emit(
+                    event_type="execution.created",
+                    entity_type="process",
+                    entity_id=process_id,
+                    payload={
+                        "execution_id": str(execution.id),
+                        "process_id": str(process_id),
+                        "process_version_number": latest_version.version_number,
+                    },
+                )
+
             if commit:
                 self.db.commit()
             return execution
