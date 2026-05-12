@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flume — Workflow Engine Visibility & Compliance Simplified</title>
-  <meta name="description" content="End-to-end workflow engine visibility made effortless. See your entire workflow engine, automate compliance, and flow with confidence.">
-  <meta name="author" content="Flume">
-  
+  <title>biz-e — Effortless control and visibility for your manufacturing operations</title>
+  <meta name="description" content="biz-e captures production activity, enforces defined constraints, tracks every change, and maintains a live connected record—removing uncertainty, reducing manual effort, and enabling instant forensic reconstruction of your production outcomes.">
+  <meta name="author" content="biz-e">
+
   <!-- Open Graph -->
-  <meta property="og:title" content="Flume — Workflow Engine Visibility & Compliance Simplified">
-  <meta property="og:description" content="End-to-end workflow engine visibility made effortless. See your entire workflow engine, automate compliance, and flow with confidence.">
+  <meta property="og:title" content="biz-e — Effortless control and visibility for your manufacturing operations">
+  <meta property="og:description" content="biz-e captures production activity, enforces defined constraints, tracks every change, and maintains a live connected record—removing uncertainty, reducing manual effort, and enabling instant forensic reconstruction of your production outcomes.">
   <meta property="og:type" content="website">
   
   <!-- Twitter Card -->
@@ -19,24 +19,34 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Momo+Trust+Display&display=swap" rel="stylesheet">
+
   <!-- Styles -->
-  <link rel="stylesheet" href="/workflow-engine-static/styles_2.css">
+  <link rel="stylesheet" href="/static/css/styles_2.css">
+  <style>
+    .momo-trust-display-regular {
+      font-family: "Momo Trust Display", sans-serif;
+      font-weight: 400;
+      font-style: normal;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #ffffff 0%, #2DD4BF 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    @media (max-width: 768px) {
+      .landing-diagram-section { display: none; }
+    }
+  </style>
 </head>
 <body>
   <!-- Navigation -->
   <nav class="navbar">
     <div class="container">
       <a href="/" class="navbar-logo">
-        <div class="navbar-logo-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-            <path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3V7z"></path>
-            <path d="M9 4v13"></path>
-            <path d="M15 7v13"></path>
-          </svg>
-        </div>
-        <span class="navbar-logo-text">Flume</span>
+        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#2DD4BF; box-shadow:0 0 0 3px rgba(45,212,191,0.22); flex-shrink:0;"></span>
+        <span class="momo-trust-display-regular" style="font-size:1.5rem; color:#F9FAFB; letter-spacing:-0.03em;">biz-e</span>
       </a>
       
       <div class="navbar-menu" id="navbar-menu" style="display: flex;">
@@ -52,198 +62,71 @@
   <!-- Hero Section -->
   <section class="gradient-hero" style="position: relative; overflow: hidden;">
     <div class="container py-20 md-py-32">
-      <div class="grid md-grid-cols-2" style="gap: 3rem; align-items: center;">
-        <!-- Hero Text -->
-        <div class="space-y-8 animate-fade-in">
-          <div style="display: inline-block;">
-            <span class="glass-card text-sm font-medium px-4 py-2">
-              Flow through your workflow engine — with total visibility
-            </span>
-          </div>
-          
-          <h1 class="text-5xl md-text-6xl font-bold" style="line-height: 1.1;">
-            End-to-End Workflow Engine Visibility —
-            <span class="gradient-text">Made Effortless</span>
-          </h1>
-          
-          <p class="text-xl text-muted" style="max-width: 36rem;">
-            See your entire workflow engine. Automate compliance. Flow with confidence.
-          </p>
+      <!-- Hero Text -->
+      <div class="space-y-8 animate-fade-in" style="max-width: 48rem;">
+        <h1 class="text-5xl md-text-6xl momo-trust-display-regular" style="line-height: 1.1;">
+          Effortless control and visibility for your
+          <span class="gradient-text">manufacturing operations</span>
+        </h1>
 
-          <!-- Flow Visualization -->
-          <div class="glass-card animate-fade-in" style="padding: 1rem;">
-            <!-- Flow visualization -->
-            <div class="flex items-center justify-between py-4" style="gap: 1rem;">
-              <!-- Node 1 -->
-              <div class="flex items-center" style="flex: 1; min-width: 0;">
-                <div class="flex flex-col items-center">
-                  <div style="position: relative;">
-                    <div class="glass-card transition-smooth" style="padding: 1rem; cursor: pointer; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;">
-                      <svg class="icon-lg text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px; height: 32px;">
-                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-                      </svg>
-                    </div>
-                    <div style="position: absolute; top: -0.5rem; right: -0.5rem; background: var(--success); border-radius: 50%; padding: 0.25rem;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </div>
-                  </div>
-                  <p class="text-xs font-medium mt-2">Supplier A</p>
-                  <span class="text-xs text-success">verified</span>
-                </div>
-                <div style="width: 2rem; margin: 0 0.5rem; display: flex; align-items: center; justify-content: center; align-self: flex-start; margin-top: 32px;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color: var(--primary);">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                </div>
-              </div>
+        <p class="text-xl text-muted" style="max-width: 36rem;">
+          <span class="momo-trust-display-regular">biz-e</span> captures production activity, enforces defined constraints, tracks every change, and maintains a live connected record—removing uncertainty, reducing manual effort, and enabling instant forensic reconstruction of your production outcomes.
+        </p>
 
-              <!-- Node 2 -->
-              <div class="flex items-center" style="flex: 1; min-width: 0;">
-                <div class="flex flex-col items-center">
-                  <div style="position: relative;">
-                    <div class="glass-card transition-smooth" style="padding: 1rem; cursor: pointer; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;">
-                      <svg class="icon-lg text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px; height: 32px;">
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                        <polyline points="7.5 4.21 12 6.81 16.5 4.21"></polyline>
-                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                      </svg>
-                    </div>
-                    <div style="position: absolute; top: -0.5rem; right: -0.5rem; background: var(--success); border-radius: 50%; padding: 0.25rem;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </div>
-                  </div>
-                  <p class="text-xs font-medium mt-2">Process 1</p>
-                  <span class="text-xs text-success">verified</span>
-                </div>
-                <div style="width: 2rem; margin: 0 0.5rem; display: flex; align-items: center; justify-content: center; align-self: flex-start; margin-top: 32px;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color: var(--primary);">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- Node 3 -->
-              <div class="flex items-center" style="flex: 1; min-width: 0;">
-                <div class="flex flex-col items-center">
-                  <div style="position: relative;">
-                    <div class="glass-card transition-smooth" style="padding: 1rem; cursor: pointer; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;">
-                      <svg class="icon-lg text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px; height: 32px;">
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                      </svg>
-                    </div>
-                    <div style="position: absolute; top: -0.5rem; right: -0.5rem; background: var(--success); border-radius: 50%; padding: 0.25rem;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </div>
-                  </div>
-                  <p class="text-xs font-medium mt-2">Process 2</p>
-                  <span class="text-xs text-success">verified</span>
-                </div>
-                <div style="width: 2rem; margin: 0 0.5rem; display: flex; align-items: center; justify-content: center; align-self: flex-start; margin-top: 32px;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color: var(--primary);">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- Node 4 -->
-              <div class="flex items-center" style="flex: 1; min-width: 0;">
-                <div class="flex flex-col items-center">
-                  <div style="position: relative;">
-                    <div class="glass-card transition-smooth" style="padding: 1rem; cursor: pointer; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;">
-                      <svg class="icon-lg text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px; height: 32px;">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                      </svg>
-                    </div>
-                    <div style="position: absolute; top: -0.5rem; right: -0.5rem; background: var(--warning); border-radius: 50%; padding: 0.25rem;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 16 14"></polyline>
-                      </svg>
-                    </div>
-                  </div>
-                  <p class="text-xs font-medium mt-2">Customer</p>
-                  <span class="text-xs text-warning">pending</span>
-                </div>
-              </div>
-            </div>
+        <div id="hero-buttons">
+          <div style="display: flex; gap: 1rem;">
+            <button class="btn btn-hero btn-lg" onclick="openModal('signupModal')">Sign Up</button>
+            <button class="btn btn-glass btn-lg" onclick="openModal('loginModal')">Sign In</button>
           </div>
-          
-          <div class="flex flex-col" style="gap: 1rem;" id="hero-buttons">
-            <button class="btn btn-hero btn-lg" style="width: 100%;" onclick="openModal('signupModal')">
-              Get Started
-            </button>
-            <button class="btn btn-glass btn-lg" style="width: 100%;" onclick="openModal('loginModal')">
-              Sign In
-            </button>
-          </div>
-          <div class="flex flex-col" style="gap: 1rem; display: none;" id="hero-buttons-authenticated">
-            <a href="/dashboard">
-              <button class="btn btn-hero btn-lg" style="width: 100%;">
-                View Dashboard
-              </button>
-            </a>
-            <a href="/workflow-engine/core">
-              <button class="btn btn-glass btn-lg" style="width: 100%;">
-                See My Flow
-              </button>
-            </a>
-          </div>
-          
-          <!-- Social proof -->
-          <div class="flex items-center" style="gap: 1.5rem; padding-top: 2rem;">
-            <div>
-              <p class="text-3xl font-bold">98.5%</p>
-              <p class="text-sm text-muted">Compliance Score</p>
-            </div>
-            <div style="height: 3rem; width: 1px; background: var(--border);"></div>
-            <div>
-              <p class="text-3xl font-bold">24/7</p>
-              <p class="text-sm text-muted">Live Monitoring</p>
-            </div>
-            <div style="height: 3rem; width: 1px; background: var(--border);"></div>
-            <div>
-              <p class="text-3xl font-bold">100+</p>
-              <p class="text-sm text-muted">Integrations</p>
-            </div>
+        </div>
+        <div style="display: none;" id="hero-buttons-authenticated">
+          <div style="display: flex; gap: 1rem;">
+            <a href="/dashboard"><button class="btn btn-hero btn-lg">View Dashboard</button></a>
+            <a href="/core"><button class="btn btn-glass btn-lg">Go to Operations</button></a>
           </div>
         </div>
 
-        <!-- Hero Image -->
-        <div class="animate-float" style="position: relative;">
-          <div class="glass-card animate-glow" style="padding: 0.5rem;">
-            <img 
-              src="/workflow-engine-static/hero-wave.jpg"
-              alt="Workflow engine visualization" 
-              class="rounded-2xl"
-              style="width: 100%; height: auto;"
-            >
+        <!-- Social proof -->
+        <div class="flex items-center" style="gap: 1.5rem; padding-top: 1rem;">
+          <div>
+            <p class="text-3xl font-bold">Real-time</p>
+            <p class="text-sm text-muted">Capture at point of work</p>
+          </div>
+          <div style="height: 3rem; width: 1px; background: var(--border);"></div>
+          <div>
+            <p class="text-3xl font-bold">Always</p>
+            <p class="text-sm text-muted">Audit-ready by default</p>
+          </div>
+          <div style="height: 3rem; width: 1px; background: var(--border);"></div>
+          <div>
+            <p class="text-3xl font-bold">Instant</p>
+            <p class="text-sm text-muted">Production state reconstruction</p>
           </div>
         </div>
       </div>
     </div>
+  </section>
 
-    <!-- Wave decoration -->
-    <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 8rem; background: linear-gradient(to top, var(--background), transparent);"></div>
+  <!-- Diagram — sits on solid background so colours match exactly; hidden on mobile (canvas is 1216px wide, unreadable when scaled to phone size) -->
+  <section class="landing-diagram-section" style="background-color: var(--background); padding: 0;">
+    <iframe
+      src="/landing-diagram"
+      title="biz-e operational diagram"
+      style="width: 100%; height: clamp(400px, 69vw, 840px); border: none; display: block;"
+      loading="lazy"
+    ></iframe>
   </section>
 
    <!-- Features Section -->
    <section class="py-20" style="background-color: var(--background);">
     <div class="container">
       <div class="text-center mb-8 animate-fade-in">
-        <h2 class="text-4xl md-text-5xl font-bold mb-4">
+        <h2 class="text-4xl md-text-5xl momo-trust-display-regular mb-4">
           Everything you need for
-          <span class="gradient-text">workflow engine excellence</span>
+          <span class="gradient-text">clear and reliable operational insights</span>
         </h2>
         <p class="text-xl text-muted mx-auto" style="max-width: 42rem;">
-          Built for modern businesses who demand transparency and efficiency
+          <span class="momo-trust-display-regular">biz-e</span> is not a reporting tool, ERP module, or documentation system. It captures how work is actually completed in real time.
         </p>
       </div>
 
@@ -254,8 +137,8 @@
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
             </svg>
           </div>
-          <h3 class="text-xl font-bold mb-2">Real-Time Visibility</h3>
-          <p class="text-muted">See your entire workflow engine mapped in real-time with live updates</p>
+          <h3 class="text-xl font-bold mb-2">Capture work as it happens</h3>
+          <p class="text-muted">Production activity is recorded at the point of execution, capturing inputs, outputs, and key details as work is completed.</p>
         </div>
 
         <div class="glass-card hover animate-fade-in">
@@ -264,8 +147,8 @@
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
             </svg>
           </div>
-          <h3 class="text-xl font-bold mb-2">Automated Compliance</h3>
-          <p class="text-muted">Generate NP3/FSANZ reports with one click. Stay audit-ready, always.</p>
+          <h3 class="text-xl font-bold mb-2">Be audit-ready by default</h3>
+          <p class="text-muted">A complete operational history is always available without requiring manual preparation or reconstruction.</p>
         </div>
 
         <div class="glass-card hover animate-fade-in">
@@ -274,8 +157,8 @@
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
           </div>
-          <h3 class="text-xl font-bold mb-2">Effortless Integration</h3>
-          <p class="text-muted">Connect with Xero, MYOB, and your existing tools in minutes</p>
+          <h3 class="text-xl font-bold mb-2">Reconstruct any production state instantly</h3>
+          <p class="text-muted">Any batch, workflow, or operational moment can be rebuilt with full context when needed.</p>
         </div>
       </div>
     </div>
@@ -286,16 +169,14 @@
     <div class="container text-center">
       <div class="glass-card mx-auto animate-scale-in" style="max-width: 48rem; padding: 3rem;">
         <h2 class="text-4xl font-bold mb-4">
-          Ready to see your workflow engine in a new light?
+          Ready to take clear control of your manufacturing operations?
         </h2>
         <p class="text-xl text-muted mb-8">
-          Join leading businesses using Flume for end-to-end visibility
+          Join manufacturing teams who run with clarity and confidence.
         </p>
-        <a href="/dashboard">
-          <button class="btn btn-hero btn-lg">
-            View Workflow Engine
-          </button>
-        </a>
+        <button class="btn btn-hero btn-lg" onclick="openModal('signupModal')">
+          Sign Up
+        </button>
       </div>
     </div>
   </section>
@@ -303,7 +184,7 @@
   <!-- Footer -->
   <footer class="py-8 border-t">
     <div class="container text-center text-muted">
-      <p>© 2025 Flume. Flow through your workflow engine — with total visibility.</p>
+      <p>© 2026 <span class="momo-trust-display-regular">biz-e</span>. Effortless control and visibility for your manufacturing operations.</p>
     </div>
   </footer>
 
@@ -323,11 +204,11 @@
       <form id="signupForm" onsubmit="handleSignup(event)" style="display: flex; flex-direction: column; gap: 1rem;">
         <div>
           <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Organization Name</label>
-          <input 
-            type="text" 
-            id="signup-org-name" 
-            name="org_name" 
-            required 
+          <input
+            type="text"
+            id="signup-org-name"
+            name="org_name"
+            required
             autocomplete="organization"
             class="input"
             placeholder="Enter your organization name"
@@ -337,11 +218,11 @@
         
         <div>
           <label class="text-sm font-medium mb-2" style="display: block; margin-bottom: 0.5rem;">Email</label>
-          <input 
-            type="email" 
-            id="signup-email" 
-            name="email" 
-            required 
+          <input
+            type="email"
+            id="signup-email"
+            name="email"
+            required
             autocomplete="email"
             class="input"
             placeholder="Enter your email"
@@ -559,7 +440,7 @@
       color: #ef4444;
       font-size: 0.875rem;
     }
-    
+
     .text-success {
       color: #10b981;
       font-size: 0.875rem;
@@ -1713,7 +1594,7 @@
     }, ACTIVITY_CHECK_INTERVAL);
   </script>
 
-  <script src="/workflow-engine-static/common.js"></script>
+  <script src="/static/js/common.js"></script>
   <script src="/ui/shared/password-policy.js"></script>
 </body>
 </html>

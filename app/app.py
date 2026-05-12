@@ -90,6 +90,18 @@ def index():
     return render_template_string(template_content)
 
 
+@app.route("/landing-diagram")
+def landing_diagram():
+    """Serve the biz-e operational diagram (embedded on landing page via iframe)"""
+    import os
+
+    from flask import send_from_directory
+
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    templates_dir = os.path.join(app_dir, "ui", "templates")
+    return send_from_directory(templates_dir, "biz-e-diagram-landing.html")
+
+
 @app.route("/dashboard")
 @requires_auth
 def dashboard():
