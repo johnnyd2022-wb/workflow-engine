@@ -38,6 +38,15 @@
     @media (max-width: 768px) {
       .landing-diagram-section { display: none; }
     }
+    @media (max-width: 640px) {
+      .hero-heading { font-size: 2rem; }
+      .features-heading { font-size: 1.875rem; }
+      .social-proof-row { flex-wrap: wrap; gap: 0.75rem 1.25rem; }
+      .social-proof-divider { display: none; }
+      .hero-buttons-row { flex-direction: column; }
+      .hero-buttons-row .btn { width: 100%; justify-content: center; }
+      .cta-card-inner { padding: 1.5rem !important; }
+    }
   </style>
 </head>
 <body>
@@ -64,7 +73,7 @@
     <div class="container py-20 md-py-32">
       <!-- Hero Text -->
       <div class="space-y-8 animate-fade-in" style="max-width: 48rem;">
-        <h1 class="text-5xl md-text-6xl momo-trust-display-regular" style="line-height: 1.1;">
+        <h1 class="text-5xl md-text-6xl momo-trust-display-regular hero-heading" style="line-height: 1.1;">
           Effortless control and visibility for your
           <span class="gradient-text">manufacturing operations</span>
         </h1>
@@ -74,30 +83,30 @@
         </p>
 
         <div id="hero-buttons">
-          <div style="display: flex; gap: 1rem;">
+          <div class="hero-buttons-row" style="display: flex; gap: 1rem;">
             <button class="btn btn-hero btn-lg" onclick="openModal('signupModal')">Sign Up</button>
             <button class="btn btn-glass btn-lg" onclick="openModal('loginModal')">Sign In</button>
           </div>
         </div>
         <div style="display: none;" id="hero-buttons-authenticated">
-          <div style="display: flex; gap: 1rem;">
+          <div class="hero-buttons-row" style="display: flex; gap: 1rem;">
             <a href="/dashboard"><button class="btn btn-hero btn-lg">View Dashboard</button></a>
             <a href="/core"><button class="btn btn-glass btn-lg">Go to Operations</button></a>
           </div>
         </div>
 
         <!-- Social proof -->
-        <div class="flex items-center" style="gap: 1.5rem; padding-top: 1rem;">
+        <div class="social-proof-row flex items-center" style="gap: 1.5rem; padding-top: 1rem;">
           <div>
             <p class="text-3xl font-bold">Real-time</p>
             <p class="text-sm text-muted">Capture at point of work</p>
           </div>
-          <div style="height: 3rem; width: 1px; background: var(--border);"></div>
+          <div class="social-proof-divider" style="height: 3rem; width: 1px; background: var(--border);"></div>
           <div>
             <p class="text-3xl font-bold">Always</p>
             <p class="text-sm text-muted">Audit-ready by default</p>
           </div>
-          <div style="height: 3rem; width: 1px; background: var(--border);"></div>
+          <div class="social-proof-divider" style="height: 3rem; width: 1px; background: var(--border);"></div>
           <div>
             <p class="text-3xl font-bold">Instant</p>
             <p class="text-sm text-muted">Production state reconstruction</p>
@@ -121,7 +130,7 @@
    <section class="py-20" style="background-color: var(--background);">
     <div class="container">
       <div class="text-center mb-8 animate-fade-in">
-        <h2 class="text-4xl md-text-5xl momo-trust-display-regular mb-4">
+        <h2 class="text-4xl md-text-5xl momo-trust-display-regular features-heading mb-4">
           Everything you need for
           <span class="gradient-text">clear and reliable operational insights</span>
         </h2>
@@ -167,7 +176,7 @@
   <!-- CTA Section -->
   <section class="py-20 gradient-hero">
     <div class="container text-center">
-      <div class="glass-card mx-auto animate-scale-in" style="max-width: 48rem; padding: 3rem;">
+      <div class="glass-card cta-card-inner mx-auto animate-scale-in" style="max-width: 48rem; padding: 3rem;">
         <h2 class="text-4xl font-bold mb-4">
           Ready to take clear control of your manufacturing operations?
         </h2>
