@@ -188,8 +188,16 @@ function createInventoryItem(item) {
         <div class="inventory-item-details">
             ${details.map(d => `<span>${d}</span>`).join('')}
         </div>
+        <div class="inv-adj-wrap" style="margin-top:8px;">
+            <button class="inv-adj-btn" type="button"
+                data-item-id="${escapeHtml(item.id || '')}"
+                data-unit="${escapeHtml(item.unit || '')}"
+                data-current="${escapeHtml(String(item.quantity != null ? item.quantity : ''))}">
+                ✏ Adjust qty
+            </button>
+        </div>
     `;
-    
+
     return div;
 }
 

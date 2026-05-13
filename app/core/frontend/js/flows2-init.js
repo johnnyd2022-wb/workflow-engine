@@ -587,3 +587,9 @@
     } else {
       flows2InitPage();
     }
+
+    // After an inline quantity adjustment, reload the inventory tab so the new
+    // quantity is reflected without a full page refresh.
+    window.invAdjustOnSave = function() {
+      if (typeof loadInventory === 'function') loadInventory();
+    };

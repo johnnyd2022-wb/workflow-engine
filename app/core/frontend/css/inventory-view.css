@@ -219,3 +219,83 @@
     .inv-audit-diff__before { color: #dc2626; text-decoration: line-through; word-break: break-all; }
     .inv-audit-diff__arrow { color: var(--text-secondary, #6b7280); flex-shrink: 0; }
     .inv-audit-diff__after { color: #16a34a; font-weight: 500; word-break: break-all; }
+
+/* ── Inline quantity adjust widget ──────────────────────────── */
+.inv-adj-wrap { display: contents; }
+.inv-adj-btn {
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  min-height: 28px;
+  border-radius: 5px;
+  border: 1px solid var(--border-default, #d1d5db);
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.inv-adj-btn:hover { background: var(--bg-hover, #f3f4f6); color: var(--text-primary, #111); }
+.inv-adj-form {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inv-adj-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #6b7280);
+}
+.inv-adj-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.inv-adj-input {
+  width: 100px;
+  padding: 5px 8px;
+  min-height: 32px;
+  border: 1px solid var(--border-default, #d1d5db);
+  border-radius: 5px;
+  font-size: 0.875rem;
+  background: var(--bg-card, #fff);
+  color: var(--text-primary, #111);
+}
+.inv-adj-input:focus { outline: 2px solid var(--primary, #3b82f6); outline-offset: 1px; }
+.inv-adj-save {
+  padding: 5px 12px;
+  min-height: 32px;
+  border-radius: 5px;
+  border: none;
+  background: var(--primary, #3b82f6);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.inv-adj-save:hover { background: #2563eb; }
+.inv-adj-save:disabled { opacity: 0.6; cursor: default; }
+.inv-adj-cancel {
+  padding: 5px 10px;
+  min-height: 32px;
+  border-radius: 5px;
+  border: 1px solid var(--border-default, #d1d5db);
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.inv-adj-cancel:hover { background: var(--bg-hover, #f3f4f6); }
+.inv-adj-msg {
+  font-size: 0.75rem;
+  color: #dc2626;
+  min-height: 1em;
+}

@@ -3765,6 +3765,37 @@ def update_inventory_item(item_id):
         return jsonify({"error": "Failed to update inventory item"}), 500
 
 
+@core_bp.route("/api/core/inventory/<item_id>/adjust", methods=["POST"])
+@requires_auth
+def adjust_inventory_item_quantity(item_id):
+    """Manually correct an inventory item's quantity (absolute value).
+
+    Emits inventory_item.quantity_adjusted so the change is fully traceable.
+    """
+    org_id = UUID(g.org_id)
+    data = request.get_json() or {}
+    raw = data.get("new_quantity")
+    if raw is None or str(raw).strip() == "":
+        return jsonify({"error": "new_quantity is required"}), 400
+    try:
+        float(str(raw).strip())
+    except (TypeError, ValueError):
+        return jsonify({"error": "new_quantity must be a valid number"}), 400
+
+    repo = InventoryRepository(db_session)
+    try:
+        item = repo.set_inventory_item_quantity(UUID(item_id), org_id, str(raw).strip())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if not item:
+        return jsonify({"error": "Inventory item not found"}), 404
+    return jsonify({
+        "id": str(item.id),
+        "quantity": quantity_to_api_str(item.quantity),
+        "unit": item.unit,
+    }), 200
+
+
 @core_bp.route("/api/core/inventory/<item_id>", methods=["DELETE"])
 @requires_auth
 def delete_inventory_item(item_id):

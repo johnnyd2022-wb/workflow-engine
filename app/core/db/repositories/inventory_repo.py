@@ -202,6 +202,48 @@ class InventoryRepository:
         _ = item.updated_at
         return item
 
+    def set_inventory_item_quantity(
+        self,
+        item_id: UUID,
+        org_id: UUID,
+        new_quantity: str,
+        commit: bool = True,
+    ) -> InventoryItem | None:
+        """Set inventory quantity to an absolute value, emitting a quantity_adjusted event."""
+        item = self.get_inventory_item_by_id_for_update(item_id, org_id)
+        if not item:
+            return None
+        current = parse_stored_quantity_to_decimal(item.quantity)
+        target = _parse_quantity(new_quantity)
+        if target is None or target < 0:
+            raise ValueError("new_quantity must be a non-negative number")
+        quantity_before = str(current)
+        if current == target:
+            if commit:
+                self.db.commit()
+            return item
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
+            item.quantity = coerce_stored_quantity(target)
+        ew = EventWriter(self.db, org_id)
+        ew.emit(
+            event_type="inventory_item.quantity_adjusted",
+            entity_type="inventory_item",
+            entity_id=item.id,
+            payload={
+                **_item_snapshot(item),
+                "quantity_before": quantity_before,
+                "quantity_after": str(item.quantity),
+                "delta": str(target - current),
+                "reason": "manual_correction",
+            },
+            diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+        )
+        if commit:
+            self.db.commit()
+        self.db.expire(item, ["updated_at"])
+        _ = item.updated_at
+        return item
+
     def get_inventory_item_by_id(self, item_id: UUID, org_id: UUID | None = None) -> InventoryItem | None:
         """Get inventory item by ID, optionally scoped to org"""
         query = self.db.query(InventoryItem).filter(InventoryItem.id == item_id)
