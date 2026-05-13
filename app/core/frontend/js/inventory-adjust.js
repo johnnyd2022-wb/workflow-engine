@@ -10,6 +10,9 @@
  * if that function exists — callers set it to trigger a page refresh.
  */
 (function () {
+  if (window._invAdjLoaded) return;
+  window._invAdjLoaded = true;
+
   function getCsrf() {
     var m = document.querySelector('meta[name="csrf-token"]');
     return m ? m.getAttribute('content') : '';

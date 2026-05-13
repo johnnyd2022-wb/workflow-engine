@@ -542,8 +542,7 @@
 
 {% block scripts %}
   {{ super() }}
-  <script src="{{ url_for('core.serve_core_js', filename='inventory-adjust.js') }}"></script>
   <script>
-    window.invAdjustOnSave = function(itemId, newQty, unit) { load(); };
+    window.invAdjustOnSave = function() { load(); };
   </script>
 {% endblock %}
