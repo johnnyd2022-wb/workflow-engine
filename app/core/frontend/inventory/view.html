@@ -405,9 +405,18 @@
           const typeLabel = TYPE_LABEL[t] || t;
           const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
 
+          const adjBtn =
+            '<div class="inv-adj-wrap" style="margin-top:4px;">' +
+              '<button class="inv-adj-btn inv-adj-btn--primary" type="button" ' +
+                'data-item-id="' + esc(item.id) + '" ' +
+                'data-unit="' + esc(item.unit || '') + '" ' +
+                'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '">' +
+                'Edit' +
+              '</button>' +
+            '</div>';
           return (
             '<tr>' +
-              '<td><strong>' + esc(item.name) + '</strong></td>' +
+              '<td><strong>' + esc(item.name) + '</strong>' + adjBtn + '</td>' +
               '<td><span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span></td>' +
               '<td>' + esc(String(item.quantity != null ? item.quantity : '')) + '</td>' +
               '<td>' + esc(item.unit || '') + '</td>' +
@@ -417,17 +426,7 @@
               '<td>' + esc(datePart(item.expiry_date) || '—') + '</td>' +
               '<td>' + esc(item.process_name || '—') + '</td>' +
               '<td>' + esc(item.barcode || '—') + '</td>' +
-              '<td>' +
-                '<div class="inv-adj-wrap">' +
-                  '<button class="inv-adj-btn" type="button" ' +
-                    'data-item-id="' + esc(item.id) + '" ' +
-                    'data-unit="' + esc(item.unit || '') + '" ' +
-                    'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '">' +
-                    '✏ Adjust qty' +
-                  '</button>' +
-                '</div>' +
-                (item.id ? buildHistoryToggle(item.id) : '') +
-              '</td>' +
+              '<td>' + (item.id ? buildHistoryToggle(item.id) : '') + '</td>' +
             '</tr>'
           );
         }).join('');
@@ -447,15 +446,15 @@
                   '<strong style="font-size:1rem;">' + esc(item.name) + '</strong>' +
                   '<span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span>' +
                 '</div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val inv-view-card__val--qty">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + buildSparkline(es) + '</span></div>' +
-                '<div class="inv-adj-wrap" style="margin:4px 0 8px;">' +
-                  '<button class="inv-adj-btn" type="button" ' +
+                '<div class="inv-adj-wrap" style="margin:6px 0 10px;">' +
+                  '<button class="inv-adj-btn inv-adj-btn--primary" type="button" ' +
                     'data-item-id="' + esc(item.id) + '" ' +
                     'data-unit="' + esc(item.unit || '') + '" ' +
                     'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '">' +
-                    '✏ Adjust qty' +
+                    'Edit' +
                   '</button>' +
                 '</div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val inv-view-card__val--qty">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + buildSparkline(es) + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Supplier</span><span class="inv-view-card__val">' + esc(item.supplier || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Batch</span><span class="inv-view-card__val">' + esc(item.supplier_batch_number || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Purchase</span><span class="inv-view-card__val">' + esc(datePart(item.purchase_date) || '—') + '</span></div>' +

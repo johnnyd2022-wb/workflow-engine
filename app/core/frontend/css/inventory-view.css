@@ -225,20 +225,23 @@
 .inv-adj-btn {
   font-size: 0.72rem;
   font-weight: 500;
-  padding: 2px 8px;
+  padding: 3px 10px;
   min-height: 28px;
   border-radius: 5px;
-  border: 1px solid var(--border-default, #d1d5db);
-  background: transparent;
-  color: var(--text-secondary, #6b7280);
+  border: none;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   white-space: nowrap;
   flex-shrink: 0;
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
 }
-.inv-adj-btn:hover { background: var(--bg-hover, #f3f4f6); color: var(--text-primary, #111); }
+.inv-adj-btn--primary {
+  background: var(--primary, #3b82f6);
+  color: #fff;
+}
+.inv-adj-btn--primary:hover { background: #2563eb; }
 .inv-adj-form {
   margin-top: 8px;
   display: flex;
