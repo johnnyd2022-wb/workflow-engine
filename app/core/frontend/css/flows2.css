@@ -947,6 +947,17 @@
       line-height: 1.6;
       color: var(--text-secondary, #6b7280);
     }
+    .flows2-audit-sortbar { display: flex; justify-content: flex-end; padding: 4px 0 6px; }
+    .flows2-audit-sortbar__btn {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-default, #d1d5db);
+      background: transparent;
+      color: var(--text-secondary, #6b7280);
+      cursor: pointer;
+    }
+    .flows2-audit-sortbar__btn:hover { background: var(--bg-hover, rgba(0,0,0,0.04)); color: var(--text-primary, #111827); }
     .flows2-audit-timeline {
       list-style: none;
       margin: 0;
@@ -974,6 +985,7 @@
     }
     .flows2-audit-timeline__content { display: flex; flex-direction: column; gap: 4px; }
     .flows2-audit-timeline__text { color: var(--text-primary, #111827); line-height: 1.4; }
+    .flows2-audit-timeline__actor { font-size: 0.7rem; color: var(--text-tertiary, #9ca3af); }
     .flows2-audit-timeline__time {
       font-size: 0.7rem;
       color: var(--text-tertiary, #9ca3af);
@@ -1003,6 +1015,7 @@
     .flows2-audit-diff__arrow { color: var(--text-secondary, #6b7280); flex-shrink: 0; }
     .flows2-audit-diff__after { color: #16a34a; font-weight: 500; word-break: break-all; }
     html[data-spa-theme="dark"] .flows2-audit-timeline__text { color: var(--text-primary, #f3f4f6); }
+    html[data-spa-theme="dark"] .flows2-audit-timeline__actor { color: var(--text-tertiary, #6b7280); }
     html[data-spa-theme="dark"] .flows2-audit-timeline__item { border-color: var(--border-light, rgba(255,255,255,0.08)); }
     html[data-spa-theme="dark"] .flows2-audit-diff { background: rgba(255,255,255,0.04); }
     html[data-spa-theme="dark"] .flows2-audit-diff__before { color: #f87171; }

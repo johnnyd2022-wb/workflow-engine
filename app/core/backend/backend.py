@@ -4123,6 +4123,8 @@ def _event_to_dict(ev) -> dict:
     return {
         "id": str(ev.id),
         "event_type": ev.event_type,
+        "entity_type": ev.entity_type,
+        "entity_id": str(ev.entity_id) if ev.entity_id else None,
         "at": ev.created_at.isoformat() if ev.created_at else None,
         "actor": ev.actor_label,
         "actor_type": ev.actor_type,
@@ -4302,41 +4304,74 @@ def _build_diff_rows(diff: dict) -> list[dict]:
             b_str = _fmt_field_value(before)
             a_str = _fmt_field_value(after)
             if b_str != a_str:
-                rows.append({"label": label, "before": b_str, "after": a_str})
+                rows.append({
+                    "label": label,
+                    "before": None if b_str == "—" else b_str,
+                    "after": None if a_str == "—" else a_str,
+                })
     return rows
 
 
-def _diff_lines(diff: dict) -> list[str]:
-    """Return human-readable diff lines as strings (used in summary text)."""
-    lines = []
-    for row in _build_diff_rows(diff):
-        lbl = row["label"]
-        b = row.get("before")
-        a = row.get("after")
-        if b is not None and a is not None:
-            lines.append(f"{lbl}: {b} → {a}")
-        elif a is not None:
-            lines.append(f"{lbl}: {a}")
-        elif b is not None:
-            lines.append(f"{lbl}: {b}")
-    return lines
+def _step_added_diff_rows(step_data: dict) -> list[dict]:
+    """Synthesize diff rows for a newly added step from its snapshot payload."""
+    rows: list[dict] = []
+    desc = step_data.get("description")
+    if desc:
+        rows.append({"label": "Description", "before": None, "after": desc})
+    for inp in (step_data.get("inputs") or []):
+        if not isinstance(inp, dict):
+            continue
+        name = _item_display_name(inp)
+        qty = inp.get("quantity")
+        unit = inp.get("unit", "")
+        detail = f"'{name}'"
+        if qty is not None:
+            detail += f" — {qty} {unit}".rstrip()
+        rows.append({"label": "Input", "before": None, "after": detail})
+    for out in (step_data.get("outputs") or []):
+        if not isinstance(out, dict):
+            continue
+        name = _item_display_name(out)
+        qty = out.get("quantity")
+        unit = out.get("unit", "")
+        detail = f"'{name}'"
+        if qty is not None:
+            detail += f" — {qty} {unit}".rstrip()
+        rows.append({"label": "Output", "before": None, "after": detail})
+    for pr in (step_data.get("execution_prompts") or []):
+        if not isinstance(pr, dict):
+            continue
+        label = pr.get("label") or pr.get("name") or "(prompt)"
+        rows.append({"label": "Prompt", "before": None, "after": label})
+    return rows
+
+
+def _event_diff_rows(ev) -> list[dict]:
+    """Return per-change diff rows for an event, handling nested step diffs."""
+    et = ev.event_type
+    p = ev.payload or {}
+    if et == "process.step_added":
+        return _step_added_diff_rows(p.get("step") or {})
+    if et == "process.step_updated":
+        return _build_diff_rows((ev.diff or {}).get("step") or {})
+    return _build_diff_rows(ev.diff or {})
+
 
 
 def _human_summary(ev) -> str:
     et = ev.event_type
     p = ev.payload or {}
     d = ev.diff or {}
-    actor = ev.actor_label or "System"
 
     if et == "inventory_item.created":
         qty = p.get("quantity", "")
         unit = p.get("unit", "")
         method = p.get("add_method", "manual").replace("_", " ")
-        inv_type = (p.get("inventory_type") or "").replace("_", " ")
+        inv_type = _INVENTORY_TYPE_LABELS.get(p.get("inventory_type") or "", (p.get("inventory_type") or "").replace("_", " "))
         parts = [f"Added {qty} {unit}".strip()]
         if inv_type:
             parts[0] += f" ({inv_type})"
-        parts.append(f"via {method} by {actor}")
+        parts.append(f"via {method}")
         supplier = p.get("supplier")
         batch = p.get("supplier_batch_number")
         if supplier:
@@ -4349,17 +4384,15 @@ def _human_summary(ev) -> str:
         before = p.get("quantity_before", "?")
         after = p.get("quantity_after", p.get("quantity", "?"))
         unit = p.get("unit", "")
-        return f"Quantity adjusted {before} → {after} {unit} by {actor}".strip()
+        return f"Quantity adjusted {before} → {after} {unit}".strip()
 
     if et == "inventory_item.consumed":
         qty = p.get("quantity_consumed", "?")
         unit = p.get("unit", "")
         step = p.get("step_name", "")
-        exec_id = p.get("execution_id", "")
         base = f"{qty} {unit} consumed".strip()
         if step:
             base += f" in '{step}'"
-        base += f" by {actor}"
         return base
 
     if et == "inventory_item.produced":
@@ -4369,7 +4402,6 @@ def _human_summary(ev) -> str:
         base = f"{qty} {unit} produced".strip()
         if step:
             base += f" by '{step}'"
-        base += f" (recorded by {actor})"
         return base
 
     if et == "inventory_item.wasted":
@@ -4379,23 +4411,19 @@ def _human_summary(ev) -> str:
         base = f"{qty} {unit} wasted".strip()
         if reason:
             base += f" — {reason}"
-        base += f" by {actor}"
         return base
 
     if et == "inventory_item.updated":
-        changed = _diff_lines(d)
-        if changed:
-            return f"Updated by {actor}: {'; '.join(changed)}"
-        return f"Updated by {actor}"
+        return "Updated"
 
     if et == "inventory_item.deleted":
         name = p.get("name", "")
-        return f"Deleted{(' ' + name) if name else ''} by {actor}"
+        return f"Deleted{(' ' + name) if name else ''}"
 
     if et == "execution.created":
         steps = p.get("total_steps", "")
         ver = p.get("process_version_number", "")
-        base = f"Batch started by {actor}"
+        base = "Batch started"
         if steps:
             base += f" — {steps} steps"
         if ver:
@@ -4406,7 +4434,7 @@ def _human_summary(ev) -> str:
         step = p.get("step_name", f"Step {p.get('step_number', '?')}")
         consumed = p.get("items_consumed") or []
         produced = p.get("items_produced") or []
-        base = f"'{step}' completed by {actor}"
+        base = f"'{step}' completed"
         if consumed:
             base += f" — {len(consumed)} input{'s' if len(consumed) != 1 else ''} consumed"
         if produced:
@@ -4420,59 +4448,60 @@ def _human_summary(ev) -> str:
             base += f" ({steps} steps)"
         return base
 
+    if et == "execution.cancelled":
+        reason = p.get("reason", "")
+        base = "Batch cancelled"
+        if reason:
+            base += f" — {reason}"
+        return base
+
     if et == "process.created":
         name = p.get("name", "")
-        return f"Process{(' ' + repr(name)) if name else ''} created by {actor}"
+        return f"Process{(' ' + repr(name)) if name else ''} created"
 
     if et == "process.updated":
-        changed = _diff_lines(d)
-        if changed:
-            return f"Process updated by {actor}: {'; '.join(changed)}"
-        return f"Process version saved by {actor} (no configuration changes)"
+        return "Process updated"
 
     if et == "process.step_added":
-        step = (p.get("step") or {}).get("name", "step")
-        pos = (p.get("step") or {}).get("step_number", "")
-        base = f"Step '{step}' added by {actor}"
+        step_data = p.get("step") or {}
+        step_name = step_data.get("name", "step")
+        pos = step_data.get("step_number", "")
+        base = f"Step '{step_name}' added"
         if pos:
             base += f" at position {pos}"
         return base
 
     if et == "process.step_updated":
         step_name = (p.get("step") or {}).get("name", "step")
-        step_diff = (d.get("step") or {}) if d else {}
-        changed = _diff_lines(step_diff)
-        if changed:
-            return f"Step '{step_name}' updated by {actor}: {'; '.join(changed)}"
-        return f"Step '{step_name}' saved by {actor} (no configuration changes)"
+        return f"Step '{step_name}' updated"
 
     if et == "process.step_deleted":
         step = (p.get("deleted_step") or {}).get("name", "step")
-        return f"Step '{step}' removed by {actor}"
+        return f"Step '{step}' removed"
 
     if et == "process.deleted":
         name = p.get("name", "")
-        return f"Process{(' ' + repr(name)) if name else ''} deleted by {actor}"
+        return f"Process{(' ' + repr(name)) if name else ''} deleted"
 
     if et == "process.step_doc_uploaded":
         step = p.get("step_name", "step")
         title = p.get("doc_title", "document")
-        return f"SOP file '{title}' uploaded to step '{step}' by {actor}"
+        return f"SOP file '{title}' uploaded to step '{step}'"
 
     if et == "process.step_doc_created":
         step = p.get("step_name", "step")
         title = p.get("doc_title", "document")
-        return f"SOP instructions '{title}' written for step '{step}' by {actor}"
+        return f"SOP instructions '{title}' written for step '{step}'"
 
     if et == "process.step_doc_updated":
         step = p.get("step_name", "step")
         title = p.get("doc_title", "document")
-        return f"SOP instructions '{title}' updated for step '{step}' by {actor}"
+        return f"SOP instructions '{title}' updated for step '{step}'"
 
     if et == "process.step_doc_deleted":
         step = p.get("step_name", "step")
         title = p.get("doc_title", "document")
-        return f"SOP document '{title}' removed from step '{step}' by {actor}"
+        return f"SOP document '{title}' removed from step '{step}'"
 
     if et == "user.created":
         return f"Account created — {p.get('email', '')}"
@@ -4485,13 +4514,13 @@ def _human_summary(ev) -> str:
         return f"Login failed from {p.get('ip', '?')} (attempt {p.get('failed_attempts', '?')})"
 
     if et == "user.2fa_enabled":
-        return f"Two-factor authentication enabled by {actor}"
+        return "Two-factor authentication enabled"
 
     if et == "user.2fa_disabled":
-        return f"Two-factor authentication disabled by {actor}"
+        return "Two-factor authentication disabled"
 
     if et == "user.role_changed":
-        return f"Role changed from {p.get('old_role', '?')} to {p.get('new_role', '?')} by {actor}"
+        return f"Role changed from {p.get('old_role', '?')} to {p.get('new_role', '?')}"
 
     return et.replace(".", " — ").replace("_", " ").capitalize()
 
@@ -4540,7 +4569,7 @@ def entity_story(entity_type: str, entity_id: str):
         "total": total,
         "offset": offset,
         "events": [
-            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _build_diff_rows(ev.diff or {})}
+            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
             for ev in events
         ],
     }), 200
@@ -4586,8 +4615,61 @@ def entity_summary_detail(entity_type: str, entity_id: str):
         "entity_type": etype,
         "summary": summary,
         "recent_events": [
-            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _build_diff_rows(ev.diff or {})}
+            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
             for ev in reversed(recent)
+        ],
+    }), 200
+
+
+@core_bp.route("/api/core/entities/activity", methods=["GET"])
+@requires_auth
+def entity_activity_feed():
+    """All entity events for the org, newest-first, with optional date/type filtering.
+
+    Powers the sourcemap Activity tab and any org-wide audit stream.
+    """
+    from app.core.db.models.entity_event import EntityEvent
+
+    org_id = UUID(g.org_id)
+    limit = min(int(request.args.get("limit", 150)), 500)
+    offset = int(request.args.get("offset", 0))
+    from_date = request.args.get("from_date", "")
+    to_date = request.args.get("to_date", "")
+    entity_types_param = request.args.get("entity_types", "")
+
+    db = db_session()
+    q = db.query(EntityEvent).filter(EntityEvent.org_id == org_id)
+
+    if entity_types_param:
+        allowed = [t.strip() for t in entity_types_param.split(",") if t.strip()]
+        if allowed:
+            q = q.filter(EntityEvent.entity_type.in_(allowed))
+
+    if from_date:
+        try:
+            from datetime import timezone as _tz
+            fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=_tz.utc)
+            q = q.filter(EntityEvent.created_at >= fd)
+        except ValueError:
+            pass
+
+    if to_date:
+        try:
+            from datetime import timezone as _tz
+            td = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=_tz.utc)
+            q = q.filter(EntityEvent.created_at <= td)
+        except ValueError:
+            pass
+
+    total = q.count()
+    events = q.order_by(EntityEvent.created_at.desc()).offset(offset).limit(limit).all()
+
+    return jsonify({
+        "total": total,
+        "offset": offset,
+        "events": [
+            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
+            for ev in events
         ],
     }), 200
 

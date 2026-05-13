@@ -151,6 +151,9 @@ class ProcessRepository:
             diff["is_draft"] = {"before": process.is_draft, "after": is_draft}
             process.is_draft = is_draft
 
+        if not diff:
+            return process
+
         steps = _current_steps(self.db, process_id)
         pv = _insert_process_version(self.db, org_id, process, steps, change_summary="Process updated")
 
@@ -165,7 +168,7 @@ class ProcessRepository:
                 "version_number": pv.version_number,
                 "change_summary": "Process updated",
             },
-            diff=diff or None,
+            diff=diff,
         )
         self.db.commit()
         self.db.expire(process, ["updated_at"])
@@ -284,6 +287,9 @@ class ProcessRepository:
         after = _step_snapshot(step)
         diff = {k: {"before": before[k], "after": after[k]} for k in before if before[k] != after[k]}
 
+        if not diff:
+            return step
+
         all_steps = _current_steps(self.db, process_id)
         pv = _insert_process_version(
             self.db, org_id, process, all_steps, change_summary=f"Updated step: {step.name}"
@@ -300,7 +306,7 @@ class ProcessRepository:
                 "version_number": pv.version_number,
                 "change_summary": f"Updated step: {step.name}",
             },
-            diff={"step": diff} if diff else None,
+            diff={"step": diff},
         )
         self.db.commit()
         self.db.expire(step, ["updated_at"])

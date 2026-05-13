@@ -135,6 +135,9 @@
             </section>
             <script>
               (function () {
+                var _events = [];
+                var _asc = true;
+
                 function esc(s) { var d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
                 function fmtDate(iso) {
                   if (!iso) return '';
@@ -145,14 +148,17 @@
                   if (!diffRows || !diffRows.length) return '';
                   var rows = diffRows.map(function (r) {
                     var beforeHtml = r.before != null
-                      ? '<span class="flows2-audit-diff__before">' + esc(r.before) + '</span><span class="flows2-audit-diff__arrow">→</span>'
+                      ? '<span class="flows2-audit-diff__before">' + esc(r.before) + '</span>'
+                      : '';
+                    var arrowHtml = (r.before != null && r.after != null)
+                      ? '<span class="flows2-audit-diff__arrow">→</span>'
                       : '';
                     var afterHtml = r.after != null
                       ? '<span class="flows2-audit-diff__after">' + esc(r.after) + '</span>'
                       : '';
                     return '<li class="flows2-audit-diff__row">' +
                       '<span class="flows2-audit-diff__label">' + esc(r.label) + '</span>' +
-                      beforeHtml + afterHtml +
+                      beforeHtml + arrowHtml + afterHtml +
                       '</li>';
                   }).join('');
                   return '<ul class="flows2-audit-diff">' + rows + '</ul>';
@@ -160,16 +166,34 @@
                 function renderTimeline(events) {
                   return '<ol class="flows2-audit-timeline">' +
                     events.map(function (ev) {
+                      var actorHtml = ev.actor
+                        ? '<span class="flows2-audit-timeline__actor">' + esc(ev.actor) + '</span>'
+                        : '';
                       return '<li class="flows2-audit-timeline__item">' +
                         '<span class="flows2-audit-timeline__dot"></span>' +
                         '<div class="flows2-audit-timeline__content">' +
                           '<span class="flows2-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
                           buildDiffHtml(ev.diff_rows) +
+                          actorHtml +
                         '</div>' +
                         '<span class="flows2-audit-timeline__time">' + esc(fmtDate(ev.at)) + '</span>' +
                         '</li>';
                     }).join('') +
                     '</ol>';
+                }
+                function render(body) {
+                  var sorted = _asc ? _events : _events.slice().reverse();
+                  body.innerHTML =
+                    '<div class="flows2-audit-sortbar">' +
+                      '<button class="flows2-audit-sortbar__btn" type="button">' +
+                        (_asc ? '↑ Oldest first' : '↓ Newest first') +
+                      '</button>' +
+                    '</div>' +
+                    renderTimeline(sorted);
+                  body.querySelector('.flows2-audit-sortbar__btn').addEventListener('click', function () {
+                    _asc = !_asc;
+                    render(body);
+                  });
                 }
 
                 var det = document.getElementById('flows2-audit-log-details');
@@ -184,12 +208,12 @@
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
                       body.dataset.loaded = 'true';
-                      var events = data.events || [];
-                      if (!events.length) {
+                      _events = data.events || [];
+                      if (!_events.length) {
                         body.innerHTML = '<p class="flows2-audit-log__placeholder">No history recorded yet.</p>';
                         return;
                       }
-                      body.innerHTML = renderTimeline(events);
+                      render(body);
                     })
                     .catch(function () {
                       body.dataset.loaded = 'true';

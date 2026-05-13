@@ -201,25 +201,32 @@
           if (!diffRows || !diffRows.length) return '';
           var rows = diffRows.map(function (r) {
             var beforeHtml = r.before != null
-              ? '<span class="inv-audit-diff__before">' + esc(r.before) + '</span><span class="inv-audit-diff__arrow">→</span>'
+              ? '<span class="inv-audit-diff__before">' + esc(r.before) + '</span>'
+              : '';
+            var arrowHtml = (r.before != null && r.after != null)
+              ? '<span class="inv-audit-diff__arrow">→</span>'
               : '';
             var afterHtml = r.after != null
               ? '<span class="inv-audit-diff__after">' + esc(r.after) + '</span>'
               : '';
             return '<li class="inv-audit-diff__row">' +
               '<span class="inv-audit-diff__label">' + esc(r.label) + '</span>' +
-              beforeHtml + afterHtml +
+              beforeHtml + arrowHtml + afterHtml +
               '</li>';
           }).join('');
           return '<ul class="inv-audit-diff">' + rows + '</ul>';
         }
         return '<ol class="inv-audit-timeline">' +
           events.map(function (ev) {
+            var actorHtml = ev.actor
+              ? '<span class="inv-audit-timeline__actor">' + esc(ev.actor) + '</span>'
+              : '';
             return '<li class="inv-audit-timeline__item">' +
               '<span class="inv-audit-timeline__dot"></span>' +
               '<div class="inv-audit-timeline__content">' +
                 '<span class="inv-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
                 buildDiffHtml(ev.diff_rows) +
+                actorHtml +
               '</div>' +
               '<span class="inv-audit-timeline__time">' + fmtDate(ev.at) + '</span>' +
               '</li>';
@@ -229,6 +236,24 @@
 
       function wireHistoryToggles(container) {
         container.querySelectorAll('.inv-audit-history').forEach(function (det) {
+          var _events = [];
+          var _asc = true;
+
+          function render(body) {
+            var sorted = _asc ? _events : _events.slice().reverse();
+            body.innerHTML =
+              '<div class="inv-audit-sortbar">' +
+                '<button class="inv-audit-sortbar__btn" type="button">' +
+                  (_asc ? '↑ Oldest first' : '↓ Newest first') +
+                '</button>' +
+              '</div>' +
+              renderTimelineEvents(sorted);
+            body.querySelector('.inv-audit-sortbar__btn').addEventListener('click', function () {
+              _asc = !_asc;
+              render(body);
+            });
+          }
+
           det.addEventListener('toggle', function () {
             if (!det.open) return;
             const body = det.querySelector('.inv-audit-history__body');
@@ -238,12 +263,12 @@
               .then(function (r) { return r.json(); })
               .then(function (data) {
                 body.dataset.loaded = 'true';
-                const events = (data.events || []);
-                if (!events.length) {
+                _events = data.events || [];
+                if (!_events.length) {
                   body.innerHTML = '<span class="inv-audit-history__empty">No history recorded yet.</span>';
                   return;
                 }
-                body.innerHTML = renderTimelineEvents(events);
+                render(body);
               })
               .catch(function () {
                 body.dataset.loaded = 'true';
