@@ -331,7 +331,10 @@ def _update_process_summary(session: Session, event: EntityEvent) -> None:
             "last_run_by": None,
         }
 
-    elif event.event_type in ("process.updated", "process.step_added", "process.step_updated", "process.step_deleted"):
+    elif event.event_type in (
+        "process.updated", "process.step_added", "process.step_updated", "process.step_deleted",
+        "process.step_doc_uploaded", "process.step_doc_created", "process.step_doc_updated", "process.step_doc_deleted",
+    ):
         summary = dict(existing)
         summary["current_version"] = p.get("version_number", existing.get("current_version", 1))
         summary["last_modified_at"] = event.created_at.isoformat() if event.created_at else None

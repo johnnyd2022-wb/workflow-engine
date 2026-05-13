@@ -4424,7 +4424,7 @@ def _human_summary(ev) -> str:
         changed = _diff_lines(d)
         if changed:
             return f"Process updated by {actor}: {'; '.join(changed)}"
-        return f"Process updated by {actor}"
+        return f"Process version saved by {actor} (no configuration changes)"
 
     if et == "process.step_added":
         step = (p.get("step") or {}).get("name", "step")
@@ -4440,7 +4440,7 @@ def _human_summary(ev) -> str:
         changed = _diff_lines(step_diff)
         if changed:
             return f"Step '{step_name}' updated by {actor}: {'; '.join(changed)}"
-        return f"Step '{step_name}' updated by {actor}"
+        return f"Step '{step_name}' saved by {actor} (no configuration changes)"
 
     if et == "process.step_deleted":
         step = (p.get("deleted_step") or {}).get("name", "step")
@@ -4449,6 +4449,26 @@ def _human_summary(ev) -> str:
     if et == "process.deleted":
         name = p.get("name", "")
         return f"Process{(' ' + repr(name)) if name else ''} deleted by {actor}"
+
+    if et == "process.step_doc_uploaded":
+        step = p.get("step_name", "step")
+        title = p.get("doc_title", "document")
+        return f"SOP file '{title}' uploaded to step '{step}' by {actor}"
+
+    if et == "process.step_doc_created":
+        step = p.get("step_name", "step")
+        title = p.get("doc_title", "document")
+        return f"SOP instructions '{title}' written for step '{step}' by {actor}"
+
+    if et == "process.step_doc_updated":
+        step = p.get("step_name", "step")
+        title = p.get("doc_title", "document")
+        return f"SOP instructions '{title}' updated for step '{step}' by {actor}"
+
+    if et == "process.step_doc_deleted":
+        step = p.get("step_name", "step")
+        title = p.get("doc_title", "document")
+        return f"SOP document '{title}' removed from step '{step}' by {actor}"
 
     if et == "user.created":
         return f"Account created — {p.get('email', '')}"

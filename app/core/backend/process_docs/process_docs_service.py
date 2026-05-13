@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from uuid import UUID
 
+from app.core.backend.event_writer import EventWriter
 from app.core.backend.process_docs.process_docs_storage import (
     delete_file as storage_delete_file,
 )
@@ -14,9 +15,38 @@ from app.core.backend.process_docs.process_docs_storage import (
     read_file_path,
 )
 from app.core.db import db_session
+from app.core.db.models.step import Step
 from app.core.db.repositories.process_step_document_repo import ProcessStepDocumentRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _step_name(step_id: UUID) -> str:
+    row = db_session.query(Step.name).filter(Step.id == step_id).first()
+    return row[0] if row else "step"
+
+
+def _emit_doc_event(event_type: str, org_id: UUID, process_id: UUID, step_id: UUID,
+                    doc_id: UUID, doc_title: str, extra: dict | None = None) -> None:
+    """Emit a process step doc event in its own transaction (best-effort)."""
+    try:
+        ew = EventWriter(db_session, org_id)
+        ew.emit(
+            event_type=event_type,
+            entity_type="process",
+            entity_id=process_id,
+            payload={
+                "step_id": str(step_id),
+                "step_name": _step_name(step_id),
+                "doc_id": str(doc_id),
+                "doc_title": doc_title,
+                **(extra or {}),
+            },
+        )
+        db_session.commit()
+    except Exception:
+        logger.exception("Failed to emit %s event for doc %s", event_type, doc_id)
+        db_session.rollback()
 
 
 def upload_sop_file(
@@ -77,6 +107,10 @@ def upload_sop_file(
         return None, "Failed to finalize file", 500
 
     logger.info("Process docs upload_sop_file: success doc_id=%s storage_path=%s", record.id, rel_path)
+    _emit_doc_event(
+        "process.step_doc_uploaded", org_id, process_id, step_id, record.id, doc_title,
+        {"mime_type": content_type, "file_size": file_size},
+    )
     return (
         {
             "id": str(record.id),
@@ -115,6 +149,9 @@ def create_or_update_inline(
             return None, "Cannot replace file-based SOP with inline content via this endpoint", 400
         doc = repo.update_inline(document_id, org_id, title=title, content_markdown=content_markdown)
         db_session.commit()
+        _emit_doc_event(
+            "process.step_doc_updated", org_id, doc.process_id, doc.step_id, doc.id, doc.title or title,
+        )
         return (
             {
                 "id": str(doc.id),
@@ -145,6 +182,9 @@ def create_or_update_inline(
         logger.exception("Process docs create_or_update_inline: commit failed: %s", e)
         db_session.rollback()
         return None, "Failed to save document", 500
+    _emit_doc_event(
+        "process.step_doc_created", org_id, process_id, step_id, record.id, record.title,
+    )
     return (
         {
             "id": str(record.id),
@@ -195,6 +235,9 @@ def delete_document(doc_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
         return True, "", 200  # idempotent
     # Capture path info before soft-delete (record may be updated)
     storage_path = doc.storage_path
+    doc_title_snap = doc.title or "document"
+    doc_process_id = doc.process_id
+    doc_step_id = doc.step_id
     org_id_s, process_id_s, step_id_s = str(doc.org_id), str(doc.process_id), str(doc.step_id)
     repo.soft_delete(doc_id, org_id)
     try:
@@ -203,6 +246,9 @@ def delete_document(doc_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
         logger.exception("Process docs delete_document failed: %s", e)
         db_session.rollback()
         return False, "Failed to delete document record", 500
+    _emit_doc_event(
+        "process.step_doc_deleted", org_id, doc_process_id, doc_step_id, doc_id, doc_title_snap,
+    )
     # Best-effort file deletion after commit (avoids storage leak; file delete failure is logged only)
     if storage_path:
         parts = storage_path.replace("\\", "/").split("/")
