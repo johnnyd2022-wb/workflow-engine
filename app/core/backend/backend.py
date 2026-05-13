@@ -4544,6 +4544,8 @@ def entity_story(entity_type: str, entity_id: str):
     """Full event timeline for a single entity, ordered chronologically.
 
     Used when drilling into a card to see its complete audit history.
+    For inventory items, legacy extra_data.inventory_audit_history entries are
+    merged in so nothing is lost — deduplicated against entity_events by timestamp.
     """
     from app.core.db.models.entity_event import EntityEvent
 
@@ -4576,16 +4578,137 @@ def entity_story(entity_type: str, entity_id: str):
         .count()
     )
 
+    event_dicts = [
+        {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
+        for ev in events
+    ]
+
+    if etype == "inventory_item":
+        event_dicts = _merge_inventory_legacy_audit(db, eid, org_id, event_dicts, events)
+
     return jsonify({
         "entity_id": str(eid),
         "entity_type": etype,
         "total": total,
         "offset": offset,
-        "events": [
-            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
-            for ev in events
-        ],
+        "events": event_dicts,
     }), 200
+
+
+def _merge_inventory_legacy_audit(db, eid: UUID, org_id: UUID, event_dicts: list, events: list) -> list:
+    """Merge extra_data.inventory_audit_history into the entity_events timeline.
+
+    - Entries within 10 s of an existing entity_event are considered the same
+      action: the display name from the legacy entry augments the actor field.
+    - Entries with no matching entity_event are inserted as standalone timeline
+      items (covers pre-event-sourcing items and barcode re-stocks).
+    - user_id is always stripped.
+    """
+    from app.core.db.models.inventory_item import InventoryItem
+    from datetime import datetime, timezone
+
+    item = db.query(InventoryItem).filter(
+        InventoryItem.id == eid, InventoryItem.org_id == org_id
+    ).first()
+    if not item or not item.extra_data:
+        return event_dicts
+
+    legacy_entries = item.extra_data.get("inventory_audit_history") or []
+    if not legacy_entries:
+        return event_dicts
+
+    # Build a lookup of entity_event timestamps (naive UTC) → index in event_dicts
+    ev_timestamps = []
+    for ev in events:
+        if ev.created_at:
+            ts = ev.created_at.replace(tzinfo=None) if ev.created_at.tzinfo else ev.created_at
+            ev_timestamps.append(ts)
+        else:
+            ev_timestamps.append(None)
+
+    def _parse_legacy_ts(ts_str):
+        if not ts_str:
+            return None
+        try:
+            return datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+        except (ValueError, AttributeError):
+            return None
+
+    def _actor_display(entry):
+        name = (entry.get("operator_name") or "").strip()
+        email = (entry.get("operator_email") or "").strip()
+        if name and email and name != email:
+            return f"{name} ({email})"
+        return name or email or ""
+
+    def _legacy_summary(entry):
+        method = (entry.get("source_method") or "manual").replace("_", " ")
+        parts = []
+        qty = entry.get("quantity_added")
+        if qty:
+            parts.append(f"Added {qty}")
+        else:
+            parts.append("Item recorded")
+        parts.append(f"via {method}")
+        supplier = entry.get("supplier")
+        batch = entry.get("supplier_batch_number")
+        purchase = entry.get("purchase_date")
+        expiry = entry.get("expiry_date")
+        if supplier:
+            parts.append(f"· supplier: {supplier}")
+        if batch:
+            parts.append(f"· batch: {batch}")
+        if purchase:
+            parts.append(f"· purchased: {purchase}")
+        if expiry:
+            parts.append(f"· expiry: {expiry}")
+        return " ".join(parts)
+
+    extra_events = []
+    for entry in legacy_entries:
+        if not isinstance(entry, dict):
+            continue
+        entry = {k: v for k, v in entry.items() if k != "user_id"}
+        legacy_ts = _parse_legacy_ts(entry.get("timestamp_utc"))
+
+        matched_idx = None
+        if legacy_ts:
+            for i, ev_ts in enumerate(ev_timestamps):
+                if ev_ts and abs((legacy_ts - ev_ts).total_seconds()) < 10:
+                    matched_idx = i
+                    break
+
+        if matched_idx is not None:
+            # Augment the matching event's actor with the display name if available
+            name = (entry.get("operator_name") or "").strip()
+            email = (entry.get("operator_email") or "").strip()
+            if name and email and name != email:
+                current = event_dicts[matched_idx].get("actor") or ""
+                if name not in current:
+                    event_dicts[matched_idx] = dict(event_dicts[matched_idx])
+                    event_dicts[matched_idx]["actor"] = f"{name} ({current})" if current else name
+        else:
+            extra_events.append({
+                "id": f"legacy_{entry.get('timestamp_utc', '')}",
+                "event_type": "inventory_item.legacy_entry",
+                "entity_type": "inventory_item",
+                "entity_id": str(eid),
+                "at": entry.get("timestamp_utc"),
+                "actor": _actor_display(entry),
+                "actor_type": "user",
+                "summary": _legacy_summary(entry),
+                "diff_rows": [],
+                "payload": None,
+                "diff": None,
+                "causation_id": None,
+            })
+
+    if extra_events:
+        merged = event_dicts + extra_events
+        merged.sort(key=lambda e: e.get("at") or "")
+        return merged
+
+    return event_dicts
 
 
 @core_bp.route("/api/core/entities/<entity_type>/<entity_id>/summary", methods=["GET"])
