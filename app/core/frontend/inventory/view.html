@@ -93,7 +93,7 @@
                 <th>Expiry</th>
                 <th>Process</th>
                 <th>Barcode</th>
-                <th>Metadata</th>
+                <th>Audit</th>
               </tr>
             </thead>
             <tbody id="inv-view-tbody"></tbody>
@@ -111,7 +111,6 @@
 
       const TYPE_LABEL = { raw_material: 'Raw', work_in_progress: 'Intermediate', final_product: 'Final' };
       const TYPE_CLASS = { raw_material: 'inv-view-type--raw', work_in_progress: 'inv-view-type--wip', final_product: 'inv-view-type--final' };
-
       let allItems = [];
 
       function esc(s) {
@@ -143,12 +142,129 @@
         return keys.sort();
       }
 
-      function extraDataString(item) {
+      function fmtDate(iso) {
+        if (!iso) return '—';
         try {
-          return JSON.stringify(item.extra_data != null ? item.extra_data : {});
-        } catch (e) {
-          return '';
+          return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        } catch (e) { return iso.slice(0, 10); }
+      }
+
+      function fmtDateTime(iso) {
+        if (!iso) return '—';
+        try {
+          const d = new Date(iso);
+          const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+          const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          return date + '<br><span style="opacity:0.7">' + time + '</span>';
+        } catch (e) { return iso.slice(0, 16); }
+      }
+
+      function buildSparkline(es) {
+        if (!es) return '';
+        var hist = es.quantity_history;
+        if (!hist || hist.length < 2) return '';
+        var vals = hist.map(function (h) { return parseFloat(h.qty) || 0; });
+        var min = Math.min.apply(null, vals);
+        var max = Math.max.apply(null, vals);
+        if (min === max) return '';
+        var W = 80, H = 24, pad = 2;
+        var pts = vals.map(function (v, i) {
+          var x = pad + (i / (vals.length - 1)) * (W - pad * 2);
+          var y = H - pad - ((v - min) / (max - min)) * (H - pad * 2);
+          return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+        return '<svg class="inv-sparkline" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' +
+          '<polyline fill="none" stroke="var(--color-primary,#3b82f6)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="' + pts + '"/>' +
+          '</svg>';
+      }
+
+      function buildHistoryToggle(itemId) {
+        return '<details class="inv-audit-history" data-item-id="' + esc(itemId) + '">' +
+          '<summary class="inv-audit-history__toggle">Audit history</summary>' +
+          '<div class="inv-audit-history__body" data-loaded="false"><span class="inv-audit-history__loading">Loading…</span></div>' +
+          '</details>';
+      }
+
+      function renderTimelineEvents(events) {
+        function buildDiffHtml(diffRows) {
+          if (!diffRows || !diffRows.length) return '';
+          var rows = diffRows.map(function (r) {
+            var beforeHtml = r.before != null
+              ? '<span class="inv-audit-diff__before">' + esc(r.before) + '</span>'
+              : '';
+            var arrowHtml = (r.before != null && r.after != null)
+              ? '<span class="inv-audit-diff__arrow">→</span>'
+              : '';
+            var afterHtml = r.after != null
+              ? '<span class="inv-audit-diff__after">' + esc(r.after) + '</span>'
+              : '';
+            return '<li class="inv-audit-diff__row">' +
+              '<span class="inv-audit-diff__label">' + esc(r.label) + '</span>' +
+              beforeHtml + arrowHtml + afterHtml +
+              '</li>';
+          }).join('');
+          return '<ul class="inv-audit-diff">' + rows + '</ul>';
         }
+        return '<ol class="inv-audit-timeline">' +
+          events.map(function (ev) {
+            var actorHtml = ev.actor
+              ? '<span class="inv-audit-timeline__actor">' + esc(ev.actor) + '</span>'
+              : '';
+            return '<li class="inv-audit-timeline__item">' +
+              '<span class="inv-audit-timeline__dot"></span>' +
+              '<div class="inv-audit-timeline__content">' +
+                '<span class="inv-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
+                buildDiffHtml(ev.diff_rows) +
+                actorHtml +
+              '</div>' +
+              '<span class="inv-audit-timeline__time">' + fmtDateTime(ev.at) + '</span>' +
+              '</li>';
+          }).join('') +
+          '</ol>';
+      }
+
+      function wireHistoryToggles(container) {
+        container.querySelectorAll('.inv-audit-history').forEach(function (det) {
+          var _events = [];
+          var _asc = true;
+
+          function render(body) {
+            var sorted = _asc ? _events : _events.slice().reverse();
+            body.innerHTML =
+              '<div class="inv-audit-sortbar">' +
+                '<button class="inv-audit-sortbar__btn" type="button">' +
+                  (_asc ? '↑ Oldest first' : '↓ Newest first') +
+                '</button>' +
+              '</div>' +
+              renderTimelineEvents(sorted);
+            body.querySelector('.inv-audit-sortbar__btn').addEventListener('click', function () {
+              _asc = !_asc;
+              render(body);
+            });
+          }
+
+          det.addEventListener('toggle', function () {
+            if (!det.open) return;
+            const body = det.querySelector('.inv-audit-history__body');
+            if (!body || body.dataset.loaded === 'true') return;
+            const itemId = det.dataset.itemId;
+            fetch('/api/core/entities/inventory_item/' + encodeURIComponent(itemId) + '/story', { credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                body.dataset.loaded = 'true';
+                _events = data.events || [];
+                if (!_events.length) {
+                  body.innerHTML = '<span class="inv-audit-history__empty">No history recorded yet.</span>';
+                  return;
+                }
+                render(body);
+              })
+              .catch(function () {
+                body.dataset.loaded = 'true';
+                body.innerHTML = '<span class="inv-audit-history__empty">Could not load history.</span>';
+              });
+          });
+        });
       }
 
       function populateSelect(sel, values, emptyLabel) {
@@ -224,8 +340,11 @@
           if (!ex || typeof ex !== 'object' || !Object.prototype.hasOwnProperty.call(ex, metaKey)) return false;
         }
 
-        const jsonLow = extraDataString(item).toLowerCase();
-        if (metaText && jsonLow.indexOf(metaText) === -1) return false;
+        if (metaText) {
+          let jsonLow = '';
+          try { jsonLow = JSON.stringify(item.extra_data || {}).toLowerCase(); } catch (e) {}
+          if (jsonLow.indexOf(metaText) === -1) return false;
+        }
 
         if (q.trim()) {
           const needle = q.trim().toLowerCase();
@@ -285,14 +404,26 @@
           const t = item.inventory_type || 'raw_material';
           const typeLabel = TYPE_LABEL[t] || t;
           const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
-          const metaStr = extraDataString(item);
-          const metaCell = metaStr.length > 2
-            ? '<details><summary style="cursor:pointer;color:var(--primary,#3b82f6);">View</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
-            : '—';
 
+          const adjBtn =
+            '<div class="inv-adj-wrap">' +
+              '<button class="inv-adj-btn inv-adj-btn--primary" type="button" ' +
+                'data-item-id="' + esc(item.id) + '" ' +
+                'data-name="' + esc(item.name || '') + '" ' +
+                'data-type="' + esc(item.inventory_type || '') + '" ' +
+                'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '" ' +
+                'data-unit="' + esc(item.unit || '') + '" ' +
+                'data-supplier="' + esc(item.supplier || '') + '" ' +
+                'data-batch="' + esc(item.supplier_batch_number || '') + '" ' +
+                'data-purchase="' + esc(datePart(item.purchase_date) || '') + '" ' +
+                'data-expiry="' + esc(datePart(item.expiry_date) || '') + '" ' +
+                'data-barcode="' + esc(item.barcode || '') + '">' +
+                'Edit' +
+              '</button>' +
+            '</div>';
           return (
             '<tr>' +
-              '<td><strong>' + esc(item.name) + '</strong></td>' +
+              '<td><strong>' + esc(item.name) + '</strong>' + adjBtn + '</td>' +
               '<td><span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span></td>' +
               '<td>' + esc(String(item.quantity != null ? item.quantity : '')) + '</td>' +
               '<td>' + esc(item.unit || '') + '</td>' +
@@ -302,39 +433,53 @@
               '<td>' + esc(datePart(item.expiry_date) || '—') + '</td>' +
               '<td>' + esc(item.process_name || '—') + '</td>' +
               '<td>' + esc(item.barcode || '—') + '</td>' +
-              '<td>' + metaCell + '</td>' +
+              '<td>' + (item.id ? buildHistoryToggle(item.id) : '') + '</td>' +
             '</tr>'
           );
         }).join('');
 
         if (tbody) tbody.innerHTML = rows;
+        if (tbody) wireHistoryToggles(tbody);
 
         if (cardsEl) {
           cardsEl.innerHTML = filtered.map(function (item) {
             const t = item.inventory_type || 'raw_material';
             const typeLabel = TYPE_LABEL[t] || t;
             const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
-            const metaStr = extraDataString(item);
-            const metaBlock = metaStr.length > 2
-              ? '<details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--primary,#3b82f6);font-size:0.875rem;">Metadata</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
-              : '';
+            const es = item.event_summary || null;
             return (
               '<article class="inv-view-card">' +
                 '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
                   '<strong style="font-size:1rem;">' + esc(item.name) + '</strong>' +
                   '<span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span>' +
                 '</div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + '</span></div>' +
+                '<div class="inv-adj-wrap">' +
+                  '<button class="inv-adj-btn inv-adj-btn--primary" type="button" ' +
+                    'data-item-id="' + esc(item.id) + '" ' +
+                    'data-name="' + esc(item.name || '') + '" ' +
+                    'data-type="' + esc(item.inventory_type || '') + '" ' +
+                    'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '" ' +
+                    'data-unit="' + esc(item.unit || '') + '" ' +
+                    'data-supplier="' + esc(item.supplier || '') + '" ' +
+                    'data-batch="' + esc(item.supplier_batch_number || '') + '" ' +
+                    'data-purchase="' + esc(datePart(item.purchase_date) || '') + '" ' +
+                    'data-expiry="' + esc(datePart(item.expiry_date) || '') + '" ' +
+                    'data-barcode="' + esc(item.barcode || '') + '">' +
+                    'Edit' +
+                  '</button>' +
+                '</div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val inv-view-card__val--qty">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + buildSparkline(es) + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Supplier</span><span class="inv-view-card__val">' + esc(item.supplier || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Batch</span><span class="inv-view-card__val">' + esc(item.supplier_batch_number || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Purchase</span><span class="inv-view-card__val">' + esc(datePart(item.purchase_date) || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Expiry</span><span class="inv-view-card__val">' + esc(datePart(item.expiry_date) || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Process</span><span class="inv-view-card__val">' + esc(item.process_name || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Barcode</span><span class="inv-view-card__val">' + esc(item.barcode || '—') + '</span></div>' +
-                metaBlock +
+                (item.id ? buildHistoryToggle(item.id) : '') +
               '</article>'
             );
           }).join('');
+          wireHistoryToggles(cardsEl);
         }
       }
 
@@ -411,4 +556,7 @@
 
 {% block scripts %}
   {{ super() }}
+  <script>
+    window.invAdjustOnSave = function() { load(); };
+  </script>
 {% endblock %}

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.backend.event_writer import EventWriter
 from app.core.db.models.inventory_wastage import InventoryWastage
 
 
@@ -21,8 +22,13 @@ class WastageRepository:
         reason: str,
         recorded_by: str | None = None,
         recorded_at: datetime | None = None,
+        causation_id: UUID | None = None,
     ) -> InventoryWastage:
-        """Create a wastage record. Caller must deduct from inventory item quantity."""
+        """Create a wastage record. Caller must deduct from inventory item quantity.
+
+        causation_id: pass the execution.step_completed event id when called from
+        within a step completion so the causal chain is preserved.
+        """
         record = InventoryWastage(
             org_id=org_id,
             inventory_item_id=inventory_item_id,
@@ -35,6 +41,24 @@ class WastageRepository:
         self.db.add(record)
         self.db.flush()
         _ = record.id
+
+        ew = EventWriter(self.db, org_id)
+        ew.emit(
+            event_type="inventory_item.wasted",
+            entity_type="inventory_item",
+            entity_id=inventory_item_id,
+            payload={
+                "wastage_id": str(record.id),
+                "inventory_item_id": str(inventory_item_id),
+                "quantity_wasted": quantity_wasted,
+                "unit": unit,
+                "reason": reason,
+                "recorded_by": recorded_by,
+                "recorded_at": record.recorded_at.isoformat() if record.recorded_at else None,
+            },
+            causation_id=causation_id,
+        )
+
         self.db.commit()
         return record
 

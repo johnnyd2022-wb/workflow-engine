@@ -11,6 +11,7 @@ from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.permissions import requires_auth, requires_org_scope, requires_role
+from app.core.utils.emit_event import emit_event
 from app.core.utils.log_action import log_action
 
 org_bp = Blueprint("org", __name__, url_prefix="/org")
@@ -65,6 +66,10 @@ def update_org():
             except ValueError:
                 return jsonify({"error": f"Invalid status: {status_str}"}), 400
 
+        # Capture before-state for diff
+        before_name = g.current_org.name
+        before_status = g.current_org.status.value if g.current_org.status else None
+
         org = org_repo.update_org(g.current_org.id, name=name, status=status)
 
         if not org:
@@ -77,6 +82,25 @@ def update_org():
 
         # Log update (using extracted values)
         log_action("update", "organisation", org.id, {"name": name, "status": status_str}, org.id, g.current_user.id)
+
+        # Emit audit event
+        diff: dict = {}
+        if name is not None and name != before_name:
+            diff["name"] = {"before": before_name, "after": org_name_val}
+        if status is not None and org_status != before_status:
+            diff["status"] = {"before": before_status, "after": org_status}
+        if diff:
+            actor_id = UUID(g.user_id) if getattr(g, "user_id", None) else None
+            emit_event(
+                event_type="org.settings_updated",
+                entity_type="org",
+                entity_id=org.id,
+                payload={"name": org_name_val, "status": org_status},
+                org_id=org.id,
+                actor_id=actor_id,
+                actor_label=getattr(g, "user_email", None),
+                diff=diff,
+            )
 
         return jsonify(
             {

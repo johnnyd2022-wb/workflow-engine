@@ -5,10 +5,48 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.backend.event_writer import EventWriter
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.process import Process
+from app.core.db.models.process_version import ProcessVersion
 from app.core.db.models.step import Step
+
+
+def _extract_consumed(actual_inputs: list) -> list[dict]:
+    """Extract consumed item references from actual_inputs list."""
+    result = []
+    for inp in actual_inputs or []:
+        if not isinstance(inp, dict):
+            continue
+        item_id = inp.get("inventory_item_id") or inp.get("item_id")
+        if item_id:
+            result.append(
+                {
+                    "item_id": str(item_id),
+                    "quantity": inp.get("quantity") or inp.get("quantity_used"),
+                    "unit": inp.get("unit"),
+                }
+            )
+    return result
+
+
+def _extract_produced(actual_outputs: list) -> list[dict]:
+    """Extract produced item references from actual_outputs list."""
+    result = []
+    for out in actual_outputs or []:
+        if not isinstance(out, dict):
+            continue
+        item_id = out.get("inventory_item_id") or out.get("item_id")
+        if item_id:
+            result.append(
+                {
+                    "item_id": str(item_id),
+                    "quantity": out.get("quantity") or out.get("quantity_produced"),
+                    "unit": out.get("unit"),
+                }
+            )
+    return result
 
 
 class ExecutionRepository:
@@ -69,6 +107,45 @@ class ExecutionRepository:
                 execution_steps[0].status = ExecutionStepStatus.READY
 
             execution.status = ExecutionStatus.IN_PROGRESS
+
+            # Link to the current process version snapshot
+            latest_version = (
+                self.db.query(ProcessVersion)
+                .filter(ProcessVersion.process_id == process_id)
+                .order_by(ProcessVersion.version_number.desc())
+                .first()
+            )
+            if latest_version:
+                execution.process_version_id = latest_version.id
+
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="execution.created",
+                entity_type="execution",
+                entity_id=execution.id,
+                payload={
+                    "execution_id": str(execution.id),
+                    "process_id": str(process_id),
+                    "process_version_id": str(latest_version.id) if latest_version else None,
+                    "process_version_number": latest_version.version_number if latest_version else None,
+                    "process_version_date": latest_version.created_at.isoformat() if latest_version else None,
+                    "total_steps": total_steps,
+                    "status": ExecutionStatus.IN_PROGRESS.value,
+                },
+            )
+            # Also emit on the process entity so process summary tracks run counts
+            if latest_version:
+                ew.emit(
+                    event_type="execution.created",
+                    entity_type="process",
+                    entity_id=process_id,
+                    payload={
+                        "execution_id": str(execution.id),
+                        "process_id": str(process_id),
+                        "process_version_number": latest_version.version_number,
+                    },
+                )
+
             if commit:
                 self.db.commit()
             return execution
@@ -184,8 +261,111 @@ class ExecutionRepository:
         )
 
         # Advance execution: mark next steps as ready
-        execution = execution_step.execution
         self._advance_execution(execution)
+
+        # --- Event emission with causal chain ---
+        step_name = execution_step.step.name if execution_step.step else f"Step {execution_step.step_number}"
+        items_consumed = _extract_consumed(actual_inputs or [])
+        items_produced = _extract_produced(actual_outputs or [])
+        evidence_ids = (execution_data or {}).get("evidence_ids", [])
+
+        ew = EventWriter(self.db, org_id)
+        step_event = ew.emit(
+            event_type="execution.step_completed",
+            entity_type="execution",
+            entity_id=execution.id,
+            payload={
+                "execution_id": str(execution.id),
+                "execution_step_id": str(execution_step.id),
+                "step_id": str(execution_step.step_id) if execution_step.step_id else None,
+                "step_number": execution_step.step_number,
+                "step_name": step_name,
+                "actual_inputs": actual_inputs or [],
+                "actual_outputs": actual_outputs or [],
+                "execution_data": execution_data or {},
+                "items_consumed": items_consumed,
+                "items_produced": items_produced,
+                "evidence_ids": evidence_ids,
+                "completed_at": execution_step.completed_at.isoformat() if execution_step.completed_at else None,
+            },
+        )
+
+        # Consumed items — causation_id links back to the step_completed event
+        for consumed in items_consumed:
+            item_id = consumed.get("item_id")
+            if item_id:
+                try:
+                    from uuid import UUID as _UUID
+
+                    item_uuid = _UUID(str(item_id))
+                    ew.emit(
+                        event_type="inventory_item.consumed",
+                        entity_type="inventory_item",
+                        entity_id=item_uuid,
+                        payload={
+                            "inventory_item_id": str(item_id),
+                            "quantity_consumed": consumed.get("quantity"),
+                            "unit": consumed.get("unit"),
+                            "execution_id": str(execution.id),
+                            "execution_step_id": str(execution_step.id),
+                            "step_name": step_name,
+                            "process_id": str(execution.process_id),
+                        },
+                        causation_id=step_event.id,
+                    )
+                except Exception:
+                    pass
+
+        # Produced items
+        for produced in items_produced:
+            item_id = produced.get("item_id")
+            if item_id:
+                try:
+                    from uuid import UUID as _UUID
+
+                    item_uuid = _UUID(str(item_id))
+                    ew.emit(
+                        event_type="inventory_item.produced",
+                        entity_type="inventory_item",
+                        entity_id=item_uuid,
+                        payload={
+                            "inventory_item_id": str(item_id),
+                            "quantity_produced": produced.get("quantity"),
+                            "unit": produced.get("unit"),
+                            "execution_id": str(execution.id),
+                            "execution_step_id": str(execution_step.id),
+                            "step_name": step_name,
+                        },
+                        causation_id=step_event.id,
+                    )
+                except Exception:
+                    pass
+
+        # If execution is now complete, emit execution.completed
+        if execution.status == ExecutionStatus.COMPLETED:
+            ew.emit(
+                event_type="execution.completed",
+                entity_type="execution",
+                entity_id=execution.id,
+                payload={
+                    "execution_id": str(execution.id),
+                    "process_id": str(execution.process_id),
+                    "total_steps": execution.total_steps,
+                    "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+                },
+                causation_id=step_event.id,
+            )
+            # Update process summary for completed run
+            ew.emit(
+                event_type="execution.completed",
+                entity_type="process",
+                entity_id=execution.process_id,
+                payload={
+                    "execution_id": str(execution.id),
+                    "process_id": str(execution.process_id),
+                },
+                causation_id=step_event.id,
+            )
 
         if commit:
             self.db.commit()

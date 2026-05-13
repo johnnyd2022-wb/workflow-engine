@@ -102,6 +102,13 @@
       <button class="sm-view-btn" data-view="table" role="tab" aria-selected="false">Table</button>
     </div>
 
+    <div class="sm-temporal-bar" id="sm-temporal-bar" aria-label="Replay as of a past date">
+      <label class="sm-temporal-bar__label" for="sm-temporal-date">Replay as of</label>
+      <input type="date" id="sm-temporal-date" class="sm-temporal-date-input" aria-label="Replay date">
+      <button id="sm-temporal-apply" class="sm-act-filter-btn sm-temporal-apply-btn">Apply</button>
+      <button id="sm-temporal-clear" class="sm-act-clear-btn sm-temporal-clear-btn" style="display:none;">Live</button>
+    </div>
+
     <div class="sm-legend" aria-label="Legend">
       <span class="sm-legend-item"><span class="sm-legend-dot sm-legend-dot--raw"></span> Raw</span>
       <span class="sm-legend-item"><span class="sm-legend-dot sm-legend-dot--wip"></span> WIP</span>

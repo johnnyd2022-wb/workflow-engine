@@ -25,6 +25,7 @@ from app.core.backend.complete_step_payload import (
 from app.core.backend.complete_step_payload import (
     MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
 )
+from app.core.backend.event_writer import EventWriter
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_docs import process_docs_routes
@@ -113,7 +114,10 @@ def _bound_inventory_extra_data_for_list_response(extra_data: dict) -> dict:
         out["previous_steps_data"] = _safe_slice_list(psd, LIST_INVENTORY_MAX_PREVIOUS_STEPS)
     ah = out.get("inventory_audit_history")
     if isinstance(ah, list):
-        out["inventory_audit_history"] = _safe_slice_list(ah, LIST_INVENTORY_MAX_AUDIT_HISTORY)
+        sliced = _safe_slice_list(ah, LIST_INVENTORY_MAX_AUDIT_HISTORY)
+        out["inventory_audit_history"] = [
+            {k: v for k, v in entry.items() if k != "user_id"} if isinstance(entry, dict) else entry for entry in sliced
+        ]
     rh = out.get("reconciliation_history")
     if isinstance(rh, list):
         out["reconciliation_history"] = _safe_slice_list(rh, LIST_INVENTORY_MAX_RECONCILIATION_HISTORY)
@@ -498,9 +502,7 @@ def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
 
     # Parse UUIDs once; raw value → UUID map eliminates second-pass parsing in the hydration loop.
     raw_to_uuid: dict[str, UUID] = {
-        raw: uid
-        for it in items
-        if (raw := it.get("source_execution_step_id")) and (uid := _parse_uuid(raw))
+        raw: uid for it in items if (raw := it.get("source_execution_step_id")) and (uid := _parse_uuid(raw))
     }
     step_ids: set[UUID] = set(raw_to_uuid.values())
 
@@ -1190,10 +1192,12 @@ def serve_core_img(filename):
         return response
     except FileNotFoundError:
         import logging
+
         logging.getLogger(__name__).info("Image static file not found: %s", filename)
         abort(404, "File not found")
     except Exception:
         import logging
+
         logging.getLogger(__name__).exception("Error serving image static: %s", filename)
         abort(500, "Internal server error")
 
@@ -1217,6 +1221,15 @@ def list_processes():
     for e in all_executions:
         execs_by_process[e.process_id].append(e)
 
+    # Batch-load process event summaries
+    from app.core.db.models.entity_event_summary import EntityEventSummary
+
+    proc_ids_all = [p.id for p in processes]
+    proc_summary_by_id: dict = {}
+    if proc_ids_all:
+        proc_ees = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(proc_ids_all)).all()
+        proc_summary_by_id = {str(r.entity_id): r.summary for r in proc_ees}
+
     result = []
     for process in processes:
         proc_execs = execs_by_process.get(process.id, [])
@@ -1235,6 +1248,7 @@ def list_processes():
             "active_executions": active_count,
             "completed_executions": completed_count,
             "created_at": process.created_at.isoformat() if process.created_at else None,
+            "event_summary": proc_summary_by_id.get(str(process.id)),
         }
 
         if include_steps:
@@ -1751,6 +1765,15 @@ def list_executions():
     executions_by_id = {str(e.id): e for e in executions}
     evidence_by_execution = list_evidence_for_executions_batch([e.id for e in executions], org_id, executions_by_id)
 
+    # Batch-load execution event summaries
+    from app.core.db.models.entity_event_summary import EntityEventSummary
+
+    exec_ids_all = [e.id for e in executions]
+    exec_summary_by_id: dict = {}
+    if exec_ids_all:
+        exec_ees = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(exec_ids_all)).all()
+        exec_summary_by_id = {str(r.entity_id): r.summary for r in exec_ees}
+
     result = []
     for execution in executions:
         execution_steps = execution.execution_steps if execution.execution_steps else []
@@ -1814,6 +1837,7 @@ def list_executions():
                 "evidence": evidence_by_execution.get(str(execution.id), []),
                 "completed_by": completed_by,
                 "created_at": execution.created_at.isoformat() if execution.created_at else None,
+                "event_summary": exec_summary_by_id.get(str(execution.id)),
             }
         )
 
@@ -2655,6 +2679,15 @@ def list_inventory():
             )
             process_by_id = {p.id: p for p in loaded_procs}
 
+    # Batch-load event summaries for card enrichment (single query, no N+1)
+    from app.core.db.models.entity_event_summary import EntityEventSummary
+
+    item_ids_all = [item.id for item in items]
+    event_summary_by_id: dict = {}
+    if item_ids_all:
+        ees_rows = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(item_ids_all)).all()
+        event_summary_by_id = {str(r.entity_id): r.summary for r in ees_rows}
+
     result = []
     for item in items:
         # Filter out items with zero or negative quantity
@@ -2972,6 +3005,7 @@ def list_inventory():
                 "extra_data": _bound_inventory_extra_data_for_list_response(extra_data),
                 "system_findings": findings_by_id.get(str(item.id), []),
                 "ready_date_display": ready_date_display,
+                "event_summary": event_summary_by_id.get(str(item.id)),
             }
         )
 
@@ -3135,7 +3169,10 @@ def record_wastage():
 
     lines.sort(key=lambda t: t[1])
     hash_for_idem = wastage_entries_payload_hash(
-        [{"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or "", "reason": r} for _i, item_id, w, u, r in lines]
+        [
+            {"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or "", "reason": r}
+            for _i, item_id, w, u, r in lines
+        ]
     )
 
     inventory_repo = InventoryRepository(db_session)
@@ -3691,7 +3728,20 @@ def update_inventory_item(item_id):
         if not item:
             return jsonify({"error": "Inventory item not found"}), 404
 
-        # Update item
+        # Snapshot before mutation for diff
+        before = {
+            "name": item.name,
+            "inventory_type": item.inventory_type,
+            "quantity": quantity_to_api_str(item.quantity),
+            "unit": item.unit,
+            "supplier": item.supplier,
+            "supplier_batch_number": item.supplier_batch_number,
+            "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+            "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+            "barcode": item.barcode,
+        }
+
+        # Apply updates
         item.name = name
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
             item.quantity = coerce_stored_quantity(quantity)
@@ -3701,8 +3751,32 @@ def update_inventory_item(item_id):
         item.purchase_date = purchase_date
         item.supplier_batch_number = data.get("supplier_batch_number")
         item.expiry_date = expiry_date
+        item.barcode = data.get("barcode") or None
         if data.get("metadata"):
             item.extra_data = data.get("metadata")
+
+        after = {
+            "name": item.name,
+            "inventory_type": item.inventory_type,
+            "quantity": quantity_to_api_str(item.quantity),
+            "unit": item.unit,
+            "supplier": item.supplier,
+            "supplier_batch_number": item.supplier_batch_number,
+            "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+            "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+            "barcode": item.barcode,
+        }
+
+        diff = {k: {"before": before[k], "after": after[k]} for k in before if before[k] != after[k]}
+
+        ew = EventWriter(db_session, org_id)
+        ew.emit(
+            event_type="inventory_item.updated",
+            entity_type="inventory_item",
+            entity_id=item.id,
+            payload={**after, "reason": "manual_edit"},
+            diff=diff if diff else None,
+        )
 
         db_session.commit()
         db_session.refresh(item)
@@ -3732,6 +3806,39 @@ def update_inventory_item(item_id):
         logger = logging.getLogger(__name__)
         logger.exception("Error updating inventory item")
         return jsonify({"error": "Failed to update inventory item"}), 500
+
+
+@core_bp.route("/api/core/inventory/<item_id>/adjust", methods=["POST"])
+@requires_auth
+def adjust_inventory_item_quantity(item_id):
+    """Manually correct an inventory item's quantity (absolute value).
+
+    Emits inventory_item.quantity_adjusted so the change is fully traceable.
+    """
+    org_id = UUID(g.org_id)
+    data = request.get_json() or {}
+    raw = data.get("new_quantity")
+    if raw is None or str(raw).strip() == "":
+        return jsonify({"error": "new_quantity is required"}), 400
+    try:
+        float(str(raw).strip())
+    except (TypeError, ValueError):
+        return jsonify({"error": "new_quantity must be a valid number"}), 400
+
+    repo = InventoryRepository(db_session)
+    try:
+        item = repo.set_inventory_item_quantity(UUID(item_id), org_id, str(raw).strip())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if not item:
+        return jsonify({"error": "Inventory item not found"}), 404
+    return jsonify(
+        {
+            "id": str(item.id),
+            "quantity": quantity_to_api_str(item.quantity),
+            "unit": item.unit,
+        }
+    ), 200
 
 
 @core_bp.route("/api/core/inventory/<item_id>", methods=["DELETE"])
@@ -3933,9 +4040,7 @@ def trace_inventory_backward(inventory_item_id: str):
     # Only return connections where both endpoints are items in the response (prevents TO <uuid> display).
     # all_result_items now includes traced_item so connections to it are preserved.
     all_item_ids = {item["id"] for item in all_result_items}
-    connections = [
-        c for c in connections if c.get("from_id") in all_item_ids and c.get("to_id") in all_item_ids
-    ]
+    connections = [c for c in connections if c.get("from_id") in all_item_ids and c.get("to_id") in all_item_ids]
 
     return jsonify(
         {
@@ -4079,3 +4184,941 @@ def get_metrics():
         ),
         200,
     )
+
+
+# ---------------------------------------------------------------------------
+# Entity Event Endpoints — Summary, Story, and Sourcemap
+# ---------------------------------------------------------------------------
+
+
+def _parse_entity_type(entity_type: str) -> str | None:
+    """Validate entity_type is one we support."""
+    valid = {"inventory_item", "execution", "process", "user", "org"}
+    return entity_type if entity_type in valid else None
+
+
+def _event_to_dict(ev) -> dict:
+    return {
+        "id": str(ev.id),
+        "event_type": ev.event_type,
+        "entity_type": ev.entity_type,
+        "entity_id": str(ev.entity_id) if ev.entity_id else None,
+        "at": ev.created_at.isoformat() if ev.created_at else None,
+        "actor": ev.actor_label,
+        "actor_type": ev.actor_type,
+        "payload": ev.payload,
+        "diff": ev.diff,
+        "causation_id": str(ev.causation_id) if ev.causation_id else None,
+    }
+
+
+_FIELD_LABELS = {
+    "name": "Name",
+    "description": "Description",
+    "quantity": "Quantity",
+    "unit": "Unit",
+    "inventory_type": "Type",
+    "supplier": "Supplier",
+    "supplier_batch_number": "Batch number",
+    "barcode": "Barcode",
+    "purchase_date": "Purchase date",
+    "expiry_date": "Expiry date",
+    "step_number": "Position",
+    "inputs": "Inputs",
+    "outputs": "Outputs",
+    "execution_prompts": "Prompts",
+    "category": "Category",
+    "is_draft": "Draft",
+}
+
+_ITEM_FIELD_LABELS = {
+    "name": "Name",
+    "label": "Label",
+    "quantity": "Quantity",
+    "unit": "Unit",
+    "inventory_type": "Inventory type",
+    "expected_inventory_type": "Expected type",
+    "type": "Type",
+    "required": "Required",
+    "is_variable": "Variable qty",
+    "requires_execution_confirmation": "Confirmation required",
+    "description": "Description",
+}
+
+# Fields that are auto-populated by the system and should not be reported when
+# they only appear in the after snapshot (i.e. before is None/absent).
+_ITEM_IMPLICIT_FIELDS = frozenset(
+    {
+        "inventory_type",
+        "expected_inventory_type",
+        "is_variable",
+        "requires_execution_confirmation",
+    }
+)
+
+_INVENTORY_TYPE_LABELS = {
+    "raw_material": "Raw material",
+    "work_in_progress": "Work in progress",
+    "final_product": "Final product",
+}
+
+_ITEM_SKIP_FIELDS = frozenset({"id", "extra_data"})
+
+
+def _fmt_field_value(val) -> str:
+    if val is None or val == "":
+        return "—"
+    if isinstance(val, bool):
+        return "Yes" if val else "No"
+    if isinstance(val, list):
+        if not val:
+            return "(none)"
+        if all(isinstance(i, dict) for i in val):
+            parts = []
+            for item in val:
+                if "name" in item:
+                    s = item["name"]
+                    if item.get("quantity") is not None:
+                        s += f" ({item['quantity']}"
+                        if item.get("unit"):
+                            s += f" {item['unit']}"
+                        s += ")"
+                    parts.append(s)
+                elif "label" in item:
+                    s = item["label"]
+                    if item.get("type"):
+                        s += f" ({item['type']})"
+                    parts.append(s)
+            if parts:
+                return ", ".join(parts)
+        return f"{len(val)} item{'s' if len(val) != 1 else ''}"
+    if isinstance(val, str) and val in _INVENTORY_TYPE_LABELS:
+        return _INVENTORY_TYPE_LABELS[val]
+    return str(val)
+
+
+def _fmt_sub_val(val, field: str = "") -> str:
+    if val is None or val == "":
+        return "(none)"
+    if isinstance(val, bool):
+        return "Yes" if val else "No"
+    if isinstance(val, list | dict):
+        return "(complex)"
+    if field in ("inventory_type", "expected_inventory_type"):
+        return _INVENTORY_TYPE_LABELS.get(str(val), str(val))
+    return str(val)
+
+
+def _item_key(item: dict) -> str | None:
+    for k in ("id", "name", "label"):
+        if k in item:
+            return str(item[k])
+    return None
+
+
+def _item_display_name(item: dict) -> str:
+    return item.get("name") or item.get("label") or "(item)"
+
+
+def _smart_list_diff_rows(label: str, before: list, after: list) -> list[dict]:
+    """Deep diff two lists of dicts, returning structured {label, before, after} rows."""
+    rows: list[dict] = []
+    before_by_key: dict = {}
+    after_by_key: dict = {}
+    for item in before:
+        k = _item_key(item)
+        if k:
+            before_by_key[k] = item
+    for item in after:
+        k = _item_key(item)
+        if k:
+            after_by_key[k] = item
+
+    if not before_by_key and not after_by_key:
+        if before != after:
+            rows.append({"label": label, "before": _fmt_field_value(before), "after": _fmt_field_value(after)})
+        return rows
+
+    seen: set = set()
+    for item in before:
+        k = _item_key(item)
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        a_item = after_by_key.get(k)
+        if a_item is None:
+            rows.append({"label": label, "before": f"'{_item_display_name(item)}' removed", "after": None})
+        else:
+            all_fields = [f for f in set(item) | set(a_item) if f not in _ITEM_SKIP_FIELDS]
+            for field in all_fields:
+                b_val = item.get(field)
+                a_val = a_item.get(field)
+                if b_val == a_val:
+                    continue
+                # Skip fields that are auto-populated when they were simply absent before
+                if field in _ITEM_IMPLICIT_FIELDS and b_val is None:
+                    continue
+                fl = _ITEM_FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
+                rows.append(
+                    {
+                        "label": f"{label} '{_item_display_name(item)}' – {fl}",
+                        "before": _fmt_sub_val(b_val, field),
+                        "after": _fmt_sub_val(a_val, field),
+                    }
+                )
+
+    for item in after:
+        k = _item_key(item)
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        if k not in before_by_key:
+            rows.append({"label": label, "before": None, "after": f"'{_item_display_name(item)}' added"})
+
+    return rows
+
+
+def _build_diff_rows(diff: dict) -> list[dict]:
+    """Build structured diff rows: [{label, before, after}]. before/after may be None."""
+    rows: list[dict] = []
+    for field, change in (diff or {}).items():
+        if not isinstance(change, dict):
+            continue
+        label = _FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
+        before = change.get("before")
+        after = change.get("after")
+        if isinstance(before, list) and isinstance(after, list) and all(isinstance(i, dict) for i in (before + after)):
+            rows.extend(_smart_list_diff_rows(label, before, after))
+        else:
+            b_str = _fmt_field_value(before)
+            a_str = _fmt_field_value(after)
+            if b_str != a_str:
+                rows.append(
+                    {
+                        "label": label,
+                        "before": None if b_str == "—" else b_str,
+                        "after": None if a_str == "—" else a_str,
+                    }
+                )
+    return rows
+
+
+def _step_added_diff_rows(step_data: dict) -> list[dict]:
+    """Synthesize diff rows for a newly added step from its snapshot payload."""
+    rows: list[dict] = []
+    desc = step_data.get("description")
+    if desc:
+        rows.append({"label": "Description", "before": None, "after": desc})
+    for inp in step_data.get("inputs") or []:
+        if not isinstance(inp, dict):
+            continue
+        name = _item_display_name(inp)
+        qty = inp.get("quantity")
+        unit = inp.get("unit", "")
+        detail = f"'{name}'"
+        if qty is not None:
+            detail += f" — {qty} {unit}".rstrip()
+        rows.append({"label": "Input", "before": None, "after": detail})
+    for out in step_data.get("outputs") or []:
+        if not isinstance(out, dict):
+            continue
+        name = _item_display_name(out)
+        qty = out.get("quantity")
+        unit = out.get("unit", "")
+        detail = f"'{name}'"
+        if qty is not None:
+            detail += f" — {qty} {unit}".rstrip()
+        rows.append({"label": "Output", "before": None, "after": detail})
+    for pr in step_data.get("execution_prompts") or []:
+        if not isinstance(pr, dict):
+            continue
+        label = pr.get("label") or pr.get("name") or "(prompt)"
+        rows.append({"label": "Prompt", "before": None, "after": label})
+    return rows
+
+
+def _event_diff_rows(ev) -> list[dict]:
+    """Return per-change diff rows for an event, handling nested step diffs."""
+    et = ev.event_type
+    p = ev.payload or {}
+    if et == "process.step_added":
+        return _step_added_diff_rows(p.get("step") or {})
+    if et == "process.step_updated":
+        return _build_diff_rows((ev.diff or {}).get("step") or {})
+    return _build_diff_rows(ev.diff or {})
+
+
+def _human_summary(ev) -> str:
+    et = ev.event_type
+    p = ev.payload or {}
+    d = ev.diff or {}
+
+    if et == "inventory_item.created":
+        qty = p.get("quantity", "")
+        unit = p.get("unit", "")
+        method = p.get("add_method", "manual").replace("_", " ")
+        inv_type = _INVENTORY_TYPE_LABELS.get(
+            p.get("inventory_type") or "", (p.get("inventory_type") or "").replace("_", " ")
+        )
+        parts = [f"Added {qty} {unit}".strip()]
+        if inv_type:
+            parts[0] += f" ({inv_type})"
+        parts.append(f"via {method}")
+        supplier = p.get("supplier")
+        batch = p.get("supplier_batch_number")
+        if supplier:
+            parts.append(f"· supplier: {supplier}")
+        if batch:
+            parts.append(f"· batch: {batch}")
+        return " ".join(parts)
+
+    if et == "inventory_item.quantity_adjusted":
+        before = p.get("quantity_before", "?")
+        after = p.get("quantity_after", p.get("quantity", "?"))
+        unit = p.get("unit", "")
+        return f"Quantity adjusted {before} → {after} {unit}".strip()
+
+    if et == "inventory_item.consumed":
+        qty = p.get("quantity_consumed", "?")
+        unit = p.get("unit", "")
+        step = p.get("step_name", "")
+        base = f"{qty} {unit} consumed".strip()
+        if step:
+            base += f" in '{step}'"
+        return base
+
+    if et == "inventory_item.produced":
+        qty = p.get("quantity_produced", "?")
+        unit = p.get("unit", "")
+        step = p.get("step_name", "")
+        base = f"{qty} {unit} produced".strip()
+        if step:
+            base += f" by '{step}'"
+        return base
+
+    if et == "inventory_item.wasted":
+        qty = p.get("quantity_wasted", "?")
+        unit = p.get("unit", "")
+        reason = p.get("reason", "")
+        base = f"{qty} {unit} wasted".strip()
+        if reason:
+            base += f" — {reason}"
+        return base
+
+    if et == "inventory_item.updated":
+        if not d:
+            return "Updated"
+        field_labels = {
+            "name": "name",
+            "inventory_type": "type",
+            "quantity": "quantity",
+            "unit": "unit",
+            "supplier": "supplier",
+            "supplier_batch_number": "batch",
+            "purchase_date": "purchase date",
+            "expiry_date": "expiry date",
+            "barcode": "barcode",
+        }
+        changed = [field_labels.get(k, k) for k in d]
+        return "Updated " + ", ".join(changed)
+
+    if et == "inventory_item.deleted":
+        name = p.get("name", "")
+        return f"Deleted{(' ' + name) if name else ''}"
+
+    if et == "execution.created":
+        steps = p.get("total_steps", "")
+        ver = p.get("process_version_number", "")
+        base = "Batch started"
+        if steps:
+            base += f" — {steps} steps"
+        if ver:
+            base += f" (process v{ver})"
+        return base
+
+    if et == "execution.step_completed":
+        step = p.get("step_name", f"Step {p.get('step_number', '?')}")
+        consumed = p.get("items_consumed") or []
+        produced = p.get("items_produced") or []
+        base = f"'{step}' completed"
+        if consumed:
+            base += f" — {len(consumed)} input{'s' if len(consumed) != 1 else ''} consumed"
+        if produced:
+            base += f", {len(produced)} output{'s' if len(produced) != 1 else ''} produced"
+        return base
+
+    if et == "execution.completed":
+        steps = p.get("total_steps", "")
+        base = "Batch completed"
+        if steps:
+            base += f" ({steps} steps)"
+        return base
+
+    if et == "execution.cancelled":
+        reason = p.get("reason", "")
+        base = "Batch cancelled"
+        if reason:
+            base += f" — {reason}"
+        return base
+
+    if et == "process.created":
+        name = p.get("name", "")
+        return f"Process{(' ' + repr(name)) if name else ''} created"
+
+    if et == "process.updated":
+        return "Process updated"
+
+    if et == "process.step_added":
+        step_data = p.get("step") or {}
+        step_name = step_data.get("name", "step")
+        pos = step_data.get("step_number", "")
+        base = f"Step '{step_name}' added"
+        if pos:
+            base += f" at position {pos}"
+        return base
+
+    if et == "process.step_updated":
+        step_name = (p.get("step") or {}).get("name", "step")
+        return f"Step '{step_name}' updated"
+
+    if et == "process.step_deleted":
+        step = (p.get("deleted_step") or {}).get("name", "step")
+        return f"Step '{step}' removed"
+
+    if et == "process.deleted":
+        name = p.get("name", "")
+        return f"Process{(' ' + repr(name)) if name else ''} deleted"
+
+    if et == "process.step_doc_uploaded":
+        step = p.get("step_name", "step")
+        title = p.get("doc_title", "document")
+        return f"SOP file '{title}' uploaded to step '{step}'"
+
+    if et == "process.step_doc_created":
+        step = p.get("step_name", "step")
+        title = p.get("doc_title", "document")
+        return f"SOP instructions '{title}' written for step '{step}'"
+
+    if et == "process.step_doc_updated":
+        step = p.get("step_name", "step")
+        title = p.get("doc_title", "document")
+        return f"SOP instructions '{title}' updated for step '{step}'"
+
+    if et == "process.step_doc_deleted":
+        step = p.get("step_name", "step")
+        title = p.get("doc_title", "document")
+        return f"SOP document '{title}' removed from step '{step}'"
+
+    if et == "user.created":
+        return f"Account created — {p.get('email', '')}"
+
+    if et == "user.login":
+        method = "with 2FA" if p.get("2fa_used") else "with password"
+        return f"Logged in {method} from {p.get('ip', '?')}"
+
+    if et == "user.login_failed":
+        return f"Login failed from {p.get('ip', '?')} (attempt {p.get('failed_attempts', '?')})"
+
+    if et == "user.2fa_enabled":
+        return "Two-factor authentication enabled"
+
+    if et == "user.2fa_disabled":
+        return "Two-factor authentication disabled"
+
+    if et == "user.role_changed":
+        return f"Role changed from {p.get('old_role', '?')} to {p.get('new_role', '?')}"
+
+    if et == "org.settings_updated":
+        d = ev.diff or {}
+        parts = []
+        if "name" in d:
+            parts.append(f"Name changed to '{d['name'].get('after', '?')}'")
+        if "status" in d:
+            parts.append(f"Status changed to {d['status'].get('after', '?')}")
+        return "Organisation settings updated" + (f" — {', '.join(parts)}" if parts else "")
+
+    return et.replace(".", " — ").replace("_", " ").capitalize()
+
+
+@core_bp.route("/api/core/entities/<entity_type>/<entity_id>/story", methods=["GET"])
+@requires_auth
+def entity_story(entity_type: str, entity_id: str):
+    """Full event timeline for a single entity, ordered chronologically.
+
+    Used when drilling into a card to see its complete audit history.
+    For inventory items, legacy extra_data.inventory_audit_history entries are
+    merged in so nothing is lost — deduplicated against entity_events by timestamp.
+    """
+    from app.core.db.models.entity_event import EntityEvent
+
+    etype = _parse_entity_type(entity_type)
+    if not etype:
+        return jsonify({"error": "Invalid entity_type"}), 400
+
+    try:
+        eid = UUID(entity_id)
+    except ValueError:
+        return jsonify({"error": "Invalid entity_id"}), 400
+
+    org_id = UUID(g.org_id)
+    limit = min(int(request.args.get("limit", 200)), 500)
+    offset = int(request.args.get("offset", 0))
+
+    db = db_session()
+    events = (
+        db.query(EntityEvent)
+        .filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid)
+        .order_by(EntityEvent.created_at.asc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    total = db.query(EntityEvent).filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid).count()
+
+    event_dicts = [
+        {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)} for ev in events
+    ]
+
+    if etype == "inventory_item":
+        event_dicts = _merge_inventory_legacy_audit(db, eid, org_id, event_dicts, events)
+
+    return jsonify(
+        {
+            "entity_id": str(eid),
+            "entity_type": etype,
+            "total": total,
+            "offset": offset,
+            "events": event_dicts,
+        }
+    ), 200
+
+
+def _merge_inventory_legacy_audit(db, eid: UUID, org_id: UUID, event_dicts: list, events: list) -> list:
+    """Merge extra_data.inventory_audit_history into the entity_events timeline.
+
+    - Entries within 10 s of an existing entity_event are considered the same
+      action: the display name from the legacy entry augments the actor field.
+    - Entries with no matching entity_event are inserted as standalone timeline
+      items (covers pre-event-sourcing items and barcode re-stocks).
+    - user_id is always stripped.
+    """
+    from datetime import datetime
+
+    from app.core.db.models.inventory_item import InventoryItem
+
+    item = db.query(InventoryItem).filter(InventoryItem.id == eid, InventoryItem.org_id == org_id).first()
+    if not item or not item.extra_data:
+        return event_dicts
+
+    legacy_entries = item.extra_data.get("inventory_audit_history") or []
+    if not legacy_entries:
+        return event_dicts
+
+    # Build a lookup of entity_event timestamps (naive UTC) → index in event_dicts
+    ev_timestamps = []
+    for ev in events:
+        if ev.created_at:
+            ts = ev.created_at.replace(tzinfo=None) if ev.created_at.tzinfo else ev.created_at
+            ev_timestamps.append(ts)
+        else:
+            ev_timestamps.append(None)
+
+    def _parse_legacy_ts(ts_str):
+        if not ts_str:
+            return None
+        try:
+            return datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+        except (ValueError, AttributeError):
+            return None
+
+    def _actor_display(entry):
+        name = (entry.get("operator_name") or "").strip()
+        email = (entry.get("operator_email") or "").strip()
+        if name and email and name != email:
+            return f"{name} ({email})"
+        return name or email or ""
+
+    def _legacy_summary(entry):
+        method = (entry.get("source_method") or "manual").replace("_", " ")
+        parts = []
+        qty = entry.get("quantity_added")
+        if qty:
+            parts.append(f"Added {qty}")
+        else:
+            parts.append("Item recorded")
+        parts.append(f"via {method}")
+        supplier = entry.get("supplier")
+        batch = entry.get("supplier_batch_number")
+        purchase = entry.get("purchase_date")
+        expiry = entry.get("expiry_date")
+        if supplier:
+            parts.append(f"· supplier: {supplier}")
+        if batch:
+            parts.append(f"· batch: {batch}")
+        if purchase:
+            parts.append(f"· purchased: {purchase}")
+        if expiry:
+            parts.append(f"· expiry: {expiry}")
+        return " ".join(parts)
+
+    extra_events = []
+    for entry in legacy_entries:
+        if not isinstance(entry, dict):
+            continue
+        entry = {k: v for k, v in entry.items() if k != "user_id"}
+        legacy_ts = _parse_legacy_ts(entry.get("timestamp_utc"))
+
+        matched_idx = None
+        if legacy_ts:
+            for i, ev_ts in enumerate(ev_timestamps):
+                if ev_ts and abs((legacy_ts - ev_ts).total_seconds()) < 10:
+                    matched_idx = i
+                    break
+
+        if matched_idx is not None:
+            # Augment the matching event's actor with the display name if available
+            name = (entry.get("operator_name") or "").strip()
+            email = (entry.get("operator_email") or "").strip()
+            if name and email and name != email:
+                current = event_dicts[matched_idx].get("actor") or ""
+                if name not in current:
+                    event_dicts[matched_idx] = dict(event_dicts[matched_idx])
+                    event_dicts[matched_idx]["actor"] = f"{name} ({current})" if current else name
+        else:
+            extra_events.append(
+                {
+                    "id": f"legacy_{entry.get('timestamp_utc', '')}",
+                    "event_type": "inventory_item.legacy_entry",
+                    "entity_type": "inventory_item",
+                    "entity_id": str(eid),
+                    "at": entry.get("timestamp_utc"),
+                    "actor": _actor_display(entry),
+                    "actor_type": "user",
+                    "summary": _legacy_summary(entry),
+                    "diff_rows": [],
+                    "payload": None,
+                    "diff": None,
+                    "causation_id": None,
+                }
+            )
+
+    if extra_events:
+        merged = event_dicts + extra_events
+        merged.sort(key=lambda e: e.get("at") or "")
+        return merged
+
+    return event_dicts
+
+
+@core_bp.route("/api/core/entities/<entity_type>/<entity_id>/summary", methods=["GET"])
+@requires_auth
+def entity_summary_detail(entity_type: str, entity_id: str):
+    """Rich computed summary for a single entity card detail view.
+
+    Queries entity_events directly (more detail than the pre-computed summary table).
+    """
+    from app.core.db.models.entity_event import EntityEvent
+    from app.core.db.models.entity_event_summary import EntityEventSummary
+
+    etype = _parse_entity_type(entity_type)
+    if not etype:
+        return jsonify({"error": "Invalid entity_type"}), 400
+
+    try:
+        eid = UUID(entity_id)
+    except ValueError:
+        return jsonify({"error": "Invalid entity_id"}), 400
+
+    org_id = UUID(g.org_id)
+    db = db_session()
+
+    # Pull pre-computed summary
+    summary_row = db.query(EntityEventSummary).filter(EntityEventSummary.entity_id == eid).first()
+    summary = summary_row.summary if summary_row else {}
+
+    # Pull most recent 10 events for "recent_events" display
+    recent = (
+        db.query(EntityEvent)
+        .filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid)
+        .order_by(EntityEvent.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    return jsonify(
+        {
+            "entity_id": str(eid),
+            "entity_type": etype,
+            "summary": summary,
+            "recent_events": [
+                {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
+                for ev in reversed(recent)
+            ],
+        }
+    ), 200
+
+
+@core_bp.route("/api/core/entities/activity", methods=["GET"])
+@requires_auth
+def entity_activity_feed():
+    """All entity events for the org, newest-first, with optional date/type filtering.
+
+    Powers the sourcemap Activity tab and any org-wide audit stream.
+    """
+    from app.core.db.models.entity_event import EntityEvent
+
+    org_id = UUID(g.org_id)
+    limit = min(int(request.args.get("limit", 150)), 500)
+    offset = int(request.args.get("offset", 0))
+    from_date = request.args.get("from_date", "")
+    to_date = request.args.get("to_date", "")
+    entity_types_param = request.args.get("entity_types", "")
+
+    db = db_session()
+    q = db.query(EntityEvent).filter(EntityEvent.org_id == org_id)
+
+    if entity_types_param:
+        allowed = [t.strip() for t in entity_types_param.split(",") if t.strip()]
+        if allowed:
+            q = q.filter(EntityEvent.entity_type.in_(allowed))
+
+    if from_date:
+        try:
+            from datetime import timezone as _tz
+
+            fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=_tz.utc)
+            q = q.filter(EntityEvent.created_at >= fd)
+        except ValueError:
+            pass
+
+    if to_date:
+        try:
+            from datetime import timezone as _tz
+
+            td = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=_tz.utc)
+            q = q.filter(EntityEvent.created_at <= td)
+        except ValueError:
+            pass
+
+    total = q.count()
+    events = q.order_by(EntityEvent.created_at.desc()).offset(offset).limit(limit).all()
+
+    return jsonify(
+        {
+            "total": total,
+            "offset": offset,
+            "events": [
+                {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
+                for ev in events
+            ],
+        }
+    ), 200
+
+
+@core_bp.route("/api/core/sourcemap/objects", methods=["GET"])
+@requires_auth
+def sourcemap_objects():
+    """Lightweight paginated index of all traceable entities.
+
+    Returns just enough for selectors — no joins to steps or execution_steps.
+    """
+    org_id = UUID(g.org_id)
+    db = db_session()
+
+    page = max(1, int(request.args.get("page", 1)))
+    limit = min(int(request.args.get("limit", 50)), 200)
+    offset = (page - 1) * limit
+    q = request.args.get("q", "").strip()
+    entity_type_filter = request.args.get("type", "").strip()
+
+    objects = []
+    total = 0
+
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.process import Process
+
+    if not entity_type_filter or entity_type_filter == "inventory_item":
+        inv_q = db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+        if q:
+            inv_q = inv_q.filter(InventoryItem.name.ilike(f"%{q}%"))
+        inv_count = inv_q.count()
+        total += inv_count
+        for item in (
+            inv_q.order_by(InventoryItem.created_at.desc())
+            .offset(offset if not entity_type_filter else 0)
+            .limit(limit)
+            .all()
+        ):
+            objects.append(
+                {
+                    "id": str(item.id),
+                    "type": "inventory_item",
+                    "label": item.display_label or item.name,
+                    "sublabel": f"{item.inventory_type.replace('_', ' ').title()} · {item.quantity} {item.unit}",
+                    "discriminators": {
+                        "supplier": item.supplier,
+                        "batch_number": item.supplier_batch_number,
+                        "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+                        "quantity": str(item.quantity),
+                        "unit": item.unit,
+                    },
+                    "traceable_since": item.created_at.isoformat() if item.created_at else None,
+                    "is_consumed": str(item.quantity) == "0.0000",
+                }
+            )
+
+    if not entity_type_filter or entity_type_filter == "execution":
+        exec_q = db.query(Execution).filter(Execution.org_id == org_id)
+        exec_count = exec_q.count()
+        total += exec_count
+        for ex in exec_q.order_by(Execution.created_at.desc()).limit(limit).all():
+            objects.append(
+                {
+                    "id": str(ex.id),
+                    "type": "execution",
+                    "label": f"Execution #{str(ex.id)[:8]}",
+                    "sublabel": f"{ex.status.value.replace('_', ' ').title()} · {ex.total_steps or '?'} steps",
+                    "discriminators": {
+                        "process_id": str(ex.process_id),
+                        "status": ex.status.value,
+                        "started_at": ex.started_at.isoformat() if ex.started_at else None,
+                    },
+                    "traceable_since": ex.created_at.isoformat() if ex.created_at else None,
+                }
+            )
+
+    if not entity_type_filter or entity_type_filter == "process":
+        proc_q = db.query(Process).filter(Process.org_id == org_id)
+        if q:
+            proc_q = proc_q.filter(Process.name.ilike(f"%{q}%"))
+        proc_count = proc_q.count()
+        total += proc_count
+        for proc in proc_q.order_by(Process.created_at.desc()).limit(limit).all():
+            objects.append(
+                {
+                    "id": str(proc.id),
+                    "type": "process",
+                    "label": proc.name,
+                    "sublabel": f"{'Draft' if proc.is_draft else 'Published'} · {proc.category.value if proc.category else 'Uncategorised'}",
+                    "discriminators": {
+                        "category": proc.category.value if proc.category else None,
+                        "is_draft": proc.is_draft,
+                    },
+                    "traceable_since": proc.created_at.isoformat() if proc.created_at else None,
+                }
+            )
+
+    return jsonify({"objects": objects[:limit], "total": total, "page": page}), 200
+
+
+@core_bp.route("/api/core/sourcemap/trace", methods=["POST"])
+@requires_auth
+def sourcemap_trace():
+    """On-demand DAG traversal — current state or temporal (with as_of).
+
+    Routes to DAGTracer (current) or TemporalDAGTracer (historical).
+    """
+    data = request.get_json() or {}
+    root_type = data.get("root_type", "inventory_item")
+    root_id_str = data.get("root_id")
+    as_of_str = data.get("as_of")
+    depth = min(int(data.get("depth", 5)), 10)
+
+    if not root_id_str:
+        return jsonify({"error": "root_id is required"}), 400
+
+    try:
+        root_id = UUID(root_id_str)
+    except ValueError:
+        return jsonify({"error": "Invalid root_id"}), 400
+
+    org_id = UUID(g.org_id)
+    db = db_session()
+
+    # Temporal trace — use as_of if provided
+    if as_of_str:
+        try:
+            as_of = datetime.fromisoformat(as_of_str.replace("Z", "+00:00"))
+        except ValueError:
+            return jsonify({"error": "Invalid as_of datetime format"}), 400
+
+        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+
+        tracer = TemporalDAGTracer(db, org_id, as_of, max_depth=depth)
+        result = tracer.trace(root_id, root_type)
+
+        # Annotate timeline with human summaries
+        from app.core.db.models.entity_event import EntityEvent as _EE_Trace
+
+        timeline_ids = [item.get("event_id") for item in result["timeline"] if item.get("event_id")]
+        events_by_id: dict = {}
+        if timeline_ids:
+            ev_rows = db.query(_EE_Trace).filter(_EE_Trace.id.in_(timeline_ids)).all()
+            events_by_id = {str(ev.id): ev for ev in ev_rows}
+        story = [
+            {
+                "at": item["at"],
+                "event_type": item["event_type"],
+                "entity_id": item["entity_id"],
+                "summary": _human_summary(events_by_id[item["event_id"]])
+                if item.get("event_id") and item["event_id"] in events_by_id
+                else item["event_type"].replace(".", " — ").replace("_", " ").capitalize(),
+                "actor": item.get("actor"),
+            }
+            for item in result["timeline"]
+        ]
+
+        return jsonify(
+            {
+                "root": next(
+                    (n for n in result["nodes"] if n["is_root"]), result["nodes"][0] if result["nodes"] else {}
+                ),
+                "nodes": result["nodes"],
+                "edges": result["edges"],
+                "as_of": result["as_of"],
+                "is_current": False,
+                "story": story,
+            }
+        ), 200
+
+    # Current state trace — use existing DAGTracer
+    from app.core.db.models.inventory_item import InventoryItem
+
+    item = db.query(InventoryItem).filter(InventoryItem.id == root_id, InventoryItem.org_id == org_id).first()
+    if not item:
+        return jsonify({"error": "Item not found"}), 404
+
+    try:
+        from app.features.workflow_engine.dagtraversal import trace_backward, trace_forward
+
+        result_fwd = trace_forward(str(root_id), db, org_id=str(org_id))
+        result_bwd = trace_backward(str(root_id), db, org_id=str(org_id))
+
+        all_nodes = {n["id"]: n for n in (result_fwd.nodes + result_bwd.nodes)}
+        all_edges = list({(e["from_id"], e["to_id"]): e for e in (result_fwd.edges + result_bwd.edges)}.values())
+
+        return jsonify(
+            {
+                "root": {"id": str(root_id), "type": "inventory_item", "label": item.display_label or item.name},
+                "nodes": list(all_nodes.values()),
+                "edges": [
+                    {"from": e["from_id"], "to": e["to_id"], "execution_id": e.get("execution_id")} for e in all_edges
+                ],
+                "as_of": None,
+                "is_current": True,
+                "story": [],
+            }
+        ), 200
+    except Exception:
+        logger.exception("Trace failed")
+        return jsonify({"error": "Trace failed"}), 500
+
+
+def _is_valid_uuid(v: str) -> bool:
+    try:
+        UUID(v)
+        return True
+    except (ValueError, AttributeError):
+        return False

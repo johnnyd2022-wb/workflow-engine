@@ -2,7 +2,7 @@
 
 import os
 
-from flask import Flask, jsonify, redirect, request, send_from_directory, session
+from flask import Flask, jsonify, redirect, request, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.middleware.session_security import setup_session_security
@@ -37,7 +37,9 @@ def create_app():
     # This prevents session cookies from being sent over unencrypted connections
     app.config["SESSION_COOKIE_SECURE"] = config.getboolean("app", "session_cookie_secure", fallback=True)
     app.config["SESSION_COOKIE_HTTPONLY"] = True  # Prevent XSS attacks by blocking JavaScript access
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Lax: blocks cross-site POST/PUT/DELETE (CSRF) while allowing top-level GET navigations
+    app.config["SESSION_COOKIE_SAMESITE"] = (
+        "Lax"  # Lax: blocks cross-site POST/PUT/DELETE (CSRF) while allowing top-level GET navigations
+    )
     app.config["SESSION_COOKIE_PATH"] = "/"  # Explicitly set cookie path to root
     # Align PERMANENT_SESSION_LIFETIME with default user session timeout (7 days default, max 30 days)
     app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600  # 30 days (max session lifetime)

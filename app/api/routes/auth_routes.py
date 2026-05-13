@@ -191,6 +191,18 @@ def signup():
         # Log signup
         log_action("signup", "organisation", org.id, {"org_name": org_name}, org.id, user.id)
 
+        from app.core.utils.emit_event import emit_event
+
+        emit_event(
+            event_type="user.created",
+            entity_type="user",
+            entity_id=user.id,
+            org_id=org.id,
+            actor_id=user.id,
+            actor_label=user.email,
+            payload={"email": user.email, "role": user.role.value, "org_id": str(org.id)},
+        )
+
         return jsonify(
             {
                 "message": "Organisation and admin user created successfully",
@@ -363,6 +375,16 @@ def login():
                     user_org_id,
                     user_id,
                 )
+                from app.core.utils.emit_event import emit_event
+
+                emit_event(
+                    event_type="user.login_failed",
+                    entity_type="user",
+                    entity_id=user_id,
+                    org_id=user_org_id,
+                    actor_type="system",
+                    payload={"ip": ip_address, "user_agent": user_agent[:200], "failed_attempts": failed_attempts},
+                )
 
             # Always return the same error message to prevent user enumeration
             return jsonify({"error": "Cannot complete request. Check credentials or contact support."}), 401
@@ -511,6 +533,18 @@ def login():
         # Log login
         # CRITICAL: Include IP address and User-Agent for security auditing
         log_action("login", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id)
+
+        from app.core.utils.emit_event import emit_event
+
+        emit_event(
+            event_type="user.login",
+            entity_type="user",
+            entity_id=user.id,
+            org_id=user.org_id,
+            actor_id=user.id,
+            actor_label=user.email,
+            payload={"ip": ip_address, "user_agent": user_agent[:200], "2fa_used": False},
+        )
 
         return jsonify(
             {
@@ -773,6 +807,22 @@ def verify_two_factor():
         log_action("2fa_success", "user", user_id, {"remember_device": remember_device}, user_org_id, user_id)
         log_action("login", "user", user_id, None, user_org_id, user_id)
 
+        from app.core.utils.emit_event import emit_event
+
+        emit_event(
+            event_type="user.login",
+            entity_type="user",
+            entity_id=user_id,
+            org_id=user_org_id,
+            actor_id=user_id,
+            actor_label=user_email,
+            payload={
+                "ip": get_remote_address(),
+                "user_agent": request.headers.get("User-Agent", "")[:200],
+                "2fa_used": True,
+            },
+        )
+
         # Create response
         response_data = {
             "message": "Login successful",
@@ -978,6 +1028,18 @@ def enable_2fa():
                 user.id,
             )
 
+            from app.core.utils.emit_event import emit_event
+
+            emit_event(
+                event_type="user.2fa_enabled",
+                entity_type="user",
+                entity_id=user.id,
+                org_id=user.org_id,
+                actor_id=user.id,
+                actor_label=user.email,
+                payload={"ip": ip_address},
+            )
+
             # Return backup codes to user (one-time display)
             # CRITICAL: These codes should be displayed once and never logged
             return jsonify({"enabled": True, "backup_codes": backup_codes}), 200
@@ -1041,6 +1103,18 @@ def disable_2fa():
                 {"ip_address": ip_address, "user_agent": user_agent, "backup_codes_deleted": deleted_count},
                 user.org_id,
                 user.id,
+            )
+
+            from app.core.utils.emit_event import emit_event
+
+            emit_event(
+                event_type="user.2fa_disabled",
+                entity_type="user",
+                entity_id=user.id,
+                org_id=user.org_id,
+                actor_id=user.id,
+                actor_label=user.email,
+                payload={"ip": ip_address},
             )
 
             return jsonify({"disabled": True}), 200

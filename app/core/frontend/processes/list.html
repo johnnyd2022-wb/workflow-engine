@@ -55,6 +55,12 @@
         return d.innerHTML;
       }
 
+      function fmtDate(iso) {
+        if (!iso) return null;
+        try { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
+        catch (e) { return iso.slice(0, 10); }
+      }
+
       function render(processes) {
         var loading = document.getElementById('processes-list-loading');
         var empty = document.getElementById('processes-list-empty');
@@ -76,17 +82,44 @@
             var done = typeof p.completed_executions === 'number' ? p.completed_executions : 0;
             var draft = p.is_draft ? ' · Draft' : '';
             var meta = steps + ' step' + (steps === 1 ? '' : 's') + ' · ' + active + ' active · ' + done + ' completed' + draft;
+            var es = p.event_summary || null;
+            var auditLine = '';
+            if (es) {
+              var parts = [];
+              if (es.current_version && es.current_version > 1) parts.push('v' + es.current_version);
+              if (es.last_modified_by && es.last_modified_at) {
+                parts.push('Last edited by ' + es.last_modified_by + ' · ' + fmtDate(es.last_modified_at));
+              } else if (es.created_by && es.created_at) {
+                parts.push('Created by ' + es.created_by + ' · ' + fmtDate(es.created_at));
+              }
+              if (es.total_runs > 0) {
+                var totalR = es.total_runs;
+                var completedR = es.completed_runs || 0;
+                var cancelledR = es.cancelled_runs || 0;
+                var failedR = es.failed_runs || 0;
+                var successRate = totalR > 0 ? Math.round((completedR / totalR) * 100) : null;
+                var runStr = totalR + ' run' + (totalR === 1 ? '' : 's');
+                if (successRate !== null && totalR > 1) runStr += ' · ' + successRate + '% success';
+                if (cancelledR > 0) runStr += ' · ' + cancelledR + ' cancelled';
+                parts.push(runStr);
+              }
+              if (parts.length) auditLine = '<p class="processes-list-item__audit">' + esc(parts.join(' · ')) + '</p>';
+            }
             return (
               '<a href="' + esc(href) + '" class="processes-list-item">' +
                 '<div class="processes-list-item__main">' +
                   '<p class="processes-list-item__name">' + esc(p.name || 'Untitled') + '</p>' +
                   '<p class="processes-list-item__meta">' + esc(meta) + '</p>' +
+                  auditLine +
                 '</div>' +
-                '<span class="processes-list-item__arrow" aria-hidden="true">' +
-                  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                    '<polyline points="9 18 15 12 9 6"/>' +
-                  '</svg>' +
-                '</span>' +
+                '<div class="processes-list-item__actions">' +
+                  '<button class="processes-list-item__history-btn" type="button" data-process-id="' + esc(id) + '" data-process-name="' + esc(p.name || 'Untitled') + '">History</button>' +
+                  '<span class="processes-list-item__arrow" aria-hidden="true">' +
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                      '<polyline points="9 18 15 12 9 6"/>' +
+                    '</svg>' +
+                  '</span>' +
+                '</div>' +
               '</a>'
             );
           }).join('');
@@ -108,6 +141,111 @@
             var loading = document.getElementById('processes-list-loading');
             if (loading) loading.textContent = 'Failed to load products.';
           });
+      }
+
+      // Wire history buttons (delegated — cards re-render on load)
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.processes-list-item__history-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var pid = btn.dataset.processId;
+        var pname = btn.dataset.processName;
+        if (pid) openProcessStoryPanel(pid, pname);
+      });
+
+      // ── Inline story panel ──────────────────────────────────
+      var _plStoryEvents = [];
+      var _plStoryAsc = true;
+
+      function openProcessStoryPanel(processId, processName) {
+        var panel = document.getElementById('pl-story-panel');
+        if (!panel) {
+          panel = document.createElement('div');
+          panel.id = 'pl-story-panel';
+          panel.className = 'pl-story-panel';
+          panel.innerHTML =
+            '<div class="pl-story-panel__header">' +
+              '<span class="pl-story-panel__title" id="pl-story-title"></span>' +
+              '<button class="pl-story-panel__sort" id="pl-story-sort" type="button">↑ Oldest first</button>' +
+              '<button class="pl-story-panel__close" id="pl-story-close" aria-label="Close">×</button>' +
+            '</div>' +
+            '<div class="pl-story-panel__body" id="pl-story-body"><div class="pl-story-loading">Loading…</div></div>';
+          document.body.appendChild(panel);
+          document.getElementById('pl-story-close').addEventListener('click', closeProcessStoryPanel);
+          document.getElementById('pl-story-sort').addEventListener('click', function () {
+            _plStoryAsc = !_plStoryAsc;
+            this.textContent = _plStoryAsc ? '↑ Oldest first' : '↓ Newest first';
+            renderProcessStory();
+          });
+          panel.addEventListener('click', function (e) { e.stopPropagation(); });
+          document.addEventListener('click', function (e) {
+            if (!e.target.closest('#pl-story-panel') && !e.target.closest('.processes-list-item__history-btn')) {
+              closeProcessStoryPanel();
+            }
+          });
+        }
+        document.getElementById('pl-story-title').textContent = processName;
+        document.getElementById('pl-story-body').innerHTML = '<div class="pl-story-loading">Loading…</div>';
+        _plStoryEvents = [];
+        _plStoryAsc = true;
+        var sortBtn = document.getElementById('pl-story-sort');
+        if (sortBtn) sortBtn.textContent = '↑ Oldest first';
+        panel.classList.add('pl-story-panel--open');
+        document.body.classList.add('pl-story-panel-active');
+
+        fetch('/api/core/entities/process/' + encodeURIComponent(processId) + '/story', { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            _plStoryEvents = data.events || [];
+            renderProcessStory();
+          })
+          .catch(function () {
+            var b = document.getElementById('pl-story-body');
+            if (b) b.innerHTML = '<p class="pl-story-empty">Could not load history.</p>';
+          });
+      }
+
+      function closeProcessStoryPanel() {
+        var panel = document.getElementById('pl-story-panel');
+        if (panel) panel.classList.remove('pl-story-panel--open');
+        document.body.classList.remove('pl-story-panel-active');
+      }
+
+      function renderProcessStory() {
+        var body = document.getElementById('pl-story-body');
+        if (!body) return;
+        var events = _plStoryAsc ? _plStoryEvents : _plStoryEvents.slice().reverse();
+        if (!events.length) {
+          body.innerHTML = '<p class="pl-story-empty">No history recorded yet.</p>';
+          return;
+        }
+        var html = '<ol class="pl-story-timeline">';
+        events.forEach(function (ev) {
+          var diffHtml = buildPlDiff(ev.diff_rows);
+          html += '<li class="pl-story-timeline__item">' +
+            '<span class="pl-story-timeline__dot"></span>' +
+            '<div class="pl-story-timeline__content">' +
+              '<span class="pl-story-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
+              diffHtml +
+              (ev.actor ? '<span class="pl-story-timeline__actor">' + esc(ev.actor) + '</span>' : '') +
+            '</div>' +
+            '<span class="pl-story-timeline__time">' + esc(fmtDate(ev.at)) + '</span>' +
+          '</li>';
+        });
+        html += '</ol>';
+        body.innerHTML = html;
+      }
+
+      function buildPlDiff(diffRows) {
+        if (!diffRows || !diffRows.length) return '';
+        var rows = diffRows.map(function (r) {
+          var bHtml = r.before != null ? '<span class="pl-story-diff__before">' + esc(r.before) + '</span>' : '';
+          var arrHtml = (r.before != null && r.after != null) ? '<span class="pl-story-diff__arrow">→</span>' : '';
+          var aHtml = r.after != null ? '<span class="pl-story-diff__after">' + esc(r.after) + '</span>' : '';
+          return '<li class="pl-story-diff__row"><span class="pl-story-diff__label">' + esc(r.label) + '</span>' + bHtml + arrHtml + aHtml + '</li>';
+        }).join('');
+        return '<ul class="pl-story-diff">' + rows + '</ul>';
       }
 
       if (document.readyState === 'loading') {
