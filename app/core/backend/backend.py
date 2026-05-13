@@ -1222,12 +1222,12 @@ def list_processes():
         execs_by_process[e.process_id].append(e)
 
     # Batch-load process event summaries
-    from app.core.db.models.entity_event_summary import EntityEventSummary as _ees_p
+    from app.core.db.models.entity_event_summary import EntityEventSummary
 
     proc_ids_all = [p.id for p in processes]
     proc_summary_by_id: dict = {}
     if proc_ids_all:
-        proc_ees = db_session.query(_ees_p).filter(_ees_p.entity_id.in_(proc_ids_all)).all()
+        proc_ees = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(proc_ids_all)).all()
         proc_summary_by_id = {str(r.entity_id): r.summary for r in proc_ees}
 
     result = []
@@ -1766,12 +1766,12 @@ def list_executions():
     evidence_by_execution = list_evidence_for_executions_batch([e.id for e in executions], org_id, executions_by_id)
 
     # Batch-load execution event summaries
-    from app.core.db.models.entity_event_summary import EntityEventSummary as _ees_e
+    from app.core.db.models.entity_event_summary import EntityEventSummary
 
     exec_ids_all = [e.id for e in executions]
     exec_summary_by_id: dict = {}
     if exec_ids_all:
-        exec_ees = db_session.query(_ees_e).filter(_ees_e.entity_id.in_(exec_ids_all)).all()
+        exec_ees = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(exec_ids_all)).all()
         exec_summary_by_id = {str(r.entity_id): r.summary for r in exec_ees}
 
     result = []
@@ -2680,12 +2680,12 @@ def list_inventory():
             process_by_id = {p.id: p for p in loaded_procs}
 
     # Batch-load event summaries for card enrichment (single query, no N+1)
-    from app.core.db.models.entity_event_summary import EntityEventSummary as _ees
+    from app.core.db.models.entity_event_summary import EntityEventSummary
 
     item_ids_all = [item.id for item in items]
     event_summary_by_id: dict = {}
     if item_ids_all:
-        ees_rows = db_session.query(_ees).filter(_ees.entity_id.in_(item_ids_all)).all()
+        ees_rows = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(item_ids_all)).all()
         event_summary_by_id = {str(r.entity_id): r.summary for r in ees_rows}
 
     result = []
