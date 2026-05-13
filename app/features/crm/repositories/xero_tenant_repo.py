@@ -18,6 +18,7 @@ class XeroTenantRepository:
         xero_tenant_id: str,
         xero_tenant_name: str | None,
         xero_tenant_type: str | None,
+        xero_connection_id: str | None = None,
     ) -> XeroTenant:
         tenant = (
             self.db.query(XeroTenant)
@@ -31,6 +32,7 @@ class XeroTenantRepository:
         if tenant:
             tenant.xero_tenant_name = xero_tenant_name
             tenant.xero_tenant_type = xero_tenant_type
+            tenant.xero_connection_id = xero_connection_id
             tenant.is_connected = True
             tenant.connected_at = datetime.utcnow()
             tenant.disconnected_at = None
@@ -39,6 +41,7 @@ class XeroTenantRepository:
             tenant = XeroTenant(
                 org_id=org_id,
                 xero_tenant_id=xero_tenant_id,
+                xero_connection_id=xero_connection_id,
                 xero_tenant_name=xero_tenant_name,
                 xero_tenant_type=xero_tenant_type,
                 is_connected=True,

@@ -109,18 +109,18 @@ class XeroOAuthService:
     # Persist tokens after exchange/refresh
     # ------------------------------------------------------------------
 
-    def store_tokens(self, org_id: UUID, token_data: dict, connections: list[dict]) -> None:
+    def store_tokens(self, org_id: UUID, token_data: dict, connection: dict) -> None:
+        """Persist encrypted tokens and the chosen Xero tenant.
+
+        connection — one entry from GET /connections:
+          {"id": str, "tenantId": str, "tenantName": str, "tenantType": str}
+        """
         expires_in = token_data.get("expires_in", 1800)
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
-        # Use the first tenant connection
-        xero_tenant_id = connections[0]["tenantId"] if connections else ""
-        tenant_name = connections[0].get("tenantName") if connections else None
-        tenant_type = connections[0].get("tenantType") if connections else None
-
         self.token_repo.upsert(
             org_id=org_id,
-            xero_tenant_id=xero_tenant_id,
+            xero_tenant_id=connection["tenantId"],
             access_token_encrypted=self.encrypt(token_data["access_token"]),
             refresh_token_encrypted=self.encrypt(token_data["refresh_token"]),
             expires_at=expires_at,
@@ -129,11 +129,28 @@ class XeroOAuthService:
 
         self.tenant_repo.upsert(
             org_id=org_id,
-            xero_tenant_id=xero_tenant_id,
-            xero_tenant_name=tenant_name,
-            xero_tenant_type=tenant_type,
+            xero_tenant_id=connection["tenantId"],
+            xero_tenant_name=connection.get("tenantName"),
+            xero_tenant_type=connection.get("tenantType"),
+            xero_connection_id=connection.get("id"),
         )
 
+        self.db.commit()
+
+    def finalize_tenant_selection(self, org_id: UUID, connection: dict) -> None:
+        """Called from the multi-tenant picker after the user chooses a tenant.
+
+        Updates the stored token's xero_tenant_id and upserts the tenant record.
+        The tokens are already in the DB (stored with a placeholder during callback).
+        """
+        self.token_repo.update_xero_tenant_id(org_id, connection["tenantId"])
+        self.tenant_repo.upsert(
+            org_id=org_id,
+            xero_tenant_id=connection["tenantId"],
+            xero_tenant_name=connection.get("tenantName"),
+            xero_tenant_type=connection.get("tenantType"),
+            xero_connection_id=connection.get("id"),
+        )
         self.db.commit()
 
     # ------------------------------------------------------------------

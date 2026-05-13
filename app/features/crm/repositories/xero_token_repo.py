@@ -57,6 +57,11 @@ class XeroTokenRepository:
             .first()
         )
 
+    def update_xero_tenant_id(self, org_id: UUID, xero_tenant_id: str) -> None:
+        self.db.query(XeroOAuthToken).filter(XeroOAuthToken.org_id == org_id).update(
+            {"xero_tenant_id": xero_tenant_id, "updated_at": datetime.utcnow()}
+        )
+
     def invalidate(self, org_id: UUID) -> None:
         self.db.query(XeroOAuthToken).filter(XeroOAuthToken.org_id == org_id).update(
             {"is_valid": False, "updated_at": datetime.utcnow()}

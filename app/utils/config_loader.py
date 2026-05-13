@@ -150,15 +150,15 @@ class Config:
 
     @property
     def xero_client_id(self) -> str:
-        return self.get("xero", "client_id", "")
+        return os.getenv("XERO_CLIENT_ID") or self.get("xero", "client_id", "")
 
     @property
     def xero_client_secret(self) -> str:
-        return self.get("xero", "client_secret", "")
+        return os.getenv("XERO_CLIENT_SECRET") or self.get("xero", "client_secret", "")
 
     @property
     def xero_redirect_uri(self) -> str:
-        return self.get("xero", "redirect_uri", "")
+        return os.getenv("XERO_REDIRECT_URI") or self.get("xero", "redirect_uri", "")
 
     @property
     def sender_email(self) -> str:
