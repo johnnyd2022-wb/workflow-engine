@@ -483,7 +483,64 @@ Clean, logical commit groupings:
 
 ---
 
-## 14. What Was Built — Implementation Summary
+## 15. Audit Log Polish — Implementation Summary (May 2026 follow-up)
+
+After the initial 8-phase implementation, a second pass improved audit log quality and consolidated the sourcemap UI.
+
+### Structured diff rows (backend)
+
+`app/core/backend/backend.py` — `_build_diff_rows`, `_event_diff_rows`, `_step_added_diff_rows`:
+
+- All diff data is now returned as `diff_rows: [{label, before, after}]` rather than flat summary strings.
+- `before` is set to `null` when the old value was absent — the frontend only renders `→` when **both** `before` and `after` are non-null (no dangling arrows on additions/deletions).
+- `_event_diff_rows` dispatcher routes `step_added` / `step_updated` / other events to correct diff extraction. `step_added` synthesizes rows for description, inputs, outputs, and prompts so every new step is fully documented.
+- `_smart_list_diff_rows` deep-diffs lists by `id`/`name`/`label` key, producing per-field rows like `Outputs 'Honey syrup' – Quantity: 2 → 3`.
+- All "by {actor}" removed from summary strings — actor is shown as a separate UI element after the summary text.
+- `execution.cancelled` → human summary includes the cancellation reason.
+
+### Empty-diff guard (process repo)
+
+`app/core/db/repositories/process_repo.py` — `update_process`, `update_step`:
+
+- Both methods now return early (`if not diff: return entity`) before inserting a process version or emitting an event. This prevents phantom "Process version saved (no configuration changes)" events that were fired when the frontend called both PATCH /steps and PATCH /process on every save.
+
+### Sort toggle and actor display (all timeline UIs)
+
+`app/core/frontend/processes/flows2.html`, `app/core/frontend/inventory/view.html`:
+
+- Every audit history panel now has an ↑/↓ sort toggle (oldest first / newest first). State is per-panel.
+- Actor email shown as a separate tertiary line below the diff block, using `--text-tertiary` colour.
+- Matching CSS added to `flows2.css` and `inventory-view.css` using the `sm-act-clear-btn` button pattern.
+
+### Process list history panel
+
+`app/core/frontend/processes/list.html`, `app/core/frontend/css/processes-list.css`:
+
+- Every process row in the list now has a "History" button alongside the chevron arrow.
+- Clicking opens an inline sliding drawer (`pl-story-panel`) from the right edge with title, sort toggle, and close button. Fetches `/api/core/entities/process/:id/story` on demand.
+- Full CSS for the slide-in panel using `transform: translateX(100%)` → `translateX(0)` with `0.22s ease` transition.
+
+### Org-wide activity feed + sourcemap Activity tab
+
+`app/core/backend/backend.py` — `GET /api/core/entities/activity`:
+
+- New endpoint returning all `entity_events` for the org, filterable by `entity_type` (comma-separated), `from_date`, `to_date`, `limit` (max 500), `offset`. Each event includes `summary` and `diff_rows`.
+
+`app/core/frontend/js/sourcemap.js`:
+
+- Sourcemap loads `_smAllActivity` at startup (200 most recent events via the new endpoint).
+- Activity tab completely rebuilt: entity type filter pills, operator dropdown (derived from event actors, not just execution operators), date range picker, search query filter, and a new `smBuildActivityFeed` renderer showing colored entity-type badges, expandable diffs, and "Audit history" per-entity buttons.
+- `smOpenStoryPanel(id, name, entityType)` — panel now supports any entity type, not just inventory items.
+- Operators tab removed entirely — operator filtering merged into Activity tab as a `<select>` dropdown, reducing navigation clutter.
+- Dead code removed: `smBuildOperatorBrowseCard` and `smTraceByPerson` functions eliminated.
+
+`app/core/frontend/css/sourcemap.css`:
+
+- New CSS for `.sm-act-feed`, `.sm-act-entry`, `.sm-act-badge` variants (inventory=green, process=blue, execution=purple, user=yellow), `.sm-act-operator-select`, and all supporting elements. Dark mode variants included.
+
+---
+
+## 17. What Was Built — Implementation Summary
 
 All 8 phases are complete as of May 2026. Here is what was built and where to find it.
 
@@ -565,11 +622,11 @@ The three list endpoints (`GET /api/core/inventory`, `/api/core/executions`, `/a
 
 ---
 
-## 15. UI Testing Guide — What to Do and What to Expect
+## 16. UI Testing Guide — What to Do and What to Expect
 
 Start the app: `python app/app.py` (or `uv run workflow start`). All features work with real data — the more actions taken, the richer the audit trail.
 
-### 15.1 Inventory view — audit enrichment
+### 16.1 Inventory view — audit enrichment
 
 **How to test:**
 1. Go to `/core/inventory/view`
@@ -588,7 +645,7 @@ Start the app: `python app/app.py` (or `uv run workflow start`). All features wo
 
 **If you see no badges / no audit meta:** The item was created before the event sourcing migration was applied — no events exist for it yet. Create a new item to see enrichment immediately.
 
-### 15.2 Process list — version and run history
+### 16.2 Process list — version and run history
 
 **How to test:**
 1. Go to `/core/flows` (the process list page)
@@ -602,7 +659,7 @@ Start the app: `python app/app.py` (or `uv run workflow start`). All features wo
 
 **If you see no tertiary line:** The process was created before the migration. Edit or add a step to the process — that write will emit an event and the line will appear from that point on.
 
-### 15.3 Process detail — audit history panel
+### 16.3 Process detail — audit history panel
 
 **How to test:**
 1. Open any process at `/core/flows?id=<uuid>`
@@ -616,7 +673,7 @@ Start the app: `python app/app.py` (or `uv run workflow start`). All features wo
 - Each entry has a blue dot, sentence, and date
 - Collapse and re-open: no fetch — content stays loaded
 
-### 15.4 Execution (batch) cards — actor and materials summary
+### 16.4 Execution (batch) cards — actor and materials summary
 
 **How to test:**
 1. Open a process at `/core/flows?id=<uuid>`
@@ -634,7 +691,7 @@ Completed batch card (expand by clicking the header):
 - "Started by: user@example.com"
 - "3 steps completed · 2 inputs consumed · 1 output produced" (numbers reflect what was recorded in step completions)
 
-### 15.5 Sourcemap — entity story panel
+### 16.5 Sourcemap — entity story panel
 
 **How to test:**
 1. Go to `/core/sourcemap`
@@ -649,7 +706,7 @@ Completed batch card (expand by clicking the header):
 - Click × in the drawer header to close — the trace area returns to full width
 - Only inventory item story panels are wired in the sourcemap; other entity types use the `/story` endpoint directly
 
-### 15.6 Sourcemap — temporal trace via API
+### 16.6 Sourcemap — temporal trace via API
 
 The temporal trace is a backend-only feature at present (no dedicated UI button yet). Test it directly:
 
@@ -675,7 +732,7 @@ curl -s -X POST "http://localhost:8000/api/core/sourcemap/trace" \
 - `nodes` and `edges` reflect the graph as it existed at the given timestamp
 - Empty `edges` if no step-completion events existed before that time
 
-### 15.7 Entity story API — direct inspection
+### 16.7 Entity story API — direct inspection
 
 ```bash
 # Full event timeline for an inventory item
@@ -691,7 +748,7 @@ curl -s "http://localhost:8000/api/core/entities/inventory_item/<uuid>/summary" 
 - `/story` returns events oldest-first, each with a human-readable `summary` field
 - `/summary` returns the latest `entity_event_summaries.summary` JSONB — `add_method`, `times_consumed`, `quantity_history`, `wastage_event_count`, etc.
 
-### 15.8 Database inspection
+### 16.8 Database inspection
 
 Connect directly to the test or local database to verify event storage:
 
@@ -721,9 +778,103 @@ FROM process_versions
 ORDER BY created_at DESC;
 ```
 
-### 15.9 Known limitations
+### 16.9 Known limitations
 
 - **Pre-migration data:** Items, processes, and executions created before the migrations have no events. The UI degrades gracefully — audit badges and meta lines simply don't appear (they check for `event_summary` null). New actions on old entities will start generating events.
 - **add_method detection:** Detected from `extra_data` keys at creation time. Items added before event sourcing show no add-method badge.
 - **2FA/login tests:** The `test_login_2fa_flow.py` and `test_2fa_totp_optimized.py` test files require a live app server running on port 8005. They fail in the test container (no server running there). All repository-level and API integration tests pass (189 passed, 1 skipped in the Docker test container).
 - **Temporal trace UI:** The `POST /api/core/sourcemap/trace` with `as_of` is complete and working on the backend. A dedicated UI control (date-picker + "Replay as of" button on the sourcemap) is not yet built — it is the natural next step.
+- **User/auth events in activity feed:** `user.*` events (login, 2FA changes, role changes) are captured but do not appear in the sourcemap Activity tab by default. The current entity type filter includes Inventory, Processes, and Executions but not Users. Login/security events are only visible via `/api/core/entities/user/<id>/story`.
+
+---
+
+## 18. Platform Gap Analysis vs. Product Claims
+
+The marketing copy makes specific claims about what the platform does. This section audits each claim against what is actually implemented, and defines a plan for anything missing. Source-to-sale tracing is excluded per current scope (CRM and accounting integrations are a separate workstream).
+
+### Claim audit
+
+| Claim | Status | Notes |
+|---|---|---|
+| "Every action is recorded at the point of work" | ✅ Done | All inventory, process, execution, and user events captured |
+| "Every change is preserved in context" | ✅ Done | Structured diff_rows with before/after on all updates |
+| "Every workflow is connected end-to-end" | ✅ Done | DAG trace connects steps via causation_id chain |
+| "Every decision, material and action is reconstructable instantly" | ⚠️ Partial | Backend temporal trace works; no UI control yet |
+| "Every inventory item is tracked and connected" | ✅ Done | Full lifecycle events on inventory items |
+| "Every product in each state of its production is tracked and visible" | ⚠️ Partial | Current state is visible; "as-of" historical state needs UI |
+| "Capture your work as it happens" | ✅ Done | Events written in same transaction as mutations |
+| "Understand how your production changes over time" | ✅ Done | Version history, diff rows, audit panels on all key entities |
+| "Reconstruct any production state instantly" | ⚠️ Partial | Backend complete; UI date-picker/replay button missing |
+| "Ensure consistent actions across teams and users" | ✅ Done | Structured workflows with enforced step definitions |
+| "Reduce errors during your workflow" | ✅ Done | Input/output validation and confirmation requirements at step completion |
+| "Be audit-ready by default" | ✅ Done | Org-wide activity feed, per-entity timelines, always-on event capture |
+| Activity visible by operator/person | ✅ Done | Operator filter added to Activity tab in sourcemap |
+| Settings changes tracked | ❌ Missing | Org settings mutations (name, config) do not emit events |
+| User events visible in org activity feed | ❌ Missing | Login, 2FA, role change events not surfaced in Activity tab |
+
+### Gaps and plan
+
+#### Gap 1 — Temporal trace UI (high value, medium effort)
+
+**What's missing:** Users cannot trigger a "replay as of [date]" from the sourcemap UI. The backend is fully capable.
+
+**Plan:**
+1. Add a date-picker input to the sourcemap header/controls bar (near the search input).
+2. When a date is selected, pass `as_of` to `POST /api/core/sourcemap/trace` and re-render the result.
+3. Show a banner: "Showing provenance as of [date] — not current state" with a "Back to live" button.
+4. This surfaces the temporal reconstruction capability that currently only power users can access via the API.
+
+**Files:** `app/core/frontend/js/sourcemap.js`, `app/core/frontend/css/sourcemap.css`
+
+#### Gap 2 — User events in Activity tab (low effort, moderate value)
+
+**What's missing:** Login, 2FA, and role-change events are captured but filtered out of the org-wide activity feed (entity_type = 'user' is not included by default in the Activity tab filter).
+
+**Plan:**
+1. Add a "Users" pill to the entity type filter buttons in the Activity tab (alongside All/Inventory/Processes/Executions).
+2. Ensure `/api/core/entities/activity` does not filter out `entity_type = 'user'` — verify the backend query includes all entity types.
+3. The `user.*` events have no diff to show, but the summary line ("User logged in", "2FA enabled", "Role changed: viewer → admin") is already generated by `_human_summary`.
+
+**Files:** `app/core/frontend/js/sourcemap.js`, `app/core/backend/backend.py` (verify entity filter)
+
+#### Gap 3 — Org settings change events (low value, low effort)
+
+**What's missing:** Changes to org settings (name, timezone, feature flags) are not tracked in `entity_events`.
+
+**Plan:**
+1. Add an `org_settings.updated` event type to the event catalog.
+2. Emit it from the org settings update route in `org_routes.py` with a diff of changed fields.
+3. Surface in Activity tab under a new "Settings" entity type or fold into "Users" filter.
+
+This is low priority — the platform's core value is production/inventory traceability, not org config. Implement after Gaps 1 and 2.
+
+#### Gap 4 — Quantity sparkline on inventory cards (design, moderate effort)
+
+**What's missing:** The original plan described a "quantity history sparkline" on inventory cards. The `quantity_history` array is captured in `entity_event_summaries.summary` (capped at 50 entries) but no sparkline is rendered in the UI.
+
+**Plan:**
+1. Add a minimal SVG sparkline renderer in `inventory/view.html` — take the `quantity_history` array from `event_summary.quantity_history` and draw a polyline.
+2. Show on the card when there are ≥ 3 data points.
+3. Hover tooltip can show the value and date for each point.
+
+**Files:** `app/core/frontend/inventory/view.html`, `app/core/frontend/css/inventory-view.css`
+
+#### Gap 5 — Success rate on process cards (low effort, good UX)
+
+**What's missing:** The original plan showed "Success rate X%" on process cards. Currently only total/active/completed counts are shown; cancelled and failed counts are not displayed.
+
+**Plan:**
+1. Add `cancelled_executions` and `failed_executions` counts to the `event_summary` on processes (via `entity_event_summaries.summary`).
+2. Display "X% success · Y completed · Z cancelled" on the process list item tertiary line.
+
+**Files:** `app/core/backend/event_writer.py` (update process summary upsert), `app/core/frontend/processes/list.html`
+
+#### Gap 6 — Execution evidence count (low effort)
+
+**What's missing:** "N evidence files attached" was listed in the card enrichment plan for execution cards. Evidence files may exist in `process_docs_storage` but are not surfaced in the activity/audit context.
+
+**Plan:**
+1. Add a count of attached documents to the execution card metadata (query the process_docs_storage directory or a docs table).
+2. Surface as "N evidence files" on completed batch cards.
+
+This depends on the existing evidence/docs storage model — investigate before estimating effort.
