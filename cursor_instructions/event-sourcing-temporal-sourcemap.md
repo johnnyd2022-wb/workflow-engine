@@ -915,3 +915,249 @@ All gaps identified in the original analysis are now complete. Source-to-sale tr
 1. Go to any process at `/core/flows?id=<uuid>` → Batches tab
 2. Find a completed batch where evidence files were uploaded during execution
 3. Expand the completed batch card — the summary line under "Started by" now includes the evidence file count
+
+---
+
+## 20. Complete UI Test Checklist — event-sourcing Branch
+
+Start the app: `uv run workflow start` (or `python app/app.py`). Use a real browser — mobile tests require DevTools responsive mode or a physical device. Work through each section in order; some tests build on actions from earlier sections.
+
+---
+
+### Page 1 — `/core/inventory/view` (Inventory view)
+
+**Setup:** Switch to card layout by narrowing the browser below 900px or using DevTools → Responsive → 390px width.
+
+**Test 1.1 — Audit badges on inventory cards**
+1. Look at any inventory item card.
+2. **Expect:** Coloured pill badges appear above the metadata rows:
+   - Purple **Barcode** badge if the item was added via barcode scan
+   - Purple **CSV import** badge if added via CSV
+   - Blue **Used N×** badge if the item has ever been consumed in a process step
+   - Red **N wastage** badge if wastage has been recorded against it
+3. Items created before event sourcing show no badges — create a new item to verify badges appear immediately.
+
+**Test 1.2 — "Added by" and "Last used" meta lines**
+1. Look below the badges on any card.
+2. **Expect:** A line reading `Added by user@email.com · 13 May 2026`
+3. After running a batch that consumes this item, **expect** a second line: `Last used 13 May 2026 in Step Name`
+
+**Test 1.3 — Quantity sparkline**
+1. Find an item that has had at least two quantity events (created + one manual adjustment or consumption).
+2. Look at the **Quantity** row on the card.
+3. **Expect:** A small blue SVG line chart appears to the right of the quantity number, showing the trend over time.
+4. Items with only one event show no sparkline (needs 2+ data points).
+5. On screens narrower than 320px the sparkline hides; verify no layout breakage.
+
+**Test 1.4 — Audit history panel**
+1. Click **Audit history** at the bottom of any card.
+2. **Expect:** A `<details>` block expands showing "Loading…" then a chronological timeline.
+3. Each event shows: blue dot · summary sentence · actor email (smaller, grey) · date (right-aligned).
+4. For update events, a diff block appears below the summary: label, red strikethrough old value, `→`, green new value. If there was no old value, no `→` is shown.
+5. Click **↑ Oldest first** / **↓ Newest first** to toggle sort order — timeline reverses.
+6. **Tap target check (mobile):** Sort toggle button should be easy to tap (≥ 36px height). Verify with finger or DevTools touch simulation.
+7. Collapse and re-expand: no second network request (content stays loaded).
+
+**Test 1.5 — Mobile layout (≤ 390px)**
+1. Verify card layout is used (table is hidden).
+2. Scroll through several cards — no horizontal overflow.
+3. Badges wrap to multiple lines without overflow.
+4. Audit history panel content scrolls within the `<details>` block.
+
+---
+
+### Page 2 — `/core/flows` (Process list)
+
+**Test 2.1 — Tertiary audit line on process entries**
+1. Look at any process in the list.
+2. **Expect:** Below the "N steps · N active · N completed" line, a third grey line appears:
+   - Fresh process: `v1 · Created by user@email.com · 13 May 2026`
+   - After edits: `v3 · Last edited by user@email.com · 13 May 2026`
+   - After runs: `v3 · Last edited by … · 13 May 2026 · 4 runs`
+   - After multiple runs: `… · 4 runs · 75% success` (only shown when total > 1)
+   - If runs were cancelled: `… · 4 runs · 75% success · 1 cancelled`
+
+**Test 2.2 — History button on process entries**
+1. Look at the right side of any process row — there is a **History** button beside the chevron arrow.
+2. Click **History**.
+3. **Expect:** A slide-in drawer appears from the right edge of the screen, showing the process name as the panel title.
+4. A timeline loads: process created event, then any step additions/edits, each with blue dot, summary, actor, date.
+5. Sort toggle (**↑ Oldest first**) in the panel header switches order.
+6. Click **×** to close — panel slides out.
+7. **Mobile (≤ 420px):** Panel occupies full screen width. Background dims with a dark overlay. Verify the × button and sort button are easy to tap.
+8. Clicking outside the panel on desktop closes it. On mobile, the list items behind the overlay are non-interactive while the panel is open.
+
+---
+
+### Page 3 — `/core/flows?id=<uuid>` (Process detail — flows2)
+
+**Test 3.1 — Audit history panel in process definition**
+1. Open any process.
+2. Scroll to the bottom of the definition/edit panel.
+3. Click **Audit history**.
+4. **Expect:** A collapsible panel expands with a timeline of process events.
+5. Update events show structured diff rows — one line per changed field, with coloured before/after values.
+6. Step additions show all fields that were set: description, each input (name, qty, unit), each output, each prompt.
+7. Sort toggle works (oldest/newest).
+8. Actor appears below the diff block in small grey text, not embedded in the summary sentence.
+
+**Test 3.2 — Execution (batch) cards — Started by**
+1. Switch to the **Batches** tab.
+2. Find any active or completed batch.
+3. **Expect:** "Started by: user@email.com" sourced from the event log (authoritative actor, not current session user).
+
+**Test 3.3 — Completed batch summary line**
+1. Find a completed batch and expand its card.
+2. **Expect:** A grey summary line: `N steps completed · N inputs consumed · N outputs produced`
+3. If evidence files were attached during the batch: `· N evidence files` appended to the line.
+
+---
+
+### Page 4 — `/core/sourcemap` (Sourcemap)
+
+#### Browse grid
+
+**Test 4.1 — Browse tabs**
+1. Open the sourcemap. The browse grid shows the **Inventory** tab by default.
+2. Switch between **Batches**, **Suppliers**, and **Activity** tabs.
+3. **Expect:** Operators tab is gone — operator filtering is now inside Activity.
+
+**Test 4.2 — Activity tab — entity type filters**
+1. Click the **Activity** tab.
+2. **Expect:** A row of filter pills: **All · Inventory · Processes · Executions · Users · Settings**
+3. Click **Inventory** — only inventory events appear (created, adjusted, consumed, wasted).
+4. Click **Processes** — only process events (created, step added, step updated, etc.).
+5. Click **Executions** — only execution events.
+6. Click **Users** — login events, 2FA changes, role changes for all users in the org.
+7. Click **Settings** — org name/status change events (grey "Settings" badge).
+8. Click **All** — all events visible, newest first.
+
+**Test 4.3 — Activity tab — operator filter**
+1. With Activity tab open, look at the right end of the filter pill row.
+2. **Expect:** An **All operators** dropdown (only appears if there are events with actors).
+3. Select a specific operator — feed filters to only that person's actions.
+4. Combined with an entity type pill: filters by both operator AND type simultaneously.
+
+**Test 4.4 — Activity tab — date range filter**
+1. Click Activity. Look below the pills for the date picker bar (From / To / Apply / Clear).
+2. Enter a **From** date and click **Apply** — feed shows only events on or after that date.
+3. Enter both **From** and **To** — shows events in that range.
+4. Click **Clear** — dates reset, full feed returns.
+5. Combine with entity type pill and operator — all three filters work together.
+
+**Test 4.5 — Activity feed entries**
+1. Look at individual feed entries.
+2. **Expect:** Each entry shows: coloured entity type badge · summary sentence · "Show diff" link (if there are field changes) · actor email · relative date (right-aligned).
+3. Click **Show diff** — a diff block expands inline showing label / red old value / `→` / green new value, one row per changed field. For additions, no red strikethrough and no `→`.
+4. Click **Audit history** on an entry — a story panel slides in from the right showing the full event history for that specific entity.
+5. **Mobile:** Entry text wraps cleanly. Badges don't overflow. Show diff and Audit history buttons are large enough to tap (≥ 32px).
+
+**Test 4.6 — Activity tab — search**
+1. Type a term in the main search bar while Activity tab is selected.
+2. **Expect:** Feed filters by matching summary text, actor name, or event type.
+
+#### Trace mode
+
+**Test 4.7 — Starting a trace**
+1. From the browse grid, click any inventory item card.
+2. **Expect:** The browse grid is replaced by a trace result. The controls bar appears above showing: **Timeline · Map · Table** view toggle + **Replay as of** date bar + legend.
+
+**Test 4.8 — Story panel from trace**
+1. In the trace result, find any item card that has an **Audit history** button.
+2. Click it — a story panel slides in from the right.
+3. **Expect:** Full chronological event history for that specific inventory item.
+4. Sort toggle in the panel header works.
+5. Close with × button.
+6. **Mobile:** Panel goes full-width. Background dims. × button is large enough to tap.
+
+**Test 4.9 — Temporal replay (Replay as of)**
+1. After starting a trace, look at the controls bar.
+2. **Expect:** A "Replay as of" label, a date input, an **Apply** button, and (when a date is active) a **Live** button.
+3. Enter a date in the past (before today) and click **Apply**.
+4. **Expect:**
+   - A yellow banner appears: "⏱ Showing provenance as of [date] — not current state"
+   - Node cards appear showing each item's name, type, and quantity as recorded up to that date
+   - A connection count line: "N connections recorded before this date"
+   - An event timeline below listing all events before that date, newest first, with actor and human-readable summary text
+5. Nodes whose events all post-date the selected date will show no meaningful state (UUID only) — this is expected.
+6. Click **Live** — returns to the standard current-state trace view; banner disappears; date input clears.
+7. **Mobile:** Date input grows to fill available width. Apply and Live buttons have adequate tap height.
+
+**Test 4.10 — Temporal replay grid layout (mobile)**
+1. With the temporal replay result showing, at 390px width:
+2. **Expect:** Node cards display in a 2-column grid (1-column below 400px, 3-column above 600px).
+3. Cards don't overflow horizontally.
+
+---
+
+### Page 5 — `/org/settings` → back to Activity tab
+
+**Test 5.1 — Org settings change event**
+1. Go to the org settings page (accessible via user menu or `/org/settings`).
+2. Change the organisation name and save.
+3. Go to `/core/sourcemap` → **Activity** tab → click **Settings** filter.
+4. **Expect:** An entry appears with a grey **Settings** badge: "Organisation settings updated — Name changed to 'New Name'"
+5. Actor email and date are shown.
+6. If only status changes (not name), the summary reflects the status change instead.
+
+---
+
+### Mobile regression tests (run all pages at 390px width)
+
+**Test 6.1 — Process list at 390px**
+- Items display correctly with name, meta, audit line.
+- History button is visible and tappable (≥ 36px tap height).
+- History panel slides in full-width; background dims; × button is easy to tap; scroll works to bottom of timeline.
+
+**Test 6.2 — Inventory cards at 390px**
+- Card layout is active (table hidden).
+- Sparkline renders next to quantity (or hides cleanly on very small screens).
+- Audit history sort button has adequate tap height.
+- Panel body scrolls smoothly (momentum scroll on iOS).
+
+**Test 6.3 — Sourcemap Activity tab at 390px**
+- Filter pills wrap to multiple lines without overflowing.
+- Operator dropdown sits inline with pills and doesn't truncate.
+- Date picker bar wraps cleanly; date inputs fill available width.
+- Activity feed entries don't cause horizontal scroll.
+- Show diff and Audit history buttons are tappable.
+
+**Test 6.4 — Sourcemap temporal replay at 390px**
+- Replay as of bar wraps as its own row below the view toggle.
+- Date input stretches to fill available space.
+- Apply and Live buttons have adequate tap height.
+- Temporal node grid shows 2 columns (or 1 below 400px).
+- Yellow banner wraps text without overflow.
+
+**Test 6.5 — Sourcemap story panels at 390px**
+- Panel opens full-width.
+- Background dims behind panel (dark overlay).
+- Panel body scrolls to show all timeline events.
+- Safe area at the bottom (iPhone home bar): content is not obscured.
+- Sort button and × close button are easy to tap.
+
+**Test 6.6 — Process audit history panel at 390px (flows2)**
+- Sort toggle has adequate tap height.
+- Diff rows wrap cleanly inside the expanded panel.
+- Time column does not overflow or truncate the event summary.
+
+---
+
+### End-to-end scenario — full audit trail
+
+Run this scenario to verify the whole system works together:
+
+1. **Create a process** at `/core/flows/create` with at least two steps, one input, one output.
+2. **Edit the process** — change the process name and modify a step's description. Save.
+3. **Run a batch** — start an execution, complete one step (attach an evidence file if possible), complete remaining steps.
+4. **Add inventory** manually, then adjust the quantity.
+5. **Check each surface:**
+   - `/core/flows` — process list shows version, last editor, run count, success rate
+   - Process list → **History** button — shows created + step added + two update events with diffs
+   - `/core/flows?id=<uuid>` → Audit history — same events with full diff detail
+   - Completed batch card — shows steps completed, inputs consumed, outputs produced, evidence count
+   - `/core/inventory/view` (card layout) — inventory item shows added-by meta; after batch, shows Last used and Used N× badge; sparkline visible after quantity adjustment
+   - Inventory card → **Audit history** — quantity adjusted event, consumed event with step name
+   - `/core/sourcemap` → **Activity** tab — all five event types visible in one feed
+   - Activity → **Users** filter — your login from this session should appear
+   - Sourcemap → click an inventory item → trace → **Replay as of** yesterday — shows provenance as it was before today's batch
