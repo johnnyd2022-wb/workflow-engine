@@ -783,98 +783,135 @@ ORDER BY created_at DESC;
 - **Pre-migration data:** Items, processes, and executions created before the migrations have no events. The UI degrades gracefully — audit badges and meta lines simply don't appear (they check for `event_summary` null). New actions on old entities will start generating events.
 - **add_method detection:** Detected from `extra_data` keys at creation time. Items added before event sourcing show no add-method badge.
 - **2FA/login tests:** The `test_login_2fa_flow.py` and `test_2fa_totp_optimized.py` test files require a live app server running on port 8005. They fail in the test container (no server running there). All repository-level and API integration tests pass (189 passed, 1 skipped in the Docker test container).
-- **Temporal trace UI:** The `POST /api/core/sourcemap/trace` with `as_of` is complete and working on the backend. A dedicated UI control (date-picker + "Replay as of" button on the sourcemap) is not yet built — it is the natural next step.
-- **User/auth events in activity feed:** `user.*` events (login, 2FA changes, role changes) are captured but do not appear in the sourcemap Activity tab by default. The current entity type filter includes Inventory, Processes, and Executions but not Users. Login/security events are only visible via `/api/core/entities/user/<id>/story`.
+- **Pre-migration entities:** Items, processes, and executions created before the migrations have no events. The UI degrades gracefully — audit badges and meta lines simply don't appear. New actions on old entities will start generating events immediately.
+- **Quantity sparkline requires 2+ history points:** An item only shows a sparkline after at least two quantity events (creation + one adjustment or consumption).
+- **2FA/login tests:** The `test_login_2fa_flow.py` and `test_2fa_totp_optimized.py` test files require a live app server running on port 8005. All repository-level and API integration tests pass.
+- **Temporal trace node state:** Nodes in temporal results only have state when a matching event exists in `entity_events` before the `as_of` date. Nodes with no pre-date events appear nameless (UUID only). Items created before event sourcing will not have state in temporal results.
 
 ---
 
 ## 18. Platform Gap Analysis vs. Product Claims
 
-The marketing copy makes specific claims about what the platform does. This section audits each claim against what is actually implemented, and defines a plan for anything missing. Source-to-sale tracing is excluded per current scope (CRM and accounting integrations are a separate workstream).
+All gaps identified in the original analysis are now complete. Source-to-sale tracing is excluded from scope (CRM and accounting integrations are a separate workstream).
 
-### Claim audit
+### Claim audit — final status
 
-| Claim | Status | Notes |
+| Claim | Status | Where to see it |
 |---|---|---|
-| "Every action is recorded at the point of work" | ✅ Done | All inventory, process, execution, and user events captured |
-| "Every change is preserved in context" | ✅ Done | Structured diff_rows with before/after on all updates |
-| "Every workflow is connected end-to-end" | ✅ Done | DAG trace connects steps via causation_id chain |
-| "Every decision, material and action is reconstructable instantly" | ⚠️ Partial | Backend temporal trace works; no UI control yet |
-| "Every inventory item is tracked and connected" | ✅ Done | Full lifecycle events on inventory items |
-| "Every product in each state of its production is tracked and visible" | ⚠️ Partial | Current state is visible; "as-of" historical state needs UI |
-| "Capture your work as it happens" | ✅ Done | Events written in same transaction as mutations |
-| "Understand how your production changes over time" | ✅ Done | Version history, diff rows, audit panels on all key entities |
-| "Reconstruct any production state instantly" | ⚠️ Partial | Backend complete; UI date-picker/replay button missing |
-| "Ensure consistent actions across teams and users" | ✅ Done | Structured workflows with enforced step definitions |
-| "Reduce errors during your workflow" | ✅ Done | Input/output validation and confirmation requirements at step completion |
-| "Be audit-ready by default" | ✅ Done | Org-wide activity feed, per-entity timelines, always-on event capture |
-| Activity visible by operator/person | ✅ Done | Operator filter added to Activity tab in sourcemap |
-| Settings changes tracked | ❌ Missing | Org settings mutations (name, config) do not emit events |
-| User events visible in org activity feed | ❌ Missing | Login, 2FA, role change events not surfaced in Activity tab |
+| "Every action is recorded at the point of work" | ✅ Done | Sourcemap → Activity tab → All |
+| "Every change is preserved in context" | ✅ Done | Any entity's audit history panel or History button |
+| "Every workflow is connected end-to-end" | ✅ Done | Sourcemap → select any item → Timeline view |
+| "Every decision, material and action is reconstructable instantly" | ✅ Done | Sourcemap → trace an item → "Replay as of" date-picker |
+| "Every inventory item is tracked and connected" | ✅ Done | Inventory view → card → Audit history |
+| "Every product in each state of production is tracked" | ✅ Done | Sourcemap temporal replay shows state at any past date |
+| "Capture your work as it happens" | ✅ Done | Events written in same transaction as every mutation |
+| "Understand how your production changes over time" | ✅ Done | Process list → History button; process detail → Audit history |
+| "Reconstruct any production state instantly" | ✅ Done | Sourcemap → Replay as of [date] |
+| "Ensure consistent actions across teams and users" | ✅ Done | Structured workflows enforce defined step definitions |
+| "Reduce errors during your workflow" | ✅ Done | Input/output validation at step completion |
+| "Be audit-ready by default" | ✅ Done | Activity tab is a complete org-wide audit log, always on |
+| Activity visible by operator/person | ✅ Done | Activity tab → operator dropdown filter |
+| Settings changes tracked | ✅ Done | Activity tab → Settings filter |
+| User/auth events in org activity feed | ✅ Done | Activity tab → Users filter |
 
-### Gaps and plan
+---
 
-#### Gap 1 — Temporal trace UI (high value, medium effort)
+## 19. Gap Resolution — Implementation Detail
 
-**What's missing:** Users cannot trigger a "replay as of [date]" from the sourcemap UI. The backend is fully capable.
+### Gap 1 — Temporal trace UI ✅
 
-**Plan:**
-1. Add a date-picker input to the sourcemap header/controls bar (near the search input).
-2. When a date is selected, pass `as_of` to `POST /api/core/sourcemap/trace` and re-render the result.
-3. Show a banner: "Showing provenance as of [date] — not current state" with a "Back to live" button.
-4. This surfaces the temporal reconstruction capability that currently only power users can access via the API.
+**Files:** `app/core/frontend/sourcemap/sourcemap.html`, `app/core/frontend/js/sourcemap.js`, `app/core/frontend/css/sourcemap.css`, `app/core/backend/temporal_dag_tracer.py`, `app/core/backend/backend.py`
 
-**Files:** `app/core/frontend/js/sourcemap.js`, `app/core/frontend/css/sourcemap.css`
+**What was built:**
+- "Replay as of" date-picker added to the controls bar (visible when a trace is active)
+- Clicking Apply calls `smRunTemporalTrace(itemId)` → `POST /api/core/sourcemap/trace` with `as_of: date + 'T23:59:59Z'`
+- `smRenderTemporalTrace(result)` renders a dedicated view: yellow as-of banner, node cards showing each item's name/quantity/type at that point in time, connection count, and event timeline
+- Clicking "Live" resets `temporalAsOf` and re-runs the standard current-state trace
+- `temporal_dag_tracer.py` now includes `event_id` in timeline items so `_human_summary` generates proper text instead of a generic string replace
+- `smClearTrace()` also resets temporal state and the date input
 
-#### Gap 2 — User events in Activity tab (low effort, moderate value)
+**How to use:**
+1. Go to `/core/sourcemap`
+2. Select any inventory item from the browse grid to start a trace
+3. Once the trace is displayed, the controls bar shows "Replay as of [date input] [Apply] [Live]"
+4. Enter a past date and click Apply
+5. A yellow banner appears: "Showing provenance as of [date] — not current state"
+6. Node cards show the item's name, quantity, and type as they were recorded up to that date
+7. The event timeline below lists all events before that date in reverse order
+8. Click Live to return to the current-state trace
 
-**What's missing:** Login, 2FA, and role-change events are captured but filtered out of the org-wide activity feed (entity_type = 'user' is not included by default in the Activity tab filter).
+### Gap 2 — User events in Activity tab ✅
 
-**Plan:**
-1. Add a "Users" pill to the entity type filter buttons in the Activity tab (alongside All/Inventory/Processes/Executions).
-2. Ensure `/api/core/entities/activity` does not filter out `entity_type = 'user'` — verify the backend query includes all entity types.
-3. The `user.*` events have no diff to show, but the summary line ("User logged in", "2FA enabled", "Role changed: viewer → admin") is already generated by `_human_summary`.
+**Files:** `app/core/frontend/js/sourcemap.js`
 
-**Files:** `app/core/frontend/js/sourcemap.js`, `app/core/backend/backend.py` (verify entity filter)
+**What was built:**
+- "Users" filter pill added to the entity type buttons in the Activity tab
+- The backend `/api/core/entities/activity` endpoint already returns all entity types including `user` — no backend change needed
+- `_SM_ENTITY_BADGE` already defined yellow badge for `user` type
 
-#### Gap 3 — Org settings change events (low value, low effort)
+**How to see it:**
+1. Go to `/core/sourcemap` → Activity tab
+2. Click the "Users" pill
+3. See login events, 2FA changes, and role changes for all users in the org
+4. Each entry shows: yellow "User" badge, human-readable summary ("Logged in with 2FA from 192.168.x.x"), actor email, timestamp
 
-**What's missing:** Changes to org settings (name, timezone, feature flags) are not tracked in `entity_events`.
+### Gap 3 — Org settings change events ✅
 
-**Plan:**
-1. Add an `org_settings.updated` event type to the event catalog.
-2. Emit it from the org settings update route in `org_routes.py` with a diff of changed fields.
-3. Surface in Activity tab under a new "Settings" entity type or fold into "Users" filter.
+**Files:** `app/api/routes/org_routes.py`, `app/core/backend/event_writer.py`, `app/core/backend/backend.py`
 
-This is low priority — the platform's core value is production/inventory traceability, not org config. Implement after Gaps 1 and 2.
+**What was built:**
+- `update_org` route captures before-state (name, status) then emits `org.settings_updated` with a diff if anything changed; no event emitted when nothing changes
+- New `org` entity type added to `_parse_entity_type`, `_upsert_summary` dispatcher, and `_human_summary`
+- `_update_org_summary`: upserts `{name, status, last_changed_at, last_changed_by}` in `entity_event_summaries`
+- `_human_summary` for `org.settings_updated` includes what changed: "Organisation settings updated — Name changed to 'Acme Co'"
+- "Settings" pill and neutral grey `.sm-act-badge--org` badge added to Activity tab
 
-#### Gap 4 — Quantity sparkline on inventory cards (design, moderate effort)
+**How to see it:**
+1. Go to `/org/settings` (or wherever the org name/status is editable) and change the org name
+2. Go to `/core/sourcemap` → Activity tab → click "Settings"
+3. See a grey "Settings" badge entry: "Organisation settings updated — Name changed to 'New Name'"
 
-**What's missing:** The original plan described a "quantity history sparkline" on inventory cards. The `quantity_history` array is captured in `entity_event_summaries.summary` (capped at 50 entries) but no sparkline is rendered in the UI.
-
-**Plan:**
-1. Add a minimal SVG sparkline renderer in `inventory/view.html` — take the `quantity_history` array from `event_summary.quantity_history` and draw a polyline.
-2. Show on the card when there are ≥ 3 data points.
-3. Hover tooltip can show the value and date for each point.
+### Gap 4 — Quantity sparkline on inventory cards ✅
 
 **Files:** `app/core/frontend/inventory/view.html`, `app/core/frontend/css/inventory-view.css`
 
-#### Gap 5 — Success rate on process cards (low effort, good UX)
+**What was built:**
+- `buildSparkline(es)` function renders an 80×24px inline SVG polyline from `event_summary.quantity_history`
+- Only renders when there are 2+ data points (flat lines are skipped)
+- Drawn in `var(--color-primary, #3b82f6)` at 75% opacity, positioned to the right of the quantity text
+- CSS: `.inv-view-card__val--qty` uses flex to align text and sparkline; `.inv-sparkline` is `display: block`
 
-**What's missing:** The original plan showed "Success rate X%" on process cards. Currently only total/active/completed counts are shown; cancelled and failed counts are not displayed.
+**How to see it:**
+1. Go to `/core/inventory/view` on a screen narrower than 900px (or use DevTools responsive mode to force card layout)
+2. Find an inventory item that has had at least one quantity adjustment since event sourcing was deployed
+3. In the Quantity row, a small blue sparkline appears to the right of the number showing the quantity trend over time
+4. More adjustments = richer sparkline
 
-**Plan:**
-1. Add `cancelled_executions` and `failed_executions` counts to the `event_summary` on processes (via `entity_event_summaries.summary`).
-2. Display "X% success · Y completed · Z cancelled" on the process list item tertiary line.
+### Gap 5 — Success rate on process cards ✅
 
-**Files:** `app/core/backend/event_writer.py` (update process summary upsert), `app/core/frontend/processes/list.html`
+**Files:** `app/core/frontend/processes/list.html`
 
-#### Gap 6 — Execution evidence count (low effort)
+**What was built:**
+- The tertiary audit line on each process list entry now computes success rate from `event_summary.completed_runs` / `event_summary.total_runs`
+- Only shown when `total_runs > 1` (a single run doesn't have a meaningful rate)
+- Cancelled count shown separately when non-zero: `2 runs · 100% success` or `5 runs · 60% success · 2 cancelled`
+- Data was already tracked in `entity_event_summaries.summary` (`completed_runs`, `cancelled_runs`, `failed_runs`) — this was purely a UI change
 
-**What's missing:** "N evidence files attached" was listed in the card enrichment plan for execution cards. Evidence files may exist in `process_docs_storage` but are not surfaced in the activity/audit context.
+**How to see it:**
+1. Go to `/core/flows` (the process list)
+2. Find a process that has been run at least twice
+3. The grey tertiary line shows: `v3 · Last edited by user@example.com · 13 May 2026 · 4 runs · 75% success · 1 cancelled`
 
-**Plan:**
-1. Add a count of attached documents to the execution card metadata (query the process_docs_storage directory or a docs table).
-2. Surface as "N evidence files" on completed batch cards.
+### Gap 6 — Evidence count on execution cards ✅
 
-This depends on the existing evidence/docs storage model — investigate before estimating effort.
+**Files:** `app/core/frontend/js/flows2-executions.js`
+
+**What was built:**
+- The completed execution card summary line now appends evidence file count: `3 steps completed · 2 inputs consumed · 1 output produced · 2 evidence files`
+- Uses `(execution.evidence || []).length` — the evidence array is already returned in the execution list API response
+- Only shown when `evidenceCount > 0`
+
+**How to see it:**
+1. Go to any process at `/core/flows?id=<uuid>` → Batches tab
+2. Find a completed batch where evidence files were uploaded during execution
+3. Expand the completed batch card — the summary line under "Started by" now includes the evidence file count
