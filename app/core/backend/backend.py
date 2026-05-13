@@ -4153,9 +4153,19 @@ _FIELD_LABELS = {
 
 _ITEM_FIELD_LABELS = {
     "name": "Name", "label": "Label", "quantity": "Quantity", "unit": "Unit",
-    "inventory_type": "Type", "type": "Type", "required": "Required",
+    "inventory_type": "Inventory type", "type": "Type", "required": "Required",
     "is_variable": "Variable qty", "requires_execution_confirmation": "Confirmation required",
     "description": "Description",
+}
+
+# Fields that are auto-populated by the system and should not be reported when
+# they only appear in the after snapshot (i.e. before is None/absent).
+_ITEM_IMPLICIT_FIELDS = frozenset({"inventory_type", "is_variable", "requires_execution_confirmation"})
+
+_INVENTORY_TYPE_LABELS = {
+    "raw_material": "Raw material",
+    "work_in_progress": "Work in progress",
+    "final_product": "Final product",
 }
 
 _ITEM_SKIP_FIELDS = frozenset({"id", "extra_data"})
@@ -4188,16 +4198,20 @@ def _fmt_field_value(val) -> str:
             if parts:
                 return ", ".join(parts)
         return f"{len(val)} item{'s' if len(val) != 1 else ''}"
+    if isinstance(val, str) and val in _INVENTORY_TYPE_LABELS:
+        return _INVENTORY_TYPE_LABELS[val]
     return str(val)
 
 
-def _fmt_sub_val(val) -> str:
+def _fmt_sub_val(val, field: str = "") -> str:
     if val is None:
         return "(none)"
     if isinstance(val, bool):
         return "Yes" if val else "No"
     if isinstance(val, (list, dict)):
         return "(complex)"
+    if field == "inventory_type":
+        return _INVENTORY_TYPE_LABELS.get(str(val), str(val))
     return str(val)
 
 
@@ -4245,13 +4259,17 @@ def _smart_list_diff_rows(label: str, before: list, after: list) -> list[dict]:
             for field in all_fields:
                 b_val = item.get(field)
                 a_val = a_item.get(field)
-                if b_val != a_val:
-                    fl = _ITEM_FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
-                    rows.append({
-                        "label": f"{label} '{_item_display_name(item)}' – {fl}",
-                        "before": _fmt_sub_val(b_val),
-                        "after": _fmt_sub_val(a_val),
-                    })
+                if b_val == a_val:
+                    continue
+                # Skip fields that are auto-populated when they were simply absent before
+                if field in _ITEM_IMPLICIT_FIELDS and b_val is None:
+                    continue
+                fl = _ITEM_FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
+                rows.append({
+                    "label": f"{label} '{_item_display_name(item)}' – {fl}",
+                    "before": _fmt_sub_val(b_val, field),
+                    "after": _fmt_sub_val(a_val, field),
+                })
 
     for item in after:
         k = _item_key(item)
