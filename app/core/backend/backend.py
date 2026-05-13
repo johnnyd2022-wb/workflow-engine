@@ -4151,25 +4151,152 @@ _FIELD_LABELS = {
     "is_draft": "Draft",
 }
 
+_ITEM_FIELD_LABELS = {
+    "name": "Name", "label": "Label", "quantity": "Quantity", "unit": "Unit",
+    "inventory_type": "Type", "type": "Type", "required": "Required",
+    "is_variable": "Variable qty", "requires_execution_confirmation": "Confirmation required",
+    "description": "Description",
+}
+
+_ITEM_SKIP_FIELDS = frozenset({"id", "extra_data"})
+
 
 def _fmt_field_value(val) -> str:
     if val is None:
         return "—"
+    if isinstance(val, bool):
+        return "Yes" if val else "No"
     if isinstance(val, list):
+        if not val:
+            return "(none)"
+        if all(isinstance(i, dict) for i in val):
+            parts = []
+            for item in val:
+                if "name" in item:
+                    s = item["name"]
+                    if item.get("quantity") is not None:
+                        s += f" ({item['quantity']}"
+                        if item.get("unit"):
+                            s += f" {item['unit']}"
+                        s += ")"
+                    parts.append(s)
+                elif "label" in item:
+                    s = item["label"]
+                    if item.get("type"):
+                        s += f" ({item['type']})"
+                    parts.append(s)
+            if parts:
+                return ", ".join(parts)
         return f"{len(val)} item{'s' if len(val) != 1 else ''}"
     return str(val)
 
 
-def _diff_lines(diff: dict) -> list[str]:
-    """Turn a {field: {before, after}} diff into readable 'Field: X → Y' lines."""
-    lines = []
+def _fmt_sub_val(val) -> str:
+    if val is None:
+        return "(none)"
+    if isinstance(val, bool):
+        return "Yes" if val else "No"
+    if isinstance(val, (list, dict)):
+        return "(complex)"
+    return str(val)
+
+
+def _item_key(item: dict) -> str | None:
+    for k in ("id", "name", "label"):
+        if k in item:
+            return str(item[k])
+    return None
+
+
+def _item_display_name(item: dict) -> str:
+    return item.get("name") or item.get("label") or "(item)"
+
+
+def _smart_list_diff_rows(label: str, before: list, after: list) -> list[dict]:
+    """Deep diff two lists of dicts, returning structured {label, before, after} rows."""
+    rows: list[dict] = []
+    before_by_key: dict = {}
+    after_by_key: dict = {}
+    for item in before:
+        k = _item_key(item)
+        if k:
+            before_by_key[k] = item
+    for item in after:
+        k = _item_key(item)
+        if k:
+            after_by_key[k] = item
+
+    if not before_by_key and not after_by_key:
+        if before != after:
+            rows.append({"label": label, "before": _fmt_field_value(before), "after": _fmt_field_value(after)})
+        return rows
+
+    seen: set = set()
+    for item in before:
+        k = _item_key(item)
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        a_item = after_by_key.get(k)
+        if a_item is None:
+            rows.append({"label": label, "before": f"'{_item_display_name(item)}' removed", "after": None})
+        else:
+            all_fields = [f for f in set(item) | set(a_item) if f not in _ITEM_SKIP_FIELDS]
+            for field in all_fields:
+                b_val = item.get(field)
+                a_val = a_item.get(field)
+                if b_val != a_val:
+                    fl = _ITEM_FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
+                    rows.append({
+                        "label": f"{label} '{_item_display_name(item)}' – {fl}",
+                        "before": _fmt_sub_val(b_val),
+                        "after": _fmt_sub_val(a_val),
+                    })
+
+    for item in after:
+        k = _item_key(item)
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        if k not in before_by_key:
+            rows.append({"label": label, "before": None, "after": f"'{_item_display_name(item)}' added"})
+
+    return rows
+
+
+def _build_diff_rows(diff: dict) -> list[dict]:
+    """Build structured diff rows: [{label, before, after}]. before/after may be None."""
+    rows: list[dict] = []
     for field, change in (diff or {}).items():
         if not isinstance(change, dict):
             continue
         label = _FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
-        before = _fmt_field_value(change.get("before"))
-        after = _fmt_field_value(change.get("after"))
-        lines.append(f"{label}: {before} → {after}")
+        before = change.get("before")
+        after = change.get("after")
+        if (isinstance(before, list) and isinstance(after, list)
+                and all(isinstance(i, dict) for i in (before + after))):
+            rows.extend(_smart_list_diff_rows(label, before, after))
+        else:
+            b_str = _fmt_field_value(before)
+            a_str = _fmt_field_value(after)
+            if b_str != a_str:
+                rows.append({"label": label, "before": b_str, "after": a_str})
+    return rows
+
+
+def _diff_lines(diff: dict) -> list[str]:
+    """Return human-readable diff lines as strings (used in summary text)."""
+    lines = []
+    for row in _build_diff_rows(diff):
+        lbl = row["label"]
+        b = row.get("before")
+        a = row.get("after")
+        if b is not None and a is not None:
+            lines.append(f"{lbl}: {b} → {a}")
+        elif a is not None:
+            lines.append(f"{lbl}: {a}")
+        elif b is not None:
+            lines.append(f"{lbl}: {b}")
     return lines
 
 
@@ -4371,7 +4498,7 @@ def entity_story(entity_type: str, entity_id: str):
         "total": total,
         "offset": offset,
         "events": [
-            {**_event_to_dict(ev), "summary": _human_summary(ev)}
+            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _build_diff_rows(ev.diff or {})}
             for ev in events
         ],
     }), 200
@@ -4417,7 +4544,7 @@ def entity_summary_detail(entity_type: str, entity_id: str):
         "entity_type": etype,
         "summary": summary,
         "recent_events": [
-            {**_event_to_dict(ev), "summary": _human_summary(ev)}
+            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _build_diff_rows(ev.diff or {})}
             for ev in reversed(recent)
         ],
     }), 200

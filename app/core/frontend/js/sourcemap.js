@@ -1148,35 +1148,24 @@
     return panel;
   }
 
-  const _SM_STORY_FIELD_LABELS = {
-    name: 'Name', description: 'Description', quantity: 'Quantity', unit: 'Unit',
-    inventory_type: 'Type', supplier: 'Supplier', supplier_batch_number: 'Batch number',
-    barcode: 'Barcode', purchase_date: 'Purchase date', expiry_date: 'Expiry date',
-    step_number: 'Position', inputs: 'Inputs', outputs: 'Outputs',
-    execution_prompts: 'Prompts', category: 'Category', is_draft: 'Draft',
-  };
-
-  function _smStoryDiffBlock(diff) {
-    if (!diff || typeof diff !== 'object') return null;
-    const src = (diff.step && typeof diff.step === 'object') ? diff.step : diff;
-    const rows = Object.keys(src).map((field) => {
-      const c = src[field];
-      if (!c || typeof c !== 'object' || (!('before' in c) && !('after' in c))) return null;
-      const label = _SM_STORY_FIELD_LABELS[field] || (field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' '));
-      const fmtVal = (v) => (v == null || v === '') ? '(none)' : String(v);
-      const row = document.createElement('li');
-      row.className = 'sm-story-diff__row';
-      row.innerHTML =
-        `<span class="sm-story-diff__label">${smEsc(label)}</span>` +
-        `<span class="sm-story-diff__before">${smEsc(fmtVal(c.before))}</span>` +
-        `<span class="sm-story-diff__arrow">→</span>` +
-        `<span class="sm-story-diff__after">${smEsc(fmtVal(c.after))}</span>`;
-      return row;
-    }).filter(Boolean);
-    if (!rows.length) return null;
+  function _smStoryDiffBlock(diffRows) {
+    if (!diffRows || !diffRows.length) return null;
     const ul = document.createElement('ul');
     ul.className = 'sm-story-diff';
-    rows.forEach((r) => ul.appendChild(r));
+    diffRows.forEach((r) => {
+      const li = document.createElement('li');
+      li.className = 'sm-story-diff__row';
+      let html = `<span class="sm-story-diff__label">${smEsc(r.label)}</span>`;
+      if (r.before != null) {
+        html += `<span class="sm-story-diff__before">${smEsc(r.before)}</span>`;
+        html += `<span class="sm-story-diff__arrow">→</span>`;
+      }
+      if (r.after != null) {
+        html += `<span class="sm-story-diff__after">${smEsc(r.after)}</span>`;
+      }
+      li.innerHTML = html;
+      ul.appendChild(li);
+    });
     return ul;
   }
 
@@ -1215,7 +1204,7 @@
           text.textContent = ev.summary || ev.event_type;
           content.appendChild(text);
 
-          const diffEl = _smStoryDiffBlock(ev.diff);
+          const diffEl = _smStoryDiffBlock(ev.diff_rows);
           if (diffEl) content.appendChild(diffEl);
 
           const time = document.createElement('span');

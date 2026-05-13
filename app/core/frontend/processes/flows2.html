@@ -141,29 +141,21 @@
                   try { return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
                   catch (e) { return iso.slice(0, 10); }
                 }
-                var FIELD_LABELS = { name: 'Name', description: 'Description', step_number: 'Position',
-                  inputs: 'Inputs', outputs: 'Outputs', execution_prompts: 'Prompts',
-                  quantity: 'Quantity', unit: 'Unit', category: 'Category', is_draft: 'Draft' };
-                function fmtVal(v) {
-                  if (v == null) return '—';
-                  if (Array.isArray(v)) return v.length + ' item' + (v.length !== 1 ? 's' : '');
-                  return String(v);
-                }
-                function diffBlock(diff) {
-                  if (!diff || typeof diff !== 'object') return '';
-                  var src = (diff.step && typeof diff.step === 'object') ? diff.step : diff;
-                  var rows = Object.keys(src).map(function (field) {
-                    var c = src[field];
-                    if (!c || typeof c !== 'object') return '';
-                    var label = FIELD_LABELS[field] || (field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' '));
+                function buildDiffHtml(diffRows) {
+                  if (!diffRows || !diffRows.length) return '';
+                  var rows = diffRows.map(function (r) {
+                    var beforeHtml = r.before != null
+                      ? '<span class="flows2-audit-diff__before">' + esc(r.before) + '</span><span class="flows2-audit-diff__arrow">→</span>'
+                      : '';
+                    var afterHtml = r.after != null
+                      ? '<span class="flows2-audit-diff__after">' + esc(r.after) + '</span>'
+                      : '';
                     return '<li class="flows2-audit-diff__row">' +
-                      '<span class="flows2-audit-diff__label">' + esc(label) + '</span>' +
-                      '<span class="flows2-audit-diff__before">' + esc(fmtVal(c.before)) + '</span>' +
-                      '<span class="flows2-audit-diff__arrow">→</span>' +
-                      '<span class="flows2-audit-diff__after">' + esc(fmtVal(c.after)) + '</span>' +
+                      '<span class="flows2-audit-diff__label">' + esc(r.label) + '</span>' +
+                      beforeHtml + afterHtml +
                       '</li>';
-                  }).filter(Boolean).join('');
-                  return rows ? '<ul class="flows2-audit-diff">' + rows + '</ul>' : '';
+                  }).join('');
+                  return '<ul class="flows2-audit-diff">' + rows + '</ul>';
                 }
                 function renderTimeline(events) {
                   return '<ol class="flows2-audit-timeline">' +
@@ -172,7 +164,7 @@
                         '<span class="flows2-audit-timeline__dot"></span>' +
                         '<div class="flows2-audit-timeline__content">' +
                           '<span class="flows2-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
-                          diffBlock(ev.diff) +
+                          buildDiffHtml(ev.diff_rows) +
                         '</div>' +
                         '<span class="flows2-audit-timeline__time">' + esc(fmtDate(ev.at)) + '</span>' +
                         '</li>';
