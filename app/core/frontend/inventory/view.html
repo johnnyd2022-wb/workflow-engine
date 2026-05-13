@@ -149,6 +149,16 @@
         } catch (e) { return iso.slice(0, 10); }
       }
 
+      function fmtDateTime(iso) {
+        if (!iso) return '—';
+        try {
+          const d = new Date(iso);
+          const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+          const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          return date + '<br><span style="opacity:0.7">' + time + '</span>';
+        } catch (e) { return iso.slice(0, 16); }
+      }
+
       function buildSparkline(es) {
         if (!es) return '';
         var hist = es.quantity_history;
@@ -207,7 +217,7 @@
                 buildDiffHtml(ev.diff_rows) +
                 actorHtml +
               '</div>' +
-              '<span class="inv-audit-timeline__time">' + fmtDate(ev.at) + '</span>' +
+              '<span class="inv-audit-timeline__time">' + fmtDateTime(ev.at) + '</span>' +
               '</li>';
           }).join('') +
           '</ol>';

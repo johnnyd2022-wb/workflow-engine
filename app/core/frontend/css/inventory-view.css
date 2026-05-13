@@ -191,10 +191,11 @@
     .inv-audit-timeline__time {
       font-size: 0.7rem;
       color: var(--text-secondary, #6b7280);
-      white-space: nowrap;
       padding-top: 2px;
-      max-width: 80px;
+      min-width: 72px;
+      max-width: 90px;
       text-align: right;
+      line-height: 1.5;
     }
     .inv-audit-diff {
       list-style: none;
