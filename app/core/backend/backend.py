@@ -25,10 +25,10 @@ from app.core.backend.complete_step_payload import (
 from app.core.backend.complete_step_payload import (
     MAX_JSON_DEPTH as _STRIP_MAX_DEPTH,
 )
+from app.core.backend.event_writer import EventWriter
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_docs import process_docs_routes
-from app.core.backend.event_writer import EventWriter
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
@@ -1222,12 +1222,12 @@ def list_processes():
         execs_by_process[e.process_id].append(e)
 
     # Batch-load process event summaries
-    from app.core.db.models.entity_event_summary import EntityEventSummary as _EES_P
+    from app.core.db.models.entity_event_summary import EntityEventSummary as _ees_p
 
     proc_ids_all = [p.id for p in processes]
     proc_summary_by_id: dict = {}
     if proc_ids_all:
-        proc_ees = db_session.query(_EES_P).filter(_EES_P.entity_id.in_(proc_ids_all)).all()
+        proc_ees = db_session.query(_ees_p).filter(_ees_p.entity_id.in_(proc_ids_all)).all()
         proc_summary_by_id = {str(r.entity_id): r.summary for r in proc_ees}
 
     result = []
@@ -1766,12 +1766,12 @@ def list_executions():
     evidence_by_execution = list_evidence_for_executions_batch([e.id for e in executions], org_id, executions_by_id)
 
     # Batch-load execution event summaries
-    from app.core.db.models.entity_event_summary import EntityEventSummary as _EES_E
+    from app.core.db.models.entity_event_summary import EntityEventSummary as _ees_e
 
     exec_ids_all = [e.id for e in executions]
     exec_summary_by_id: dict = {}
     if exec_ids_all:
-        exec_ees = db_session.query(_EES_E).filter(_EES_E.entity_id.in_(exec_ids_all)).all()
+        exec_ees = db_session.query(_ees_e).filter(_ees_e.entity_id.in_(exec_ids_all)).all()
         exec_summary_by_id = {str(r.entity_id): r.summary for r in exec_ees}
 
     result = []
@@ -2680,12 +2680,12 @@ def list_inventory():
             process_by_id = {p.id: p for p in loaded_procs}
 
     # Batch-load event summaries for card enrichment (single query, no N+1)
-    from app.core.db.models.entity_event_summary import EntityEventSummary as _EES
+    from app.core.db.models.entity_event_summary import EntityEventSummary as _ees
 
     item_ids_all = [item.id for item in items]
     event_summary_by_id: dict = {}
     if item_ids_all:
-        ees_rows = db_session.query(_EES).filter(_EES.entity_id.in_(item_ids_all)).all()
+        ees_rows = db_session.query(_ees).filter(_ees.entity_id.in_(item_ids_all)).all()
         event_summary_by_id = {str(r.entity_id): r.summary for r in ees_rows}
 
     result = []
@@ -4302,7 +4302,7 @@ def _fmt_sub_val(val, field: str = "") -> str:
         return "(none)"
     if isinstance(val, bool):
         return "Yes" if val else "No"
-    if isinstance(val, (list, dict)):
+    if isinstance(val, list | dict):
         return "(complex)"
     if field in ("inventory_type", "expected_inventory_type"):
         return _INVENTORY_TYPE_LABELS.get(str(val), str(val))
@@ -4508,7 +4508,7 @@ def _human_summary(ev) -> str:
     if et == "inventory_item.updated":
         if not d:
             return "Updated"
-        _FIELD_LABELS = {
+        field_labels = {
             "name": "name",
             "inventory_type": "type",
             "quantity": "quantity",
@@ -4519,7 +4519,7 @@ def _human_summary(ev) -> str:
             "expiry_date": "expiry date",
             "barcode": "barcode",
         }
-        changed = [_FIELD_LABELS.get(k, k) for k in d]
+        changed = [field_labels.get(k, k) for k in d]
         return "Updated " + ", ".join(changed)
 
     if et == "inventory_item.deleted":
@@ -4703,8 +4703,9 @@ def _merge_inventory_legacy_audit(db, eid: UUID, org_id: UUID, event_dicts: list
       items (covers pre-event-sourcing items and barcode re-stocks).
     - user_id is always stripped.
     """
+    from datetime import datetime
+
     from app.core.db.models.inventory_item import InventoryItem
-    from datetime import datetime, timezone
 
     item = db.query(InventoryItem).filter(InventoryItem.id == eid, InventoryItem.org_id == org_id).first()
     if not item or not item.extra_data:
@@ -4934,8 +4935,8 @@ def sourcemap_objects():
     objects = []
     total = 0
 
-    from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.execution import Execution
+    from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.process import Process
 
     if not entity_type_filter or entity_type_filter == "inventory_item":

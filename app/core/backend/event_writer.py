@@ -174,7 +174,7 @@ def _json_dumps(obj) -> str:
     def default(o):
         if isinstance(o, Decimal):
             return str(o)
-        if isinstance(o, (datetime,)):
+        if isinstance(o, datetime):
             return o.isoformat()
         if isinstance(o, UUID):
             return str(o)

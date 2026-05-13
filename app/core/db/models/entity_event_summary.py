@@ -4,7 +4,6 @@ from datetime import datetime
 
 from sqlalchemy import Column, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
 
