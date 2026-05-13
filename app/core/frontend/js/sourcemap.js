@@ -1148,6 +1148,38 @@
     return panel;
   }
 
+  const _SM_STORY_FIELD_LABELS = {
+    name: 'Name', description: 'Description', quantity: 'Quantity', unit: 'Unit',
+    inventory_type: 'Type', supplier: 'Supplier', supplier_batch_number: 'Batch number',
+    barcode: 'Barcode', purchase_date: 'Purchase date', expiry_date: 'Expiry date',
+    step_number: 'Position', inputs: 'Inputs', outputs: 'Outputs',
+    execution_prompts: 'Prompts', category: 'Category', is_draft: 'Draft',
+  };
+
+  function _smStoryDiffBlock(diff) {
+    if (!diff || typeof diff !== 'object') return null;
+    const src = (diff.step && typeof diff.step === 'object') ? diff.step : diff;
+    const rows = Object.keys(src).map((field) => {
+      const c = src[field];
+      if (!c || typeof c !== 'object' || (!('before' in c) && !('after' in c))) return null;
+      const label = _SM_STORY_FIELD_LABELS[field] || (field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' '));
+      const fmtVal = (v) => (v == null || v === '') ? '(none)' : String(v);
+      const row = document.createElement('li');
+      row.className = 'sm-story-diff__row';
+      row.innerHTML =
+        `<span class="sm-story-diff__label">${smEsc(label)}</span>` +
+        `<span class="sm-story-diff__before">${smEsc(fmtVal(c.before))}</span>` +
+        `<span class="sm-story-diff__arrow">→</span>` +
+        `<span class="sm-story-diff__after">${smEsc(fmtVal(c.after))}</span>`;
+      return row;
+    }).filter(Boolean);
+    if (!rows.length) return null;
+    const ul = document.createElement('ul');
+    ul.className = 'sm-story-diff';
+    rows.forEach((r) => ul.appendChild(r));
+    return ul;
+  }
+
   function smOpenStoryPanel(itemId, itemName) {
     const panel = smEnsureStoryPanel();
     const title = document.getElementById('sm-story-panel-title');
@@ -1171,16 +1203,27 @@
         events.forEach((ev) => {
           const li = document.createElement('li');
           li.className = 'sm-story-timeline__item';
+
           const dot = document.createElement('span');
           dot.className = 'sm-story-timeline__dot';
+
+          const content = document.createElement('div');
+          content.className = 'sm-story-timeline__content';
+
           const text = document.createElement('span');
           text.className = 'sm-story-timeline__text';
           text.textContent = ev.summary || ev.event_type;
+          content.appendChild(text);
+
+          const diffEl = _smStoryDiffBlock(ev.diff);
+          if (diffEl) content.appendChild(diffEl);
+
           const time = document.createElement('span');
           time.className = 'sm-story-timeline__time';
           time.textContent = ev.at ? new Date(ev.at).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+
           li.appendChild(dot);
-          li.appendChild(text);
+          li.appendChild(content);
           li.appendChild(time);
           ol.appendChild(li);
         });

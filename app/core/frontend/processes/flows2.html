@@ -135,6 +135,51 @@
             </section>
             <script>
               (function () {
+                function esc(s) { var d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
+                function fmtDate(iso) {
+                  if (!iso) return '';
+                  try { return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+                  catch (e) { return iso.slice(0, 10); }
+                }
+                var FIELD_LABELS = { name: 'Name', description: 'Description', step_number: 'Position',
+                  inputs: 'Inputs', outputs: 'Outputs', execution_prompts: 'Prompts',
+                  quantity: 'Quantity', unit: 'Unit', category: 'Category', is_draft: 'Draft' };
+                function fmtVal(v) {
+                  if (v == null) return '—';
+                  if (Array.isArray(v)) return v.length + ' item' + (v.length !== 1 ? 's' : '');
+                  return String(v);
+                }
+                function diffBlock(diff) {
+                  if (!diff || typeof diff !== 'object') return '';
+                  var src = (diff.step && typeof diff.step === 'object') ? diff.step : diff;
+                  var rows = Object.keys(src).map(function (field) {
+                    var c = src[field];
+                    if (!c || typeof c !== 'object') return '';
+                    var label = FIELD_LABELS[field] || (field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' '));
+                    return '<li class="flows2-audit-diff__row">' +
+                      '<span class="flows2-audit-diff__label">' + esc(label) + '</span>' +
+                      '<span class="flows2-audit-diff__before">' + esc(fmtVal(c.before)) + '</span>' +
+                      '<span class="flows2-audit-diff__arrow">→</span>' +
+                      '<span class="flows2-audit-diff__after">' + esc(fmtVal(c.after)) + '</span>' +
+                      '</li>';
+                  }).filter(Boolean).join('');
+                  return rows ? '<ul class="flows2-audit-diff">' + rows + '</ul>' : '';
+                }
+                function renderTimeline(events) {
+                  return '<ol class="flows2-audit-timeline">' +
+                    events.map(function (ev) {
+                      return '<li class="flows2-audit-timeline__item">' +
+                        '<span class="flows2-audit-timeline__dot"></span>' +
+                        '<div class="flows2-audit-timeline__content">' +
+                          '<span class="flows2-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
+                          diffBlock(ev.diff) +
+                        '</div>' +
+                        '<span class="flows2-audit-timeline__time">' + esc(fmtDate(ev.at)) + '</span>' +
+                        '</li>';
+                    }).join('') +
+                    '</ol>';
+                }
+
                 var det = document.getElementById('flows2-audit-log-details');
                 if (!det) return;
                 det.addEventListener('toggle', function () {
@@ -152,21 +197,7 @@
                         body.innerHTML = '<p class="flows2-audit-log__placeholder">No history recorded yet.</p>';
                         return;
                       }
-                      function esc(s) { var d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
-                      function fmtDate(iso) {
-                        if (!iso) return '';
-                        try { return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
-                        catch (e) { return iso.slice(0, 10); }
-                      }
-                      body.innerHTML = '<ol class="flows2-audit-timeline">' +
-                        events.map(function (ev) {
-                          return '<li class="flows2-audit-timeline__item">' +
-                            '<span class="flows2-audit-timeline__dot"></span>' +
-                            '<span class="flows2-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
-                            '<span class="flows2-audit-timeline__time">' + esc(fmtDate(ev.at)) + '</span>' +
-                            '</li>';
-                        }).join('') +
-                        '</ol>';
+                      body.innerHTML = renderTimeline(events);
                     })
                     .catch(function () {
                       body.dataset.loaded = 'true';

@@ -196,6 +196,57 @@
           '</details>';
       }
 
+      function renderTimelineEvents(events) {
+        var FIELD_LABELS = { name: 'Name', description: 'Description', quantity: 'Quantity', unit: 'Unit',
+          inventory_type: 'Type', supplier: 'Supplier', supplier_batch_number: 'Batch', barcode: 'Barcode',
+          purchase_date: 'Purchase date', expiry_date: 'Expiry date', step_number: 'Position',
+          inputs: 'Inputs', outputs: 'Outputs', execution_prompts: 'Prompts' };
+        function fmtVal(v) {
+          if (v == null) return '—';
+          if (Array.isArray(v)) return v.length + ' item' + (v.length !== 1 ? 's' : '');
+          return String(v);
+        }
+        function diffLines(diff) {
+          if (!diff || typeof diff !== 'object') return [];
+          var lines = [];
+          Object.keys(diff).forEach(function (field) {
+            var change = diff[field];
+            if (!change || typeof change !== 'object') return;
+            var label = FIELD_LABELS[field] || field.replace(/_/g, ' ');
+            label = label.charAt(0).toUpperCase() + label.slice(1);
+            lines.push({ label: label, before: fmtVal(change.before), after: fmtVal(change.after) });
+          });
+          return lines;
+        }
+        return '<ol class="inv-audit-timeline">' +
+          events.map(function (ev) {
+            // Diff can be at top level or nested under 'step' (for step_updated)
+            var rawDiff = ev.diff || null;
+            var diffToShow = rawDiff;
+            if (rawDiff && rawDiff.step && typeof rawDiff.step === 'object') diffToShow = rawDiff.step;
+            var changes = diffLines(diffToShow);
+            var diffHtml = changes.length
+              ? '<ul class="inv-audit-diff">' + changes.map(function (c) {
+                  return '<li class="inv-audit-diff__row">' +
+                    '<span class="inv-audit-diff__label">' + esc(c.label) + '</span>' +
+                    '<span class="inv-audit-diff__before">' + esc(c.before) + '</span>' +
+                    '<span class="inv-audit-diff__arrow">→</span>' +
+                    '<span class="inv-audit-diff__after">' + esc(c.after) + '</span>' +
+                    '</li>';
+                }).join('') + '</ul>'
+              : '';
+            return '<li class="inv-audit-timeline__item">' +
+              '<span class="inv-audit-timeline__dot"></span>' +
+              '<div class="inv-audit-timeline__content">' +
+                '<span class="inv-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
+                diffHtml +
+              '</div>' +
+              '<span class="inv-audit-timeline__time">' + fmtDate(ev.at) + '</span>' +
+              '</li>';
+          }).join('') +
+          '</ol>';
+      }
+
       function wireHistoryToggles(container) {
         container.querySelectorAll('.inv-audit-history').forEach(function (det) {
           det.addEventListener('toggle', function () {
@@ -212,15 +263,7 @@
                   body.innerHTML = '<span class="inv-audit-history__empty">No history recorded yet.</span>';
                   return;
                 }
-                body.innerHTML = '<ol class="inv-audit-timeline">' +
-                  events.map(function (ev) {
-                    return '<li class="inv-audit-timeline__item">' +
-                      '<span class="inv-audit-timeline__dot"></span>' +
-                      '<span class="inv-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
-                      '<span class="inv-audit-timeline__time">' + fmtDate(ev.at) + '</span>' +
-                      '</li>';
-                  }).join('') +
-                  '</ol>';
+                body.innerHTML = renderTimelineEvents(events);
               })
               .catch(function () {
                 body.dataset.loaded = 'true';

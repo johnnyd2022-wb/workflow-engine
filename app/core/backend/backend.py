@@ -4132,64 +4132,198 @@ def _event_to_dict(ev) -> dict:
     }
 
 
+_FIELD_LABELS = {
+    "name": "Name",
+    "description": "Description",
+    "quantity": "Quantity",
+    "unit": "Unit",
+    "inventory_type": "Type",
+    "supplier": "Supplier",
+    "supplier_batch_number": "Batch number",
+    "barcode": "Barcode",
+    "purchase_date": "Purchase date",
+    "expiry_date": "Expiry date",
+    "step_number": "Position",
+    "inputs": "Inputs",
+    "outputs": "Outputs",
+    "execution_prompts": "Prompts",
+    "category": "Category",
+    "is_draft": "Draft",
+}
+
+
+def _fmt_field_value(val) -> str:
+    if val is None:
+        return "—"
+    if isinstance(val, list):
+        return f"{len(val)} item{'s' if len(val) != 1 else ''}"
+    return str(val)
+
+
+def _diff_lines(diff: dict) -> list[str]:
+    """Turn a {field: {before, after}} diff into readable 'Field: X → Y' lines."""
+    lines = []
+    for field, change in (diff or {}).items():
+        if not isinstance(change, dict):
+            continue
+        label = _FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
+        before = _fmt_field_value(change.get("before"))
+        after = _fmt_field_value(change.get("after"))
+        lines.append(f"{label}: {before} → {after}")
+    return lines
+
+
 def _human_summary(ev) -> str:
     et = ev.event_type
     p = ev.payload or {}
+    d = ev.diff or {}
     actor = ev.actor_label or "System"
+
     if et == "inventory_item.created":
-        method = p.get("add_method", "manual")
-        return f"Added by {actor} via {method.replace('_', ' ')}"
+        qty = p.get("quantity", "")
+        unit = p.get("unit", "")
+        method = p.get("add_method", "manual").replace("_", " ")
+        inv_type = (p.get("inventory_type") or "").replace("_", " ")
+        parts = [f"Added {qty} {unit}".strip()]
+        if inv_type:
+            parts[0] += f" ({inv_type})"
+        parts.append(f"via {method} by {actor}")
+        supplier = p.get("supplier")
+        batch = p.get("supplier_batch_number")
+        if supplier:
+            parts.append(f"· supplier: {supplier}")
+        if batch:
+            parts.append(f"· batch: {batch}")
+        return " ".join(parts)
+
     if et == "inventory_item.quantity_adjusted":
-        return f"Quantity adjusted: {p.get('quantity_before')} → {p.get('quantity_after')} {p.get('unit', '')} by {actor}"
+        before = p.get("quantity_before", "?")
+        after = p.get("quantity_after", p.get("quantity", "?"))
+        unit = p.get("unit", "")
+        return f"Quantity adjusted {before} → {after} {unit} by {actor}".strip()
+
     if et == "inventory_item.consumed":
         qty = p.get("quantity_consumed", "?")
         unit = p.get("unit", "")
         step = p.get("step_name", "")
-        return f"{qty} {unit} consumed in {step} by {actor}"
+        exec_id = p.get("execution_id", "")
+        base = f"{qty} {unit} consumed".strip()
+        if step:
+            base += f" in '{step}'"
+        base += f" by {actor}"
+        return base
+
     if et == "inventory_item.produced":
         qty = p.get("quantity_produced", "?")
         unit = p.get("unit", "")
-        return f"{qty} {unit} produced by {actor}"
+        step = p.get("step_name", "")
+        base = f"{qty} {unit} produced".strip()
+        if step:
+            base += f" by '{step}'"
+        base += f" (recorded by {actor})"
+        return base
+
     if et == "inventory_item.wasted":
         qty = p.get("quantity_wasted", "?")
         unit = p.get("unit", "")
         reason = p.get("reason", "")
-        return f"{qty} {unit} wasted — {reason} by {actor}"
+        base = f"{qty} {unit} wasted".strip()
+        if reason:
+            base += f" — {reason}"
+        base += f" by {actor}"
+        return base
+
     if et == "inventory_item.updated":
+        changed = _diff_lines(d)
+        if changed:
+            return f"Updated by {actor}: {'; '.join(changed)}"
         return f"Updated by {actor}"
+
     if et == "inventory_item.deleted":
-        return f"Deleted by {actor}"
+        name = p.get("name", "")
+        return f"Deleted{(' ' + name) if name else ''} by {actor}"
+
     if et == "execution.created":
-        return f"Execution started by {actor}"
+        steps = p.get("total_steps", "")
+        ver = p.get("process_version_number", "")
+        base = f"Batch started by {actor}"
+        if steps:
+            base += f" — {steps} steps"
+        if ver:
+            base += f" (process v{ver})"
+        return base
+
     if et == "execution.step_completed":
-        step = p.get("step_name", f"Step {p.get('step_number','?')}")
-        return f"{step} completed by {actor}"
+        step = p.get("step_name", f"Step {p.get('step_number', '?')}")
+        consumed = p.get("items_consumed") or []
+        produced = p.get("items_produced") or []
+        base = f"'{step}' completed by {actor}"
+        if consumed:
+            base += f" — {len(consumed)} input{'s' if len(consumed) != 1 else ''} consumed"
+        if produced:
+            base += f", {len(produced)} output{'s' if len(produced) != 1 else ''} produced"
+        return base
+
     if et == "execution.completed":
-        return f"Execution completed by {actor}"
+        steps = p.get("total_steps", "")
+        base = "Batch completed"
+        if steps:
+            base += f" ({steps} steps)"
+        return base
+
     if et == "process.created":
-        return f"Process created by {actor}"
+        name = p.get("name", "")
+        return f"Process{(' ' + repr(name)) if name else ''} created by {actor}"
+
     if et == "process.updated":
+        changed = _diff_lines(d)
+        if changed:
+            return f"Process updated by {actor}: {'; '.join(changed)}"
         return f"Process updated by {actor}"
+
     if et == "process.step_added":
         step = (p.get("step") or {}).get("name", "step")
-        return f"Step '{step}' added by {actor}"
+        pos = (p.get("step") or {}).get("step_number", "")
+        base = f"Step '{step}' added by {actor}"
+        if pos:
+            base += f" at position {pos}"
+        return base
+
     if et == "process.step_updated":
-        step = (p.get("step") or {}).get("name", "step")
-        return f"Step '{step}' updated by {actor}"
+        step_name = (p.get("step") or {}).get("name", "step")
+        step_diff = (d.get("step") or {}) if d else {}
+        changed = _diff_lines(step_diff)
+        if changed:
+            return f"Step '{step_name}' updated by {actor}: {'; '.join(changed)}"
+        return f"Step '{step_name}' updated by {actor}"
+
     if et == "process.step_deleted":
         step = (p.get("deleted_step") or {}).get("name", "step")
-        return f"Step '{step}' deleted by {actor}"
+        return f"Step '{step}' removed by {actor}"
+
+    if et == "process.deleted":
+        name = p.get("name", "")
+        return f"Process{(' ' + repr(name)) if name else ''} deleted by {actor}"
+
     if et == "user.created":
         return f"Account created — {p.get('email', '')}"
+
     if et == "user.login":
         method = "with 2FA" if p.get("2fa_used") else "with password"
         return f"Logged in {method} from {p.get('ip', '?')}"
+
     if et == "user.login_failed":
         return f"Login failed from {p.get('ip', '?')} (attempt {p.get('failed_attempts', '?')})"
+
     if et == "user.2fa_enabled":
         return f"Two-factor authentication enabled by {actor}"
+
     if et == "user.2fa_disabled":
         return f"Two-factor authentication disabled by {actor}"
+
+    if et == "user.role_changed":
+        return f"Role changed from {p.get('old_role', '?')} to {p.get('new_role', '?')} by {actor}"
+
     return et.replace(".", " — ").replace("_", " ").capitalize()
 
 

@@ -957,7 +957,7 @@
     .flows2-audit-timeline__item {
       display: grid;
       grid-template-columns: 10px 1fr auto;
-      align-items: baseline;
+      align-items: start;
       gap: 10px;
       padding: 7px 0;
       border-bottom: 1px solid var(--border-light, #f3f4f6);
@@ -969,17 +969,44 @@
       height: 7px;
       border-radius: 50%;
       background: var(--primary, #3b82f6);
-      margin-top: 4px;
+      margin-top: 5px;
       flex-shrink: 0;
     }
+    .flows2-audit-timeline__content { display: flex; flex-direction: column; gap: 4px; }
     .flows2-audit-timeline__text { color: var(--text-primary, #111827); line-height: 1.4; }
     .flows2-audit-timeline__time {
       font-size: 0.7rem;
       color: var(--text-tertiary, #9ca3af);
       white-space: nowrap;
+      padding-top: 3px;
     }
+    .flows2-audit-diff {
+      list-style: none;
+      margin: 0;
+      padding: 4px 6px;
+      background: var(--bg-hover, rgba(0,0,0,0.025));
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .flows2-audit-diff__row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px;
+      font-size: 0.72rem;
+    }
+    .flows2-audit-diff__label { color: var(--text-secondary, #6b7280); font-weight: 500; flex-shrink: 0; }
+    .flows2-audit-diff__label::after { content: ':'; }
+    .flows2-audit-diff__before { color: #dc2626; text-decoration: line-through; word-break: break-all; }
+    .flows2-audit-diff__arrow { color: var(--text-secondary, #6b7280); flex-shrink: 0; }
+    .flows2-audit-diff__after { color: #16a34a; font-weight: 500; word-break: break-all; }
     html[data-spa-theme="dark"] .flows2-audit-timeline__text { color: var(--text-primary, #f3f4f6); }
     html[data-spa-theme="dark"] .flows2-audit-timeline__item { border-color: var(--border-light, rgba(255,255,255,0.08)); }
+    html[data-spa-theme="dark"] .flows2-audit-diff { background: rgba(255,255,255,0.04); }
+    html[data-spa-theme="dark"] .flows2-audit-diff__before { color: #f87171; }
+    html[data-spa-theme="dark"] .flows2-audit-diff__after { color: #4ade80; }
 
 /* Notification toast animation */
     @keyframes slideInRight {
