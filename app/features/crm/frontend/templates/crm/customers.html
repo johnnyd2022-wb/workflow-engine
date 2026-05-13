@@ -31,7 +31,7 @@
         </button>
       </template>
       <template x-if="!isConnected">
-        <a href="/crm/xero/auth" class="crm-btn crm-btn--primary crm-btn--sm">
+        <a href="/crm/xero/auth" hx-boost="false" class="crm-btn crm-btn--primary crm-btn--sm">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           Connect Xero
         </a>
@@ -54,7 +54,7 @@
         <strong>Connect Xero to sync your customers</strong>
         <p>Your contacts and invoices will appear here once Xero is connected.</p>
       </div>
-      <a href="/crm/xero/auth" class="crm-btn crm-btn--primary crm-btn--sm">Connect Xero</a>
+      <a href="/crm/xero/auth" hx-boost="false" class="crm-btn crm-btn--primary crm-btn--sm">Connect Xero</a>
     </div>
   </template>
 
@@ -105,7 +105,7 @@
         <h3 x-text="search ? 'No customers match your search' : 'No customers yet'">No customers yet</h3>
         <p x-text="search ? 'Try a different search term.' : isConnected ? 'Sync Xero to import your contacts.' : 'Connect Xero to get started.'"></p>
         <template x-if="!isConnected">
-          <a href="/crm/xero/auth" class="crm-btn crm-btn--primary" style="margin-top:8px;">Connect Xero</a>
+          <a href="/crm/xero/auth" hx-boost="false" class="crm-btn crm-btn--primary" style="margin-top:8px;">Connect Xero</a>
         </template>
       </div>
     </template>

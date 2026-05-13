@@ -120,7 +120,7 @@
               >Disconnect</button>
             </template>
             <template x-if="!loading && !connected">
-              <a href="/crm/xero/auth" class="btn btn-primary btn-sm integration-connect-btn">Connect</a>
+              <a href="/crm/xero/auth" hx-boost="false" class="btn btn-primary btn-sm integration-connect-btn">Connect</a>
             </template>
           </div>
         </div>
