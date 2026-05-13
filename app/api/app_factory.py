@@ -60,6 +60,12 @@ def create_app():
 
     app.register_blueprint(core_bp)
 
+    # Register CRM blueprint (feature-flagged)
+    if config.crm_enabled:
+        from app.features.crm.crm_bp import create_crm_blueprint
+
+        app.register_blueprint(create_crm_blueprint())
+
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
     @limiter.exempt
@@ -245,6 +251,10 @@ def create_app():
                 return ""
 
             return dict(csrf_token=csrf_token)
+
+    @app.context_processor
+    def _inject_feature_flags():
+        return dict(crm_enabled=config.crm_enabled)
 
     # Trust Cloudflare's forwarded headers (1 proxy hop)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)

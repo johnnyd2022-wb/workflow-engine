@@ -157,6 +157,10 @@ class Config:
         return self.get("xero", "client_secret", "")
 
     @property
+    def xero_redirect_uri(self) -> str:
+        return self.get("xero", "redirect_uri", "")
+
+    @property
     def sender_email(self) -> str:
         return self.get("email", "sender_email", "")
 

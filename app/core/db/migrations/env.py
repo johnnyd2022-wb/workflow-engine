@@ -20,6 +20,15 @@ from app.core.db.models.inventory_movement import InventoryMovement
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.process_version import ProcessVersion
+from app.features.crm.models.xero_tenant import XeroTenant
+from app.features.crm.models.xero_oauth_token import XeroOAuthToken
+from app.features.crm.models.xero_contact import XeroContact
+from app.features.crm.models.xero_invoice import XeroInvoice
+from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+from app.features.crm.models.xero_sync_job import XeroSyncJob
+from app.features.crm.models.product_mapping import ProductMapping
+from app.features.crm.models.crm_note import CRMNote
+from app.features.crm.models.crm_task import CRMTask
 from app.utils.config_loader import config
 
 # this is the Alembic Config object, which provides
