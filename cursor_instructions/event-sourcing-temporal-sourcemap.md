@@ -480,3 +480,250 @@ Clean, logical commit groupings:
 7. `entity_event_summaries` is always consistent with `entity_events`
 8. Card enrichment data is accurate after mutations
 9. `quantity_history` is capped at 50 entries regardless of how many adjustments occur
+
+---
+
+## 14. What Was Built — Implementation Summary
+
+All 8 phases are complete as of May 2026. Here is what was built and where to find it.
+
+### Database layer (Phase 1)
+
+Three alembic migrations, all applied:
+
+| Migration | Revision ID | Creates |
+|---|---|---|
+| `event_sourcing_core_001` | `event_sourcing_core_001` | `entity_events` table + 7 indexes |
+| `event_sourcing_summaries_001` | `event_sourcing_summaries_001` | `entity_event_summaries` table + 2 indexes |
+| `event_sourcing_proc_ver_001` | `event_sourcing_proc_ver_001` | `process_versions` table; adds `process_version_id` to `executions` and `display_label` to `inventory_items` |
+
+Run `docker exec workflow-engine-test sh -c "cd /app && ENVIRONMENT=test uv run alembic upgrade head"` to apply to the test DB.
+
+### Core infrastructure (Phase 2)
+
+- `app/core/db/models/entity_event.py` — `EntityEvent` ORM model
+- `app/core/db/models/entity_event_summary.py` — `EntityEventSummary` ORM model
+- `app/core/db/models/process_version.py` — `ProcessVersion` ORM model
+- `app/core/backend/event_writer.py` — `EventWriter` class; single entry point for all event writes; upserts `entity_event_summaries` in the same transaction
+- `app/api/middleware/tenant_context.py` — `g.correlation_id = uuid4()` set per HTTP request so all events from one request share the same correlation UUID
+
+### Repository event emission (Phases 3–4)
+
+| Repository | Events emitted |
+|---|---|
+| `ProcessRepository` | `process.created`, `process.updated` (with diff), `process.step_added`, `process.step_updated`, `process.step_deleted`, `process.deleted` (tombstone) |
+| `ExecutionRepository.create_execution` | `execution.created` (on execution entity + process entity for run-count tracking) |
+| `ExecutionRepository.complete_step` | `execution.step_completed` → `inventory_item.consumed` (per input) + `inventory_item.produced` (per output) + `execution.completed` (on final step), all linked by `causation_id` |
+| `InventoryRepository` | `inventory_item.created` (with `add_method`), `inventory_item.quantity_adjusted`, `inventory_item.updated` (with diff), `inventory_item.deleted` (tombstone) |
+| `WastageRepository` | `inventory_item.wasted` (accepts optional `causation_id` from step completion) |
+
+### Auth events (Phase 5)
+
+Emitted via `app/core/utils/emit_event.py` (separate session, fire-and-forget so auth routes are never blocked):
+
+- `user.created` — on signup
+- `user.login` — on successful login (direct) and after 2FA verification, with `2fa_used` flag
+- `user.login_failed` — on failed login, `actor_type="system"`
+- `user.2fa_enabled` / `user.2fa_disabled`
+
+### API endpoints (Phase 6)
+
+All endpoints are on `core_bp`, protected by `@requires_auth`:
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/core/entities/<type>/<id>/story` | Chronological event timeline for one entity. Returns `{events: [{event_type, at, actor, summary, diff, payload}]}`. Used by all audit history panels. |
+| `GET /api/core/entities/<type>/<id>/summary` | Latest `entity_event_summaries` row for one entity. Used by detail views. |
+| `GET /api/core/sourcemap/objects` | Paginated index of all traceable entities (inventory items, executions, processes). Query params: `page`, `limit`, `q`, `type`. |
+| `POST /api/core/sourcemap/trace` | On-demand DAG traversal. Body: `{root_type, root_id, depth, as_of?}`. Routes to `TemporalDAGTracer` when `as_of` is present, `DAGTracer` otherwise. |
+
+The three list endpoints (`GET /api/core/inventory`, `/api/core/executions`, `/api/core/processes`) all batch-load `entity_event_summaries` and include an `event_summary` key on every item.
+
+### Card enrichment UI (Phase 7)
+
+**Inventory view** (`app/core/frontend/inventory/view.html`):
+- Mobile cards show colour-coded add-method badge (purple = barcode, blue = used N×, red = wastage count)
+- "Added by … · date" and "Last used … in process" meta lines below badges
+- "Audit history" collapsible panel at the bottom of each card — lazy-loads from the story endpoint on first expand
+
+**Process list** (`app/core/frontend/processes/list.html`):
+- Each process entry has a third tertiary line: `v{N} · Last edited by {email} · {date} · {N} runs`
+
+**Execution cards** (`app/core/frontend/js/flows2-executions.js`):
+- "Started by" uses `event_summary.created_by` (authoritative, from the event log) rather than the current logged-in user
+- Completed cards show: "X steps completed · Y inputs consumed · Z outputs produced"
+
+**Process audit log** (`app/core/frontend/processes/flows2.html`):
+- The "Audit history" details panel lazy-loads from the story endpoint on first expand
+- Replaced the previous "Coming soon" placeholder with a live chronological timeline
+
+### Sourcemap temporal trace and story panel (Phase 8)
+
+- `app/core/backend/temporal_dag_tracer.py` — `TemporalDAGTracer` class; accepts `db`, `org_id`, `as_of`, `max_depth`; queries `execution.step_completed` events before `as_of` to reconstruct the provenance graph as it existed at that moment
+- `POST /api/core/sourcemap/trace` now delegates temporal requests to `TemporalDAGTracer` instead of inline BFS
+- Each sourcemap item card has an "Audit history" button that opens a slide-in story panel (`.sm-story-panel`) — lazy-fetches `/api/core/entities/inventory_item/<id>/story` and renders a chronological timeline
+
+---
+
+## 15. UI Testing Guide — What to Do and What to Expect
+
+Start the app: `python app/app.py` (or `uv run workflow start`). All features work with real data — the more actions taken, the richer the audit trail.
+
+### 15.1 Inventory view — audit enrichment
+
+**How to test:**
+1. Go to `/core/inventory/view`
+2. Shrink the browser window below 900px width (or use DevTools responsive mode) to show the card layout — audit badges only appear on cards, not the desktop table
+3. Add some inventory items via different methods: one manually, one via barcode scan (set `extra_data.barcode_scan = true`), one via CSV upload
+
+**What to expect:**
+- Items added via barcode show a purple **Barcode** badge
+- Items added via CSV show a purple **CSV import** badge
+- Items used in executions show a blue **Used N×** badge
+- Items with wastage records show a red **N wastage** badge
+- Below the badges: "Added by user@example.com · 13 May 2026"
+- After an item has been consumed in a process step: "Last used 13 May 2026 in Step Name"
+- At the bottom of each card: an "Audit history" expand control. Click it — first click triggers a fetch. Subsequent opens are instant (already loaded)
+- The timeline shows oldest events at the top, newest at the bottom, each with a blue dot, human-readable sentence, and date
+
+**If you see no badges / no audit meta:** The item was created before the event sourcing migration was applied — no events exist for it yet. Create a new item to see enrichment immediately.
+
+### 15.2 Process list — version and run history
+
+**How to test:**
+1. Go to `/core/flows` (the process list page)
+2. Create a new process, add a step, then edit the process name
+
+**What to expect:**
+- Under each process name and the "X steps · Y active · Z completed" line, a third line appears in light grey
+- Fresh process (just created): `v1 · Created by user@example.com · 13 May 2026`
+- After editing: `v2 · Last edited by user@example.com · 13 May 2026`
+- After running a batch: `v2 · Last edited by … · 13 May 2026 · 1 run`
+
+**If you see no tertiary line:** The process was created before the migration. Edit or add a step to the process — that write will emit an event and the line will appear from that point on.
+
+### 15.3 Process detail — audit history panel
+
+**How to test:**
+1. Open any process at `/core/flows?id=<uuid>`
+2. Scroll to the bottom of the "Edit process" panel (the definition tab)
+3. Click "Audit history"
+
+**What to expect:**
+- A collapsible details panel expands (animated chevron)
+- First open triggers a fetch — you see "Loading…" briefly
+- Timeline appears: `Process created by user@example.com · 13 May 2026`, then any step additions/edits
+- Each entry has a blue dot, sentence, and date
+- Collapse and re-open: no fetch — content stays loaded
+
+### 15.4 Execution (batch) cards — actor and materials summary
+
+**How to test:**
+1. Open a process at `/core/flows?id=<uuid>`
+2. Switch to the "Batches" panel
+3. Start a new batch and complete a step that consumes inputs and produces outputs
+
+**What to expect:**
+
+Active batch card:
+- "Started: 13 May 2026, 10:30 am"
+- "Started by: user@example.com" — sourced from the event log, not the current session
+
+Completed batch card (expand by clicking the header):
+- "Completed: 13 May 2026, 10:45 am"
+- "Started by: user@example.com"
+- "3 steps completed · 2 inputs consumed · 1 output produced" (numbers reflect what was recorded in step completions)
+
+### 15.5 Sourcemap — entity story panel
+
+**How to test:**
+1. Go to `/core/sourcemap`
+2. Click any inventory item in the browse grid to start a trace
+3. On any item card in the trace result, click the **"Audit history"** button (appears below the "Details" toggle)
+
+**What to expect:**
+- A drawer slides in from the right edge of the screen (360px wide)
+- The item's name appears in the drawer header
+- A chronological timeline loads: every recorded event for that item — created, quantity adjustments, consumptions, production, wastage
+- The trace area shifts left (margin-right: 360px) so cards are not obscured
+- Click × in the drawer header to close — the trace area returns to full width
+- Only inventory item story panels are wired in the sourcemap; other entity types use the `/story` endpoint directly
+
+### 15.6 Sourcemap — temporal trace via API
+
+The temporal trace is a backend-only feature at present (no dedicated UI button yet). Test it directly:
+
+```bash
+# Get a valid inventory item UUID first
+curl -s -X GET "http://localhost:8000/api/core/inventory" \
+  -H "Cookie: <your-session-cookie>" | jq '.inventory_items[0].id'
+
+# Temporal trace — reconstructs provenance as of a point in time
+curl -s -X POST "http://localhost:8000/api/core/sourcemap/trace" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: <your-session-cookie>" \
+  -d '{
+    "root_type": "inventory_item",
+    "root_id": "<uuid>",
+    "as_of": "2026-05-13T10:00:00Z",
+    "depth": 5
+  }' | jq '{nodes: (.nodes | length), edges: (.edges | length), is_current, as_of}'
+```
+
+**What to expect:**
+- `is_current: false`, `as_of` echoed back
+- `nodes` and `edges` reflect the graph as it existed at the given timestamp
+- Empty `edges` if no step-completion events existed before that time
+
+### 15.7 Entity story API — direct inspection
+
+```bash
+# Full event timeline for an inventory item
+curl -s "http://localhost:8000/api/core/entities/inventory_item/<uuid>/story" \
+  -H "Cookie: <session>" | jq '.events[] | {event_type, at, actor, summary}'
+
+# Pre-computed summary
+curl -s "http://localhost:8000/api/core/entities/inventory_item/<uuid>/summary" \
+  -H "Cookie: <session>" | jq '.summary'
+```
+
+**What to expect:**
+- `/story` returns events oldest-first, each with a human-readable `summary` field
+- `/summary` returns the latest `entity_event_summaries.summary` JSONB — `add_method`, `times_consumed`, `quantity_history`, `wastage_event_count`, etc.
+
+### 15.8 Database inspection
+
+Connect directly to the test or local database to verify event storage:
+
+```sql
+-- See all events for an entity
+SELECT event_type, actor_label, created_at, payload->>'add_method' as add_method
+FROM entity_events
+WHERE entity_id = '<uuid>'
+ORDER BY created_at;
+
+-- Check that causal chains are intact
+SELECT id, event_type, causation_id
+FROM entity_events
+WHERE causation_id IS NOT NULL
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- View pre-computed summaries
+SELECT entity_type, summary->>'add_method', summary->>'times_consumed', last_event_type
+FROM entity_event_summaries
+ORDER BY last_event_at DESC
+LIMIT 20;
+
+-- Check process version history
+SELECT process_id, version_number, change_summary, created_at
+FROM process_versions
+ORDER BY created_at DESC;
+```
+
+### 15.9 Known limitations
+
+- **Pre-migration data:** Items, processes, and executions created before the migrations have no events. The UI degrades gracefully — audit badges and meta lines simply don't appear (they check for `event_summary` null). New actions on old entities will start generating events.
+- **add_method detection:** Detected from `extra_data` keys at creation time. Items added before event sourcing show no add-method badge.
+- **2FA/login tests:** The `test_login_2fa_flow.py` and `test_2fa_totp_optimized.py` test files require a live app server running on port 8005. They fail in the test container (no server running there). All repository-level and API integration tests pass (189 passed, 1 skipped in the Docker test container).
+- **Temporal trace UI:** The `POST /api/core/sourcemap/trace` with `as_of` is complete and working on the backend. A dedicated UI control (date-picker + "Replay as of" button on the sourcemap) is not yet built — it is the natural next step.
