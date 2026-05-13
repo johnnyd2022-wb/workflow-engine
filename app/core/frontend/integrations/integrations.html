@@ -68,11 +68,67 @@
     <section class="spa-form-section spa-page-hero" aria-label="Integrations header">
       <h1 class="page-title">Integrations</h1>
       <p class="page-subtitle" style="color: var(--text-secondary, #6b7280);">
-        Accounting integrations coming soon.
+        Connect your accounting software to sync contacts and invoices.
       </p>
     </section>
 
     <div class="integrations-grid">
+      {% if crm_enabled %}
+      <section class="card" x-data="xeroIntegration()" x-init="init()">
+        <div class="card-content integration-card-row">
+          <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+            <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="#13B5EA"/>
+                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.5" font-weight="700" fill="#ffffff">X</text>
+              </svg>
+            </div>
+            <div style="min-width: 0;">
+              <div style="font-weight: 700; color: var(--text-primary, #111827); line-height: 1.2;">Xero</div>
+              <template x-if="loading">
+                <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Loading…</div>
+              </template>
+              <template x-if="!loading && connected">
+                <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">
+                  <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e; margin-right:5px; vertical-align:middle;"></span>
+                  Connected <span x-show="tenantName" x-text="'· ' + tenantName"></span>
+                  <span x-show="lastSync" style="margin-left:6px;" x-text="'· Synced ' + lastSync"></span>
+                </div>
+              </template>
+              <template x-if="!loading && !connected">
+                <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Connect to sync contacts &amp; invoices</div>
+              </template>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+            <template x-if="!loading && connected">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm integration-connect-btn"
+                @click="doSync()"
+                :disabled="syncing"
+                x-text="syncing ? 'Syncing…' : 'Sync Now'"
+              >Sync Now</button>
+            </template>
+            <template x-if="!loading && connected">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm integration-connect-btn"
+                @click="doDisconnect()"
+                :disabled="disconnecting"
+                style="color: var(--color-red, #ef4444);"
+              >Disconnect</button>
+            </template>
+            <template x-if="!loading && !connected">
+              <a href="/crm/xero/auth" class="btn btn-primary btn-sm integration-connect-btn">Connect</a>
+            </template>
+          </div>
+        </div>
+        <template x-if="error">
+          <div style="padding: 8px 16px 12px; font-size: 0.82rem; color: var(--color-red, #ef4444);" x-text="error"></div>
+        </template>
+      </section>
+      {% else %}
       <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
         <div class="card-content integration-card-row">
           <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
@@ -90,6 +146,7 @@
           <button type="button" class="btn btn-secondary btn-sm integration-connect-btn" disabled>Connect</button>
         </div>
       </section>
+      {% endif %}
 
       <section class="card" aria-disabled="true" style="opacity: 0.6; filter: grayscale(1);">
         <div class="card-content integration-card-row">
@@ -110,4 +167,67 @@
       </section>
     </div>
   </div>
+
+{% if crm_enabled %}
+<script src="/crm/static/js/crm-api.js"></script>
+<script>
+function xeroIntegration() {
+  return {
+    loading: true,
+    connected: false,
+    tenantName: '',
+    lastSync: '',
+    syncing: false,
+    disconnecting: false,
+    error: null,
+
+    async init() {
+      try {
+        const data = await CRMAPI.getXeroStatus();
+        this.connected = data.is_connected || false;
+        this.tenantName = data.tenant_name || '';
+        if (data.last_sync_at) {
+          const d = new Date(data.last_sync_at);
+          this.lastSync = isNaN(d) ? '' : d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        }
+      } catch (e) {
+        this.error = e.message || 'Failed to load Xero status.';
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async doSync() {
+      if (this.syncing) return;
+      this.syncing = true;
+      this.error = null;
+      try {
+        await CRMAPI.triggerSync();
+        await this.init();
+      } catch (e) {
+        this.error = e.message || 'Sync failed.';
+      } finally {
+        this.syncing = false;
+      }
+    },
+
+    async doDisconnect() {
+      if (!confirm('Disconnect Xero? This will remove your synced contacts and invoices.')) return;
+      this.disconnecting = true;
+      this.error = null;
+      try {
+        await CRMAPI.disconnectXero();
+        this.connected = false;
+        this.tenantName = '';
+        this.lastSync = '';
+      } catch (e) {
+        this.error = e.message || 'Disconnect failed.';
+      } finally {
+        this.disconnecting = false;
+      }
+    },
+  };
+}
+</script>
+{% endif %}
 {% endblock %}
