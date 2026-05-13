@@ -163,8 +163,9 @@
         if (!es) return '';
         const parts = [];
         const method = es.add_method;
-        if (method && method !== 'manual') {
-          parts.push('<span class="inv-audit-badge inv-audit-badge--method">' + esc(ADD_METHOD_LABEL[method] || method) + '</span>');
+        if (method) {
+          const methodCls = method === 'manual' ? 'inv-audit-badge--manual' : 'inv-audit-badge--method';
+          parts.push('<span class="inv-audit-badge ' + methodCls + '">' + esc(ADD_METHOD_LABEL[method] || method) + '</span>');
         }
         const tc = parseInt(es.times_consumed || 0);
         if (tc > 0) {

@@ -135,6 +135,7 @@
       letter-spacing: 0.02em;
     }
     .inv-audit-badge--method { background: hsl(270, 60%, 94%); color: hsl(270, 60%, 35%); }
+    .inv-audit-badge--manual { background: #f3f4f6; color: #374151; }
     .inv-audit-badge--consumed { background: hsl(217, 91%, 94%); color: hsl(217, 91%, 35%); }
     .inv-audit-badge--wasted { background: hsl(0, 85%, 94%); color: hsl(0, 72%, 38%); }
     .inv-audit-meta {
