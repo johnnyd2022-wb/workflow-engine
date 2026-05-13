@@ -22,6 +22,7 @@
   let tracedItemName = '';
   let tracedItemBatch = '';
   let lastTraceResult = null;
+  let temporalAsOf = ''; // ISO date string for temporal replay; '' = live
   let currentView = 'timeline';       // 'timeline' | 'map' | 'table'
   let currentBrowseTab = 'inventory'; // 'inventory' | 'batches' | 'suppliers' | 'operators' | 'activity'
   let showWastage = false;
@@ -231,6 +232,8 @@
             <button class="sm-act-type-btn${_smActivityEntityType === 'inventory_item' ? ' sm-act-type-btn--active' : ''}" data-type="inventory_item">Inventory</button>
             <button class="sm-act-type-btn${_smActivityEntityType === 'process' ? ' sm-act-type-btn--active' : ''}" data-type="process">Processes</button>
             <button class="sm-act-type-btn${_smActivityEntityType === 'execution' ? ' sm-act-type-btn--active' : ''}" data-type="execution">Executions</button>
+            <button class="sm-act-type-btn${_smActivityEntityType === 'user' ? ' sm-act-type-btn--active' : ''}" data-type="user">Users</button>
+            <button class="sm-act-type-btn${_smActivityEntityType === 'org' ? ' sm-act-type-btn--active' : ''}" data-type="org">Settings</button>
             ${operators.length > 0 ? `<select class="sm-act-operator-select" id="sm-act-operator" aria-label="Filter by operator">
               <option value="">All operators</option>
               ${opOptions}
@@ -556,6 +559,7 @@
     process:        { label: 'Process',   cls: 'sm-act-badge--process' },
     execution:      { label: 'Execution', cls: 'sm-act-badge--execution' },
     user:           { label: 'User',      cls: 'sm-act-badge--user' },
+    org:            { label: 'Settings',  cls: 'sm-act-badge--org' },
   };
 
   function smBuildActivityFeed(events) {
@@ -642,6 +646,10 @@
     smShowAreaLoading();
     smSetControlsVisible(true);
 
+    if (temporalAsOf) {
+      return smRunTemporalTrace(itemId, itemName);
+    }
+
     try {
       const endpoint = isBackward
         ? `/api/core/inventory/trace-backward/${itemId}`
@@ -657,13 +665,113 @@
     }
   }
 
+  async function smRunTemporalTrace(itemId, itemName) {
+    smShowAreaLoading();
+    try {
+      const res = await fetch('/api/core/sourcemap/trace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...smCsrfHeader() },
+        body: JSON.stringify({ root_type: 'inventory_item', root_id: itemId, as_of: temporalAsOf, depth: 5 }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      smRenderTemporalTrace(data, itemName);
+    } catch (err) {
+      console.error('[sourcemap] temporal trace failed', err);
+      const area = document.getElementById('sm-trace-area');
+      if (area) area.innerHTML = smEmptyState('Temporal trace failed. Please try again.');
+    }
+  }
+
+  function smRenderTemporalTrace(result, rootName) {
+    const area = document.getElementById('sm-trace-area');
+    if (!area) return;
+    area.innerHTML = '';
+
+    const asOfDate = result.as_of ? new Date(result.as_of).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '?';
+    const nodes = result.nodes || [];
+    const edges = result.edges || [];
+    const story = result.story || [];
+
+    // Banner
+    const banner = document.createElement('div');
+    banner.className = 'sm-temporal-banner';
+    banner.innerHTML = `<span class="sm-temporal-banner__icon">⏱</span> Showing provenance as of <strong>${smEsc(asOfDate)}</strong> — not current state`;
+    area.appendChild(banner);
+
+    if (!nodes.length) {
+      area.insertAdjacentHTML('beforeend', smEmptyState('No provenance data recorded before this date.'));
+      return;
+    }
+
+    // Node cards
+    const grid = document.createElement('div');
+    grid.className = 'sm-temporal-grid';
+    nodes.forEach(node => {
+      const s = node.state || {};
+      const card = document.createElement('div');
+      card.className = 'sm-temporal-node' + (node.is_root ? ' sm-temporal-node--root' : '');
+      const typeLabel = { raw_material: 'Raw', work_in_progress: 'WIP', final_product: 'Final' }[s.inventory_type] || (node.type || '');
+      const qty = s.quantity != null ? `${s.quantity}${s.unit ? ' ' + s.unit : ''}` : null;
+      card.innerHTML = `
+        <div class="sm-temporal-node__type">${smEsc(typeLabel)}</div>
+        <div class="sm-temporal-node__name">${smEsc(s.name || node.id)}</div>
+        ${qty ? `<div class="sm-temporal-node__qty">${smEsc(qty)}</div>` : ''}
+        ${node.is_root ? '<div class="sm-temporal-node__root-tag">Root</div>' : ''}
+      `;
+      grid.appendChild(card);
+    });
+    area.appendChild(grid);
+
+    // Connections summary
+    if (edges.length) {
+      const connEl = document.createElement('div');
+      connEl.className = 'sm-temporal-conn';
+      connEl.textContent = `${edges.length} connection${edges.length !== 1 ? 's' : ''} recorded before this date`;
+      area.appendChild(connEl);
+    }
+
+    // Event timeline
+    if (story.length) {
+      const tl = document.createElement('div');
+      tl.className = 'sm-temporal-timeline';
+      const tlTitle = document.createElement('div');
+      tlTitle.className = 'sm-temporal-timeline__title';
+      tlTitle.textContent = 'Events up to this date';
+      tl.appendChild(tlTitle);
+      const ol = document.createElement('ol');
+      ol.className = 'pl-story-timeline';
+      story.slice().reverse().forEach(ev => {
+        const li = document.createElement('li');
+        li.className = 'pl-story-timeline__item';
+        const atStr = ev.at ? new Date(ev.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        li.innerHTML = `
+          <span class="pl-story-timeline__dot"></span>
+          <div class="pl-story-timeline__content">
+            <span class="pl-story-timeline__text">${smEsc(ev.summary || ev.event_type)}</span>
+            ${ev.actor ? `<span class="pl-story-timeline__actor">${smEsc(ev.actor)}</span>` : ''}
+          </div>
+          <span class="pl-story-timeline__time">${smEsc(atStr)}</span>
+        `;
+        ol.appendChild(li);
+      });
+      tl.appendChild(ol);
+      area.appendChild(tl);
+    }
+  }
+
   function smClearTrace() {
     tracedItemId = null;
     tracedItemName = '';
     tracedItemBatch = '';
     lastTraceResult = null;
+    temporalAsOf = '';
     showWastage = false;
     smSetWastageChip(false);
+    const tClr = document.getElementById('sm-temporal-clear');
+    const tDate = document.getElementById('sm-temporal-date');
+    if (tClr) tClr.style.display = 'none';
+    if (tDate) tDate.value = '';
     const input = document.getElementById('sm-search-input');
     if (input) { input.value = ''; filterQuery = ''; }
     smHideSearchClear();
@@ -1807,6 +1915,30 @@
         }
       });
     });
+
+    // Temporal replay controls
+    const temporalApply = document.getElementById('sm-temporal-apply');
+    const temporalClear = document.getElementById('sm-temporal-clear');
+    const temporalDateInput = document.getElementById('sm-temporal-date');
+    function applyTemporalDate() {
+      const v = temporalDateInput ? temporalDateInput.value : '';
+      if (!v) return;
+      temporalAsOf = v + 'T23:59:59Z';
+      if (temporalClear) temporalClear.style.display = '';
+      if (tracedItemId) smRunTemporalTrace(tracedItemId, tracedItemName);
+    }
+    if (temporalApply) temporalApply.addEventListener('click', applyTemporalDate);
+    if (temporalDateInput) {
+      temporalDateInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyTemporalDate(); });
+    }
+    if (temporalClear) {
+      temporalClear.addEventListener('click', () => {
+        temporalAsOf = '';
+        if (temporalDateInput) temporalDateInput.value = '';
+        temporalClear.style.display = 'none';
+        if (tracedItemId) smTraceItem(tracedItemId, tracedItemName, tracedItemBatch, false);
+      });
+    }
 
     // Wastage toggle (persistent bar, independent of trace state)
     const wastageToggle = document.getElementById('sm-wastage-toggle');

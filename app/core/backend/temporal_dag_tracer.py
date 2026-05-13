@@ -156,6 +156,7 @@ class TemporalDAGTracer:
         )
         return [
             {
+                "event_id": str(ev.id),
                 "event_type": ev.event_type,
                 "entity_id": str(ev.entity_id),
                 "actor": ev.actor_label,
