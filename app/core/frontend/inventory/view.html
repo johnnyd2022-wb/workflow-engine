@@ -330,8 +330,11 @@
           if (!ex || typeof ex !== 'object' || !Object.prototype.hasOwnProperty.call(ex, metaKey)) return false;
         }
 
-        const jsonLow = extraDataString(item).toLowerCase();
-        if (metaText && jsonLow.indexOf(metaText) === -1) return false;
+        if (metaText) {
+          let jsonLow = '';
+          try { jsonLow = JSON.stringify(item.extra_data || {}).toLowerCase(); } catch (e) {}
+          if (jsonLow.indexOf(metaText) === -1) return false;
+        }
 
         if (q.trim()) {
           const needle = q.trim().toLowerCase();
