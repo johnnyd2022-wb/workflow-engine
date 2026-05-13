@@ -131,6 +131,8 @@ def _upsert_summary(session: Session, event: EntityEvent) -> None:
         _update_process_summary(session, event)
     elif entity_type == "user":
         _update_user_summary(session, event)
+    elif entity_type == "org":
+        _update_org_summary(session, event)
 
 
 def _do_upsert(session: Session, entity_id: UUID, org_id: UUID, entity_type: str, summary: dict, event: EntityEvent) -> None:
@@ -393,6 +395,17 @@ def _update_user_summary(session: Session, event: EntityEvent) -> None:
         summary = dict(existing)
 
     _do_upsert(session, event.entity_id, event.org_id, "user", summary, event)
+
+
+def _update_org_summary(session: Session, event: EntityEvent) -> None:
+    existing = _load_existing_summary(session, event.entity_id)
+    p = event.payload or {}
+    summary = dict(existing)
+    summary["name"] = p.get("name", existing.get("name"))
+    summary["status"] = p.get("status", existing.get("status"))
+    summary["last_changed_at"] = event.created_at.isoformat() if event.created_at else None
+    summary["last_changed_by"] = event.actor_label
+    _do_upsert(session, event.entity_id, event.org_id, "org", summary, event)
 
 
 def _parse_decimal(value: str) -> Decimal:

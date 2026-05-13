@@ -4115,7 +4115,7 @@ def get_metrics():
 
 def _parse_entity_type(entity_type: str) -> str | None:
     """Validate entity_type is one we support."""
-    valid = {"inventory_item", "execution", "process", "user"}
+    valid = {"inventory_item", "execution", "process", "user", "org"}
     return entity_type if entity_type in valid else None
 
 
@@ -4522,6 +4522,15 @@ def _human_summary(ev) -> str:
     if et == "user.role_changed":
         return f"Role changed from {p.get('old_role', '?')} to {p.get('new_role', '?')}"
 
+    if et == "org.settings_updated":
+        d = ev.diff or {}
+        parts = []
+        if "name" in d:
+            parts.append(f"Name changed to '{d['name'].get('after', '?')}'")
+        if "status" in d:
+            parts.append(f"Status changed to {d['status'].get('after', '?')}")
+        return "Organisation settings updated" + (f" — {', '.join(parts)}" if parts else "")
+
     return et.replace(".", " — ").replace("_", " ").capitalize()
 
 
@@ -4798,12 +4807,18 @@ def sourcemap_trace():
 
         # Annotate timeline with human summaries
         from app.core.db.models.entity_event import EntityEvent as _EE_Trace
+        timeline_ids = [item.get("event_id") for item in result["timeline"] if item.get("event_id")]
+        events_by_id: dict = {}
+        if timeline_ids:
+            ev_rows = db.query(_EE_Trace).filter(_EE_Trace.id.in_(timeline_ids)).all()
+            events_by_id = {str(ev.id): ev for ev in ev_rows}
         story = [
             {
                 "at": item["at"],
                 "event_type": item["event_type"],
                 "entity_id": item["entity_id"],
-                "summary": item["event_type"].replace(".", " — ").replace("_", " ").capitalize(),
+                "summary": _human_summary(events_by_id[item["event_id"]]) if item.get("event_id") and item["event_id"] in events_by_id
+                           else item["event_type"].replace(".", " — ").replace("_", " ").capitalize(),
                 "actor": item.get("actor"),
             }
             for item in result["timeline"]
