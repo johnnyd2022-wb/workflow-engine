@@ -10,6 +10,9 @@
   let allProcesses = [];
   let allInventory = [];
   let allExecutions = [];
+  let _smAllActivity = [];
+  let _smActivityEntityType = ''; // '' = all, or 'inventory_item' | 'process' | 'execution'
+  let _smActivityOperator = '';   // '' = all operators
   let allExecutionMetadata = [];
   let allOutOfStockRawMaterials = [];
   let checkNeededData = { expired_raw_materials: [], impacted_items: [], connections: [], untracked_items: [] };
@@ -50,6 +53,7 @@
         outOfStockData,
         expiredResult,
         untrackedResult,
+        activityData,
       ] = await Promise.all([
         CoreAPI.getProcesses(true).catch(() => ({ processes: [] })),
         CoreAPI.getInventory().catch(() => ({ inventory_items: [] })),
@@ -58,6 +62,7 @@
         CoreAPI.getOutOfStockRawMaterials().catch(() => ({ inventory_items: [] })),
         CoreAPI.getExpiredMaterials().catch(() => ({ expired_raw_materials: [], impacted_items: [], connections: [] })),
         CoreAPI.getUntrackedItems().catch(() => ({ untracked_items: [], connections: [] })),
+        fetch('/api/core/entities/activity?limit=200', { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ events: [] })),
       ]);
 
       allProcesses = processesData.processes || [];
@@ -67,6 +72,7 @@
       allOutOfStockRawMaterials = outOfStockData.inventory_items || [];
       checkNeededData = expiredResult || { expired_raw_materials: [], impacted_items: [], connections: [] };
       checkNeededData.untracked_items = (untrackedResult && untrackedResult.untracked_items) ? untrackedResult.untracked_items : [];
+      _smAllActivity = activityData.events || [];
 
       smUpdateSearchPool();
       smRenderBrowseGrid();
@@ -97,7 +103,6 @@
       { key: 'inventory', label: 'Inventory' },
       { key: 'batches',   label: 'Batches' },
       { key: 'suppliers', label: 'Suppliers' },
-      { key: 'operators', label: 'Operators' },
       { key: 'activity',  label: 'Activity' },
     ];
 
@@ -208,79 +213,66 @@
         break;
       }
 
-      case 'operators': {
-        const personMap = new Map();
-        (allExecutions || []).forEach(exec => {
-          const person = exec.completed_by || exec.created_by;
-          if (!person) return;
-          if (q && !person.toLowerCase().includes(q)) return;
-          if (!personMap.has(person)) personMap.set(person, []);
-          personMap.get(person).push(exec);
-        });
-
-        if (!personMap.size) {
-          grid.innerHTML = smBrowseEmpty(q ? `No operators matching "${q}"` : 'No operator data recorded on executions yet.');
-          return;
-        }
-
-        [...personMap.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .forEach(([person, execs]) => grid.appendChild(smBuildOperatorBrowseCard(person, execs)));
-        break;
-      }
-
       case 'activity': {
-        // Switch grid to block layout so the timeline renders full-width (not card grid)
         grid.style.display = 'block';
 
-        const hasFilter = activityStartDate || activityEndDate;
-        const pickerDiv = document.createElement('div');
-        pickerDiv.className = 'sm-act-picker';
-        pickerDiv.innerHTML = `
-          <label class="sm-act-picker__label" for="sm-act-start">From</label>
-          <input type="date" class="sm-act-date-input" id="sm-act-start" value="${smEsc(activityStartDate)}">
-          <label class="sm-act-picker__label" for="sm-act-end">To</label>
-          <input type="date" class="sm-act-date-input" id="sm-act-end" value="${smEsc(activityEndDate)}">
-          <button class="sm-act-filter-btn" id="sm-act-apply">Show</button>
-          ${hasFilter ? '<button class="sm-act-clear-btn" id="sm-act-clear">Clear</button>' : ''}
+        // ── Filters bar ──────────────────────────────────────
+        const hasDateFilter = activityStartDate || activityEndDate;
+        const controls = document.createElement('div');
+        controls.className = 'sm-act-controls';
+        const operators = [...new Set((_smAllActivity || []).map(ev => ev.actor).filter(Boolean))].sort();
+        const opOptions = operators.map(op =>
+          `<option value="${smEsc(op)}"${_smActivityOperator === op ? ' selected' : ''}>${smEsc(op)}</option>`
+        ).join('');
+
+        controls.innerHTML = `
+          <div class="sm-act-type-filter">
+            <button class="sm-act-type-btn${_smActivityEntityType === '' ? ' sm-act-type-btn--active' : ''}" data-type="">All</button>
+            <button class="sm-act-type-btn${_smActivityEntityType === 'inventory_item' ? ' sm-act-type-btn--active' : ''}" data-type="inventory_item">Inventory</button>
+            <button class="sm-act-type-btn${_smActivityEntityType === 'process' ? ' sm-act-type-btn--active' : ''}" data-type="process">Processes</button>
+            <button class="sm-act-type-btn${_smActivityEntityType === 'execution' ? ' sm-act-type-btn--active' : ''}" data-type="execution">Executions</button>
+            ${operators.length > 0 ? `<select class="sm-act-operator-select" id="sm-act-operator" aria-label="Filter by operator">
+              <option value="">All operators</option>
+              ${opOptions}
+            </select>` : ''}
+          </div>
+          <div class="sm-act-picker">
+            <label class="sm-act-picker__label" for="sm-act-start">From</label>
+            <input type="date" class="sm-act-date-input" id="sm-act-start" value="${smEsc(activityStartDate)}">
+            <label class="sm-act-picker__label" for="sm-act-end">To</label>
+            <input type="date" class="sm-act-date-input" id="sm-act-end" value="${smEsc(activityEndDate)}">
+            <button class="sm-act-filter-btn" id="sm-act-apply">Apply</button>
+            ${hasDateFilter ? '<button class="sm-act-clear-btn" id="sm-act-clear">Clear</button>' : ''}
+          </div>
         `;
-        grid.appendChild(pickerDiv);
+        grid.appendChild(controls);
 
-        const startD = activityStartDate ? new Date(activityStartDate + 'T00:00:00') : null;
-        const endD   = activityEndDate   ? new Date(activityEndDate   + 'T23:59:59') : null;
+        // Wire type filter toggles
+        controls.querySelectorAll('.sm-act-type-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            _smActivityEntityType = btn.dataset.type;
+            smRefreshBrowseCards(grid);
+          });
+        });
 
-        let filtered = [...(allExecutions || [])];
-        if (q) {
-          filtered = filtered.filter(exec => {
-            const proc = allProcesses.find(p => p.id === exec.process_id);
-            const name = proc ? proc.name.toLowerCase() : '';
-            return name.includes(q) || (exec.completed_by || '').toLowerCase().includes(q);
+        // Wire operator filter
+        const opSelect = controls.querySelector('#sm-act-operator');
+        if (opSelect) {
+          opSelect.addEventListener('change', () => {
+            _smActivityOperator = opSelect.value;
+            smRefreshBrowseCards(grid);
           });
         }
-        if (startD) filtered = filtered.filter(e => new Date(e.started_at || e.created_at || 0) >= startD);
-        if (endD)   filtered = filtered.filter(e => new Date(e.started_at || e.created_at || 0) <= endD);
-        filtered.sort((a, b) => new Date(b.started_at || b.created_at || 0) - new Date(a.started_at || a.created_at || 0));
 
-        if (!filtered.length) {
-          const msg = (hasFilter || q)
-            ? (q ? `No activity matching "${q}"` : 'No activity in selected date range.')
-            : 'Pick a date range or use the search bar to browse production activity.';
-          grid.insertAdjacentHTML('beforeend', `<div class="sm-browse-empty" style="margin-top:16px">${smEsc(msg)}</div>`);
-        } else {
-          // Render inline activity timeline — same as operator tracing, no separate card step
-          const tl = smBuildInlineActivityTimeline(filtered);
-          grid.appendChild(tl);
-        }
-
-        // Wire controls
-        const applyBtn = pickerDiv.querySelector('#sm-act-apply');
+        // Wire date filters
         const wireApply = () => {
-          activityStartDate = (pickerDiv.querySelector('#sm-act-start') || {}).value || '';
-          activityEndDate   = (pickerDiv.querySelector('#sm-act-end')   || {}).value || '';
+          activityStartDate = (controls.querySelector('#sm-act-start') || {}).value || '';
+          activityEndDate   = (controls.querySelector('#sm-act-end')   || {}).value || '';
           smRefreshBrowseCards(grid);
         };
+        const applyBtn = controls.querySelector('#sm-act-apply');
         if (applyBtn) applyBtn.addEventListener('click', wireApply);
-        const clearBtn = pickerDiv.querySelector('#sm-act-clear');
+        const clearBtn = controls.querySelector('#sm-act-clear');
         if (clearBtn) {
           clearBtn.addEventListener('click', () => {
             activityStartDate = '';
@@ -288,9 +280,41 @@
             smRefreshBrowseCards(grid);
           });
         }
-        pickerDiv.querySelectorAll('.sm-act-date-input').forEach(inp => {
+        controls.querySelectorAll('.sm-act-date-input').forEach(inp => {
           inp.addEventListener('keydown', e => { if (e.key === 'Enter') wireApply(); });
         });
+
+        // ── Filter events ─────────────────────────────────────
+        const startD = activityStartDate ? new Date(activityStartDate + 'T00:00:00') : null;
+        const endD   = activityEndDate   ? new Date(activityEndDate   + 'T23:59:59') : null;
+
+        let filtered = [...(_smAllActivity || [])];
+        if (_smActivityEntityType) {
+          filtered = filtered.filter(ev => ev.entity_type === _smActivityEntityType);
+        }
+        if (_smActivityOperator) {
+          filtered = filtered.filter(ev => ev.actor === _smActivityOperator);
+        }
+        if (q) {
+          const ql = q.toLowerCase();
+          filtered = filtered.filter(ev =>
+            (ev.summary || '').toLowerCase().includes(ql) ||
+            (ev.actor || '').toLowerCase().includes(ql) ||
+            (ev.event_type || '').toLowerCase().includes(ql)
+          );
+        }
+        if (startD) filtered = filtered.filter(ev => new Date(ev.at || 0) >= startD);
+        if (endD)   filtered = filtered.filter(ev => new Date(ev.at || 0) <= endD);
+
+        // ── Render ────────────────────────────────────────────
+        if (!filtered.length) {
+          const msg = (hasDateFilter || q || _smActivityEntityType || _smActivityOperator)
+            ? 'No activity matching these filters.'
+            : 'No activity recorded yet.';
+          grid.insertAdjacentHTML('beforeend', `<div class="sm-browse-empty" style="margin-top:16px">${smEsc(msg)}</div>`);
+        } else {
+          grid.appendChild(smBuildActivityFeed(filtered));
+        }
         break;
       }
     }
@@ -379,30 +403,6 @@
     `;
 
     card.addEventListener('click', () => smShowBatchModal(`Supplier: ${supplier}`, items));
-    return card;
-  }
-
-  function smBuildOperatorBrowseCard(person, execs) {
-    const sorted = [...execs].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    const lastExec = sorted[0];
-    const processNames = [...new Set(execs.map(e => {
-      const proc = allProcesses.find(p => p.id === e.process_id);
-      return proc ? proc.name : null;
-    }).filter(Boolean))];
-
-    const card = document.createElement('div');
-    card.className = 'sm-browse-card sm-browse-card--operator';
-    card.innerHTML = `
-      <div class="sm-browse-card__header">
-        <span class="sm-browse-card__type-label">Operator</span>
-      </div>
-      <div class="sm-browse-card__name">${smEsc(person)}</div>
-      <div class="sm-browse-card__meta">${execs.length} execution${execs.length !== 1 ? 's' : ''}</div>
-      ${lastExec ? `<div class="sm-browse-card__meta sm-browse-card__meta--muted">Last: ${smFmtDate(lastExec.created_at)}</div>` : ''}
-      ${processNames.slice(0, 2).map(n => `<div class="sm-browse-card__meta sm-browse-card__meta--muted">${smEsc(n)}</div>`).join('')}
-    `;
-
-    card.addEventListener('click', () => smTraceByPerson(person, execs));
     return card;
   }
 
@@ -522,7 +522,8 @@
       ${stepCount ? `<div class="sm-browse-card__meta sm-browse-card__meta--muted">${stepCount} step${stepCount !== 1 ? 's' : ''}</div>` : ''}
     `;
 
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.sm-story-btn')) return;
       smRenderActivityLog([exec], { type: 'activity', label: procName });
       const input = document.getElementById('sm-search-input');
       if (input) { input.value = procName; filterQuery = procName; }
@@ -530,11 +531,105 @@
       smSetControlsVisible(true);
     });
 
+    if (exec.id) {
+      const storyBtn = document.createElement('button');
+      storyBtn.type = 'button';
+      storyBtn.className = 'sm-story-btn';
+      storyBtn.textContent = 'Audit history';
+      storyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        smOpenStoryPanel(exec.id, procName, 'execution');
+      });
+      card.appendChild(storyBtn);
+    }
+
     return card;
   }
 
   function smBrowseEmpty(msg) {
     return `<div class="sm-browse-empty">${smEsc(msg)}</div>`;
+  }
+
+  /* ── All-entity activity feed ────────────────────────────── */
+  const _SM_ENTITY_BADGE = {
+    inventory_item: { label: 'Inventory', cls: 'sm-act-badge--inventory' },
+    process:        { label: 'Process',   cls: 'sm-act-badge--process' },
+    execution:      { label: 'Execution', cls: 'sm-act-badge--execution' },
+    user:           { label: 'User',      cls: 'sm-act-badge--user' },
+  };
+
+  function smBuildActivityFeed(events) {
+    const feed = document.createElement('div');
+    feed.className = 'sm-act-feed';
+
+    events.forEach((ev, idx) => {
+      const isLast = idx === events.length - 1;
+      const entry = document.createElement('div');
+      entry.className = 'sm-act-entry' + (isLast ? ' sm-act-entry--last' : '');
+
+      const badge = _SM_ENTITY_BADGE[ev.entity_type] || { label: ev.entity_type, cls: '' };
+      const hasDiff = ev.diff_rows && ev.diff_rows.length;
+      const diffId = `sm-act-diff-${idx}`;
+
+      let diffHtml = '';
+      if (hasDiff) {
+        const rows = ev.diff_rows.map(r => {
+          let rh = `<span class="sm-story-diff__label">${smEsc(r.label)}</span>`;
+          if (r.before != null) rh += `<span class="sm-story-diff__before">${smEsc(r.before)}</span>`;
+          if (r.before != null && r.after != null) rh += `<span class="sm-story-diff__arrow">→</span>`;
+          if (r.after != null) rh += `<span class="sm-story-diff__after">${smEsc(r.after)}</span>`;
+          return `<li class="sm-story-diff__row">${rh}</li>`;
+        }).join('');
+        diffHtml = `<ul class="sm-story-diff sm-act-diff" id="${diffId}" hidden>${rows}</ul>`;
+      }
+
+      entry.innerHTML = `
+        <div class="sm-act-entry__dot-col" aria-hidden="true">
+          <div class="sm-act-entry__dot"></div>
+          ${!isLast ? '<div class="sm-act-entry__line"></div>' : ''}
+        </div>
+        <div class="sm-act-entry__body">
+          <div class="sm-act-entry__header">
+            <span class="sm-act-badge ${badge.cls}">${smEsc(badge.label)}</span>
+            <span class="sm-act-entry__summary">${smEsc(ev.summary || ev.event_type)}</span>
+            ${hasDiff ? `<button class="sm-act-entry__expand" aria-expanded="false" aria-controls="${diffId}">Details ›</button>` : ''}
+            <button class="sm-act-entry__history sm-act-clear-btn" data-entity-id="${smEsc(ev.entity_id || '')}" data-entity-type="${smEsc(ev.entity_type || '')}" data-entity-name="${smEsc(ev.summary || ev.event_type)}">Audit history</button>
+          </div>
+          ${diffHtml}
+          <div class="sm-act-entry__footer">
+            ${ev.actor ? `<span class="sm-act-entry__actor">${smEsc(ev.actor)}</span>` : ''}
+            <span class="sm-act-entry__time">${ev.at ? smFmtDate(ev.at) : ''}</span>
+          </div>
+        </div>
+      `;
+
+      if (hasDiff) {
+        const expandBtn = entry.querySelector('.sm-act-entry__expand');
+        const diffEl = entry.querySelector(`#${diffId}`);
+        if (expandBtn && diffEl) {
+          expandBtn.addEventListener('click', () => {
+            const open = !diffEl.hidden;
+            diffEl.hidden = open;
+            expandBtn.setAttribute('aria-expanded', String(!open));
+            expandBtn.textContent = open ? 'Details ›' : 'Hide ‹';
+          });
+        }
+      }
+
+      const historyBtn = entry.querySelector('.sm-act-entry__history');
+      if (historyBtn) {
+        historyBtn.addEventListener('click', () => {
+          const eid = historyBtn.dataset.entityId;
+          const etype = historyBtn.dataset.entityType;
+          const ename = historyBtn.dataset.entityName;
+          if (eid && etype) smOpenStoryPanel(eid, ename, etype);
+        });
+      }
+
+      feed.appendChild(entry);
+    });
+
+    return feed;
   }
 
   /* ── Trace: call API then render ────────────────────────── */
@@ -1115,7 +1210,7 @@
       storyBtn.textContent = 'Audit history';
       storyBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        smOpenStoryPanel(item.id, item.name || 'Item');
+        smOpenStoryPanel(item.id, item.name || 'Item', 'inventory_item');
       });
       card.appendChild(storyBtn);
     }
@@ -1124,6 +1219,9 @@
   }
 
   /* ── Entity story panel (slide-in drawer) ───────────────── */
+  let _smStoryEvents = [];
+  let _smStoryAsc = true;
+
   function smEnsureStoryPanel() {
     let panel = document.getElementById('sm-story-panel');
     if (panel) return panel;
@@ -1136,6 +1234,7 @@
     panel.innerHTML = `
       <div class="sm-story-panel__header">
         <span class="sm-story-panel__title" id="sm-story-panel-title"></span>
+        <button class="sm-story-panel__sort" id="sm-story-panel-sort" type="button">↑ Oldest first</button>
         <button class="sm-story-panel__close" id="sm-story-panel-close" aria-label="Close">×</button>
       </div>
       <div class="sm-story-panel__body" id="sm-story-panel-body">
@@ -1144,6 +1243,11 @@
     `;
     document.body.appendChild(panel);
     document.getElementById('sm-story-panel-close').addEventListener('click', smCloseStoryPanel);
+    document.getElementById('sm-story-panel-sort').addEventListener('click', function () {
+      _smStoryAsc = !_smStoryAsc;
+      this.textContent = _smStoryAsc ? '↑ Oldest first' : '↓ Newest first';
+      _smRenderStoryBody();
+    });
     panel.addEventListener('click', (e) => e.stopPropagation());
     return panel;
   }
@@ -1158,6 +1262,8 @@
       let html = `<span class="sm-story-diff__label">${smEsc(r.label)}</span>`;
       if (r.before != null) {
         html += `<span class="sm-story-diff__before">${smEsc(r.before)}</span>`;
+      }
+      if (r.before != null && r.after != null) {
         html += `<span class="sm-story-diff__arrow">→</span>`;
       }
       if (r.after != null) {
@@ -1169,55 +1275,74 @@
     return ul;
   }
 
-  function smOpenStoryPanel(itemId, itemName) {
+  function _smRenderStoryBody() {
+    const body = document.getElementById('sm-story-panel-body');
+    if (!body) return;
+    const events = _smStoryAsc ? _smStoryEvents : _smStoryEvents.slice().reverse();
+    const ol = document.createElement('ol');
+    ol.className = 'sm-story-timeline';
+    events.forEach((ev) => {
+      const li = document.createElement('li');
+      li.className = 'sm-story-timeline__item';
+
+      const dot = document.createElement('span');
+      dot.className = 'sm-story-timeline__dot';
+
+      const content = document.createElement('div');
+      content.className = 'sm-story-timeline__content';
+
+      const text = document.createElement('span');
+      text.className = 'sm-story-timeline__text';
+      text.textContent = ev.summary || ev.event_type;
+      content.appendChild(text);
+
+      const diffEl = _smStoryDiffBlock(ev.diff_rows);
+      if (diffEl) content.appendChild(diffEl);
+
+      if (ev.actor) {
+        const actor = document.createElement('span');
+        actor.className = 'sm-story-timeline__actor';
+        actor.textContent = ev.actor;
+        content.appendChild(actor);
+      }
+
+      const time = document.createElement('span');
+      time.className = 'sm-story-timeline__time';
+      time.textContent = ev.at ? new Date(ev.at).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+
+      li.appendChild(dot);
+      li.appendChild(content);
+      li.appendChild(time);
+      ol.appendChild(li);
+    });
+    body.innerHTML = '';
+    body.appendChild(ol);
+  }
+
+  function smOpenStoryPanel(itemId, itemName, entityType) {
+    entityType = entityType || 'inventory_item';
     const panel = smEnsureStoryPanel();
     const title = document.getElementById('sm-story-panel-title');
     const body = document.getElementById('sm-story-panel-body');
+    const sortBtn = document.getElementById('sm-story-panel-sort');
     if (title) title.textContent = itemName;
     if (body) body.innerHTML = '<div class="sm-loading">Loading…</div>';
+    _smStoryEvents = [];
+    _smStoryAsc = true;
+    if (sortBtn) sortBtn.textContent = '↑ Oldest first';
     panel.classList.add('sm-story-panel--open');
     document.body.classList.add('sm-story-panel-active');
 
-    fetch(`/api/core/entities/inventory_item/${encodeURIComponent(itemId)}/story`, { credentials: 'same-origin' })
+    fetch(`/api/core/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(itemId)}/story`, { credentials: 'same-origin' })
       .then((r) => r.json())
       .then((data) => {
-        const events = data.events || [];
         if (!body) return;
-        if (!events.length) {
+        _smStoryEvents = data.events || [];
+        if (!_smStoryEvents.length) {
           body.innerHTML = '<p class="sm-story-panel__empty">No history recorded yet.</p>';
           return;
         }
-        const ol = document.createElement('ol');
-        ol.className = 'sm-story-timeline';
-        events.forEach((ev) => {
-          const li = document.createElement('li');
-          li.className = 'sm-story-timeline__item';
-
-          const dot = document.createElement('span');
-          dot.className = 'sm-story-timeline__dot';
-
-          const content = document.createElement('div');
-          content.className = 'sm-story-timeline__content';
-
-          const text = document.createElement('span');
-          text.className = 'sm-story-timeline__text';
-          text.textContent = ev.summary || ev.event_type;
-          content.appendChild(text);
-
-          const diffEl = _smStoryDiffBlock(ev.diff_rows);
-          if (diffEl) content.appendChild(diffEl);
-
-          const time = document.createElement('span');
-          time.className = 'sm-story-timeline__time';
-          time.textContent = ev.at ? new Date(ev.at).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-
-          li.appendChild(dot);
-          li.appendChild(content);
-          li.appendChild(time);
-          ol.appendChild(li);
-        });
-        body.innerHTML = '';
-        body.appendChild(ol);
+        _smRenderStoryBody();
       })
       .catch(() => {
         if (body) body.innerHTML = '<p class="sm-story-panel__empty">Could not load history.</p>';
@@ -1585,23 +1710,6 @@
     const closeBtn = document.getElementById('sm-modal-close');
     if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) smCloseBatchModal(); });
     if (closeBtn) closeBtn.addEventListener('click', smCloseBatchModal);
-  }
-
-  /* ── Activity log (metadata traces: operator, date, etc.) ─── */
-  function smTraceByPerson(person, execs) {
-    tracedItemId = null;
-    tracedItemName = '';
-    tracedItemBatch = '';
-    lastTraceResult = null;
-    showWastage = false;
-    smSetWastageChip(false);
-    smSetControlsVisible(true);
-
-    const input = document.getElementById('sm-search-input');
-    if (input) input.value = person;
-    smShowSearchClear();
-
-    smRenderActivityLog(execs, { type: 'operator', label: person });
   }
 
   function smBuildActivityGroups(execs) {
