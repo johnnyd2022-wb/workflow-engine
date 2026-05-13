@@ -185,7 +185,7 @@ function createInventoryItem(item) {
             <span class="inventory-item-name">${escapeHtml(item.name)}</span>
             <span class="badge ${badgeClass}">${item.quantity} ${item.unit}</span>
         </div>
-        <div class="inv-adj-wrap" style="margin:6px 0 8px;">
+        <div class="inv-adj-wrap">
             <button class="inv-adj-btn inv-adj-btn--primary" type="button"
                 data-item-id="${escapeHtml(item.id || '')}"
                 data-unit="${escapeHtml(item.unit || '')}"
