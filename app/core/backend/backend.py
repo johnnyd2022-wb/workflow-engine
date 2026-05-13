@@ -113,7 +113,11 @@ def _bound_inventory_extra_data_for_list_response(extra_data: dict) -> dict:
         out["previous_steps_data"] = _safe_slice_list(psd, LIST_INVENTORY_MAX_PREVIOUS_STEPS)
     ah = out.get("inventory_audit_history")
     if isinstance(ah, list):
-        out["inventory_audit_history"] = _safe_slice_list(ah, LIST_INVENTORY_MAX_AUDIT_HISTORY)
+        sliced = _safe_slice_list(ah, LIST_INVENTORY_MAX_AUDIT_HISTORY)
+        out["inventory_audit_history"] = [
+            {k: v for k, v in entry.items() if k != "user_id"} if isinstance(entry, dict) else entry
+            for entry in sliced
+        ]
     rh = out.get("reconciliation_history")
     if isinstance(rh, list):
         out["reconciliation_history"] = _safe_slice_list(rh, LIST_INVENTORY_MAX_RECONCILIATION_HISTORY)

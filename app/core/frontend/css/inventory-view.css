@@ -121,33 +121,6 @@
       text-align: center;
       color: var(--text-secondary, #6b7280);
     }
-    .inv-audit-badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin: 8px 0 4px;
-    }
-    .inv-audit-badge {
-      font-size: 0.7rem;
-      font-weight: 600;
-      padding: 2px 7px;
-      border-radius: 999px;
-      letter-spacing: 0.02em;
-    }
-    .inv-audit-badge--method { background: hsl(270, 60%, 94%); color: hsl(270, 60%, 35%); }
-    .inv-audit-badge--manual { background: #f3f4f6; color: #374151; }
-    .inv-audit-badge--consumed { background: hsl(217, 91%, 94%); color: hsl(217, 91%, 35%); }
-    .inv-audit-badge--wasted { background: hsl(0, 85%, 94%); color: hsl(0, 72%, 38%); }
-    .inv-audit-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      margin-bottom: 8px;
-    }
-    .inv-audit-meta__item {
-      font-size: 0.75rem;
-      color: var(--text-secondary, #6b7280);
-    }
     .inv-audit-history {
       margin-top: 12px;
       border-top: 1px solid var(--border-light, #f3f4f6);

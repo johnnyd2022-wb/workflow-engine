@@ -111,8 +111,6 @@
 
       const TYPE_LABEL = { raw_material: 'Raw', work_in_progress: 'Intermediate', final_product: 'Final' };
       const TYPE_CLASS = { raw_material: 'inv-view-type--raw', work_in_progress: 'inv-view-type--wip', final_product: 'inv-view-type--final' };
-      const ADD_METHOD_LABEL = { manual: 'Manual', barcode_scan: 'Barcode', csv_import: 'CSV import', execution_output: 'Process output' };
-
       let allItems = [];
 
       function esc(s) {
@@ -144,50 +142,11 @@
         return keys.sort();
       }
 
-      function extraDataString(item) {
-        try {
-          return JSON.stringify(item.extra_data != null ? item.extra_data : {});
-        } catch (e) {
-          return '';
-        }
-      }
-
       function fmtDate(iso) {
         if (!iso) return '—';
         try {
           return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
         } catch (e) { return iso.slice(0, 10); }
-      }
-
-      function buildAuditBadges(es) {
-        if (!es) return '';
-        const parts = [];
-        const method = es.add_method;
-        if (method) {
-          const methodCls = method === 'manual' ? 'inv-audit-badge--manual' : 'inv-audit-badge--method';
-          parts.push('<span class="inv-audit-badge ' + methodCls + '">' + esc(ADD_METHOD_LABEL[method] || method) + '</span>');
-        }
-        const tc = parseInt(es.times_consumed || 0);
-        if (tc > 0) {
-          parts.push('<span class="inv-audit-badge inv-audit-badge--consumed">Used ' + tc + 'x</span>');
-        }
-        const wc = parseInt(es.wastage_event_count || 0);
-        if (wc > 0) {
-          parts.push('<span class="inv-audit-badge inv-audit-badge--wasted">' + wc + ' wastage</span>');
-        }
-        return parts.length ? '<div class="inv-audit-badges">' + parts.join('') + '</div>' : '';
-      }
-
-      function buildAuditMeta(es) {
-        if (!es) return '';
-        const lines = [];
-        if (es.created_by) {
-          lines.push('<span class="inv-audit-meta__item">Added by <strong>' + esc(es.created_by) + '</strong> · ' + fmtDate(es.created_at) + '</span>');
-        }
-        if (es.last_consumed_at) {
-          lines.push('<span class="inv-audit-meta__item">Last used ' + fmtDate(es.last_consumed_at) + (es.last_consumed_execution ? ' in <em>' + esc(es.last_consumed_execution) + '</em>' : '') + '</span>');
-        }
-        return lines.length ? '<div class="inv-audit-meta">' + lines.join('') + '</div>' : '';
       }
 
       function buildSparkline(es) {
@@ -432,16 +391,6 @@
           const t = item.inventory_type || 'raw_material';
           const typeLabel = TYPE_LABEL[t] || t;
           const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
-          const es = item.event_summary || null;
-          const metaStr = extraDataString(item);
-          const metaExpand = metaStr.length > 2
-            ? '<details style="margin-top:6px;"><summary style="cursor:pointer;color:var(--primary,#3b82f6);font-size:0.75rem;">Metadata</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
-            : '';
-          const auditCell =
-            buildAuditBadges(es) +
-            buildAuditMeta(es) +
-            (item.id ? buildHistoryToggle(item.id) : '') +
-            metaExpand;
 
           return (
             '<tr>' +
@@ -455,7 +404,7 @@
               '<td>' + esc(datePart(item.expiry_date) || '—') + '</td>' +
               '<td>' + esc(item.process_name || '—') + '</td>' +
               '<td>' + esc(item.barcode || '—') + '</td>' +
-              '<td>' + auditCell + '</td>' +
+              '<td>' + (item.id ? buildHistoryToggle(item.id) : '—') + '</td>' +
             '</tr>'
           );
         }).join('');
@@ -468,10 +417,6 @@
             const t = item.inventory_type || 'raw_material';
             const typeLabel = TYPE_LABEL[t] || t;
             const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
-            const metaStr = extraDataString(item);
-            const metaBlock = metaStr.length > 2
-              ? '<details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--primary,#3b82f6);font-size:0.875rem;">Metadata</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
-              : '';
             const es = item.event_summary || null;
             return (
               '<article class="inv-view-card">' +
@@ -479,8 +424,6 @@
                   '<strong style="font-size:1rem;">' + esc(item.name) + '</strong>' +
                   '<span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span>' +
                 '</div>' +
-                buildAuditBadges(es) +
-                buildAuditMeta(es) +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val inv-view-card__val--qty">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + buildSparkline(es) + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Supplier</span><span class="inv-view-card__val">' + esc(item.supplier || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Batch</span><span class="inv-view-card__val">' + esc(item.supplier_batch_number || '—') + '</span></div>' +
@@ -488,7 +431,6 @@
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Expiry</span><span class="inv-view-card__val">' + esc(datePart(item.expiry_date) || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Process</span><span class="inv-view-card__val">' + esc(item.process_name || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Barcode</span><span class="inv-view-card__val">' + esc(item.barcode || '—') + '</span></div>' +
-                metaBlock +
                 (item.id ? buildHistoryToggle(item.id) : '') +
               '</article>'
             );
