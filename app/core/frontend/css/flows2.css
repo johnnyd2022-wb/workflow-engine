@@ -950,12 +950,15 @@
     .flows2-audit-sortbar { display: flex; justify-content: flex-end; padding: 4px 0 6px; }
     .flows2-audit-sortbar__btn {
       font-size: 12px;
-      padding: 4px 10px;
+      padding: 6px 12px;
+      min-height: 36px;
       border-radius: 6px;
       border: 1px solid var(--border-default, #d1d5db);
       background: transparent;
       color: var(--text-secondary, #6b7280);
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
     }
     .flows2-audit-sortbar__btn:hover { background: var(--bg-hover, rgba(0,0,0,0.04)); color: var(--text-primary, #111827); }
     .flows2-audit-timeline {
@@ -991,6 +994,8 @@
       color: var(--text-tertiary, #9ca3af);
       white-space: nowrap;
       padding-top: 3px;
+      max-width: 90px;
+      text-align: right;
     }
     .flows2-audit-diff {
       list-style: none;
