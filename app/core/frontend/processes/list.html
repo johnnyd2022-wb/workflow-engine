@@ -92,7 +92,17 @@
               } else if (es.created_by && es.created_at) {
                 parts.push('Created by ' + es.created_by + ' · ' + fmtDate(es.created_at));
               }
-              if (es.total_runs > 0) parts.push(es.total_runs + ' run' + (es.total_runs === 1 ? '' : 's'));
+              if (es.total_runs > 0) {
+                var totalR = es.total_runs;
+                var completedR = es.completed_runs || 0;
+                var cancelledR = es.cancelled_runs || 0;
+                var failedR = es.failed_runs || 0;
+                var successRate = totalR > 0 ? Math.round((completedR / totalR) * 100) : null;
+                var runStr = totalR + ' run' + (totalR === 1 ? '' : 's');
+                if (successRate !== null && totalR > 1) runStr += ' · ' + successRate + '% success';
+                if (cancelledR > 0) runStr += ' · ' + cancelledR + ' cancelled';
+                parts.push(runStr);
+              }
               if (parts.length) auditLine = '<p class="processes-list-item__audit">' + esc(parts.join(' · ')) + '</p>';
             }
             return (

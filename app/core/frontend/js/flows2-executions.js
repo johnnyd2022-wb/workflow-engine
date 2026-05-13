@@ -635,9 +635,11 @@
           stepsEl.style.cssText = 'font-size: 12px; color: var(--text-tertiary, #9ca3af);';
           const itemsC = (es.items_consumed || []).length;
           const itemsP = (es.items_produced || []).length;
+          const evidenceCount = (execution.evidence || []).length;
           let stepsText = `${es.steps_completed} step${es.steps_completed !== 1 ? 's' : ''} completed`;
           if (itemsC > 0) stepsText += ` · ${itemsC} input${itemsC !== 1 ? 's' : ''} consumed`;
           if (itemsP > 0) stepsText += ` · ${itemsP} output${itemsP !== 1 ? 's' : ''} produced`;
+          if (evidenceCount > 0) stepsText += ` · ${evidenceCount} evidence file${evidenceCount !== 1 ? 's' : ''}`;
           stepsEl.textContent = stepsText;
           headerLeft.appendChild(stepsEl);
         }

@@ -189,6 +189,25 @@
         return lines.length ? '<div class="inv-audit-meta">' + lines.join('') + '</div>' : '';
       }
 
+      function buildSparkline(es) {
+        if (!es) return '';
+        var hist = es.quantity_history;
+        if (!hist || hist.length < 2) return '';
+        var vals = hist.map(function (h) { return parseFloat(h.qty) || 0; });
+        var min = Math.min.apply(null, vals);
+        var max = Math.max.apply(null, vals);
+        if (min === max) return '';
+        var W = 80, H = 24, pad = 2;
+        var pts = vals.map(function (v, i) {
+          var x = pad + (i / (vals.length - 1)) * (W - pad * 2);
+          var y = H - pad - ((v - min) / (max - min)) * (H - pad * 2);
+          return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+        return '<svg class="inv-sparkline" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' +
+          '<polyline fill="none" stroke="var(--color-primary,#3b82f6)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="' + pts + '"/>' +
+          '</svg>';
+      }
+
       function buildHistoryToggle(itemId) {
         return '<details class="inv-audit-history" data-item-id="' + esc(itemId) + '">' +
           '<summary class="inv-audit-history__toggle">Audit history</summary>' +
@@ -454,7 +473,7 @@
                 '</div>' +
                 buildAuditBadges(es) +
                 buildAuditMeta(es) +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + '</span></div>' +
+                '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val inv-view-card__val--qty">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + buildSparkline(es) + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Supplier</span><span class="inv-view-card__val">' + esc(item.supplier || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Batch</span><span class="inv-view-card__val">' + esc(item.supplier_batch_number || '—') + '</span></div>' +
                 '<div class="inv-view-card__row"><span class="inv-view-card__label">Purchase</span><span class="inv-view-card__val">' + esc(datePart(item.purchase_date) || '—') + '</span></div>' +

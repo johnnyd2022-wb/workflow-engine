@@ -99,6 +99,8 @@
     .inv-view-card__row:first-of-type { margin-top: 0; }
     .inv-view-card__label { color: var(--text-secondary, #6b7280); flex-shrink: 0; }
     .inv-view-card__val { text-align: right; word-break: break-word; }
+    .inv-view-card__val--qty { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+    .inv-sparkline { display: block; flex-shrink: 0; opacity: 0.75; }
     @media (max-width: 899px) {
       .inv-view-table-wrap { display: none !important; }
       .inv-view-cards { display: flex !important; }
