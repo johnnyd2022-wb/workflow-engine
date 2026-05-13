@@ -135,7 +135,9 @@ def _upsert_summary(session: Session, event: EntityEvent) -> None:
         _update_org_summary(session, event)
 
 
-def _do_upsert(session: Session, entity_id: UUID, org_id: UUID, entity_type: str, summary: dict, event: EntityEvent) -> None:
+def _do_upsert(
+    session: Session, entity_id: UUID, org_id: UUID, entity_type: str, summary: dict, event: EntityEvent
+) -> None:
     """Generic upsert into entity_event_summaries."""
     now = datetime.now(timezone.utc)
     session.execute(
@@ -334,14 +336,22 @@ def _update_process_summary(session: Session, event: EntityEvent) -> None:
         }
 
     elif event.event_type in (
-        "process.updated", "process.step_added", "process.step_updated", "process.step_deleted",
-        "process.step_doc_uploaded", "process.step_doc_created", "process.step_doc_updated", "process.step_doc_deleted",
+        "process.updated",
+        "process.step_added",
+        "process.step_updated",
+        "process.step_deleted",
+        "process.step_doc_uploaded",
+        "process.step_doc_created",
+        "process.step_doc_updated",
+        "process.step_doc_deleted",
     ):
         summary = dict(existing)
         summary["current_version"] = p.get("version_number", existing.get("current_version", 1))
         summary["last_modified_at"] = event.created_at.isoformat() if event.created_at else None
         summary["last_modified_by"] = event.actor_label
-        summary["last_change_summary"] = p.get("change_summary") or event.event_type.replace("process.", "").replace("_", " ").capitalize()
+        summary["last_change_summary"] = (
+            p.get("change_summary") or event.event_type.replace("process.", "").replace("_", " ").capitalize()
+        )
 
     elif event.event_type == "execution.created":
         # Increment process run count when an execution is created for this process

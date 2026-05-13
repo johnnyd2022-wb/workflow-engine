@@ -26,8 +26,15 @@ def _step_name(step_id: UUID) -> str:
     return row[0] if row else "step"
 
 
-def _emit_doc_event(event_type: str, org_id: UUID, process_id: UUID, step_id: UUID,
-                    doc_id: UUID, doc_title: str, extra: dict | None = None) -> None:
+def _emit_doc_event(
+    event_type: str,
+    org_id: UUID,
+    process_id: UUID,
+    step_id: UUID,
+    doc_id: UUID,
+    doc_title: str,
+    extra: dict | None = None,
+) -> None:
     """Emit a process step doc event in its own transaction (best-effort)."""
     try:
         ew = EventWriter(db_session, org_id)
@@ -108,7 +115,12 @@ def upload_sop_file(
 
     logger.info("Process docs upload_sop_file: success doc_id=%s storage_path=%s", record.id, rel_path)
     _emit_doc_event(
-        "process.step_doc_uploaded", org_id, process_id, step_id, record.id, doc_title,
+        "process.step_doc_uploaded",
+        org_id,
+        process_id,
+        step_id,
+        record.id,
+        doc_title,
         {"mime_type": content_type, "file_size": file_size},
     )
     return (
@@ -150,7 +162,12 @@ def create_or_update_inline(
         doc = repo.update_inline(document_id, org_id, title=title, content_markdown=content_markdown)
         db_session.commit()
         _emit_doc_event(
-            "process.step_doc_updated", org_id, doc.process_id, doc.step_id, doc.id, doc.title or title,
+            "process.step_doc_updated",
+            org_id,
+            doc.process_id,
+            doc.step_id,
+            doc.id,
+            doc.title or title,
         )
         return (
             {
@@ -183,7 +200,12 @@ def create_or_update_inline(
         db_session.rollback()
         return None, "Failed to save document", 500
     _emit_doc_event(
-        "process.step_doc_created", org_id, process_id, step_id, record.id, record.title,
+        "process.step_doc_created",
+        org_id,
+        process_id,
+        step_id,
+        record.id,
+        record.title,
     )
     return (
         {
@@ -247,7 +269,12 @@ def delete_document(doc_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
         db_session.rollback()
         return False, "Failed to delete document record", 500
     _emit_doc_event(
-        "process.step_doc_deleted", org_id, doc_process_id, doc_step_id, doc_id, doc_title_snap,
+        "process.step_doc_deleted",
+        org_id,
+        doc_process_id,
+        doc_step_id,
+        doc_id,
+        doc_title_snap,
     )
     # Best-effort file deletion after commit (avoids storage leak; file delete failure is logged only)
     if storage_path:

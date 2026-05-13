@@ -116,8 +116,7 @@ def _bound_inventory_extra_data_for_list_response(extra_data: dict) -> dict:
     if isinstance(ah, list):
         sliced = _safe_slice_list(ah, LIST_INVENTORY_MAX_AUDIT_HISTORY)
         out["inventory_audit_history"] = [
-            {k: v for k, v in entry.items() if k != "user_id"} if isinstance(entry, dict) else entry
-            for entry in sliced
+            {k: v for k, v in entry.items() if k != "user_id"} if isinstance(entry, dict) else entry for entry in sliced
         ]
     rh = out.get("reconciliation_history")
     if isinstance(rh, list):
@@ -503,9 +502,7 @@ def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
 
     # Parse UUIDs once; raw value → UUID map eliminates second-pass parsing in the hydration loop.
     raw_to_uuid: dict[str, UUID] = {
-        raw: uid
-        for it in items
-        if (raw := it.get("source_execution_step_id")) and (uid := _parse_uuid(raw))
+        raw: uid for it in items if (raw := it.get("source_execution_step_id")) and (uid := _parse_uuid(raw))
     }
     step_ids: set[UUID] = set(raw_to_uuid.values())
 
@@ -1195,10 +1192,12 @@ def serve_core_img(filename):
         return response
     except FileNotFoundError:
         import logging
+
         logging.getLogger(__name__).info("Image static file not found: %s", filename)
         abort(404, "File not found")
     except Exception:
         import logging
+
         logging.getLogger(__name__).exception("Error serving image static: %s", filename)
         abort(500, "Internal server error")
 
@@ -1224,6 +1223,7 @@ def list_processes():
 
     # Batch-load process event summaries
     from app.core.db.models.entity_event_summary import EntityEventSummary as _EES_P
+
     proc_ids_all = [p.id for p in processes]
     proc_summary_by_id: dict = {}
     if proc_ids_all:
@@ -1767,6 +1767,7 @@ def list_executions():
 
     # Batch-load execution event summaries
     from app.core.db.models.entity_event_summary import EntityEventSummary as _EES_E
+
     exec_ids_all = [e.id for e in executions]
     exec_summary_by_id: dict = {}
     if exec_ids_all:
@@ -2680,6 +2681,7 @@ def list_inventory():
 
     # Batch-load event summaries for card enrichment (single query, no N+1)
     from app.core.db.models.entity_event_summary import EntityEventSummary as _EES
+
     item_ids_all = [item.id for item in items]
     event_summary_by_id: dict = {}
     if item_ids_all:
@@ -3167,7 +3169,10 @@ def record_wastage():
 
     lines.sort(key=lambda t: t[1])
     hash_for_idem = wastage_entries_payload_hash(
-        [{"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or "", "reason": r} for _i, item_id, w, u, r in lines]
+        [
+            {"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or "", "reason": r}
+            for _i, item_id, w, u, r in lines
+        ]
     )
 
     inventory_repo = InventoryRepository(db_session)
@@ -3827,11 +3832,13 @@ def adjust_inventory_item_quantity(item_id):
         return jsonify({"error": str(e)}), 400
     if not item:
         return jsonify({"error": "Inventory item not found"}), 404
-    return jsonify({
-        "id": str(item.id),
-        "quantity": quantity_to_api_str(item.quantity),
-        "unit": item.unit,
-    }), 200
+    return jsonify(
+        {
+            "id": str(item.id),
+            "quantity": quantity_to_api_str(item.quantity),
+            "unit": item.unit,
+        }
+    ), 200
 
 
 @core_bp.route("/api/core/inventory/<item_id>", methods=["DELETE"])
@@ -4033,9 +4040,7 @@ def trace_inventory_backward(inventory_item_id: str):
     # Only return connections where both endpoints are items in the response (prevents TO <uuid> display).
     # all_result_items now includes traced_item so connections to it are preserved.
     all_item_ids = {item["id"] for item in all_result_items}
-    connections = [
-        c for c in connections if c.get("from_id") in all_item_ids and c.get("to_id") in all_item_ids
-    ]
+    connections = [c for c in connections if c.get("from_id") in all_item_ids and c.get("to_id") in all_item_ids]
 
     return jsonify(
         {
@@ -4227,19 +4232,29 @@ _FIELD_LABELS = {
 }
 
 _ITEM_FIELD_LABELS = {
-    "name": "Name", "label": "Label", "quantity": "Quantity", "unit": "Unit",
-    "inventory_type": "Inventory type", "expected_inventory_type": "Expected type",
-    "type": "Type", "required": "Required",
-    "is_variable": "Variable qty", "requires_execution_confirmation": "Confirmation required",
+    "name": "Name",
+    "label": "Label",
+    "quantity": "Quantity",
+    "unit": "Unit",
+    "inventory_type": "Inventory type",
+    "expected_inventory_type": "Expected type",
+    "type": "Type",
+    "required": "Required",
+    "is_variable": "Variable qty",
+    "requires_execution_confirmation": "Confirmation required",
     "description": "Description",
 }
 
 # Fields that are auto-populated by the system and should not be reported when
 # they only appear in the after snapshot (i.e. before is None/absent).
-_ITEM_IMPLICIT_FIELDS = frozenset({
-    "inventory_type", "expected_inventory_type",
-    "is_variable", "requires_execution_confirmation",
-})
+_ITEM_IMPLICIT_FIELDS = frozenset(
+    {
+        "inventory_type",
+        "expected_inventory_type",
+        "is_variable",
+        "requires_execution_confirmation",
+    }
+)
 
 _INVENTORY_TYPE_LABELS = {
     "raw_material": "Raw material",
@@ -4344,11 +4359,13 @@ def _smart_list_diff_rows(label: str, before: list, after: list) -> list[dict]:
                 if field in _ITEM_IMPLICIT_FIELDS and b_val is None:
                     continue
                 fl = _ITEM_FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
-                rows.append({
-                    "label": f"{label} '{_item_display_name(item)}' – {fl}",
-                    "before": _fmt_sub_val(b_val, field),
-                    "after": _fmt_sub_val(a_val, field),
-                })
+                rows.append(
+                    {
+                        "label": f"{label} '{_item_display_name(item)}' – {fl}",
+                        "before": _fmt_sub_val(b_val, field),
+                        "after": _fmt_sub_val(a_val, field),
+                    }
+                )
 
     for item in after:
         k = _item_key(item)
@@ -4370,18 +4387,19 @@ def _build_diff_rows(diff: dict) -> list[dict]:
         label = _FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
         before = change.get("before")
         after = change.get("after")
-        if (isinstance(before, list) and isinstance(after, list)
-                and all(isinstance(i, dict) for i in (before + after))):
+        if isinstance(before, list) and isinstance(after, list) and all(isinstance(i, dict) for i in (before + after)):
             rows.extend(_smart_list_diff_rows(label, before, after))
         else:
             b_str = _fmt_field_value(before)
             a_str = _fmt_field_value(after)
             if b_str != a_str:
-                rows.append({
-                    "label": label,
-                    "before": None if b_str == "—" else b_str,
-                    "after": None if a_str == "—" else a_str,
-                })
+                rows.append(
+                    {
+                        "label": label,
+                        "before": None if b_str == "—" else b_str,
+                        "after": None if a_str == "—" else a_str,
+                    }
+                )
     return rows
 
 
@@ -4391,7 +4409,7 @@ def _step_added_diff_rows(step_data: dict) -> list[dict]:
     desc = step_data.get("description")
     if desc:
         rows.append({"label": "Description", "before": None, "after": desc})
-    for inp in (step_data.get("inputs") or []):
+    for inp in step_data.get("inputs") or []:
         if not isinstance(inp, dict):
             continue
         name = _item_display_name(inp)
@@ -4401,7 +4419,7 @@ def _step_added_diff_rows(step_data: dict) -> list[dict]:
         if qty is not None:
             detail += f" — {qty} {unit}".rstrip()
         rows.append({"label": "Input", "before": None, "after": detail})
-    for out in (step_data.get("outputs") or []):
+    for out in step_data.get("outputs") or []:
         if not isinstance(out, dict):
             continue
         name = _item_display_name(out)
@@ -4411,7 +4429,7 @@ def _step_added_diff_rows(step_data: dict) -> list[dict]:
         if qty is not None:
             detail += f" — {qty} {unit}".rstrip()
         rows.append({"label": "Output", "before": None, "after": detail})
-    for pr in (step_data.get("execution_prompts") or []):
+    for pr in step_data.get("execution_prompts") or []:
         if not isinstance(pr, dict):
             continue
         label = pr.get("label") or pr.get("name") or "(prompt)"
@@ -4430,7 +4448,6 @@ def _event_diff_rows(ev) -> list[dict]:
     return _build_diff_rows(ev.diff or {})
 
 
-
 def _human_summary(ev) -> str:
     et = ev.event_type
     p = ev.payload or {}
@@ -4440,7 +4457,9 @@ def _human_summary(ev) -> str:
         qty = p.get("quantity", "")
         unit = p.get("unit", "")
         method = p.get("add_method", "manual").replace("_", " ")
-        inv_type = _INVENTORY_TYPE_LABELS.get(p.get("inventory_type") or "", (p.get("inventory_type") or "").replace("_", " "))
+        inv_type = _INVENTORY_TYPE_LABELS.get(
+            p.get("inventory_type") or "", (p.get("inventory_type") or "").replace("_", " ")
+        )
         parts = [f"Added {qty} {unit}".strip()]
         if inv_type:
             parts[0] += f" ({inv_type})"
@@ -4490,9 +4509,15 @@ def _human_summary(ev) -> str:
         if not d:
             return "Updated"
         _FIELD_LABELS = {
-            "name": "name", "inventory_type": "type", "quantity": "quantity",
-            "unit": "unit", "supplier": "supplier", "supplier_batch_number": "batch",
-            "purchase_date": "purchase date", "expiry_date": "expiry date", "barcode": "barcode",
+            "name": "name",
+            "inventory_type": "type",
+            "quantity": "quantity",
+            "unit": "unit",
+            "supplier": "supplier",
+            "supplier_batch_number": "batch",
+            "purchase_date": "purchase date",
+            "expiry_date": "expiry date",
+            "barcode": "barcode",
         }
         changed = [_FIELD_LABELS.get(k, k) for k in d]
         return "Updated " + ", ".join(changed)
@@ -4649,27 +4674,24 @@ def entity_story(entity_type: str, entity_id: str):
         .all()
     )
 
-    total = (
-        db.query(EntityEvent)
-        .filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid)
-        .count()
-    )
+    total = db.query(EntityEvent).filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid).count()
 
     event_dicts = [
-        {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
-        for ev in events
+        {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)} for ev in events
     ]
 
     if etype == "inventory_item":
         event_dicts = _merge_inventory_legacy_audit(db, eid, org_id, event_dicts, events)
 
-    return jsonify({
-        "entity_id": str(eid),
-        "entity_type": etype,
-        "total": total,
-        "offset": offset,
-        "events": event_dicts,
-    }), 200
+    return jsonify(
+        {
+            "entity_id": str(eid),
+            "entity_type": etype,
+            "total": total,
+            "offset": offset,
+            "events": event_dicts,
+        }
+    ), 200
 
 
 def _merge_inventory_legacy_audit(db, eid: UUID, org_id: UUID, event_dicts: list, events: list) -> list:
@@ -4684,9 +4706,7 @@ def _merge_inventory_legacy_audit(db, eid: UUID, org_id: UUID, event_dicts: list
     from app.core.db.models.inventory_item import InventoryItem
     from datetime import datetime, timezone
 
-    item = db.query(InventoryItem).filter(
-        InventoryItem.id == eid, InventoryItem.org_id == org_id
-    ).first()
+    item = db.query(InventoryItem).filter(InventoryItem.id == eid, InventoryItem.org_id == org_id).first()
     if not item or not item.extra_data:
         return event_dicts
 
@@ -4765,20 +4785,22 @@ def _merge_inventory_legacy_audit(db, eid: UUID, org_id: UUID, event_dicts: list
                     event_dicts[matched_idx] = dict(event_dicts[matched_idx])
                     event_dicts[matched_idx]["actor"] = f"{name} ({current})" if current else name
         else:
-            extra_events.append({
-                "id": f"legacy_{entry.get('timestamp_utc', '')}",
-                "event_type": "inventory_item.legacy_entry",
-                "entity_type": "inventory_item",
-                "entity_id": str(eid),
-                "at": entry.get("timestamp_utc"),
-                "actor": _actor_display(entry),
-                "actor_type": "user",
-                "summary": _legacy_summary(entry),
-                "diff_rows": [],
-                "payload": None,
-                "diff": None,
-                "causation_id": None,
-            })
+            extra_events.append(
+                {
+                    "id": f"legacy_{entry.get('timestamp_utc', '')}",
+                    "event_type": "inventory_item.legacy_entry",
+                    "entity_type": "inventory_item",
+                    "entity_id": str(eid),
+                    "at": entry.get("timestamp_utc"),
+                    "actor": _actor_display(entry),
+                    "actor_type": "user",
+                    "summary": _legacy_summary(entry),
+                    "diff_rows": [],
+                    "payload": None,
+                    "diff": None,
+                    "causation_id": None,
+                }
+            )
 
     if extra_events:
         merged = event_dicts + extra_events
@@ -4823,15 +4845,17 @@ def entity_summary_detail(entity_type: str, entity_id: str):
         .all()
     )
 
-    return jsonify({
-        "entity_id": str(eid),
-        "entity_type": etype,
-        "summary": summary,
-        "recent_events": [
-            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
-            for ev in reversed(recent)
-        ],
-    }), 200
+    return jsonify(
+        {
+            "entity_id": str(eid),
+            "entity_type": etype,
+            "summary": summary,
+            "recent_events": [
+                {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
+                for ev in reversed(recent)
+            ],
+        }
+    ), 200
 
 
 @core_bp.route("/api/core/entities/activity", methods=["GET"])
@@ -4861,6 +4885,7 @@ def entity_activity_feed():
     if from_date:
         try:
             from datetime import timezone as _tz
+
             fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=_tz.utc)
             q = q.filter(EntityEvent.created_at >= fd)
         except ValueError:
@@ -4869,6 +4894,7 @@ def entity_activity_feed():
     if to_date:
         try:
             from datetime import timezone as _tz
+
             td = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=_tz.utc)
             q = q.filter(EntityEvent.created_at <= td)
         except ValueError:
@@ -4877,14 +4903,16 @@ def entity_activity_feed():
     total = q.count()
     events = q.order_by(EntityEvent.created_at.desc()).offset(offset).limit(limit).all()
 
-    return jsonify({
-        "total": total,
-        "offset": offset,
-        "events": [
-            {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
-            for ev in events
-        ],
-    }), 200
+    return jsonify(
+        {
+            "total": total,
+            "offset": offset,
+            "events": [
+                {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
+                for ev in events
+            ],
+        }
+    ), 200
 
 
 @core_bp.route("/api/core/sourcemap/objects", methods=["GET"])
@@ -4916,40 +4944,49 @@ def sourcemap_objects():
             inv_q = inv_q.filter(InventoryItem.name.ilike(f"%{q}%"))
         inv_count = inv_q.count()
         total += inv_count
-        for item in inv_q.order_by(InventoryItem.created_at.desc()).offset(offset if not entity_type_filter else 0).limit(limit).all():
-            objects.append({
-                "id": str(item.id),
-                "type": "inventory_item",
-                "label": item.display_label or item.name,
-                "sublabel": f"{item.inventory_type.replace('_', ' ').title()} · {item.quantity} {item.unit}",
-                "discriminators": {
-                    "supplier": item.supplier,
-                    "batch_number": item.supplier_batch_number,
-                    "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
-                    "quantity": str(item.quantity),
-                    "unit": item.unit,
-                },
-                "traceable_since": item.created_at.isoformat() if item.created_at else None,
-                "is_consumed": str(item.quantity) == "0.0000",
-            })
+        for item in (
+            inv_q.order_by(InventoryItem.created_at.desc())
+            .offset(offset if not entity_type_filter else 0)
+            .limit(limit)
+            .all()
+        ):
+            objects.append(
+                {
+                    "id": str(item.id),
+                    "type": "inventory_item",
+                    "label": item.display_label or item.name,
+                    "sublabel": f"{item.inventory_type.replace('_', ' ').title()} · {item.quantity} {item.unit}",
+                    "discriminators": {
+                        "supplier": item.supplier,
+                        "batch_number": item.supplier_batch_number,
+                        "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+                        "quantity": str(item.quantity),
+                        "unit": item.unit,
+                    },
+                    "traceable_since": item.created_at.isoformat() if item.created_at else None,
+                    "is_consumed": str(item.quantity) == "0.0000",
+                }
+            )
 
     if not entity_type_filter or entity_type_filter == "execution":
         exec_q = db.query(Execution).filter(Execution.org_id == org_id)
         exec_count = exec_q.count()
         total += exec_count
         for ex in exec_q.order_by(Execution.created_at.desc()).limit(limit).all():
-            objects.append({
-                "id": str(ex.id),
-                "type": "execution",
-                "label": f"Execution #{str(ex.id)[:8]}",
-                "sublabel": f"{ex.status.value.replace('_', ' ').title()} · {ex.total_steps or '?'} steps",
-                "discriminators": {
-                    "process_id": str(ex.process_id),
-                    "status": ex.status.value,
-                    "started_at": ex.started_at.isoformat() if ex.started_at else None,
-                },
-                "traceable_since": ex.created_at.isoformat() if ex.created_at else None,
-            })
+            objects.append(
+                {
+                    "id": str(ex.id),
+                    "type": "execution",
+                    "label": f"Execution #{str(ex.id)[:8]}",
+                    "sublabel": f"{ex.status.value.replace('_', ' ').title()} · {ex.total_steps or '?'} steps",
+                    "discriminators": {
+                        "process_id": str(ex.process_id),
+                        "status": ex.status.value,
+                        "started_at": ex.started_at.isoformat() if ex.started_at else None,
+                    },
+                    "traceable_since": ex.created_at.isoformat() if ex.created_at else None,
+                }
+            )
 
     if not entity_type_filter or entity_type_filter == "process":
         proc_q = db.query(Process).filter(Process.org_id == org_id)
@@ -4958,17 +4995,19 @@ def sourcemap_objects():
         proc_count = proc_q.count()
         total += proc_count
         for proc in proc_q.order_by(Process.created_at.desc()).limit(limit).all():
-            objects.append({
-                "id": str(proc.id),
-                "type": "process",
-                "label": proc.name,
-                "sublabel": f"{'Draft' if proc.is_draft else 'Published'} · {proc.category.value if proc.category else 'Uncategorised'}",
-                "discriminators": {
-                    "category": proc.category.value if proc.category else None,
-                    "is_draft": proc.is_draft,
-                },
-                "traceable_since": proc.created_at.isoformat() if proc.created_at else None,
-            })
+            objects.append(
+                {
+                    "id": str(proc.id),
+                    "type": "process",
+                    "label": proc.name,
+                    "sublabel": f"{'Draft' if proc.is_draft else 'Published'} · {proc.category.value if proc.category else 'Uncategorised'}",
+                    "discriminators": {
+                        "category": proc.category.value if proc.category else None,
+                        "is_draft": proc.is_draft,
+                    },
+                    "traceable_since": proc.created_at.isoformat() if proc.created_at else None,
+                }
+            )
 
     return jsonify({"objects": objects[:limit], "total": total, "page": page}), 200
 
@@ -5011,6 +5050,7 @@ def sourcemap_trace():
 
         # Annotate timeline with human summaries
         from app.core.db.models.entity_event import EntityEvent as _EE_Trace
+
         timeline_ids = [item.get("event_id") for item in result["timeline"] if item.get("event_id")]
         events_by_id: dict = {}
         if timeline_ids:
@@ -5021,44 +5061,55 @@ def sourcemap_trace():
                 "at": item["at"],
                 "event_type": item["event_type"],
                 "entity_id": item["entity_id"],
-                "summary": _human_summary(events_by_id[item["event_id"]]) if item.get("event_id") and item["event_id"] in events_by_id
-                           else item["event_type"].replace(".", " — ").replace("_", " ").capitalize(),
+                "summary": _human_summary(events_by_id[item["event_id"]])
+                if item.get("event_id") and item["event_id"] in events_by_id
+                else item["event_type"].replace(".", " — ").replace("_", " ").capitalize(),
                 "actor": item.get("actor"),
             }
             for item in result["timeline"]
         ]
 
-        return jsonify({
-            "root": next((n for n in result["nodes"] if n["is_root"]), result["nodes"][0] if result["nodes"] else {}),
-            "nodes": result["nodes"],
-            "edges": result["edges"],
-            "as_of": result["as_of"],
-            "is_current": False,
-            "story": story,
-        }), 200
+        return jsonify(
+            {
+                "root": next(
+                    (n for n in result["nodes"] if n["is_root"]), result["nodes"][0] if result["nodes"] else {}
+                ),
+                "nodes": result["nodes"],
+                "edges": result["edges"],
+                "as_of": result["as_of"],
+                "is_current": False,
+                "story": story,
+            }
+        ), 200
 
     # Current state trace — use existing DAGTracer
     from app.core.db.models.inventory_item import InventoryItem
+
     item = db.query(InventoryItem).filter(InventoryItem.id == root_id, InventoryItem.org_id == org_id).first()
     if not item:
         return jsonify({"error": "Item not found"}), 404
 
     try:
         from app.features.workflow_engine.dagtraversal import trace_backward, trace_forward
+
         result_fwd = trace_forward(str(root_id), db, org_id=str(org_id))
         result_bwd = trace_backward(str(root_id), db, org_id=str(org_id))
 
         all_nodes = {n["id"]: n for n in (result_fwd.nodes + result_bwd.nodes)}
         all_edges = list({(e["from_id"], e["to_id"]): e for e in (result_fwd.edges + result_bwd.edges)}.values())
 
-        return jsonify({
-            "root": {"id": str(root_id), "type": "inventory_item", "label": item.display_label or item.name},
-            "nodes": list(all_nodes.values()),
-            "edges": [{"from": e["from_id"], "to": e["to_id"], "execution_id": e.get("execution_id")} for e in all_edges],
-            "as_of": None,
-            "is_current": True,
-            "story": [],
-        }), 200
+        return jsonify(
+            {
+                "root": {"id": str(root_id), "type": "inventory_item", "label": item.display_label or item.name},
+                "nodes": list(all_nodes.values()),
+                "edges": [
+                    {"from": e["from_id"], "to": e["to_id"], "execution_id": e.get("execution_id")} for e in all_edges
+                ],
+                "as_of": None,
+                "is_current": True,
+                "story": [],
+            }
+        ), 200
     except Exception:
         logger.exception("Trace failed")
         return jsonify({"error": "Trace failed"}), 500

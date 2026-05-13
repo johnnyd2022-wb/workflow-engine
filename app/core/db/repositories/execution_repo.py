@@ -21,11 +21,13 @@ def _extract_consumed(actual_inputs: list) -> list[dict]:
             continue
         item_id = inp.get("inventory_item_id") or inp.get("item_id")
         if item_id:
-            result.append({
-                "item_id": str(item_id),
-                "quantity": inp.get("quantity") or inp.get("quantity_used"),
-                "unit": inp.get("unit"),
-            })
+            result.append(
+                {
+                    "item_id": str(item_id),
+                    "quantity": inp.get("quantity") or inp.get("quantity_used"),
+                    "unit": inp.get("unit"),
+                }
+            )
     return result
 
 
@@ -37,11 +39,13 @@ def _extract_produced(actual_outputs: list) -> list[dict]:
             continue
         item_id = out.get("inventory_item_id") or out.get("item_id")
         if item_id:
-            result.append({
-                "item_id": str(item_id),
-                "quantity": out.get("quantity") or out.get("quantity_produced"),
-                "unit": out.get("unit"),
-            })
+            result.append(
+                {
+                    "item_id": str(item_id),
+                    "quantity": out.get("quantity") or out.get("quantity_produced"),
+                    "unit": out.get("unit"),
+                }
+            )
     return result
 
 
@@ -292,6 +296,7 @@ class ExecutionRepository:
             if item_id:
                 try:
                     from uuid import UUID as _UUID
+
                     item_uuid = _UUID(str(item_id))
                     ew.emit(
                         event_type="inventory_item.consumed",
@@ -317,6 +322,7 @@ class ExecutionRepository:
             if item_id:
                 try:
                     from uuid import UUID as _UUID
+
                     item_uuid = _UUID(str(item_id))
                     ew.emit(
                         event_type="inventory_item.produced",

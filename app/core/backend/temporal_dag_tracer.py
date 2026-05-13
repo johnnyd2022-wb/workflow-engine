@@ -49,30 +49,34 @@ class TemporalDAGTracer:
             exec_id = p.get("execution_id")
             if not exec_id:
                 continue
-            for c in (p.get("items_consumed") or []):
+            for c in p.get("items_consumed") or []:
                 item_id = c.get("item_id")
                 if item_id:
-                    edges.append({
-                        "from": str(item_id),
-                        "to": str(exec_id),
-                        "relationship": "consumed_by",
-                        "execution_id": str(exec_id),
-                        "quantity": c.get("quantity"),
-                        "unit": c.get("unit"),
-                        "at": ev.created_at.isoformat() if ev.created_at else None,
-                    })
-            for prod in (p.get("items_produced") or []):
+                    edges.append(
+                        {
+                            "from": str(item_id),
+                            "to": str(exec_id),
+                            "relationship": "consumed_by",
+                            "execution_id": str(exec_id),
+                            "quantity": c.get("quantity"),
+                            "unit": c.get("unit"),
+                            "at": ev.created_at.isoformat() if ev.created_at else None,
+                        }
+                    )
+            for prod in p.get("items_produced") or []:
                 item_id = prod.get("item_id")
                 if item_id:
-                    edges.append({
-                        "from": str(exec_id),
-                        "to": str(item_id),
-                        "relationship": "produced",
-                        "execution_id": str(exec_id),
-                        "quantity": prod.get("quantity"),
-                        "unit": prod.get("unit"),
-                        "at": ev.created_at.isoformat() if ev.created_at else None,
-                    })
+                    edges.append(
+                        {
+                            "from": str(exec_id),
+                            "to": str(item_id),
+                            "relationship": "produced",
+                            "execution_id": str(exec_id),
+                            "quantity": prod.get("quantity"),
+                            "unit": prod.get("unit"),
+                            "at": ev.created_at.isoformat() if ev.created_at else None,
+                        }
+                    )
 
         root_str = str(root_id)
         connected: set[str] = {root_str}
@@ -121,9 +125,7 @@ class TemporalDAGTracer:
     def _build_node_list(
         self, connected: set[str], root_str: str, root_type: str, root_state: dict | None
     ) -> list[dict]:
-        nodes: list[dict] = [
-            {"id": root_str, "type": root_type, "is_root": True, "state": root_state}
-        ]
+        nodes: list[dict] = [{"id": root_str, "type": root_type, "is_root": True, "state": root_state}]
         for nid in connected:
             if nid == root_str:
                 continue

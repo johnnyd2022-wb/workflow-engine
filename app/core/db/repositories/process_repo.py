@@ -36,9 +36,11 @@ def _process_snapshot(process: Process, steps: list[Step]) -> dict:
 
 
 def _next_version_number(db: Session, process_id: UUID) -> int:
-    row = db.query(func.coalesce(func.max(ProcessVersion.version_number), 0)).filter(
-        ProcessVersion.process_id == process_id
-    ).scalar()
+    row = (
+        db.query(func.coalesce(func.max(ProcessVersion.version_number), 0))
+        .filter(ProcessVersion.process_id == process_id)
+        .scalar()
+    )
     return (row or 0) + 1
 
 
@@ -225,9 +227,7 @@ class ProcessRepository:
         _ = step.id
 
         all_steps = _current_steps(self.db, process_id)
-        pv = _insert_process_version(
-            self.db, org_id, process, all_steps, change_summary=f"Added step: {name}"
-        )
+        pv = _insert_process_version(self.db, org_id, process, all_steps, change_summary=f"Added step: {name}")
 
         ew = EventWriter(self.db, org_id)
         ew.emit(
@@ -291,9 +291,7 @@ class ProcessRepository:
             return step
 
         all_steps = _current_steps(self.db, process_id)
-        pv = _insert_process_version(
-            self.db, org_id, process, all_steps, change_summary=f"Updated step: {step.name}"
-        )
+        pv = _insert_process_version(self.db, org_id, process, all_steps, change_summary=f"Updated step: {step.name}")
 
         ew = EventWriter(self.db, org_id)
         ew.emit(

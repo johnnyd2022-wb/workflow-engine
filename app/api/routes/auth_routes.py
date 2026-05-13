@@ -192,6 +192,7 @@ def signup():
         log_action("signup", "organisation", org.id, {"org_name": org_name}, org.id, user.id)
 
         from app.core.utils.emit_event import emit_event
+
         emit_event(
             event_type="user.created",
             entity_type="user",
@@ -375,6 +376,7 @@ def login():
                     user_id,
                 )
                 from app.core.utils.emit_event import emit_event
+
                 emit_event(
                     event_type="user.login_failed",
                     entity_type="user",
@@ -533,6 +535,7 @@ def login():
         log_action("login", "user", user.id, {"ip_address": ip_address, "user_agent": user_agent}, user.org_id, user.id)
 
         from app.core.utils.emit_event import emit_event
+
         emit_event(
             event_type="user.login",
             entity_type="user",
@@ -805,6 +808,7 @@ def verify_two_factor():
         log_action("login", "user", user_id, None, user_org_id, user_id)
 
         from app.core.utils.emit_event import emit_event
+
         emit_event(
             event_type="user.login",
             entity_type="user",
@@ -812,7 +816,11 @@ def verify_two_factor():
             org_id=user_org_id,
             actor_id=user_id,
             actor_label=user_email,
-            payload={"ip": get_remote_address(), "user_agent": request.headers.get("User-Agent", "")[:200], "2fa_used": True},
+            payload={
+                "ip": get_remote_address(),
+                "user_agent": request.headers.get("User-Agent", "")[:200],
+                "2fa_used": True,
+            },
         )
 
         # Create response
@@ -1021,6 +1029,7 @@ def enable_2fa():
             )
 
             from app.core.utils.emit_event import emit_event
+
             emit_event(
                 event_type="user.2fa_enabled",
                 entity_type="user",
@@ -1097,6 +1106,7 @@ def disable_2fa():
             )
 
             from app.core.utils.emit_event import emit_event
+
             emit_event(
                 event_type="user.2fa_disabled",
                 entity_type="user",
