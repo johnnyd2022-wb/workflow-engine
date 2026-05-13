@@ -409,8 +409,15 @@
             '<div class="inv-adj-wrap">' +
               '<button class="inv-adj-btn inv-adj-btn--primary" type="button" ' +
                 'data-item-id="' + esc(item.id) + '" ' +
+                'data-name="' + esc(item.name || '') + '" ' +
+                'data-type="' + esc(item.inventory_type || '') + '" ' +
+                'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '" ' +
                 'data-unit="' + esc(item.unit || '') + '" ' +
-                'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '">' +
+                'data-supplier="' + esc(item.supplier || '') + '" ' +
+                'data-batch="' + esc(item.supplier_batch_number || '') + '" ' +
+                'data-purchase="' + esc(datePart(item.purchase_date) || '') + '" ' +
+                'data-expiry="' + esc(datePart(item.expiry_date) || '') + '" ' +
+                'data-barcode="' + esc(item.barcode || '') + '">' +
                 'Edit' +
               '</button>' +
             '</div>';
@@ -449,8 +456,15 @@
                 '<div class="inv-adj-wrap">' +
                   '<button class="inv-adj-btn inv-adj-btn--primary" type="button" ' +
                     'data-item-id="' + esc(item.id) + '" ' +
+                    'data-name="' + esc(item.name || '') + '" ' +
+                    'data-type="' + esc(item.inventory_type || '') + '" ' +
+                    'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '" ' +
                     'data-unit="' + esc(item.unit || '') + '" ' +
-                    'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '">' +
+                    'data-supplier="' + esc(item.supplier || '') + '" ' +
+                    'data-batch="' + esc(item.supplier_batch_number || '') + '" ' +
+                    'data-purchase="' + esc(datePart(item.purchase_date) || '') + '" ' +
+                    'data-expiry="' + esc(datePart(item.expiry_date) || '') + '" ' +
+                    'data-barcode="' + esc(item.barcode || '') + '">' +
                     'Edit' +
                   '</button>' +
                 '</div>' +

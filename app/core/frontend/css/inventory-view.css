@@ -223,11 +223,11 @@
 /* ── Inline quantity adjust widget ──────────────────────────── */
 .inv-adj-wrap { display: block; margin-top: 4px; }
 .inv-adj-btn {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  padding: 1px 7px;
-  min-height: 22px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  min-height: 28px;
+  border-radius: 6px;
   border: none;
   cursor: pointer;
   display: inline-flex;
@@ -301,3 +301,160 @@
   color: #dc2626;
   min-height: 1em;
 }
+
+/* ── Full-edit bottom sheet ──────────────────────────────────── */
+body.inv-edit-open { overflow: hidden; }
+
+.inv-edit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+body.inv-edit-open .inv-edit-backdrop { opacity: 1; pointer-events: auto; }
+
+.inv-edit-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1100;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--bg-card, #fff);
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(110%);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+body.inv-edit-open .inv-edit-panel { transform: translateY(0); }
+
+/* Desktop: align panel left edge with page-content (sidebar width = 260px) */
+@media (min-width: 768px) {
+  .inv-edit-panel { left: 260px; }
+}
+
+/* Mobile: compact form — smaller inputs and font to fit the screen cleanly */
+@media (max-width: 767px) {
+  .inv-edit-form { padding: 12px 16px 20px; gap: 10px; }
+  .inv-edit-label { font-size: 0.75rem; }
+  .inv-edit-input {
+    padding: 7px 10px;
+    min-height: 36px;
+    font-size: 0.875rem;
+  }
+  .inv-edit-save,
+  .inv-edit-cancel {
+    padding: 9px 12px;
+    min-height: 40px;
+    font-size: 0.875rem;
+  }
+  .inv-edit-row { gap: 8px; }
+  .inv-edit-header { padding: 10px 16px 10px; }
+  .inv-edit-title { font-size: 0.9375rem; }
+}
+
+.inv-edit-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-default, #d1d5db);
+  margin: 14px auto 0;
+  flex-shrink: 0;
+}
+
+.inv-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--border-light, #f3f4f6);
+  flex-shrink: 0;
+}
+.inv-edit-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #111);
+}
+.inv-edit-form {
+  padding: 16px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.inv-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.inv-edit-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary, #6b7280);
+}
+.inv-edit-input {
+  padding: 10px 12px;
+  min-height: 44px;
+  border: 1px solid var(--border-default, #d1d5db);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--bg-card, #fff);
+  color: var(--text-primary, #111);
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.inv-edit-input:focus {
+  outline: 2px solid var(--primary, #3b82f6);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.inv-edit-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.inv-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding-top: 4px;
+}
+.inv-edit-save {
+  padding: 12px 20px;
+  min-height: 48px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary, #3b82f6);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.inv-edit-save:hover { background: #2563eb; }
+.inv-edit-save:disabled { opacity: 0.6; cursor: default; }
+.inv-edit-cancel {
+  padding: 12px 16px;
+  min-height: 48px;
+  border: 1px solid var(--border-default, #d1d5db);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  font-size: 1rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.inv-edit-cancel:hover { background: var(--bg-hover, #f3f4f6); }
+.inv-edit-msg {
+  font-size: 0.8125rem;
+  color: #dc2626;
+  min-height: 1em;
+  margin: 0;
+}
+

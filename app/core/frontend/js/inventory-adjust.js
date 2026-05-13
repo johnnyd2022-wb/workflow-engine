@@ -1,121 +1,201 @@
 /**
- * Inline quantity adjustment widget for inventory items.
- *
- * Usage: render a button with class "inv-adj-btn" and data attributes:
- *   data-item-id   — inventory item UUID
- *   data-unit      — unit string (e.g. "kg")
- *   data-current   — current quantity string
- *
- * After a successful save the widget calls window.invAdjustOnSave(itemId, newQty, unit)
- * if that function exists — callers set it to trigger a page refresh.
+ * Inventory item edit bottom sheet.
+ * Backdrop and panel are direct <body> children (position:fixed).
+ * Open/close = add/remove class on <body>. No display:none toggling.
  */
 (function () {
   if (window._invAdjLoaded) return;
   window._invAdjLoaded = true;
+
+  var panel    = null;
+  var backdrop = null;
+  var activeItemId = null;
 
   function getCsrf() {
     var m = document.querySelector('meta[name="csrf-token"]');
     return m ? m.getAttribute('content') : '';
   }
 
-  function closeForm(btn) {
-    var f = btn.closest('.inv-adj-wrap');
-    if (f) f.querySelector('.inv-adj-form') && f.querySelector('.inv-adj-form').remove();
-  }
+  function ensureElements() {
+    if (panel) return;
 
-  function showForm(btn) {
-    var wrap = btn.closest('.inv-adj-wrap');
-    if (!wrap) return;
+    backdrop = document.createElement('div');
+    backdrop.className = 'inv-edit-backdrop';
+    document.body.appendChild(backdrop);
 
-    // Toggle off if already open
-    var existing = wrap.querySelector('.inv-adj-form');
-    if (existing) { existing.remove(); return; }
-
-    var itemId  = btn.dataset.itemId;
-    var unit    = btn.dataset.unit || '';
-    var current = btn.dataset.current || '';
-
-    var form = document.createElement('div');
-    form.className = 'inv-adj-form';
-    form.innerHTML =
-      '<label class="inv-adj-label">New quantity (' + escInvAdj(unit) + ')</label>' +
-      '<div class="inv-adj-row">' +
-        '<input type="number" class="inv-adj-input" step="any" min="0" value="' + escInvAdj(current) + '" placeholder="0">' +
-        '<button type="button" class="inv-adj-save">Save</button>' +
-        '<button type="button" class="inv-adj-cancel">Cancel</button>' +
+    panel = document.createElement('div');
+    panel.className = 'inv-edit-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-labelledby', 'inv-edit-title');
+    panel.innerHTML =
+      '<div class="inv-edit-handle" aria-hidden="true"></div>' +
+      '<div class="inv-edit-header">' +
+        '<span class="inv-edit-title" id="inv-edit-title">Edit item</span>' +
       '</div>' +
-      '<span class="inv-adj-msg"></span>';
+      '<form class="inv-edit-form" id="inv-edit-form" novalidate>' +
+        '<div class="inv-edit-field">' +
+          '<label class="inv-edit-label" for="inv-e-name">Name</label>' +
+          '<input type="text" id="inv-e-name" class="inv-edit-input" required>' +
+        '</div>' +
+        '<div class="inv-edit-field">' +
+          '<label class="inv-edit-label" for="inv-e-type">Type</label>' +
+          '<select id="inv-e-type" class="inv-edit-input">' +
+            '<option value="raw_material">Raw material</option>' +
+            '<option value="work_in_progress">Intermediate (WIP)</option>' +
+            '<option value="final_product">Final product</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="inv-edit-row">' +
+          '<div class="inv-edit-field">' +
+            '<label class="inv-edit-label" for="inv-e-qty">Quantity</label>' +
+            '<input type="number" id="inv-e-qty" class="inv-edit-input" step="any" min="0">' +
+          '</div>' +
+          '<div class="inv-edit-field">' +
+            '<label class="inv-edit-label" for="inv-e-unit">Unit</label>' +
+            '<input type="text" id="inv-e-unit" class="inv-edit-input">' +
+          '</div>' +
+        '</div>' +
+        '<div class="inv-edit-field">' +
+          '<label class="inv-edit-label" for="inv-e-supplier">Supplier</label>' +
+          '<input type="text" id="inv-e-supplier" class="inv-edit-input">' +
+        '</div>' +
+        '<div class="inv-edit-field">' +
+          '<label class="inv-edit-label" for="inv-e-batch">Batch number</label>' +
+          '<input type="text" id="inv-e-batch" class="inv-edit-input">' +
+        '</div>' +
+        '<div class="inv-edit-row">' +
+          '<div class="inv-edit-field">' +
+            '<label class="inv-edit-label" for="inv-e-purchase">Purchase date</label>' +
+            '<input type="date" id="inv-e-purchase" class="inv-edit-input">' +
+          '</div>' +
+          '<div class="inv-edit-field">' +
+            '<label class="inv-edit-label" for="inv-e-expiry">Expiry date</label>' +
+            '<input type="date" id="inv-e-expiry" class="inv-edit-input">' +
+          '</div>' +
+        '</div>' +
+        '<div class="inv-edit-field">' +
+          '<label class="inv-edit-label" for="inv-e-barcode">Barcode</label>' +
+          '<input type="text" id="inv-e-barcode" class="inv-edit-input">' +
+        '</div>' +
+        '<p class="inv-edit-msg" id="inv-edit-msg" role="alert"></p>' +
+        '<div class="inv-edit-actions">' +
+          '<button type="button" class="inv-edit-cancel">Cancel</button>' +
+          '<button type="submit" class="inv-edit-save">Save changes</button>' +
+        '</div>' +
+      '</form>';
+    document.body.appendChild(panel);
 
-    wrap.appendChild(form);
-    var input = form.querySelector('.inv-adj-input');
-    input.focus();
-    input.select();
-
-    form.querySelector('.inv-adj-cancel').addEventListener('click', function () {
-      form.remove();
+    panel.querySelector('.inv-edit-cancel').addEventListener('click', closeSheet);
+    panel.querySelector('#inv-edit-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      saveEdit();
     });
 
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') form.querySelector('.inv-adj-save').click();
-      if (e.key === 'Escape') form.remove();
-    });
+    /* On mobile, keep the panel above the bottom nav bar */
+    window.addEventListener('resize', adjustBottom);
+  }
 
-    form.querySelector('.inv-adj-save').addEventListener('click', function () {
-      var val = input.value.trim();
-      if (val === '' || isNaN(parseFloat(val))) {
-        form.querySelector('.inv-adj-msg').textContent = 'Enter a valid number.';
-        return;
-      }
-      var saveBtn = form.querySelector('.inv-adj-save');
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
+  function adjustBottom() {
+    if (!panel) return;
+    var sidebar = document.getElementById('sidebar');
+    var navH = 0;
+    if (sidebar) {
+      var r = sidebar.getBoundingClientRect();
+      if (r.top > window.innerHeight / 2) navH = Math.round(window.innerHeight - r.top);
+    }
+    panel.style.bottom = navH ? navH + 'px' : '';
+  }
 
-      fetch('/api/core/inventory/' + encodeURIComponent(itemId) + '/adjust', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrf(),
-          'X-CSRF-Token': getCsrf(),
-        },
-        body: JSON.stringify({ new_quantity: val }),
-      })
-        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-          if (!res.ok) {
-            form.querySelector('.inv-adj-msg').textContent = res.data.error || 'Save failed.';
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save';
-            return;
-          }
-          var newQty = res.data.quantity;
-          // Update the btn data-current so toggling again shows the new value
-          btn.dataset.current = newQty;
-          form.remove();
-          if (typeof window.invAdjustOnSave === 'function') {
-            window.invAdjustOnSave(itemId, newQty, unit);
-          }
-        })
-        .catch(function () {
-          form.querySelector('.inv-adj-msg').textContent = 'Network error — try again.';
+  function openSheet(btn) {
+    ensureElements();
+    activeItemId = btn.dataset.itemId;
+
+    panel.querySelector('#inv-e-name').value     = btn.dataset.name     || '';
+    panel.querySelector('#inv-e-type').value     = btn.dataset.type     || 'raw_material';
+    panel.querySelector('#inv-e-qty').value      = btn.dataset.current  || '';
+    panel.querySelector('#inv-e-unit').value     = btn.dataset.unit     || '';
+    panel.querySelector('#inv-e-supplier').value = btn.dataset.supplier || '';
+    panel.querySelector('#inv-e-batch').value    = btn.dataset.batch    || '';
+    panel.querySelector('#inv-e-purchase').value = btn.dataset.purchase || '';
+    panel.querySelector('#inv-e-expiry').value   = btn.dataset.expiry   || '';
+    panel.querySelector('#inv-e-barcode').value  = btn.dataset.barcode  || '';
+    panel.querySelector('#inv-edit-msg').textContent = '';
+
+    var saveBtn = panel.querySelector('.inv-edit-save');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save changes';
+
+    adjustBottom();
+    document.body.classList.add('inv-edit-open');
+    panel.querySelector('#inv-e-name').focus();
+  }
+
+  function closeSheet() {
+    document.body.classList.remove('inv-edit-open');
+    activeItemId = null;
+  }
+
+  function saveEdit() {
+    if (!activeItemId) return;
+    var msgEl   = panel.querySelector('#inv-edit-msg');
+    var saveBtn = panel.querySelector('.inv-edit-save');
+
+    var name = panel.querySelector('#inv-e-name').value.trim();
+    var unit = panel.querySelector('#inv-e-unit').value.trim();
+    var qty  = panel.querySelector('#inv-e-qty').value.trim();
+
+    if (!name) { msgEl.textContent = 'Name is required.'; return; }
+    if (!unit) { msgEl.textContent = 'Unit is required.'; return; }
+    if (qty === '' || isNaN(parseFloat(qty))) { msgEl.textContent = 'A valid quantity is required.'; return; }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    msgEl.textContent = '';
+
+    var body = {
+      name:                  name,
+      inventory_type:        panel.querySelector('#inv-e-type').value,
+      quantity:              qty,
+      unit:                  unit,
+      supplier:              panel.querySelector('#inv-e-supplier').value.trim() || null,
+      supplier_batch_number: panel.querySelector('#inv-e-batch').value.trim()    || null,
+      purchase_date:         panel.querySelector('#inv-e-purchase').value         || null,
+      expiry_date:           panel.querySelector('#inv-e-expiry').value           || null,
+      barcode:               panel.querySelector('#inv-e-barcode').value.trim()   || null,
+    };
+
+    var savedId = activeItemId;
+    fetch('/api/core/inventory/' + encodeURIComponent(savedId), {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrf(),
+        'X-CSRF-Token': getCsrf(),
+      },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          msgEl.textContent = res.data.error || 'Save failed.';
           saveBtn.disabled = false;
-          saveBtn.textContent = 'Save';
-        });
-    });
+          saveBtn.textContent = 'Save changes';
+          return;
+        }
+        closeSheet();
+        if (typeof window.invAdjustOnSave === 'function') window.invAdjustOnSave(savedId);
+      })
+      .catch(function () {
+        msgEl.textContent = 'Network error — try again.';
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save changes';
+      });
   }
 
-  function escInvAdj(s) {
-    if (!s) return '';
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  // Event delegation — works on dynamically rendered cards
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('.inv-adj-btn');
-    if (btn) showForm(btn);
+    if (btn) openSheet(btn);
   });
 })();

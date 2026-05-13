@@ -188,8 +188,15 @@ function createInventoryItem(item) {
         <div class="inv-adj-wrap">
             <button class="inv-adj-btn inv-adj-btn--primary" type="button"
                 data-item-id="${escapeHtml(item.id || '')}"
+                data-name="${escapeHtml(item.name || '')}"
+                data-type="${escapeHtml(item.inventory_type || '')}"
+                data-current="${escapeHtml(String(item.quantity != null ? item.quantity : ''))}"
                 data-unit="${escapeHtml(item.unit || '')}"
-                data-current="${escapeHtml(String(item.quantity != null ? item.quantity : ''))}">
+                data-supplier="${escapeHtml(item.supplier || '')}"
+                data-batch="${escapeHtml(item.supplier_batch_number || '')}"
+                data-purchase="${escapeHtml(item.purchase_date ? item.purchase_date.slice(0, 10) : '')}"
+                data-expiry="${escapeHtml(item.expiry_date ? item.expiry_date.slice(0, 10) : '')}"
+                data-barcode="${escapeHtml(item.barcode || '')}">
                 Edit
             </button>
         </div>

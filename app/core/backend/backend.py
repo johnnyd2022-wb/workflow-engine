@@ -28,6 +28,7 @@ from app.core.backend.complete_step_payload import (
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_docs import process_docs_routes
+from app.core.backend.event_writer import EventWriter
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
@@ -3722,7 +3723,20 @@ def update_inventory_item(item_id):
         if not item:
             return jsonify({"error": "Inventory item not found"}), 404
 
-        # Update item
+        # Snapshot before mutation for diff
+        before = {
+            "name": item.name,
+            "inventory_type": item.inventory_type,
+            "quantity": quantity_to_api_str(item.quantity),
+            "unit": item.unit,
+            "supplier": item.supplier,
+            "supplier_batch_number": item.supplier_batch_number,
+            "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+            "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+            "barcode": item.barcode,
+        }
+
+        # Apply updates
         item.name = name
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
             item.quantity = coerce_stored_quantity(quantity)
@@ -3732,8 +3746,32 @@ def update_inventory_item(item_id):
         item.purchase_date = purchase_date
         item.supplier_batch_number = data.get("supplier_batch_number")
         item.expiry_date = expiry_date
+        item.barcode = data.get("barcode") or None
         if data.get("metadata"):
             item.extra_data = data.get("metadata")
+
+        after = {
+            "name": item.name,
+            "inventory_type": item.inventory_type,
+            "quantity": quantity_to_api_str(item.quantity),
+            "unit": item.unit,
+            "supplier": item.supplier,
+            "supplier_batch_number": item.supplier_batch_number,
+            "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+            "expiry_date": item.expiry_date.isoformat() if item.expiry_date else None,
+            "barcode": item.barcode,
+        }
+
+        diff = {k: {"before": before[k], "after": after[k]} for k in before if before[k] != after[k]}
+
+        ew = EventWriter(db_session, org_id)
+        ew.emit(
+            event_type="inventory_item.updated",
+            entity_type="inventory_item",
+            entity_id=item.id,
+            payload={**after, "reason": "manual_edit"},
+            diff=diff if diff else None,
+        )
 
         db_session.commit()
         db_session.refresh(item)
@@ -4449,7 +4487,15 @@ def _human_summary(ev) -> str:
         return base
 
     if et == "inventory_item.updated":
-        return "Updated"
+        if not d:
+            return "Updated"
+        _FIELD_LABELS = {
+            "name": "name", "inventory_type": "type", "quantity": "quantity",
+            "unit": "unit", "supplier": "supplier", "supplier_batch_number": "batch",
+            "purchase_date": "purchase date", "expiry_date": "expiry date", "barcode": "barcode",
+        }
+        changed = [_FIELD_LABELS.get(k, k) for k in d]
+        return "Updated " + ", ".join(changed)
 
     if et == "inventory_item.deleted":
         name = p.get("name", "")
