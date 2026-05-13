@@ -4153,14 +4153,18 @@ _FIELD_LABELS = {
 
 _ITEM_FIELD_LABELS = {
     "name": "Name", "label": "Label", "quantity": "Quantity", "unit": "Unit",
-    "inventory_type": "Inventory type", "type": "Type", "required": "Required",
+    "inventory_type": "Inventory type", "expected_inventory_type": "Expected type",
+    "type": "Type", "required": "Required",
     "is_variable": "Variable qty", "requires_execution_confirmation": "Confirmation required",
     "description": "Description",
 }
 
 # Fields that are auto-populated by the system and should not be reported when
 # they only appear in the after snapshot (i.e. before is None/absent).
-_ITEM_IMPLICIT_FIELDS = frozenset({"inventory_type", "is_variable", "requires_execution_confirmation"})
+_ITEM_IMPLICIT_FIELDS = frozenset({
+    "inventory_type", "expected_inventory_type",
+    "is_variable", "requires_execution_confirmation",
+})
 
 _INVENTORY_TYPE_LABELS = {
     "raw_material": "Raw material",
@@ -4172,7 +4176,7 @@ _ITEM_SKIP_FIELDS = frozenset({"id", "extra_data"})
 
 
 def _fmt_field_value(val) -> str:
-    if val is None:
+    if val is None or val == "":
         return "—"
     if isinstance(val, bool):
         return "Yes" if val else "No"
@@ -4204,13 +4208,13 @@ def _fmt_field_value(val) -> str:
 
 
 def _fmt_sub_val(val, field: str = "") -> str:
-    if val is None:
+    if val is None or val == "":
         return "(none)"
     if isinstance(val, bool):
         return "Yes" if val else "No"
     if isinstance(val, (list, dict)):
         return "(complex)"
-    if field == "inventory_type":
+    if field in ("inventory_type", "expected_inventory_type"):
         return _INVENTORY_TYPE_LABELS.get(str(val), str(val))
     return str(val)
 
