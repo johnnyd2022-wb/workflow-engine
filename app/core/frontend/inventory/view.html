@@ -93,7 +93,7 @@
                 <th>Expiry</th>
                 <th>Process</th>
                 <th>Barcode</th>
-                <th>Metadata</th>
+                <th>Audit</th>
               </tr>
             </thead>
             <tbody id="inv-view-tbody"></tbody>
@@ -431,10 +431,16 @@
           const t = item.inventory_type || 'raw_material';
           const typeLabel = TYPE_LABEL[t] || t;
           const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
+          const es = item.event_summary || null;
           const metaStr = extraDataString(item);
-          const metaCell = metaStr.length > 2
-            ? '<details><summary style="cursor:pointer;color:var(--primary,#3b82f6);">View</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
-            : '—';
+          const metaExpand = metaStr.length > 2
+            ? '<details style="margin-top:6px;"><summary style="cursor:pointer;color:var(--primary,#3b82f6);font-size:0.75rem;">Metadata</summary><pre class="inv-json">' + esc(metaStr) + '</pre></details>'
+            : '';
+          const auditCell =
+            buildAuditBadges(es) +
+            buildAuditMeta(es) +
+            (item.id ? buildHistoryToggle(item.id) : '') +
+            metaExpand;
 
           return (
             '<tr>' +
@@ -448,12 +454,13 @@
               '<td>' + esc(datePart(item.expiry_date) || '—') + '</td>' +
               '<td>' + esc(item.process_name || '—') + '</td>' +
               '<td>' + esc(item.barcode || '—') + '</td>' +
-              '<td>' + metaCell + '</td>' +
+              '<td>' + auditCell + '</td>' +
             '</tr>'
           );
         }).join('');
 
         if (tbody) tbody.innerHTML = rows;
+        if (tbody) wireHistoryToggles(tbody);
 
         if (cardsEl) {
           cardsEl.innerHTML = filtered.map(function (item) {

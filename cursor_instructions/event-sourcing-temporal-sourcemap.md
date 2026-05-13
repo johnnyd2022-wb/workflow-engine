@@ -630,7 +630,7 @@ Start the app: `python app/app.py` (or `uv run workflow start`). All features wo
 
 **How to test:**
 1. Go to `/core/inventory/view`
-2. Shrink the browser window below 900px width (or use DevTools responsive mode) to show the card layout — audit badges only appear on cards, not the desktop table
+2. Badges and "Added by" meta appear in both the desktop **Audit** column (table view) and on cards (mobile < 900px)
 3. Add some inventory items via different methods: one manually, one via barcode scan (set `extra_data.barcode_scan = true`), one via CSV upload
 
 **What to expect:**
@@ -926,21 +926,21 @@ Start the app: `uv run workflow start` (or `python app/app.py`). Use a real brow
 
 ### Page 1 — `/core/inventory/view` (Inventory view)
 
+**Test 1.1 — Audit badges and "Added by" in table view (desktop)**
+1. Open the page at full desktop width (≥ 900px) — you will see the table layout.
+2. Look at the **Audit** column (rightmost column, replacing the old "Metadata" column).
+3. **Expect:** For any item created after event sourcing was deployed:
+   - Coloured pill badges: Purple **Barcode scan** if via barcode, Purple **CSV import** if via CSV, Blue **Used N×** if consumed, Red **N wastage** if wastage recorded
+   - A grey "Added by user@email.com · 13 May 2026" line below the badges
+   - An "Audit history" collapsible at the bottom of the cell
+4. Items created before event sourcing show only the "Audit history" expand (with no recorded events) and no badges/meta lines.
+5. Create a new item now — refresh the page and confirm the new row shows "Added by" immediately.
+
+**Test 1.2 — Audit badges and meta in card view (mobile)**
 **Setup:** Switch to card layout by narrowing the browser below 900px or using DevTools → Responsive → 390px width.
-
-**Test 1.1 — Audit badges on inventory cards**
 1. Look at any inventory item card.
-2. **Expect:** Coloured pill badges appear above the metadata rows:
-   - Purple **Barcode** badge if the item was added via barcode scan
-   - Purple **CSV import** badge if added via CSV
-   - Blue **Used N×** badge if the item has ever been consumed in a process step
-   - Red **N wastage** badge if wastage has been recorded against it
-3. Items created before event sourcing show no badges — create a new item to verify badges appear immediately.
-
-**Test 1.2 — "Added by" and "Last used" meta lines**
-1. Look below the badges on any card.
-2. **Expect:** A line reading `Added by user@email.com · 13 May 2026`
-3. After running a batch that consumes this item, **expect** a second line: `Last used 13 May 2026 in Step Name`
+2. **Expect:** Same badges and "Added by" / "Last used" lines appear above the data rows.
+3. After running a batch that consumes this item, **expect** a `Last used 13 May 2026 in Step Name` line.
 
 **Test 1.3 — Quantity sparkline**
 1. Find an item that has had at least two quantity events (created + one manual adjustment or consumption).
