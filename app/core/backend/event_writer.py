@@ -142,9 +142,9 @@ def _do_upsert(session: Session, entity_id: UUID, org_id: UUID, entity_type: str
             INSERT INTO entity_event_summaries
                 (entity_id, org_id, entity_type, summary, last_event_at, last_event_type, last_actor, updated_at)
             VALUES
-                (:entity_id, :org_id, :entity_type, :summary::jsonb, :last_event_at, :last_event_type, :last_actor, :updated_at)
+                (:entity_id, :org_id, :entity_type, CAST(:summary AS jsonb), :last_event_at, :last_event_type, :last_actor, :updated_at)
             ON CONFLICT (entity_id) DO UPDATE SET
-                summary        = :summary::jsonb,
+                summary        = CAST(:summary AS jsonb),
                 last_event_at  = :last_event_at,
                 last_event_type= :last_event_type,
                 last_actor     = :last_actor,
