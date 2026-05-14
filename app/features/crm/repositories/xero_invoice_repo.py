@@ -1,5 +1,6 @@
 """Repository for XeroInvoice and XeroInvoiceLineItem records."""
 
+import uuid
 from datetime import datetime
 from uuid import UUID
 
@@ -40,6 +41,7 @@ class XeroInvoiceRepository:
             inv.updated_at = datetime.utcnow()
         else:
             inv = XeroInvoice(
+                id=uuid.uuid4(),  # generate now so inv.id is available before flush
                 org_id=org_id,
                 xero_invoice_id=xero_invoice_id,
                 xero_tenant_id=xero_tenant_id,
