@@ -67,8 +67,22 @@ class XeroAPIClient:
         access_token, tenant_id = self._oauth_service.get_valid_token(self.org_id)
         self._xero_tenant_id = tenant_id
 
-        api_client = ApiClient(configuration=Configuration())
-        api_client.set_oauth2_token(OAuth2Token(access_token=access_token))
+        # The SDK's OAuth2Token is populated at request time via the getter.
+        # We manage token storage and refresh ourselves, so the saver is a no-op.
+        token_obj = OAuth2Token()
+        _token_dict = {
+            "access_token": access_token,
+            "refresh_token": "",
+            "token_type": "Bearer",
+            "expires_in": 1800,
+            "scope": "",
+            "expires_at": None,
+        }
+        api_client = ApiClient(
+            configuration=Configuration(oauth2_token=token_obj),
+            oauth2_token_getter=lambda: _token_dict,
+            oauth2_token_saver=lambda _: None,
+        )
         self._api_client = api_client
         return api_client
 

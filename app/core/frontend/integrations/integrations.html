@@ -184,10 +184,10 @@ function xeroIntegration() {
     async init() {
       try {
         const data = await CRMAPI.getXeroStatus();
-        this.connected = data.is_connected || false;
+        this.connected = data.connected || false;
         this.tenantName = data.tenant_name || '';
-        if (data.last_sync_at) {
-          const d = new Date(data.last_sync_at);
+        if (data.last_successful_sync_at) {
+          const d = new Date(data.last_successful_sync_at);
           this.lastSync = isNaN(d) ? '' : d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
         }
       } catch (e) {
