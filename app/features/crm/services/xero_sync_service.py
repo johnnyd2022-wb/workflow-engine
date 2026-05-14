@@ -221,7 +221,7 @@ class XeroSyncService:
                     total=xi.total,
                     amount_due=xi.amount_due,
                     amount_paid=xi.amount_paid,
-                    currency_code=str(xi.currency_code) if xi.currency_code else "NZD",
+                    currency_code=xi.currency_code.value if xi.currency_code else "NZD",
                     date=xi.date,
                     due_date=xi.due_date,
                     fully_paid_on_date=xi.fully_paid_on_date,
