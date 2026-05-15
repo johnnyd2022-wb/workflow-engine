@@ -3,7 +3,7 @@
 import logging
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -151,6 +151,20 @@ class XeroAPIClient:
 
         return contacts
 
+    def get_contact_payment_terms(self, contact_xero_id: str) -> dict | None:
+        """Fetch a single contact's payment terms from Xero."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+        result = self._call_with_retry(api.get_contact, tenant_id, contact_xero_id)
+        contacts = getattr(result, "contacts", None) or []
+        if not contacts:
+            return None
+        contact = contacts[0]
+        raw = getattr(contact, "payment_terms", None)
+        return _normalise_payment_terms(raw)
+
     # ------------------------------------------------------------------
     # Invoices
     # ------------------------------------------------------------------
@@ -180,3 +194,84 @@ class XeroAPIClient:
             page += 1
 
         return invoices
+
+    def create_invoice(
+        self,
+        *,
+        contact_xero_id: str,
+        invoice_date: date,
+        due_date: date | None,
+        line_items: list[dict],
+    ):
+        """Create a DRAFT ACCREC invoice in Xero and return the created invoice model."""
+        from xero_python.accounting import AccountingApi
+        from xero_python.accounting.models import Contact, Invoice, Invoices, LineItem
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+
+        li_models = []
+        for item in line_items:
+            li_models.append(
+                LineItem(
+                    description=item.get("description"),
+                    item_code=item.get("item_code"),
+                    quantity=item.get("quantity"),
+                    unit_amount=item.get("unit_amount"),
+                    tax_type=item.get("tax_type"),
+                    account_code=item.get("account_code"),
+                )
+            )
+
+        invoice_model = Invoice(
+            type="ACCREC",
+            status="DRAFT",
+            contact=Contact(contact_id=contact_xero_id),
+            date=invoice_date,
+            due_date=due_date,
+            line_items=li_models,
+        )
+        payload = Invoices(invoices=[invoice_model])
+
+        def _create():
+            try:
+                return api.create_invoices(tenant_id, invoices=payload, summarize_errors=False)
+            except TypeError:
+                return api.create_invoices(tenant_id, payload, summarize_errors=False)
+
+        result = self._call_with_retry(_create)
+        invoices = getattr(result, "invoices", None) or []
+        if not invoices:
+            raise RuntimeError("Xero did not return a created invoice")
+        return invoices[0]
+
+
+def _normalise_payment_terms(raw) -> dict | None:
+    if not raw:
+        return None
+
+    def _term_obj(obj):
+        if not obj:
+            return None
+        day = getattr(obj, "day", None)
+        if day is None:
+            day = getattr(obj, "Day", None)
+        month = getattr(obj, "month", None)
+        if month is None:
+            month = getattr(obj, "Month", None)
+        type_value = getattr(obj, "type", None)
+        if type_value is None:
+            type_value = getattr(obj, "Type", None)
+        if hasattr(type_value, "value"):
+            type_value = type_value.value
+        return {
+            "day": int(day) if day is not None else None,
+            "month": int(month) if month is not None else None,
+            "type": str(type_value) if type_value else None,
+        }
+
+    sales = _term_obj(getattr(raw, "sales", None) or getattr(raw, "Sales", None))
+    bills = _term_obj(getattr(raw, "bills", None) or getattr(raw, "Bills", None))
+    if not sales and not bills:
+        return None
+    return {"sales": sales, "bills": bills}

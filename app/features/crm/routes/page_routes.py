@@ -2,7 +2,7 @@
 
 import logging
 
-from flask import Blueprint, redirect, render_template
+from flask import Blueprint, render_template
 
 from app.core.security.permissions import requires_auth
 
@@ -14,7 +14,7 @@ page_bp = Blueprint("crm_pages", __name__, template_folder="../frontend/template
 @page_bp.route("/crm", methods=["GET"])
 @requires_auth
 def crm_index():
-    return redirect("/crm/customers")
+    return render_template("crm/overview.html", active_page="crm")
 
 
 @page_bp.route("/crm/customers", methods=["GET"])
@@ -39,3 +39,9 @@ def crm_tasks():
 @requires_auth
 def crm_analytics():
     return render_template("crm/analytics.html", active_page="crm")
+
+
+@page_bp.route("/crm/configuration", methods=["GET"])
+@requires_auth
+def crm_configuration():
+    return render_template("crm/configuration.html", active_page="crm")

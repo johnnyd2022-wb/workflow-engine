@@ -155,6 +155,8 @@ class XeroSyncService:
                         }
                     )
 
+                payment_terms = _serialise_xero_payment_terms(getattr(xc, "payment_terms", None))
+
                 xero_updated_at = None
                 if xc.updated_date_utc:
                     xero_updated_at = xc.updated_date_utc
@@ -169,6 +171,7 @@ class XeroSyncService:
                     email_address=xc.email_address,
                     phone_number=phone_number,
                     addresses=addresses or None,
+                    payment_terms=payment_terms,
                     tax_number=getattr(xc, "tax_number", None),
                     account_number=xc.account_number,
                     contact_status=str(xc.contact_status) if xc.contact_status else None,
@@ -285,3 +288,37 @@ class XeroSyncService:
                 error_details={"errors": result.errors},
             )
         self.db.commit()
+
+
+def _serialise_xero_payment_terms(raw) -> dict | None:
+    """Normalise Xero contact payment terms into JSON-serialisable dict."""
+    if not raw:
+        return None
+
+    def _term_obj(obj):
+        if not obj:
+            return None
+        day = getattr(obj, "day", None)
+        if day is None:
+            day = getattr(obj, "Day", None)
+        month = getattr(obj, "month", None)
+        if month is None:
+            month = getattr(obj, "Month", None)
+        type_value = getattr(obj, "type", None)
+        if type_value is None:
+            type_value = getattr(obj, "Type", None)
+        if hasattr(type_value, "value"):
+            type_value = type_value.value
+        return {
+            "day": int(day) if day is not None else None,
+            "month": int(month) if month is not None else None,
+            "type": str(type_value) if type_value else None,
+        }
+
+    sales = _term_obj(getattr(raw, "sales", None) or getattr(raw, "Sales", None))
+    bills = _term_obj(getattr(raw, "bills", None) or getattr(raw, "Bills", None))
+
+    if not sales and not bills:
+        return None
+
+    return {"sales": sales, "bills": bills}

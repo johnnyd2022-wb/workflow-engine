@@ -27,7 +27,7 @@ def xero_auth():
     from app.utils.config_loader import config
 
     if not config.xero_client_id or not config.xero_client_secret:
-        return redirect("/core/integrations?error=xero_not_configured")
+        return redirect("/crm/configuration?error=xero_not_configured")
 
     state = XeroOAuthService.generate_state()
     session[_XERO_STATE_SESSION_KEY] = state
@@ -48,16 +48,16 @@ def xero_callback():
     expected_state = session.pop(_XERO_STATE_SESSION_KEY, None)
     if not expected_state or state_param != expected_state:
         logger.warning("Xero OAuth callback: state mismatch for org %s", org_id)
-        return redirect("/core/integrations?error=xero_state_mismatch")
+        return redirect("/crm/configuration?error=xero_state_mismatch")
 
     error = request.args.get("error")
     if error:
         logger.warning("Xero OAuth callback error: %s for org %s", error, org_id)
-        return redirect(f"/core/integrations?error=xero_{error}")
+        return redirect(f"/crm/configuration?error=xero_{error}")
 
     code = request.args.get("code")
     if not code:
-        return redirect("/core/integrations?error=xero_no_code")
+        return redirect("/crm/configuration?error=xero_no_code")
 
     db = db_session()
     service = XeroOAuthService(db)
@@ -66,11 +66,11 @@ def xero_callback():
         token_data = service.exchange_code(code)
         connections = service.get_connections(token_data["access_token"])
         if not connections:
-            return redirect("/core/integrations?error=xero_no_tenant")
+            return redirect("/crm/configuration?error=xero_no_tenant")
 
     except Exception:
         logger.exception("Xero OAuth exchange failed for org %s", org_id)
-        return redirect("/core/integrations?error=xero_exchange_failed")
+        return redirect("/crm/configuration?error=xero_exchange_failed")
 
     if len(connections) == 1:
         # Single tenant — auto-connect immediately
@@ -82,7 +82,7 @@ def xero_callback():
         service.store_tokens(org_id, token_data, connections[0])
     except Exception:
         logger.exception("Failed to store pending Xero tokens for org %s", org_id)
-        return redirect("/core/integrations?error=xero_exchange_failed")
+        return redirect("/crm/configuration?error=xero_exchange_failed")
 
     # Store only non-sensitive connection metadata in the session cookie
     session[_XERO_PENDING_CONNECTIONS_KEY] = [
@@ -105,7 +105,7 @@ def xero_select_tenant_page():
     connections = session.get(_XERO_PENDING_CONNECTIONS_KEY)
     if not connections:
         # Nothing pending — they may have arrived here directly
-        return redirect("/core/integrations")
+        return redirect("/crm/configuration")
 
     return render_template("crm/select_tenant.html", connections=connections)
 
@@ -117,7 +117,7 @@ def xero_select_tenant_submit():
     org_id = UUID(g.org_id)
     connections = session.get(_XERO_PENDING_CONNECTIONS_KEY)
     if not connections:
-        return redirect("/core/integrations?error=xero_session_expired")
+        return redirect("/crm/configuration?error=xero_session_expired")
 
     selected_tenant_id = request.form.get("tenant_id", "").strip()
     connection = next((c for c in connections if c["tenantId"] == selected_tenant_id), None)
@@ -181,7 +181,7 @@ def _complete_connection(org_id: UUID, service: XeroOAuthService, token_data: di
         log_action("connect", "xero_tenant", org_id, {"tenant": connection.get("tenantName")})
     except Exception:
         logger.exception("Xero OAuth exchange failed for org %s", org_id)
-        return redirect("/core/integrations?error=xero_exchange_failed")
+        return redirect("/crm/configuration?error=xero_exchange_failed")
 
     try:
         sync_service = XeroSyncService(service.db)
