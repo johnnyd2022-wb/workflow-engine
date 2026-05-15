@@ -27,6 +27,7 @@ class XeroContact(Base):
     email_address = Column(String(255), nullable=True)
     phone_number = Column(String(50), nullable=True)
     addresses = Column(JSONB, nullable=True)
+    payment_terms = Column(JSONB, nullable=True)
     tax_number = Column(String(50), nullable=True)
     account_number = Column(String(50), nullable=True)
     contact_status = Column(String(50), nullable=True)

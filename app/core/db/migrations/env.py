@@ -29,6 +29,7 @@ from app.features.crm.models.xero_sync_job import XeroSyncJob
 from app.features.crm.models.product_mapping import ProductMapping
 from app.features.crm.models.crm_note import CRMNote
 from app.features.crm.models.crm_task import CRMTask
+from app.features.crm.models.sales_traceability_config import SalesTraceabilityConfig
 from app.utils.config_loader import config
 
 # this is the Alembic Config object, which provides
@@ -113,4 +114,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

@@ -14,6 +14,7 @@ class ProductMappingRepository:
     def create(
         self,
         org_id: UUID,
+        biz_e_source_output_id: UUID | None,
         biz_e_product_name: str,
         xero_description_pattern: str,
         match_type: str = "exact",
@@ -22,6 +23,7 @@ class ProductMappingRepository:
     ) -> ProductMapping:
         mapping = ProductMapping(
             org_id=org_id,
+            biz_e_source_output_id=biz_e_source_output_id,
             biz_e_product_name=biz_e_product_name,
             xero_description_pattern=xero_description_pattern,
             match_type=match_type,

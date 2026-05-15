@@ -19,6 +19,7 @@ class ProductMapping(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
+    biz_e_source_output_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     biz_e_product_name = Column(String(500), nullable=False)
     xero_description_pattern = Column(String(500), nullable=False)
     match_type = Column(String(50), nullable=False, default="exact")  # exact | contains | alias
