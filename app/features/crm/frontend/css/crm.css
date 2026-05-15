@@ -949,6 +949,10 @@
   gap: 8px;
   justify-content: flex-end;
   flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  background: inherit;
+  z-index: 2;
 }
 
 /* Tasks page drawer: use one scroll container (the sheet) so lower sections never clip. */
@@ -971,11 +975,12 @@
   padding-bottom: 12px;
 }
 
-.crm-tasks-page .crm-task-sheet__footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
-  background: var(--bg-card, #fff);
+.crm-tasks-page .crm-task-sheet__body > * + * {
+  margin-top: 14px;
+}
+
+.crm-tasks-page .crm-task-customer-details {
+  margin-top: 18px;
 }
 
 .crm-task-customer-details {
