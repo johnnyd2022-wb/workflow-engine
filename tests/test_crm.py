@@ -67,6 +67,8 @@ def app_client(db, org, user):
     flask_app.config["WTF_CSRF_ENABLED"] = False
 
     with flask_app.test_client() as client:
+        client.environ_base["wsgi.url_scheme"] = "https"
+        client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
         with flask_app.app_context():
             # Log in
             resp = client.post(
@@ -368,14 +370,26 @@ class TestCRMTasks:
 
 
 class TestCRMAPIAuth:
+    def test_http_requests_redirect_to_https(self):
+        from app.api.app_factory import create_app
+
+        flask_app = create_app()
+        flask_app.config["TESTING"] = True
+        with flask_app.test_client() as client:
+            resp = client.get("/api/crm/tasks", base_url="http://localhost")
+        assert resp.status_code == 301
+        assert resp.headers["Location"].startswith("https://")
+
     def test_tasks_endpoint_requires_auth(self):
         from app.api.app_factory import create_app
 
         flask_app = create_app()
         flask_app.config["TESTING"] = True
         with flask_app.test_client() as client:
+            client.environ_base["wsgi.url_scheme"] = "https"
+            client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
             resp = client.get("/api/crm/tasks")
-        assert resp.status_code in (401, 302, 301)
+        assert resp.status_code in (401, 302)
 
     def test_customers_endpoint_requires_auth(self):
         from app.api.app_factory import create_app
@@ -383,8 +397,10 @@ class TestCRMAPIAuth:
         flask_app = create_app()
         flask_app.config["TESTING"] = True
         with flask_app.test_client() as client:
+            client.environ_base["wsgi.url_scheme"] = "https"
+            client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
             resp = client.get("/api/crm/customers")
-        assert resp.status_code in (401, 302, 301)
+        assert resp.status_code in (401, 302)
 
 
 class TestCRMTasksAPI:

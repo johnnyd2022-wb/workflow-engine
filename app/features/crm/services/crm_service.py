@@ -39,10 +39,11 @@ class CRMService:
         latest_job = self.sync_job_repo.get_latest(org_id)
 
         if not tenant or not token:
-            return {"connected": False}
+            return {"connected": False, "is_connected": False}
 
         return {
             "connected": True,
+            "is_connected": True,
             "tenant_name": tenant.xero_tenant_name,
             "tenant_id": tenant.xero_tenant_id,
             "last_successful_sync_at": tenant.last_successful_sync_at.isoformat()
@@ -432,11 +433,27 @@ class CRMService:
 
     def list_tasks(
         self, org_id: UUID, contact_id: UUID | None = None, status: str | None = None, assigned_to: UUID | None = None
-    ) -> list[dict]:
+    ) -> list[dict] | dict[str, list[dict]]:
+        # Backward compatibility for older callsites/tests that pass filters as a dict:
+        # list_tasks(org_id, {"status": "...", "contact_id": "...", "assigned_to": "..."})
+        legacy_wrap = False
+        if isinstance(contact_id, dict) and status is None and assigned_to is None:
+            filters = contact_id
+            legacy_wrap = True
+            raw_contact = filters.get("contact_id")
+            raw_status = filters.get("status")
+            raw_assigned = filters.get("assigned_to")
+            contact_id = UUID(raw_contact) if raw_contact else None
+            status = raw_status or None
+            assigned_to = UUID(raw_assigned) if raw_assigned else None
+
         tasks = self.task_repo.list_for_org(
             org_id, contact_id=contact_id, status=status, assigned_to_user_id=assigned_to
         )
-        return [_serialise_task(t, db=self.db) for t in tasks]
+        serialised = [_serialise_task(t, db=self.db) for t in tasks]
+        if legacy_wrap:
+            return {"tasks": serialised}
+        return serialised
 
     def create_task(self, org_id: UUID, data: dict, user_id: UUID | None) -> dict:
         from datetime import date
@@ -665,11 +682,30 @@ class CRMService:
         return options
 
     def create_mapping(self, org_id: UUID, data: dict, user_id: UUID | None) -> dict:
+        from app.features.crm.models.product_mapping import ProductMapping
+
+        biz_name = (data.get("biz_e_product_name") or "").strip()
+        xero_pattern = (data.get("xero_description_pattern") or "").strip()
+        if not biz_name or not xero_pattern:
+            raise ValueError("biz_e_product_name and xero_description_pattern are required")
+
+        existing = (
+            self.db.query(ProductMapping)
+            .filter(
+                ProductMapping.org_id == org_id,
+                ProductMapping.biz_e_product_name == biz_name,
+                ProductMapping.xero_description_pattern == xero_pattern,
+            )
+            .first()
+        )
+        if existing is not None:
+            raise ValueError("This mapping already exists")
+
         m = self.mapping_repo.create(
             org_id=org_id,
             biz_e_source_output_id=UUID(data["biz_e_source_output_id"]) if data.get("biz_e_source_output_id") else None,
-            biz_e_product_name=data["biz_e_product_name"],
-            xero_description_pattern=data["xero_description_pattern"],
+            biz_e_product_name=biz_name,
+            xero_description_pattern=xero_pattern,
             match_type=data.get("match_type", "exact"),
             notes=data.get("notes"),
             created_by_user_id=user_id,

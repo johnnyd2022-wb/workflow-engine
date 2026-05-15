@@ -327,7 +327,7 @@ def monthly_sales():
     org_id = UUID(g.org_id)
     months = min(24, max(1, int(request.args.get("months", 12))))
     data = _crm_service().monthly_sales(org_id, months=months)
-    return jsonify({"monthly_sales": data}), 200
+    return jsonify({"monthly_sales": data, "months": data}), 200
 
 
 @api_bp.route("/api/crm/analytics/customer-breakdown", methods=["GET"])
@@ -336,7 +336,7 @@ def customer_breakdown():
     org_id = UUID(g.org_id)
     top_n = min(50, max(1, int(request.args.get("top_n", 20))))
     data = _crm_service().customer_breakdown(org_id, top_n=top_n)
-    return jsonify({"customer_breakdown": data}), 200
+    return jsonify({"customer_breakdown": data, "customers": data}), 200
 
 
 @api_bp.route("/api/crm/analytics/rankings", methods=["GET"])
@@ -450,7 +450,7 @@ def rankings():
 def churn_risk():
     org_id = UUID(g.org_id)
     data = _crm_service().churn_risk(org_id)
-    return jsonify({"churn_risk": data}), 200
+    return jsonify({"churn_risk": data, "customers": data}), 200
 
 
 @api_bp.route("/api/crm/overview", methods=["GET"])
@@ -518,9 +518,17 @@ def create_mapping():
         mapping = _crm_service().create_mapping(org_id, data, UUID(g.user_id) if g.user_id else None)
         log_action("create", "product_mapping", None, {"biz_e": data.get("biz_e_product_name")})
         return jsonify({"product_mapping": mapping}), 201
+    except ValueError as e:
+        if "already exists" in str(e).lower():
+            return jsonify({"error": "This mapping already exists"}), 409
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         if "unique" in str(e).lower():
             return jsonify({"error": "This mapping already exists"}), 409
+        try:
+            db_session().rollback()
+        except Exception:
+            pass
         raise
 
 

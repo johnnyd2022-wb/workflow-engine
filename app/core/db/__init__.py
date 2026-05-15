@@ -37,7 +37,7 @@ if db_ssl_mode and db_ssl_mode != "disable":
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, echo=False, connect_args=connect_args)
 
 # Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
 
 # Scoped session for thread safety
 db_session = scoped_session(SessionLocal)

@@ -43,6 +43,7 @@ def create_app():
     app.config["SESSION_COOKIE_PATH"] = "/"  # Explicitly set cookie path to root
     # Align PERMANENT_SESSION_LIFETIME with default user session timeout (7 days default, max 30 days)
     app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600  # 30 days (max session lifetime)
+    app.config.setdefault("ENFORCE_HTTPS", True)
 
     # Initialize rate limiter (IP-based)
     # Import limiter from auth_routes and initialize it with the app
@@ -151,6 +152,8 @@ def create_app():
     @app.before_request
     def force_https():
         """Redirect HTTP requests to HTTPS to ensure encrypted connections"""
+        if not app.config.get("ENFORCE_HTTPS", True):
+            return
         # Skip for healthcheck and static files
         # CRITICAL: Check if endpoint is None before calling methods on it
         if request.endpoint is None:
