@@ -339,22 +339,22 @@
           </select>
         </div>
 
-        <div class="crm-card" style="padding:10px;" x-show="selectedDrawerCustomer()" x-cloak>
-          <div style="font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--text-secondary,#6b7280); margin-bottom:8px;">Customer Details</div>
-          <div class="crm-detail-grid">
-            <div class="crm-detail-field">
+        <div class="crm-task-customer-details" x-show="selectedDrawerCustomer()" x-cloak>
+          <div class="crm-task-customer-details__title">Customer Details</div>
+          <div class="crm-task-customer-details__grid">
+            <div class="crm-task-customer-details__field">
               <label>Name</label>
               <span x-text="selectedDrawerCustomer()?.name || '—'"></span>
             </div>
-            <div class="crm-detail-field">
+            <div class="crm-task-customer-details__field">
               <label>Contact</label>
               <span x-text="((selectedDrawerCustomer()?.first_name || '') + ' ' + (selectedDrawerCustomer()?.last_name || '')).trim() || selectedDrawerCustomer()?.name || '—'"></span>
             </div>
-            <div class="crm-detail-field">
+            <div class="crm-task-customer-details__field">
               <label>Email</label>
               <span x-text="selectedDrawerCustomer()?.email_address || selectedDrawerCustomer()?.contact_email || '—'"></span>
             </div>
-            <div class="crm-detail-field">
+            <div class="crm-task-customer-details__field">
               <label>Phone</label>
               <span x-text="selectedDrawerCustomer()?.phone_number || selectedDrawerCustomer()?.contact_phone || '—'"></span>
             </div>
