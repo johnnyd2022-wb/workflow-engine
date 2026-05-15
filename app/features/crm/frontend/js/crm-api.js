@@ -90,6 +90,10 @@ window.CRMAPI = (function () {
 
   // ── Xero ──────────────────────────────────────────────────────
   async function getXeroStatus() { return request('/xero/status'); }
+  async function getXeroAuthUrl() {
+    const nonce = `t=${Date.now()}`;
+    return request(`/xero/auth-url?${nonce}`, { cache: 'no-store' });
+  }
   async function triggerSync()   { return request('/xero/sync', { method: 'POST', body: {} }); }
   async function disconnectXero(){ return request('/xero/disconnect', { method: 'POST', body: {} }); }
 
@@ -130,6 +134,13 @@ window.CRMAPI = (function () {
   }
   async function authoriseInvoice(invoiceId) {
     return request(`/invoices/${invoiceId}/authorise`, { method: 'POST', body: {} });
+  }
+  async function getInvoiceViewUrl(invoiceId) {
+    return request(`/invoices/${invoiceId}/view-url`);
+  }
+  function invoicePdfUrl(invoiceId, inline = false) {
+    const qs = inline ? '?inline=1' : '';
+    return `/api/crm/invoices/${encodeURIComponent(invoiceId)}/pdf${qs}`;
   }
 
   // ── Notes ─────────────────────────────────────────────────────
@@ -174,8 +185,8 @@ window.CRMAPI = (function () {
 
   return {
     request, csrfToken, navigate, ensureBackButton,
-    getXeroStatus, triggerSync, disconnectXero,
-    getCustomers, getCustomer, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice,
+    getXeroStatus, getXeroAuthUrl, triggerSync, disconnectXero,
+    getCustomers, getCustomer, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
     createNote, updateNote, deleteNote,
     getTasks, createTask, updateTask, deleteTask,
     getMonthlySales, getCustomerBreakdown, getRankings, getChurnRisk, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,

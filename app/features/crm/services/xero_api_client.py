@@ -1,11 +1,16 @@
 """XeroAPIClient — thin wrapper around xero-python SDK with rate limiting, retry, and pagination."""
 
+import base64
+import binascii
+import gzip
+import json
 import logging
 import time
 from collections import deque
 from datetime import date, datetime, timezone
 from uuid import UUID
 
+import requests
 from sqlalchemy.orm import Session
 
 from app.features.crm.services.xero_oauth_service import XeroOAuthService
@@ -282,6 +287,136 @@ class XeroAPIClient:
             raise RuntimeError("Xero did not return an updated invoice")
         return invoices[0]
 
+    def get_invoice_pdf(self, *, xero_invoice_id: str) -> bytes:
+        """Fetch an invoice PDF from Xero."""
+        live_type = None
+        live_status = None
+        try:
+            inv = self.get_invoice_by_id(xero_invoice_id=xero_invoice_id)
+            live_type = inv.get("type")
+            live_status = inv.get("status")
+        except Exception:
+            pass
+
+        if live_type and live_type != "ACCREC":
+            raise ValueError(
+                f"Xero only renders ACCREC invoices as PDF via API (this invoice type is {live_type})."
+            )
+        if live_status and live_status not in {"SUBMITTED", "AUTHORISED", "PAID"}:
+            raise ValueError(
+                f"Xero does not render PDF for invoice status {live_status}. "
+                "Use SUBMITTED, AUTHORISED, or PAID."
+            )
+        access_token, tenant_id = self._oauth_service.get_valid_token(self.org_id)
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "xero-tenant-id": tenant_id,
+            "Accept": "application/pdf",
+        }
+
+        # Xero supports PDF rendering via the invoice resource when Accept=application/pdf.
+        # Some tenants/docs also reference /pdf, so keep that as a fallback.
+        primary_url = f"https://api.xero.com/api.xro/2.0/Invoices/{xero_invoice_id}"
+        fallback_url = f"{primary_url}/pdf"
+        last_response = None
+        for url in (primary_url, fallback_url):
+            response = requests.get(url, headers=headers, timeout=20)
+            last_response = response
+            if response.status_code >= 400:
+                # Try fallback only when endpoint shape might be unsupported.
+                if response.status_code == 404 and url == primary_url:
+                    continue
+                detail = _extract_json_error_message(response.content)
+                if detail:
+                    raise ValueError(detail)
+                raise ValueError(f"Xero PDF request failed ({response.status_code})")
+
+            raw = _parse_pdf_bytes_or_none(response.content)
+            if raw is not None:
+                return raw
+
+            # If we got a non-PDF success from the primary endpoint, try /pdf once.
+            if url == primary_url:
+                continue
+
+        detail = _extract_json_error_message(last_response.content if last_response is not None else b"")
+        if detail:
+            raise ValueError(detail)
+        raise ValueError(
+            "Xero returned non-PDF content for this invoice. "
+            f"(type={live_type or 'unknown'}, status={live_status or 'unknown'}). "
+            "Sync and retry."
+        )
+
+    def get_invoice_by_id(self, *, xero_invoice_id: str) -> dict:
+        """Fetch a single invoice from Xero and return key metadata."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+        result = self._call_with_retry(api.get_invoice, tenant_id, xero_invoice_id)
+        rows = getattr(result, "invoices", None) or []
+        if not rows:
+            raise ValueError("Xero did not return this invoice.")
+        row = rows[0]
+        return {
+            "invoice_id": getattr(row, "invoice_id", None),
+            "invoice_number": getattr(row, "invoice_number", None),
+            "type": str(getattr(row, "type", "") or "").upper() or None,
+            "status": str(getattr(row, "status", "") or "").upper() or None,
+        }
+
+    def get_online_invoice_url(self, *, xero_invoice_id: str) -> str:
+        """Fetch Xero online invoice URL for live viewing."""
+        from xero_python.accounting import AccountingApi
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+        payload = self._call_with_retry(api.get_online_invoice, tenant_id, xero_invoice_id)
+
+        # xero-python may return OnlineInvoice, OnlineInvoices, dicts, or lists.
+        for attr in ("online_invoice_url", "url", "online_url"):
+            val = getattr(payload, attr, None)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+        online_rows = getattr(payload, "online_invoices", None)
+        if isinstance(online_rows, list):
+            for row in online_rows:
+                val = getattr(row, "online_invoice_url", None)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+                if isinstance(row, dict):
+                    for key in ("online_invoice_url", "OnlineInvoiceUrl", "url", "Url"):
+                        dval = row.get(key)
+                        if isinstance(dval, str) and dval.strip():
+                            return dval.strip()
+
+        if isinstance(payload, dict):
+            nested = payload.get("OnlineInvoices") or payload.get("online_invoices")
+            if isinstance(nested, list):
+                for row in nested:
+                    if not isinstance(row, dict):
+                        continue
+                    for key in ("online_invoice_url", "OnlineInvoiceUrl", "url", "Url"):
+                        val = row.get(key)
+                        if isinstance(val, str) and val.strip():
+                            return val.strip()
+            for key in ("online_invoice_url", "OnlineInvoiceUrl", "url", "Url"):
+                val = payload.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+
+        if isinstance(payload, list):
+            for row in payload:
+                if isinstance(row, dict):
+                    for key in ("online_invoice_url", "OnlineInvoiceUrl", "url", "Url"):
+                        val = row.get(key)
+                        if isinstance(val, str) and val.strip():
+                            return val.strip()
+
+        raise ValueError("Xero did not return an online invoice URL for this invoice.")
+
 
 def _normalise_payment_terms(raw) -> dict | None:
     if not raw:
@@ -349,3 +484,110 @@ def _is_insufficient_scope(error: Exception) -> bool:
             except Exception:
                 pass
     return False
+
+
+def _coerce_pdf_bytes(payload) -> bytes:
+    if isinstance(payload, bytes | bytearray):
+        return bytes(payload)
+
+    data_attr = getattr(payload, "data", None)
+    if isinstance(data_attr, bytes | bytearray):
+        return bytes(data_attr)
+    if isinstance(data_attr, str):
+        return _string_to_bytes(data_attr)
+
+    read_fn = getattr(payload, "read", None)
+    if callable(read_fn):
+        try:
+            read_value = read_fn()
+            if isinstance(read_value, bytes | bytearray):
+                return bytes(read_value)
+            if isinstance(read_value, str):
+                return _string_to_bytes(read_value)
+        except Exception:
+            pass
+
+    if isinstance(payload, str):
+        return _string_to_bytes(payload)
+
+    raise RuntimeError("Xero did not return invoice PDF content")
+
+
+def _parse_pdf_payload_or_none(payload) -> bytes | None:
+    raw = _coerce_pdf_bytes(payload)
+    return _parse_pdf_bytes_or_none(raw)
+
+
+def _parse_pdf_bytes_or_none(raw: bytes) -> bytes | None:
+    if raw.startswith(b"\x1f\x8b"):
+        try:
+            raw = gzip.decompress(raw)
+        except Exception:
+            pass
+    sig = raw.find(b"%PDF")
+    if sig != -1:
+        return raw[sig:]
+    return None
+
+
+def _string_to_bytes(value: str) -> bytes:
+    text = value.strip()
+    if text.startswith("{") and text.endswith("}"):
+        return text.encode("utf-8")
+
+    try:
+        decoded = base64.b64decode(text, validate=True)
+        if decoded:
+            return decoded
+    except (ValueError, binascii.Error):
+        pass
+
+    # Latin-1 preserves byte values 0-255 for text-like binary payloads.
+    return value.encode("latin-1", errors="ignore")
+
+
+def _extract_json_error_message(raw: bytes) -> str | None:
+    try:
+        text = raw.decode("utf-8")
+    except Exception:
+        return None
+    text = text.strip()
+    if not (text.startswith("{") and text.endswith("}")):
+        return None
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    for key in ("Message", "message", "Detail", "detail", "Title", "title", "error"):
+        val = parsed.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    elements = parsed.get("Elements")
+    if isinstance(elements, list):
+        for elem in elements:
+            if not isinstance(elem, dict):
+                continue
+            for key in ("ValidationErrors", "validationErrors"):
+                errs = elem.get(key)
+                if isinstance(errs, list):
+                    for err in errs:
+                        if not isinstance(err, dict):
+                            continue
+                        msg = err.get("Message") or err.get("message")
+                        if isinstance(msg, str) and msg.strip():
+                            return msg.strip()
+    return "Unable to render invoice PDF from Xero."
+
+
+def _extract_exception_error_message(exc: Exception) -> str | None:
+    http_resp = getattr(exc, "http_resp", None)
+    if http_resp is None:
+        return None
+    data = getattr(http_resp, "data", None)
+    if isinstance(data, bytes):
+        return _extract_json_error_message(data)
+    if isinstance(data, str):
+        return _extract_json_error_message(data.encode("utf-8", errors="ignore"))
+    return None

@@ -2,9 +2,10 @@
 
 import logging
 from datetime import date, timedelta
+from io import BytesIO
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, request, send_file
 
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
@@ -179,6 +180,56 @@ def authorise_invoice(invoice_id: str):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"invoice": invoice}), 200
+
+
+@api_bp.route("/api/crm/invoices/<invoice_id>/pdf", methods=["GET"])
+@requires_auth
+def get_invoice_pdf(invoice_id: str):
+    org_id = UUID(g.org_id)
+    inline = str(request.args.get("inline") or "").strip().lower() in {"1", "true", "yes"}
+    try:
+        pdf_bytes, filename = _crm_service().get_invoice_pdf(UUID(invoice_id), org_id)
+    except XeroInsufficientScopeError as e:
+        return (
+            jsonify(
+                {
+                    "error": "xero_insufficient_scope",
+                    "message": str(e),
+                    "action": "reconnect_xero",
+                }
+            ),
+            401,
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return send_file(
+        BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=not inline,
+        download_name=filename or "invoice.pdf",
+    )
+
+
+@api_bp.route("/api/crm/invoices/<invoice_id>/view-url", methods=["GET"])
+@requires_auth
+def get_invoice_view_url(invoice_id: str):
+    org_id = UUID(g.org_id)
+    try:
+        view_url = _crm_service().get_invoice_view_url(UUID(invoice_id), org_id)
+    except XeroInsufficientScopeError as e:
+        return (
+            jsonify(
+                {
+                    "error": "xero_insufficient_scope",
+                    "message": str(e),
+                    "action": "reconnect_xero",
+                }
+            ),
+            401,
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"view_url": view_url}), 200
 
 
 @api_bp.route("/api/crm/customers/<contact_id>/analytics", methods=["GET"])

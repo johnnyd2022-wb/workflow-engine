@@ -21,7 +21,12 @@ XERO_TOKEN_URL = "https://identity.xero.com/connect/token"
 XERO_REVOKE_URL = "https://identity.xero.com/connect/revocation"
 XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 XERO_AUTH_URL = "https://login.xero.com/identity/connect/authorize"
-XERO_SCOPES = "openid profile email accounting.contacts.read accounting.invoices.read accounting.invoices offline_access"
+XERO_SCOPES = (
+    "openid profile email "
+    "accounting.contacts.read "
+    "accounting.invoices accounting.invoices.read "
+    "offline_access"
+)
 
 
 class XeroTokenExpiredError(Exception):
@@ -179,35 +184,56 @@ class XeroOAuthService:
         return access_token, token_record.xero_tenant_id
 
     def _refresh_token(self, org_id: UUID, token_record: XeroOAuthToken) -> XeroOAuthToken:
-        try:
-            refresh_token = self.decrypt(token_record.refresh_token_encrypted)
-        except Exception as e:
-            self.token_repo.invalidate(org_id)
-            self.db.commit()
-            raise XeroTokenExpiredError("Refresh token decryption failed.") from e
+        def _refresh_with_record(record: XeroOAuthToken) -> tuple[dict, str]:
+            try:
+                refresh_plain = self.decrypt(record.refresh_token_encrypted)
+            except Exception as exc:
+                raise XeroTokenExpiredError("Refresh token decryption failed.") from exc
 
-        try:
             resp = requests.post(
                 XERO_TOKEN_URL,
-                data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+                data={"grant_type": "refresh_token", "refresh_token": refresh_plain},
                 auth=(config.xero_client_id, config.xero_client_secret),
                 timeout=15,
             )
             resp.raise_for_status()
-            token_data = resp.json()
+            return resp.json(), refresh_plain
+
+        try:
+            token_data, prior_refresh_token = _refresh_with_record(token_record)
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code in (400, 401):
-                self.token_repo.invalidate(org_id)
-                self.db.commit()
-                raise XeroTokenExpiredError("Xero refresh token rejected — reconnect required.") from e
+                # Handle rotated-token race: another request may have already refreshed
+                # and persisted a newer refresh token.
+                self.db.expire_all()
+                latest = self.token_repo.get(org_id)
+                if latest and latest.refresh_token_encrypted and latest.refresh_token_encrypted != token_record.refresh_token_encrypted:
+                    try:
+                        token_data, prior_refresh_token = _refresh_with_record(latest)
+                    except requests.HTTPError as retry_err:
+                        if retry_err.response is not None and retry_err.response.status_code in (400, 401):
+                            self.token_repo.invalidate(org_id)
+                            self.db.commit()
+                            raise XeroTokenExpiredError("Xero refresh token rejected — reconnect required.") from retry_err
+                        raise
+                else:
+                    self.token_repo.invalidate(org_id)
+                    self.db.commit()
+                    raise XeroTokenExpiredError("Xero refresh token rejected — reconnect required.") from e
+            else:
+                raise
+        except XeroTokenExpiredError:
+            self.token_repo.invalidate(org_id)
+            self.db.commit()
             raise
 
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=token_data.get("expires_in", 1800))
+        next_refresh_token = token_data.get("refresh_token") or prior_refresh_token
         updated = self.token_repo.upsert(
             org_id=org_id,
             xero_tenant_id=token_record.xero_tenant_id,
             access_token_encrypted=self.encrypt(token_data["access_token"]),
-            refresh_token_encrypted=self.encrypt(token_data.get("refresh_token", "")),
+            refresh_token_encrypted=self.encrypt(next_refresh_token),
             expires_at=expires_at,
             scopes=token_data.get("scope"),
         )

@@ -14,6 +14,7 @@ from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepositor
 from app.features.crm.repositories.xero_sync_job_repo import XeroSyncJobRepository
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
+from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroTokenExpiredError
 
 
 class CRMService:
@@ -40,6 +41,12 @@ class CRMService:
 
         if not tenant or not token:
             return {"connected": False, "is_connected": False}
+
+        # Touch token validity so near-expiry tokens are refreshed during normal CRM use.
+        try:
+            XeroOAuthService(self.db).get_valid_token(org_id)
+        except XeroTokenExpiredError:
+            return {"connected": False, "is_connected": False, "reconnect_required": True}
 
         return {
             "connected": True,
@@ -260,12 +267,14 @@ class CRMService:
                 "matching_key": "batch_id",
                 "manual_review_days": 7,
                 "strict_mapping": True,
+                "task_done_archive_days": 7,
             }
         return {
             "matching_strategy": row.matching_strategy,
             "matching_key": row.matching_key,
             "manual_review_days": row.manual_review_days,
             "strict_mapping": bool(row.strict_mapping),
+            "task_done_archive_days": int(getattr(row, "task_done_archive_days", 7) or 7),
         }
 
     def update_traceability_config(self, org_id: UUID, data: dict) -> dict:
@@ -275,12 +284,15 @@ class CRMService:
         manual_review_days = int(data.get("manual_review_days") or 7)
         manual_review_days = min(90, max(1, manual_review_days))
         strict_mapping = bool(data.get("strict_mapping", True))
+        task_done_archive_days = int(data.get("task_done_archive_days") or 7)
+        task_done_archive_days = min(90, max(1, task_done_archive_days))
         row = self.traceability_repo.upsert(
             org_id=org_id,
             matching_strategy=strategy,
             matching_key="batch_id",
             manual_review_days=manual_review_days,
             strict_mapping=strict_mapping,
+            task_done_archive_days=task_done_archive_days,
         )
         self.db.commit()
         return {
@@ -288,6 +300,7 @@ class CRMService:
             "matching_key": row.matching_key,
             "manual_review_days": row.manual_review_days,
             "strict_mapping": bool(row.strict_mapping),
+            "task_done_archive_days": int(getattr(row, "task_done_archive_days", 7) or 7),
         }
 
     def create_customer_invoice(self, contact_id: UUID, org_id: UUID, data: dict) -> dict:
@@ -401,6 +414,45 @@ class CRMService:
             pass
 
         return _serialise_invoice(inv, with_line_items=True, db=self.db)
+
+    def get_invoice_pdf(self, invoice_id: UUID, org_id: UUID) -> tuple[bytes, str]:
+        from app.features.crm.services.xero_api_client import XeroAPIClient
+
+        inv = self.invoice_repo.get_by_id(invoice_id, org_id)
+        if not inv:
+            raise ValueError("Invoice not found")
+        if not inv.xero_invoice_id:
+            raise ValueError("Invoice is missing Xero invoice id")
+        status = (inv.status or "").strip().upper()
+        if status == "DRAFT":
+            raise ValueError("Xero does not provide PDFs for draft invoices. Authorise the invoice, then download.")
+        if status and status not in {"AUTHORISED", "PAID", "SUBMITTED"}:
+            raise ValueError(
+                f"Invoice status '{status}' is not downloadable from Xero yet. "
+                "Authorise or sync the latest status, then retry."
+            )
+
+        pdf_bytes = XeroAPIClient(self.db, org_id).get_invoice_pdf(xero_invoice_id=inv.xero_invoice_id)
+        filename_seed = (inv.invoice_number or str(inv.id)[:8] or "invoice").strip().replace("/", "-")
+        return pdf_bytes, f"{filename_seed}.pdf"
+
+    def get_invoice_view_url(self, invoice_id: UUID, org_id: UUID) -> str:
+        from app.features.crm.services.xero_api_client import XeroAPIClient
+
+        inv = self.invoice_repo.get_by_id(invoice_id, org_id)
+        if not inv:
+            raise ValueError("Invoice not found")
+        if not inv.xero_invoice_id:
+            raise ValueError("Invoice is missing Xero invoice id")
+        status = (inv.status or "").strip().upper()
+        if status == "DRAFT":
+            return _xero_invoice_app_url(inv.xero_invoice_id, inv.invoice_type)
+
+        try:
+            return XeroAPIClient(self.db, org_id).get_online_invoice_url(xero_invoice_id=inv.xero_invoice_id)
+        except ValueError:
+            # Some statuses/tenants do not expose OnlineInvoiceUrl; fallback to Xero app view.
+            return _xero_invoice_app_url(inv.xero_invoice_id, inv.invoice_type)
 
     # ------------------------------------------------------------------
     # Notes
@@ -581,6 +633,9 @@ class CRMService:
         from datetime import date, timedelta
 
         today = date.today()
+        trace_cfg = self.traceability_repo.get_for_org(org_id)
+        completed_archive_days = int(getattr(trace_cfg, "task_done_archive_days", 7) or 7)
+        completed_archive_days = min(90, max(1, completed_archive_days))
         current_month_start = today.replace(day=1)
         if current_month_start.month == 1:
             previous_month_start = current_month_start.replace(year=current_month_start.year - 1, month=12)
@@ -601,7 +656,7 @@ class CRMService:
         top_customers_by_product = self.invoice_repo.top_customers_by_product(org_id, limit_products=50)
 
         tasks = self.task_repo.list_for_org(org_id)
-        completed_cutoff = today - timedelta(days=7)
+        completed_cutoff = today - timedelta(days=completed_archive_days)
         open_tasks = [task for task in tasks if task.status in ("pending", "in_progress")]
         overview_tasks = [
             task
@@ -882,6 +937,15 @@ def _serialise_sync_job(j) -> dict:
         "error_message": j.error_message,
         "triggered_by": j.triggered_by,
     }
+
+
+def _xero_invoice_app_url(xero_invoice_id: str, invoice_type: str | None) -> str:
+    """Fallback URL to open the live invoice inside the Xero web app."""
+    base = "https://go.xero.com"
+    inv_type = (invoice_type or "").strip().upper()
+    if inv_type == "ACCPAY":
+        return f"{base}/AccountsPayable/View.aspx?InvoiceID={xero_invoice_id}"
+    return f"{base}/AccountsReceivable/View.aspx?InvoiceID={xero_invoice_id}"
 
 
 def _suggest_due_date_from_terms(invoice_date, payment_terms):

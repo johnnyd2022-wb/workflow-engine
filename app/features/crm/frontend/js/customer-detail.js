@@ -149,6 +149,57 @@ function crmCustomerDetail(contactId) {
       return isNaN(dt) ? '—' : dt.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
     },
 
+    async viewInvoice(inv) {
+      if (!inv?.id) return;
+      try {
+        const data = await CRMAPI.getInvoiceViewUrl(inv.id);
+        const url = data?.view_url;
+        if (!url) throw new Error('Xero did not return an online invoice URL.');
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch (e) {
+        alert(e.message || 'Failed to open invoice in Xero.');
+      }
+    },
+
+    async downloadInvoice(inv) {
+      if (!inv?.id) return;
+      try {
+        const blob = await this.fetchInvoicePdfBlob(inv.id, false);
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = `${inv.invoice_number || 'invoice'}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      } catch (e) {
+        alert(e.message || 'Failed to download invoice PDF.');
+      }
+    },
+
+    async fetchInvoicePdfBlob(invoiceId, inline = false) {
+      const res = await fetch(CRMAPI.invoicePdfUrl(invoiceId, inline), { credentials: 'same-origin' });
+      if (!res.ok) {
+        let msg = `Failed to load invoice PDF (HTTP ${res.status}).`;
+        try {
+          const data = await res.json();
+          msg = data?.message || data?.error || msg;
+        } catch (_) {}
+        throw new Error(msg);
+      }
+      const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+      const blob = await res.blob();
+      if (contentType.includes('application/pdf')) return blob;
+      let msg = 'Xero did not return a PDF for this invoice.';
+      try {
+        const text = await blob.text();
+        const data = JSON.parse(text);
+        msg = data?.message || data?.error || msg;
+      } catch (_) {}
+      throw new Error(msg);
+    },
+
     // ── Notes ────────────────────────────────────────────────────
     async submitNote() {
       const content = this.newNoteContent.trim();

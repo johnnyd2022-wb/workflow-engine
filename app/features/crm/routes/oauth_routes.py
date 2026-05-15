@@ -3,7 +3,7 @@
 import logging
 from uuid import UUID
 
-from flask import Blueprint, g, jsonify, redirect, render_template, request, session
+from flask import Blueprint, g, jsonify, make_response, redirect, render_template, request, session
 
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
@@ -12,6 +12,7 @@ from app.core.utils.log_action import log_action
 from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
 from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroTokenExpiredError
 from app.features.crm.services.xero_sync_service import XeroSyncService
+from app.utils.config_loader import config
 
 logger = logging.getLogger(__name__)
 
@@ -25,17 +26,57 @@ _XERO_PENDING_CONNECTIONS_KEY = "_xero_pending_connections"
 @requires_auth
 def xero_auth():
     """Initiate Xero OAuth2 flow."""
-    from app.utils.config_loader import config
-
-    if not config.xero_client_id or not config.xero_client_secret:
+    service = XeroOAuthService(db_session())
+    client_id = config.xero_client_id
+    redirect_uri = config.xero_redirect_uri
+    if not client_id or not redirect_uri:
+        logger.error(
+            "Xero OAuth config missing (env=%s, has_client_id=%s, has_redirect_uri=%s)",
+            config.environment,
+            bool(client_id),
+            bool(redirect_uri),
+        )
         return redirect("/crm/configuration?error=xero_not_configured")
+
+    state = XeroOAuthService.generate_state()
+    session[_XERO_STATE_SESSION_KEY] = state
+
+    auth_url = service.build_auth_url(state)
+    return redirect(auth_url)
+
+
+@oauth_bp.route("/api/crm/xero/auth-url", methods=["GET"])
+@requires_auth
+def xero_auth_url():
+    """Return the Xero OAuth authorization URL for client-side redirect flows."""
+    client_id = config.xero_client_id
+    redirect_uri = config.xero_redirect_uri
+    if not client_id or not redirect_uri:
+        logger.error(
+            "Xero auth-url unavailable due to missing config (env=%s, has_client_id=%s, has_redirect_uri=%s)",
+            config.environment,
+            bool(client_id),
+            bool(redirect_uri),
+        )
+        return jsonify({"error": "xero_not_configured", "message": "Xero client_id/redirect_uri is not configured"}), 400
+
+    logger.info(
+        "Xero auth-url requested (env=%s, client_id_suffix=%s, redirect_uri=%s)",
+        config.environment,
+        client_id[-6:] if len(client_id) >= 6 else client_id,
+        redirect_uri,
+    )
 
     state = XeroOAuthService.generate_state()
     session[_XERO_STATE_SESSION_KEY] = state
 
     service = XeroOAuthService(db_session())
     auth_url = service.build_auth_url(state)
-    return redirect(auth_url)
+    response = make_response(jsonify({"auth_url": auth_url}), 200)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @oauth_bp.route("/crm/xero/callback", methods=["GET"])
