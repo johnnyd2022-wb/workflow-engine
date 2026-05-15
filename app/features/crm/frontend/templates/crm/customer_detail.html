@@ -227,10 +227,16 @@
                 <template x-if="!inv.line_items || !inv.line_items.length">
                   <p style="font-size:0.8rem; color:var(--text-secondary,#9ca3af); padding:8px 0;">No line items for this invoice.</p>
                 </template>
-                <div style="display:flex; justify-content:flex-end; padding-top:8px; border-top:1px solid var(--border-default,#e5e7eb); margin-top:8px; gap:20px; font-size:0.8rem;">
-                  <span style="color:var(--text-secondary,#6b7280);">Subtotal: <strong x-text="formatCurrency(inv.sub_total, inv.currency_code)"></strong></span>
-                  <span style="color:var(--text-secondary,#6b7280);">Tax: <strong x-text="formatCurrency(inv.total_tax, inv.currency_code)"></strong></span>
-                  <span style="font-weight:700; color:var(--text-primary,#111827);">Total: <strong x-text="formatCurrency(inv.total, inv.currency_code)"></strong></span>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; padding-top:8px; border-top:1px solid var(--border-default,#e5e7eb); margin-top:8px; gap:10px; font-size:0.8rem;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click.stop="viewInvoice(inv)">View</button>
+                    <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click.stop="downloadInvoice(inv)">Download</button>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap; justify-content:flex-end; margin-left:auto;">
+                    <span style="color:var(--text-secondary,#6b7280);">Subtotal: <strong x-text="formatCurrency(inv.sub_total, inv.currency_code)"></strong></span>
+                    <span style="color:var(--text-secondary,#6b7280);">Tax: <strong x-text="formatCurrency(inv.total_tax, inv.currency_code)"></strong></span>
+                    <span style="font-weight:700; color:var(--text-primary,#111827);">Total: <strong x-text="formatCurrency(inv.total, inv.currency_code)"></strong></span>
+                  </div>
                 </div>
               </div>
             </div>

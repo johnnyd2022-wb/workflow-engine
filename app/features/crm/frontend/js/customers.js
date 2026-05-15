@@ -81,6 +81,10 @@ function crmCustomers() {
 
     openCustomer(id) { CRMAPI.navigate(`/crm/customers/${id}`); },
 
+    beginXeroConnect() {
+      window.location.assign('/crm/xero/auth');
+    },
+
     async doSync() {
       if (this.syncing) return;
       this.syncing = true;

@@ -15,6 +15,7 @@ function crmConfiguration() {
       key: 'batch_id',
       review_days: 7,
       strict: true,
+      task_done_archive_days: 7,
     },
     savingMapping: false,
     mappingDraft: {
@@ -44,6 +45,7 @@ function crmConfiguration() {
           key: traceCfg?.matching_key || 'batch_id',
           review_days: Number(traceCfg?.manual_review_days || 7),
           strict: traceCfg?.strict_mapping !== false,
+          task_done_archive_days: Number(traceCfg?.task_done_archive_days || 7),
         };
       } catch (e) {
         this.error = e.message || 'Failed to load configuration.';
@@ -98,18 +100,54 @@ function crmConfiguration() {
       this.showDisconnectModal = false;
     },
 
+    beginXeroConnect() {
+      const fallbackLocal = () => {
+        const popup = window.open('/crm/xero/auth', '_blank');
+        if (popup && !popup.closed) return;
+        window.location.assign('/crm/xero/auth');
+        window.setTimeout(() => {
+          if (window.location.pathname.startsWith('/crm/configuration')) {
+            window.location.replace('/crm/xero/auth');
+          }
+        }, 120);
+      };
+
+      CRMAPI.getXeroAuthUrl()
+        .then((data) => {
+          const authUrl = data?.auth_url;
+          if (!authUrl) {
+            fallbackLocal();
+            return;
+          }
+          // Prefer a new tab (mobile/webview friendly). Fallback to top-level nav.
+          const popup = window.open(authUrl, '_blank');
+          if (popup && !popup.closed) return;
+          try {
+            window.top.location.href = authUrl;
+          } catch (_) {
+            window.location.href = authUrl;
+          }
+        })
+        .catch(() => {
+          fallbackLocal();
+        });
+    },
+
     async saveTraceConfig() {
       this.traceConfig.review_days = Math.min(90, Math.max(1, Number(this.traceConfig.review_days || 7)));
+      this.traceConfig.task_done_archive_days = Math.min(90, Math.max(1, Number(this.traceConfig.task_done_archive_days || 7)));
       try {
         const saved = await CRMAPI.updateTraceabilityConfig({
           matching_strategy: this.traceConfig.mode,
           manual_review_days: this.traceConfig.review_days,
           strict_mapping: this.traceConfig.strict,
+          task_done_archive_days: this.traceConfig.task_done_archive_days,
         });
         this.traceConfig.mode = saved?.matching_strategy || this.traceConfig.mode;
         this.traceConfig.key = saved?.matching_key || 'batch_id';
         this.traceConfig.review_days = Number(saved?.manual_review_days || this.traceConfig.review_days);
         this.traceConfig.strict = saved?.strict_mapping !== false;
+        this.traceConfig.task_done_archive_days = Number(saved?.task_done_archive_days || this.traceConfig.task_done_archive_days);
       } catch (e) {
         this.error = e.message || 'Failed to save traceability settings.';
       }

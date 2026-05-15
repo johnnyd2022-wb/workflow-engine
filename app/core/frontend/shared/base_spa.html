@@ -598,6 +598,10 @@
       }
       if (path === '/core/dashboard') document.body.classList.add('dashboard-page');
       if (path === '/core/sourcemap') document.body.classList.add('sourcemap-page');
+      if (path === '/core/flows') document.body.classList.add('flows2-page');
+      if (path === '/core/flows/create' || path.indexOf('/core/flows/create/') === 0) {
+        document.body.classList.add('process-flow-spa');
+      }
       if (path.indexOf('/crm') === 0) document.body.classList.add('crm-page');
     }
     window.spaNormalizeBodyClasses = spaNormalizeBodyClasses;

@@ -22,6 +22,7 @@ class SalesTraceabilityConfigRepository:
         matching_key: str = "batch_id",
         manual_review_days: int = 7,
         strict_mapping: bool = True,
+        task_done_archive_days: int = 7,
     ) -> SalesTraceabilityConfig:
         row = self.get_for_org(org_id)
         if row is None:
@@ -31,6 +32,7 @@ class SalesTraceabilityConfigRepository:
                 matching_key=matching_key,
                 manual_review_days=manual_review_days,
                 strict_mapping=strict_mapping,
+                task_done_archive_days=task_done_archive_days,
             )
             self.db.add(row)
             return row
@@ -38,4 +40,5 @@ class SalesTraceabilityConfigRepository:
         row.matching_key = matching_key
         row.manual_review_days = manual_review_days
         row.strict_mapping = strict_mapping
+        row.task_done_archive_days = task_done_archive_days
         return row

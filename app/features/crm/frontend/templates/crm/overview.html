@@ -91,9 +91,30 @@
                   </select>
                   <a href="/crm/tasks" style="font-size:.78rem; color:var(--crm-teal); font-weight:700;">View all tasks →</a>
                 </div>
-                <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px;">
+                <div class="crm-lane-mobile-selector crm-lane-mobile-selector--overview">
+                  <div class="flow-mode-segmented" role="tablist" aria-label="Overview task lanes">
+                    <template x-for="lane in taskColumns" :key="`overview-${lane.status}`">
+                      <button
+                        type="button"
+                        role="tab"
+                        class="flow-mode-segment"
+                        :class="selectedOverviewTaskLane === lane.status ? 'flow-mode-segment--active' : ''"
+                        :aria-selected="selectedOverviewTaskLane === lane.status ? 'true' : 'false'"
+                        @click="setOverviewTaskLane(lane.status)"
+                        x-text="lane.title"
+                      ></button>
+                    </template>
+                  </div>
+                </div>
+                <div class="crm-overview-task-board-grid">
                   <template x-for="column in taskColumns" :key="`${widget.id}-${column.status}`">
-                    <div style="background:var(--surface-subtle,rgba(0,0,0,.03)); border-radius:10px; padding:10px; min-height:180px;" @dragover.prevent @drop.prevent="onColumnDrop(column.status)">
+                    <div
+                      style="background:var(--surface-subtle,rgba(0,0,0,.03)); border-radius:10px; padding:10px; min-height:180px;"
+                      @dragover.prevent
+                      @drop.prevent="onColumnDrop(column.status)"
+                      x-show="!isMobileViewport() || selectedOverviewTaskLane === column.status"
+                      x-cloak
+                    >
                       <div style="font-size:.74rem; font-weight:800; text-transform:uppercase; margin-bottom:8px;" x-text="column.title"></div>
                       <template x-if="tasksFor(column.status).length === 0"><div style="font-size:.78rem; color:var(--text-secondary,#6b7280); padding:12px 0;">No tasks</div></template>
                       <template x-for="task in tasksFor(column.status).slice(0, 5)" :key="task.id">

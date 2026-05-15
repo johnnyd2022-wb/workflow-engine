@@ -33,6 +33,7 @@ function crmTasks() {
     calSelectedDate: null,
     calVisibleMonthLabel: '',
     showArchivedCancelled: false,
+    taskDoneArchiveDays: 7,
     showLaneModal: false,
     laneDraft: { title: '' },
     activeLaneId: null,
@@ -69,7 +70,7 @@ function crmTasks() {
       this.syncViewport();
       window.addEventListener('resize', () => { this.syncViewport(); });
       this.initCalendarWindow();
-      await Promise.all([this.loadOperators(), this.loadTasks(), this.loadCustomers()]);
+      await Promise.all([this.loadOperators(), this.loadTasks(), this.loadCustomers(), this.loadTraceabilityConfig()]);
       this.pruneLaneAssignments();
       this.openTaskFromQueryString();
     },
@@ -308,6 +309,15 @@ function crmTasks() {
       }
     },
 
+    async loadTraceabilityConfig() {
+      try {
+        const cfg = await CRMAPI.getTraceabilityConfig();
+        this.taskDoneArchiveDays = Math.min(90, Math.max(1, Number(cfg?.task_done_archive_days || 7)));
+      } catch (_) {
+        this.taskDoneArchiveDays = 7;
+      }
+    },
+
     openTaskFromQueryString() {
       const params = new URLSearchParams(window.location.search || '');
       const taskId = params.get('task_id');
@@ -478,6 +488,7 @@ function crmTasks() {
 
     tasksForLane(lane) {
       return this.filteredTasks.filter((task) => {
+        if (task.status === 'completed' && !this.showArchivedCancelled && this.isArchivedCompleted(task)) return false;
         if (task.status === 'cancelled' && !this.showArchivedCancelled && this.isArchivedCancelled(task)) return false;
         return this.laneForTask(task) === lane.id;
       });
@@ -541,6 +552,16 @@ function crmTasks() {
       const dt = new Date(ts);
       if (Number.isNaN(dt.getTime())) return false;
       return (Date.now() - dt.getTime()) >= 3 * 24 * 60 * 60 * 1000;
+    },
+
+    isArchivedCompleted(task) {
+      if (!task || task.status !== 'completed') return false;
+      const ts = task.completed_at || task.updated_at || task.created_at;
+      if (!ts) return false;
+      const dt = new Date(ts);
+      if (Number.isNaN(dt.getTime())) return false;
+      const days = Math.min(90, Math.max(1, Number(this.taskDoneArchiveDays || 7)));
+      return (Date.now() - dt.getTime()) >= days * 24 * 60 * 60 * 1000;
     },
 
     priorityClass(p) {

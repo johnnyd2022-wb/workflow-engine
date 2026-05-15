@@ -61,7 +61,7 @@
               <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openDisconnectModal()" :disabled="disconnecting" style="border-color:rgba(239,68,68,.35); color:#dc2626;">Disconnect</button>
             </template>
             <template x-if="!xero.connected">
-              <a href="/crm/xero/auth" hx-boost="false" class="crm-btn crm-btn--primary crm-btn--sm">Connect</a>
+              <a href="/crm/xero/auth" hx-boost="false" class="crm-btn crm-btn--primary crm-btn--sm" @click.prevent="beginXeroConnect()">Connect</a>
             </template>
           </div>
         </section>
@@ -122,6 +122,22 @@
           <a href="/core/sourcemap" class="crm-btn crm-btn--secondary crm-btn--sm">Open Sourcemap</a>
           <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Traceability Settings</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-card" style="margin-bottom:16px;">
+    <div class="crm-analytics-header"><span class="crm-analytics-title">Tasks</span></div>
+    <div style="padding:16px; display:grid; gap:12px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Archive Done Tasks After (days)</label>
+          <input class="crm-form-input" type="number" min="1" max="90" x-model.number="traceConfig.task_done_archive_days">
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Completed tasks are automatically archived after this many days to reduce board noise.</p>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end;">
+        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Task Settings</button>
       </div>
     </div>
   </div>

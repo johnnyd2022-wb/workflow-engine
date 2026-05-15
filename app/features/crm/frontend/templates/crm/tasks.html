@@ -30,7 +30,7 @@
   </div>
 
   {# ── Calendar Strip ── #}
-  <div class="crm-card" style="padding:14px 16px;">
+  <div class="crm-card" style="padding:14px 16px; margin-bottom:12px;">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
       <p style="font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary,#9ca3af); margin:0;">
         Upcoming — click a date to filter
@@ -83,29 +83,88 @@
   </div>
 
   {# ── Filter bar ── #}
-  <div style="display:flex; gap:10px; flex-wrap:wrap;">
-    <label style="display:inline-flex; align-items:center; gap:8px; font-size:0.8rem; color:var(--text-secondary,#6b7280);">
-      <input type="checkbox" x-model="onlyAssigned">
-      Assigned only
-    </label>
-    <select class="crm-select" x-model="operatorFilter">
-      <option value="">All operators</option>
-      <template x-for="u in operators" :key="u.id">
-        <option :value="u.id" x-text="u.display_name || u.email"></option>
-      </template>
-    </select>
-    <label style="display:inline-flex; align-items:center; gap:8px; font-size:0.8rem; color:var(--text-secondary,#6b7280);">
-      <input type="checkbox" x-model="showArchivedCancelled">
-      Show archived cancelled tasks
-    </label>
-    <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="openLaneModal()" :disabled="!canAddCustomLane">
-      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Add Lane
-    </button>
-    <span x-show="!canAddCustomLane" x-cloak style="font-size:0.76rem; color:var(--text-secondary,#6b7280);">Max 1 custom lane</span>
+  <div class="crm-task-filters">
+    <div class="crm-task-filters__desktop-row">
+      <select class="crm-select crm-task-filters__operator-select" x-model="operatorFilter">
+        <option value="">All operators</option>
+        <template x-for="u in operators" :key="u.id">
+          <option :value="u.id" x-text="u.display_name || u.email"></option>
+        </template>
+      </select>
+      <button
+        type="button"
+        class="spa-advanced-toggle crm-task-filters__desktop-toggle"
+        role="switch"
+        :aria-checked="onlyAssigned ? 'true' : 'false'"
+        @click="onlyAssigned = !onlyAssigned"
+      >
+        <span class="spa-advanced-toggle__label">Assigned only</span>
+        <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': onlyAssigned }">
+          <span class="spa-advanced-toggle__thumb"></span>
+        </span>
+      </button>
+      <button
+        type="button"
+        class="spa-advanced-toggle crm-task-filters__desktop-toggle"
+        role="switch"
+        :aria-checked="showArchivedCancelled ? 'true' : 'false'"
+        @click="showArchivedCancelled = !showArchivedCancelled"
+      >
+        <span class="spa-advanced-toggle__label">Show archived tasks</span>
+        <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': showArchivedCancelled }">
+          <span class="spa-advanced-toggle__thumb"></span>
+        </span>
+      </button>
+      <button class="crm-btn crm-btn--secondary crm-btn--sm crm-task-filters__add-lane-btn" @click="openLaneModal()" :disabled="!canAddCustomLane">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Lane
+      </button>
+    </div>
+
+    <div class="crm-task-filters__mobile-toggle-row">
+      <button
+        type="button"
+        class="spa-advanced-toggle crm-task-filters__mobile-toggle"
+        role="switch"
+        :aria-checked="onlyAssigned ? 'true' : 'false'"
+        @click="onlyAssigned = !onlyAssigned"
+      >
+        <span class="spa-advanced-toggle__label">Assigned only</span>
+        <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': onlyAssigned }">
+          <span class="spa-advanced-toggle__thumb"></span>
+        </span>
+      </button>
+      <button
+        type="button"
+        class="spa-advanced-toggle crm-task-filters__mobile-toggle"
+        role="switch"
+        :aria-checked="showArchivedCancelled ? 'true' : 'false'"
+        @click="showArchivedCancelled = !showArchivedCancelled"
+      >
+        <span class="spa-advanced-toggle__label">Show archived tasks</span>
+        <span class="spa-advanced-toggle__track" :class="{ 'spa-advanced-toggle__track--on': showArchivedCancelled }">
+          <span class="spa-advanced-toggle__thumb"></span>
+        </span>
+      </button>
+    </div>
+
+    <div class="crm-task-filters__mobile-action-row">
+      <select class="crm-select crm-task-filters__operator-select" x-model="operatorFilter">
+        <option value="">All operators</option>
+        <template x-for="u in operators" :key="`mobile-${u.id}`">
+          <option :value="u.id" x-text="u.display_name || u.email"></option>
+        </template>
+      </select>
+      <button class="crm-btn crm-btn--secondary crm-btn--sm crm-task-filters__add-lane-btn" @click="openLaneModal()" :disabled="!canAddCustomLane">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Lane
+      </button>
+    </div>
+
+    <span x-show="!canAddCustomLane" x-cloak class="crm-task-filters__lane-hint">Max 1 custom lane</span>
   </div>
 
-  <div class="crm-lane-mobile-selector" x-show="!loading && lanes.length > 0" x-cloak>
+  <div class="crm-lane-mobile-selector crm-lane-mobile-selector--tasks" x-show="!loading && lanes.length > 0" x-cloak>
     <div class="flow-mode-segmented" role="tablist" aria-label="Task lanes">
       <template x-for="lane in lanes" :key="`${lane.id}-selector`">
         <button
@@ -141,7 +200,7 @@
       <template x-for="lane in visibleLanes" :key="lane.id">
         <div class="crm-kanban-col">
           <div class="crm-kanban-header" :class="laneHeaderClass(lane)">
-            <span x-text="lane.title"></span>
+            <span x-show="!isMobileView" x-text="lane.title"></span>
             <div style="display:flex; align-items:center; gap:6px;">
               <span class="crm-kanban-count" x-text="tasksForLane(lane).length">0</span>
               <button

@@ -22,6 +22,7 @@ class SalesTraceabilityConfig(Base):
     matching_key = Column(String(30), nullable=False, default="batch_id")
     manual_review_days = Column(Integer, nullable=False, default=7)
     strict_mapping = Column(Boolean, nullable=False, default=True)
+    task_done_archive_days = Column(Integer, nullable=False, default=7)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

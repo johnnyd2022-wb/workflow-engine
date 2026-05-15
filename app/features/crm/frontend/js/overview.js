@@ -30,6 +30,7 @@ function crmOverview() {
       { status: 'pending', title: 'To Do' },
       { status: 'in_progress', title: 'In Progress' },
     ],
+    selectedOverviewTaskLane: 'pending',
     draggedTaskId: null,
     dragSuppressUntil: 0,
     expandedTaskId: null,
@@ -207,6 +208,14 @@ function crmOverview() {
         if (this.boardOperatorFilter && task.assigned_to_user_id !== this.boardOperatorFilter) return false;
         return true;
       });
+    },
+
+    isMobileViewport() {
+      return window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+    },
+
+    setOverviewTaskLane(status) {
+      this.selectedOverviewTaskLane = status;
     },
 
     toggleTask(task) {
