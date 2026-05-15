@@ -14,6 +14,7 @@ password = YOUR_PASSWORD_HERE
 [xero]
 client_id = YOUR_LOCAL_XERO_CLIENT_ID
 client_secret = YOUR_LOCAL_XERO_CLIENT_SECRET
+redirect_uri = https://localhost:8005/crm/xero/callback
 
 [email]
 sender_email = your-email@example.com

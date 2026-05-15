@@ -1,0 +1,28 @@
+<nav class="crm-section-tabs" aria-label="CRM sections">
+  <div class="flow-mode-segmented" role="tablist" aria-label="CRM pages">
+    <a
+      href="/crm"
+      role="tab"
+      aria-selected="{{ 'true' if active_crm_tab == 'overview' else 'false' }}"
+      class="flow-mode-segment{% if active_crm_tab == 'overview' %} flow-mode-segment--active{% endif %}"
+    >Overview</a>
+    <a
+      href="/crm/customers"
+      role="tab"
+      aria-selected="{{ 'true' if active_crm_tab == 'customers' else 'false' }}"
+      class="flow-mode-segment{% if active_crm_tab == 'customers' %} flow-mode-segment--active{% endif %}"
+    >Customers</a>
+    <a
+      href="/crm/tasks"
+      role="tab"
+      aria-selected="{{ 'true' if active_crm_tab == 'tasks' else 'false' }}"
+      class="flow-mode-segment{% if active_crm_tab == 'tasks' %} flow-mode-segment--active{% endif %}"
+    >Tasks</a>
+    <a
+      href="/crm/configuration"
+      role="tab"
+      aria-selected="{{ 'true' if active_crm_tab == 'configuration' else 'false' }}"
+      class="flow-mode-segment{% if active_crm_tab == 'configuration' %} flow-mode-segment--active{% endif %}"
+    >Configuration</a>
+  </div>
+</nav>

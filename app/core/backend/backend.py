@@ -618,7 +618,7 @@ def dashboard():
 @core_bp.route("/core/integrations", methods=["GET"])
 @requires_auth
 def integrations():
-    return render_template("integrations/integrations.html", active_page="integrations")
+    return redirect("/crm/configuration")
 
 
 @core_bp.route("/core/settings", methods=["GET"])

@@ -12,6 +12,7 @@ class Config:
         self.config = configparser.ConfigParser()
         self.environment = os.getenv("ENVIRONMENT", "local")
         self._keepass_creds: dict | None = None
+        self._xero_keepass_creds: dict | None = None
         self.load_config()
         self._load_keepass_creds()
 
@@ -30,42 +31,59 @@ class Config:
 
     def _load_keepass_creds(self):
         """Attempt to load database credentials from KeePassXC"""
-        # Only try KeePassXC for local environment
-        if self.environment != "local":
-            return
+        # Database creds: KeePassXC local override only.
+        if self.environment == "local":
+            try:
+                # Import the keepass function from scripts
+                scripts_dir = Path(__file__).parent.parent.parent / "scripts"
+                if (scripts_dir / "local_secrets.py").exists():
+                    sys.path.insert(0, str(scripts_dir))
+                    from local_secrets import get_keepass_entry
 
-        try:
-            # Import the keepass function from scripts
-            scripts_dir = Path(__file__).parent.parent.parent / "scripts"
-            if (scripts_dir / "local_secrets.py").exists():
-                sys.path.insert(0, str(scripts_dir))
-                from local_secrets import get_keepass_entry
-
-                # Enable verbose logging if KEEPASS_VERBOSE env var is set
-                verbose = os.getenv("KEEPASS_VERBOSE", "").lower() in ("1", "true", "yes")
-                creds = get_keepass_entry(verbose=verbose)
-                if creds and "Password" in creds:
-                    password = creds["Password"]
-                    # Only use KeePassXC if we got a valid password (not empty or "PROTECTED")
-                    if password and password != "PROTECTED" and password.strip():
-                        self._keepass_creds = creds
-                        print("✅ Loaded database credentials from KeePassXC")
+                    # Enable verbose logging if KEEPASS_VERBOSE env var is set
+                    verbose = os.getenv("KEEPASS_VERBOSE", "").lower() in ("1", "true", "yes")
+                    creds = get_keepass_entry(verbose=verbose)
+                    if creds and "Password" in creds:
+                        password = creds["Password"]
+                        # Only use KeePassXC if we got a valid password (not empty or "PROTECTED")
+                        if password and password != "PROTECTED" and password.strip():
+                            self._keepass_creds = creds
+                            print("✅ Loaded database credentials from KeePassXC")
+                        else:
+                            if verbose:
+                                print(f"⚠️  KeePassXC password is '{password}', using config file credentials")
+                            else:
+                                print("ℹ️  KeePassXC not available or database locked, using config file credentials")
                     else:
                         if verbose:
-                            print(f"⚠️  KeePassXC password is '{password}', using config file credentials")
+                            print(f"⚠️  KeePassXC returned: {creds}, using config file credentials")
                         else:
                             print("ℹ️  KeePassXC not available or database locked, using config file credentials")
+            except Exception as e:
+                # Log error if verbose, otherwise silently fail and use config file
+                if os.getenv("KEEPASS_VERBOSE", "").lower() in ("1", "true", "yes"):
+                    print(f"⚠️  KeePassXC error: {e}, using config file credentials")
                 else:
-                    if verbose:
-                        print(f"⚠️  KeePassXC returned: {creds}, using config file credentials")
-                    else:
-                        print("ℹ️  KeePassXC not available or database locked, using config file credentials")
-        except Exception as e:
-            # Log error if verbose, otherwise silently fail and use config file
-            if os.getenv("KEEPASS_VERBOSE", "").lower() in ("1", "true", "yes"):
-                print(f"⚠️  KeePassXC error: {e}, using config file credentials")
-            else:
-                print("ℹ️  KeePassXC not available or database locked, using config file credentials")
+                    print("ℹ️  KeePassXC not available or database locked, using config file credentials")
+
+        # Load Xero platform credentials from KeePassXC (local only)
+        if self.environment == "local":
+            try:
+                scripts_dir = Path(__file__).parent.parent.parent / "scripts"
+                if (scripts_dir / "local_secrets.py").exists():
+                    sys.path.insert(0, str(scripts_dir))
+                    from local_secrets import get_keepass_entry
+
+                    verbose = os.getenv("KEEPASS_VERBOSE", "").lower() in ("1", "true", "yes")
+                    id_entry = get_keepass_entry(entry_name="xero_client_id", verbose=verbose)
+                    secret_entry = get_keepass_entry(entry_name="xero_client_secret", verbose=verbose)
+                    client_id = id_entry.get("Password", "") if id_entry else ""
+                    client_secret = secret_entry.get("Password", "") if secret_entry else ""
+                    if client_id and client_secret:
+                        self._xero_keepass_creds = {"client_id": client_id, "client_secret": client_secret}
+                        print("✅ Loaded Xero credentials from KeePassXC")
+            except Exception:
+                pass  # silently fall back to env var / ini
 
     def get(self, section: str, key: str, fallback: Any = None) -> str:
         """Get a configuration value"""
@@ -78,6 +96,12 @@ class Config:
     def getint(self, section: str, key: str, fallback: int = 0) -> int:
         """Get an integer configuration value"""
         return self.config.getint(section, key, fallback=fallback)
+
+    @staticmethod
+    def _clean_config_secret(value: str | None) -> str:
+        if value is None:
+            return ""
+        return str(value).strip().strip("\"'").strip()
 
     @property
     def environment(self) -> str:
@@ -150,11 +174,31 @@ class Config:
 
     @property
     def xero_client_id(self) -> str:
-        return self.get("xero", "client_id", "")
+        if self.environment == "test":
+            return self._clean_config_secret(
+                os.getenv("xero_client_id_test")
+                or os.getenv("XERO_CLIENT_ID_TEST")
+                or self.get("xero", "client_id", "")
+            )
+        if self._xero_keepass_creds:
+            return self._clean_config_secret(self._xero_keepass_creds["client_id"])
+        return self._clean_config_secret(os.getenv("XERO_CLIENT_ID") or self.get("xero", "client_id", ""))
 
     @property
     def xero_client_secret(self) -> str:
-        return self.get("xero", "client_secret", "")
+        if self.environment == "test":
+            return self._clean_config_secret(
+                os.getenv("xero_client_secret_test")
+                or os.getenv("XERO_CLIENT_SECRET_TEST")
+                or self.get("xero", "client_secret", "")
+            )
+        if self._xero_keepass_creds:
+            return self._clean_config_secret(self._xero_keepass_creds["client_secret"])
+        return self._clean_config_secret(os.getenv("XERO_CLIENT_SECRET") or self.get("xero", "client_secret", ""))
+
+    @property
+    def xero_redirect_uri(self) -> str:
+        return self._clean_config_secret(os.getenv("XERO_REDIRECT_URI") or self.get("xero", "redirect_uri", ""))
 
     @property
     def sender_email(self) -> str:

@@ -18,6 +18,10 @@ docker run -d \
     --name workflow-engine-test \
     -p 8001:8001 \
     -e ENVIRONMENT=test \
+    -e XERO_CLIENT_ID_TEST="$XERO_CLIENT_ID_TEST" \
+    -e XERO_CLIENT_SECRET_TEST="$XERO_CLIENT_SECRET_TEST" \
+    -e xero_client_id_test="$xero_client_id_test" \
+    -e xero_client_secret_test="$xero_client_secret_test" \
     workflow-engine:test
 
 echo "✅ Test environment started on port 8001"

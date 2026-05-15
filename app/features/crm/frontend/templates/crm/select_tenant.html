@@ -1,0 +1,127 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Connect Xero · Select Organisation{% endblock %}
+
+{% block head_extras %}
+  <link rel="stylesheet" href="/crm/static/css/crm.css">
+{% endblock %}
+
+{% block topbar %}
+  <a href="/crm/configuration" class="spa-banner-back" aria-label="Back to Configuration" hx-boost="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M11 19l-7-7 7-7"/><path d="M4 12h16"/></svg>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="crm-root" style="max-width:560px; margin:0 auto; padding-top:24px;">
+
+  <div class="crm-page-header" style="margin-bottom:24px;">
+    <div>
+      <h1 class="crm-page-title">Connect Xero</h1>
+      <p class="crm-page-subtitle">Multiple Xero organisations were found on your account. Select the one you want to connect to Biz-e.</p>
+    </div>
+  </div>
+
+  {% if error %}
+  <div class="crm-error-banner" style="margin-bottom:16px;">
+    <span>{{ error }}</span>
+  </div>
+  {% endif %}
+
+  <form method="POST" action="/crm/xero/select-tenant" hx-boost="false">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="crm-card" style="padding:0; overflow:hidden;">
+      {% for conn in connections %}
+      <label class="xero-tenant-option" for="tenant_{{ loop.index }}">
+        <input
+          type="radio"
+          id="tenant_{{ loop.index }}"
+          name="tenant_id"
+          value="{{ conn.tenantId }}"
+          {% if loop.first %}checked{% endif %}
+          style="position:absolute; opacity:0; width:0; height:0;"
+        >
+        <div class="xero-tenant-option__check" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="xero-tenant-option__logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" fill="#13B5EA"/>
+            <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="9.5" font-weight="700" fill="#ffffff">X</text>
+          </svg>
+        </div>
+        <div class="xero-tenant-option__info">
+          <span class="xero-tenant-option__name">{{ conn.tenantName }}</span>
+          <span class="xero-tenant-option__type">{{ conn.tenantType | replace('ORGANISATION', 'Organisation') | replace('PRACTICE', 'Practice') }}</span>
+        </div>
+      </label>
+      {% if not loop.last %}
+      <div style="height:1px; background:var(--border-default, #e5e7eb); margin:0 16px;"></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+      <a href="/crm/configuration" hx-boost="false" class="btn btn-secondary">Cancel</a>
+      <button type="submit" class="btn btn-primary">Connect Selected Organisation</button>
+    </div>
+  </form>
+
+</div>
+
+<style>
+.xero-tenant-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background 120ms ease;
+  position: relative;
+}
+.xero-tenant-option:hover {
+  background: var(--bg-secondary, rgba(0,0,0,0.03));
+}
+.xero-tenant-option:has(input:checked) {
+  background: rgba(45, 212, 191, 0.08);
+}
+.xero-tenant-option__check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border-default, #d1d5db);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+.xero-tenant-option:has(input:checked) .xero-tenant-option__check {
+  border-color: var(--crm-teal, #2DD4BF);
+  background: var(--crm-teal, #2DD4BF);
+  color: #0f1a1a;
+}
+.xero-tenant-option__logo {
+  flex-shrink: 0;
+}
+.xero-tenant-option__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.xero-tenant-option__name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xero-tenant-option__type {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9ca3af);
+}
+</style>
+{% endblock %}

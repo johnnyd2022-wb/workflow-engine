@@ -43,6 +43,7 @@ def create_app():
     app.config["SESSION_COOKIE_PATH"] = "/"  # Explicitly set cookie path to root
     # Align PERMANENT_SESSION_LIFETIME with default user session timeout (7 days default, max 30 days)
     app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600  # 30 days (max session lifetime)
+    app.config.setdefault("ENFORCE_HTTPS", True)
 
     # Initialize rate limiter (IP-based)
     # Import limiter from auth_routes and initialize it with the app
@@ -59,6 +60,12 @@ def create_app():
     from app.core.backend.backend import core_bp
 
     app.register_blueprint(core_bp)
+
+    # Register CRM blueprint (feature-flagged)
+    if config.crm_enabled:
+        from app.features.crm.crm_bp import create_crm_blueprint
+
+        app.register_blueprint(create_crm_blueprint())
 
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
@@ -145,6 +152,8 @@ def create_app():
     @app.before_request
     def force_https():
         """Redirect HTTP requests to HTTPS to ensure encrypted connections"""
+        if not app.config.get("ENFORCE_HTTPS", True):
+            return
         # Skip for healthcheck and static files
         # CRITICAL: Check if endpoint is None before calling methods on it
         if request.endpoint is None:
@@ -245,6 +254,10 @@ def create_app():
                 return ""
 
             return dict(csrf_token=csrf_token)
+
+    @app.context_processor
+    def _inject_feature_flags():
+        return dict(crm_enabled=config.crm_enabled)
 
     # Trust Cloudflare's forwarded headers (1 proxy hop)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)

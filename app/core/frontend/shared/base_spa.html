@@ -44,6 +44,8 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='core2.css') }}">
   {# Inventory spa header: used across many pages (core, integrations, settings, notifications). Global for HTMX swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
+  {# CRM styles must be global because HTMX only swaps #page-content, not <head>. #}
+  <link rel="stylesheet" href="/crm/static/css/crm.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -310,6 +312,14 @@
 
   {# HTMX & Alpine — self-hosted to avoid CDN dependency and floating-version risk. #}
   <script src="{{ url_for('core.serve_core_js', filename='htmx.min.js') }}"></script>
+  {# CRM scripts loaded before Alpine so components are defined when Alpine initialises x-data. #}
+  <script src="/crm/static/js/crm-api.js" defer></script>
+  <script src="/crm/static/js/overview.js" defer></script>
+  <script src="/crm/static/js/customers.js" defer></script>
+  <script src="/crm/static/js/customer-detail.js" defer></script>
+  <script src="/crm/static/js/tasks-calendar.js" defer></script>
+  <script src="/crm/static/js/configuration.js" defer></script>
+  <script src="/crm/static/js/integrations.js" defer></script>
   <script src="{{ url_for('core.serve_core_js', filename='alpinejs.min.js') }}" defer></script>
 
   <script>
@@ -407,7 +417,8 @@
         p === '/core' ||
         p === '/core/dashboard' ||
         p === '/core/integrations' ||
-        p === '/core/settings'
+        p === '/core/settings' ||
+        p === '/crm'
       );
     }
     window.spaBannerBackIsMainTab = spaBannerBackIsMainTab;
@@ -449,6 +460,12 @@
         var legacyPid = new URLSearchParams(window.location.search).get('id');
         var legacyDest = legacyPid ? '/core/flows?id=' + encodeURIComponent(legacyPid) : '/core';
         el.setAttribute('href', legacyDest);
+        el.setAttribute('data-spa-back-explicit', 'true');
+        return;
+      }
+      if (path.indexOf('/crm') === 0) {
+        var crmHref = '/crm';
+        el.setAttribute('href', crmHref);
         el.setAttribute('data-spa-back-explicit', 'true');
         return;
       }
@@ -531,6 +548,22 @@
           }
           return;
         }
+        /* CRM pages: explicit deterministic parent route, independent of stale href/history state. */
+        if (pathNow.indexOf('/crm') === 0) {
+          e.preventDefault();
+          var crmDest = '/crm';
+          if (window.htmx && typeof window.htmx.ajax === 'function') {
+            window.htmx.ajax('GET', crmDest, {
+              target: '#page-content',
+              swap: 'innerHTML',
+              select: '#page-content',
+              pushURL: true,
+            });
+          } else {
+            window.location.href = crmDest;
+          }
+          return;
+        }
         if (el.getAttribute('data-spa-back-explicit') === 'true') {
           return;
         }
@@ -543,6 +576,48 @@
       window.addEventListener('popstate', spaSyncBannerBack);
     }
 
+    function spaNormalizeBodyClasses(pathname) {
+      var path = (pathname || window.location.pathname || '').replace(/\/$/, '') || '/';
+      var pageBodyClasses = [
+        'settings-page',
+        'dashboard-page',
+        'sourcemap-page',
+        'flows2-page',
+        'process-flow-spa',
+        'execution-step-spa',
+        'batch-start-spa',
+        'add-inventory-manual-spa',
+        'crm-page'
+      ];
+      pageBodyClasses.forEach(function (cls) { document.body.classList.remove(cls); });
+      if (path === '/core/settings') {
+        document.body.classList.add('settings-page');
+        if (typeof window.initAccountInfo === 'function') {
+          window.initAccountInfo('account-info-container');
+        }
+      }
+      if (path === '/core/dashboard') document.body.classList.add('dashboard-page');
+      if (path === '/core/sourcemap') document.body.classList.add('sourcemap-page');
+      if (path === '/core/flows') document.body.classList.add('flows2-page');
+      if (path === '/core/flows/create' || path.indexOf('/core/flows/create/') === 0) {
+        document.body.classList.add('process-flow-spa');
+      }
+      if (path.indexOf('/crm') === 0) document.body.classList.add('crm-page');
+    }
+    window.spaNormalizeBodyClasses = spaNormalizeBodyClasses;
+
+    function spaPathFromHtmxEvent(evt) {
+      try {
+        var info = evt && evt.detail && evt.detail.pathInfo;
+        var raw = (info && (info.finalRequestPath || info.requestPath || info.path)) || '';
+        if (!raw) return null;
+        var url = raw.indexOf('http') === 0 ? new URL(raw) : new URL(raw, window.location.origin);
+        return (url.pathname || '').replace(/\/$/, '') || '/';
+      } catch (e) {
+        return null;
+      }
+    }
+
     // Last path we already scrolled to top for (avoids duplicate settles + same-URL noise).
     var spaLastScrollResetPath =
       (window.location.pathname || '').replace(/\/$/, '') || '/';
@@ -550,12 +625,16 @@
       spaLastScrollResetPath =
         (window.location.pathname || '').replace(/\/$/, '') || '/';
       spaBannerBackInit();
+      spaNormalizeBodyClasses(spaLastScrollResetPath);
       syncAddInventoryManualPageShell();
       tagExecAddMissingItemControls(document);
       wireExecInputsMutationObserver();
       if (typeof window.syncSpaThemeToggle === 'function') {
         window.syncSpaThemeToggle();
       }
+      window.addEventListener('popstate', function () {
+        spaNormalizeBodyClasses();
+      });
     });
 
     // Global HTMX wiring
@@ -565,13 +644,28 @@
         evt.detail.elt.setAttribute('hx-indicator', '#loading-indicator');
       }
     });
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+      var tgt = evt && evt.detail && evt.detail.target;
+      if (!tgt || tgt.id !== 'page-content') return;
+      var nextPath = spaPathFromHtmxEvent(evt);
+      if (nextPath) spaNormalizeBodyClasses(nextPath);
+    });
 
     document.body.addEventListener('htmx:afterSwap', function (evt) {
       var tgt = evt.detail && evt.detail.target;
       if (tgt && tgt.id === 'page-content') {
+        spaNormalizeBodyClasses();
+        if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+          try {
+            window.Alpine.initTree(tgt);
+          } catch (e) {}
+        }
         syncAddInventoryManualPageShell();
         tagExecAddMissingItemControls(tgt);
         wireExecInputsMutationObserver();
+        if (typeof spaSyncBannerBack === 'function') {
+          spaSyncBannerBack();
+        }
       }
     });
 
@@ -588,17 +682,7 @@
         window.syncSpaThemeToggle();
       }
       if (tgt && tgt.id === 'page-content') {
-        // Sync body classes for HTMX boost navigation (CSS scoped to body classes needs this).
-        var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
-        var pageBodyClasses = ['settings-page', 'dashboard-page'];
-        pageBodyClasses.forEach(function (cls) { document.body.classList.remove(cls); });
-        if (path === '/core/settings') {
-          document.body.classList.add('settings-page');
-          if (typeof window.initAccountInfo === 'function') {
-            window.initAccountInfo('account-info-container');
-          }
-        }
-        if (path === '/core/dashboard') document.body.classList.add('dashboard-page');
+        spaNormalizeBodyClasses();
       }
       if (!tgt || tgt.id !== 'page-content') return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
@@ -948,4 +1032,3 @@
   {% block scripts %}{% endblock %}
 </body>
 </html>
-

@@ -1,0 +1,177 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Customers · CRM{% endblock %}
+{% block body_class %}crm-page{% endblock %}
+
+{% block head_extras %}
+  <link rel="stylesheet" href="/crm/static/css/crm.css">
+{% endblock %}
+
+{% block topbar %}
+  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to CRM" hx-boost="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M11 19l-7-7 7-7"/>
+      <path d="M4 12h16"/>
+    </svg>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="max-content crm-root" x-data="crmCustomers()" x-init="init()">
+  {% set crm_heading = "Customers" %}
+  {% set crm_subtitle = "View synced contacts and customer sales context" %}
+  {% include "crm/_crm_banner.html" %}
+  {% set active_crm_tab = "customers" %}
+  {% include "crm/_crm_section_tabs.html" %}
+
+  {# ── Page Header ── #}
+  <div class="crm-page-header">
+    <div>
+      <p class="crm-page-subtitle">
+        <span class="crm-sync-dot" :class="isConnected ? 'crm-sync-dot--ok' : 'crm-sync-dot--off'"></span>
+        <span x-text="syncSubtitle">Loading…</span>
+      </p>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <template x-if="isConnected">
+        <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="doSync()" :disabled="syncing">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" :style="syncing ? 'animation:spin 1s linear infinite' : ''"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <span x-text="syncing ? 'Syncing…' : 'Sync'">Sync</span>
+        </button>
+      </template>
+      <template x-if="!isConnected">
+        <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click="beginXeroConnect()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Connect Xero
+        </button>
+      </template>
+    </div>
+  </div>
+
+  {# ── Error ── #}
+  <div x-show="error" class="crm-error-banner" x-cloak>
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span x-text="error"></span>
+    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit; font-size:1rem;">&times;</button>
+  </div>
+
+  {# ── Not connected banner ── #}
+  <template x-if="xeroStatus && !isConnected">
+    <div class="crm-connect-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--crm-teal); flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div class="crm-connect-banner-text">
+        <strong>Connect Xero to sync your customers</strong>
+        <p>Your contacts and invoices will appear here once Xero is connected.</p>
+      </div>
+      <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click="beginXeroConnect()">Connect Xero</button>
+    </div>
+  </template>
+
+  {# ── Main Card ── #}
+  <div class="crm-card">
+    {# Toolbar #}
+    <div class="crm-toolbar">
+      <div class="crm-search-wrap crm-search-wrap--plain">
+        <input
+          class="crm-search crm-search--plain"
+          type="search"
+          placeholder="Search by name or email…"
+          x-model="search"
+          @input="onSearchInput()"
+          autocomplete="off"
+        >
+      </div>
+      <select class="crm-select" x-model="statusFilter" @change="page=1; loadCustomers()">
+        <option value="">All statuses</option>
+        <option value="ACTIVE">Active</option>
+        <option value="ARCHIVED">Archived</option>
+      </select>
+    </div>
+
+    {# Loading skeletons #}
+    <template x-if="loading">
+      <div>
+        <template x-for="i in 8" :key="i">
+          <div class="crm-skeleton-row">
+            <div class="crm-skeleton crm-skeleton-circle"></div>
+            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+              <div class="crm-skeleton crm-skeleton-line" :style="'width:' + (40 + Math.random()*30) + '%'"></div>
+              <div class="crm-skeleton crm-skeleton-line" :style="'width:' + (25 + Math.random()*20) + '%'"></div>
+            </div>
+            <div class="crm-skeleton crm-skeleton-line" style="width:60px; height:20px; border-radius:10px;"></div>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    {# Empty state #}
+    <template x-if="!loading && customers.length === 0">
+      <div class="crm-empty">
+        <div class="crm-empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3 x-text="search ? 'No customers match your search' : 'No customers yet'">No customers yet</h3>
+        <p x-text="search ? 'Try a different search term.' : isConnected ? 'Sync Xero to import your contacts.' : 'Connect Xero to get started.'"></p>
+        <template x-if="!isConnected">
+          <button type="button" class="crm-btn crm-btn--primary" style="margin-top:8px;" @click="beginXeroConnect()">Connect Xero</button>
+        </template>
+      </div>
+    </template>
+
+    {# Table #}
+    <template x-if="!loading && customers.length > 0">
+      <div>
+        <div class="crm-table-wrap">
+          <table class="crm-table">
+            <thead>
+              <tr>
+                <th class="sortable" :class="sortBy==='name' ? 'sort-active' : ''" @click="setSort('name')">
+                  Name <span class="sort-arrow" x-text="sortBy==='name' ? (sortDir==='asc' ? '↑' : '↓') : '↕'"></span>
+                </th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Status</th>
+                <th class="sortable" :class="sortBy==='synced' ? 'sort-active' : ''" @click="setSort('synced')">
+                  Last Synced <span class="sort-arrow" x-text="sortBy==='synced' ? (sortDir==='asc' ? '↑' : '↓') : '↕'"></span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="c in customers" :key="c.id">
+                <tr @click="openCustomer(c.id)">
+                  <td>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <div style="width:30px;height:30px;border-radius:50%;background:var(--crm-teal);display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:#0f1a1a;flex-shrink:0;" x-text="initials(c.name)"></div>
+                      <span class="col-name" x-text="c.name">—</span>
+                    </div>
+                  </td>
+                  <td class="col-secondary" x-text="c.email_address || '—'">—</td>
+                  <td class="col-secondary" x-text="c.phone_number || '—'">—</td>
+                  <td>
+                    <span class="crm-badge" :class="statusBadgeClass(c.contact_status)" x-text="c.contact_status || '—'">—</span>
+                  </td>
+                  <td class="col-secondary" x-text="formatDate(c.last_synced_at)">—</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        {# Pagination #}
+        <div class="crm-pagination">
+          <span x-text="total === 0 ? 'No results' : `${paginationStart}–${paginationEnd} of ${total}`"></span>
+          <div class="crm-pagination-btns">
+            <button class="crm-btn-page" @click="prevPage()" :disabled="page <= 1">← Prev</button>
+            <button class="crm-btn-page" @click="nextPage()" :disabled="page >= totalPages">Next →</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+</div>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+{% endblock %}
