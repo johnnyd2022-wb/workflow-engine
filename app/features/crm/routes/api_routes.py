@@ -10,6 +10,7 @@ from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
 from app.features.crm.services.crm_service import CRMService
+from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +143,42 @@ def create_customer_invoice(contact_id: str):
     data = request.get_json() or {}
     try:
         invoice = _crm_service().create_customer_invoice(UUID(contact_id), org_id, data)
+    except XeroInsufficientScopeError as e:
+        return (
+            jsonify(
+                {
+                    "error": "xero_insufficient_scope",
+                    "message": str(e),
+                    "action": "reconnect_xero",
+                }
+            ),
+            401,
+        )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"invoice": invoice}), 201
+
+
+@api_bp.route("/api/crm/invoices/<invoice_id>/authorise", methods=["POST"])
+@requires_auth
+def authorise_invoice(invoice_id: str):
+    org_id = UUID(g.org_id)
+    try:
+        invoice = _crm_service().authorise_invoice(UUID(invoice_id), org_id)
+    except XeroInsufficientScopeError as e:
+        return (
+            jsonify(
+                {
+                    "error": "xero_insufficient_scope",
+                    "message": str(e),
+                    "action": "reconnect_xero",
+                }
+            ),
+            401,
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"invoice": invoice}), 200
 
 
 @api_bp.route("/api/crm/customers/<contact_id>/analytics", methods=["GET"])

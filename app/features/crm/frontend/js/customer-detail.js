@@ -20,9 +20,11 @@ function crmCustomerDetail(contactId) {
     showInvoiceModal: false,
     showInvoicePreview: false,
     creatingInvoice: false,
+    authorisingInvoiceId: null,
     invoiceForm: {
       invoice_date: '',
       due_date: '',
+      invoice_status: 'DRAFT',
       line_items: [],
     },
     loading: true,
@@ -355,6 +357,7 @@ function crmCustomerDetail(contactId) {
       this.invoiceForm = {
         invoice_date: iso,
         due_date: '',
+        invoice_status: 'DRAFT',
         line_items: [
           {
             option_key: '',
@@ -381,6 +384,30 @@ function crmCustomerDetail(contactId) {
     closeInvoiceModal() {
       this.showInvoiceModal = false;
       this.showInvoicePreview = false;
+    },
+
+    canAuthoriseInvoice(inv) {
+      const status = String(inv?.status || '').toUpperCase();
+      return status === 'DRAFT';
+    },
+
+    async authoriseInvoice(inv) {
+      if (!inv?.id) return;
+      if (!this.canAuthoriseInvoice(inv)) return;
+      this.authorisingInvoiceId = inv.id;
+      try {
+        const { invoice } = await CRMAPI.authoriseInvoice(inv.id);
+        const idx = this.invoices.findIndex((x) => x.id === inv.id);
+        if (idx !== -1 && invoice) {
+          this.invoices[idx] = invoice;
+        } else {
+          await this.loadInvoices(this.invoicePage || 1);
+        }
+      } catch (e) {
+        alert(e.message || 'Failed to authorise invoice.');
+      } finally {
+        this.authorisingInvoiceId = null;
+      }
     },
 
     async applyInvoiceDueDateDefault(force = false) {
@@ -590,6 +617,7 @@ function crmCustomerDetail(contactId) {
         await CRMAPI.createCustomerInvoice(this.contactId, {
           invoice_date: this.invoiceForm.invoice_date,
           due_date: this.invoiceForm.due_date || null,
+          invoice_status: this.invoiceForm.invoice_status || 'DRAFT',
           line_items,
         });
         await this.loadInvoices(1);

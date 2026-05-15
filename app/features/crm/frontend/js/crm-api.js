@@ -128,6 +128,9 @@ window.CRMAPI = (function () {
   async function createCustomerInvoice(contactId, data) {
     return request(`/customers/${contactId}/invoices`, { method: 'POST', body: data });
   }
+  async function authoriseInvoice(invoiceId) {
+    return request(`/invoices/${invoiceId}/authorise`, { method: 'POST', body: {} });
+  }
 
   // ── Notes ─────────────────────────────────────────────────────
   async function createNote(contactId, content) {
@@ -172,7 +175,7 @@ window.CRMAPI = (function () {
   return {
     request, csrfToken, navigate, ensureBackButton,
     getXeroStatus, triggerSync, disconnectXero,
-    getCustomers, getCustomer, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice,
+    getCustomers, getCustomer, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice,
     createNote, updateNote, deleteNote,
     getTasks, createTask, updateTask, deleteTask,
     getMonthlySales, getCustomerBreakdown, getRankings, getChurnRisk, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,

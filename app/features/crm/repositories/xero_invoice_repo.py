@@ -66,6 +66,32 @@ class XeroInvoiceRepository:
             )
             self.db.add(li)
 
+    def mark_missing_as_deleted(self, org_id: UUID, xero_tenant_id: str, seen_xero_invoice_ids: set[str]) -> int:
+        """During a full sync, mark local ACCREC invoices as DELETED if they are absent from Xero snapshot."""
+        q = (
+            self.db.query(XeroInvoice)
+            .filter(
+                XeroInvoice.org_id == org_id,
+                XeroInvoice.xero_tenant_id == xero_tenant_id,
+                XeroInvoice.invoice_type == "ACCREC",
+                XeroInvoice.status.in_(["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED"]),
+            )
+        )
+        if seen_xero_invoice_ids:
+            q = q.filter(~XeroInvoice.xero_invoice_id.in_(list(seen_xero_invoice_ids)))
+
+        now = datetime.utcnow()
+        updated = q.update(
+            {
+                XeroInvoice.status: "DELETED",
+                XeroInvoice.amount_due: 0,
+                XeroInvoice.updated_at: now,
+                XeroInvoice.last_synced_at: now,
+            },
+            synchronize_session=False,
+        )
+        return int(updated or 0)
+
     def get_by_id(self, invoice_id: UUID, org_id: UUID) -> XeroInvoice | None:
         return (
             self.db.query(XeroInvoice)

@@ -203,15 +203,18 @@ class XeroSyncService:
         result = SyncResult()
         invoices = api_client.get_all_invoices(modified_after=modified_after if incremental else None)
         logger.info("Syncing %d invoices for org %s", len(invoices), org_id)
+        seen_invoice_ids: set[str] = set()
 
         for xi in invoices:
             try:
+                xero_invoice_id = str(xi.invoice_id)
+                seen_invoice_ids.add(xero_invoice_id)
                 xero_contact_id = str(xi.contact.contact_id) if xi.contact and xi.contact.contact_id else None
                 contact = self.contact_repo.get_by_xero_id(xero_contact_id, org_id) if xero_contact_id else None
 
                 inv = self.invoice_repo.upsert_invoice(
                     org_id=org_id,
-                    xero_invoice_id=str(xi.invoice_id),
+                    xero_invoice_id=xero_invoice_id,
                     xero_tenant_id=tenant_id,
                     contact_id=contact.id if contact else None,
                     xero_contact_id=xero_contact_id,
@@ -260,6 +263,11 @@ class XeroSyncService:
             except Exception as e:
                 logger.warning("Failed to sync invoice %s: %s", getattr(xi, "invoice_id", "?"), e)
                 result.errors.append(f"invoice {getattr(xi, 'invoice_id', '?')}: {e}")
+
+        if not incremental:
+            deleted_count = self.invoice_repo.mark_missing_as_deleted(org_id, tenant_id, seen_invoice_ids)
+            if deleted_count:
+                logger.info("Marked %d local invoices as DELETED during full sync for org %s", deleted_count, org_id)
 
         self.db.flush()
         return result

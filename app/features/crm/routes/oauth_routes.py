@@ -9,6 +9,7 @@ from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.core.utils.emit_event import emit_event
 from app.core.utils.log_action import log_action
+from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
 from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroTokenExpiredError
 from app.features.crm.services.xero_sync_service import XeroSyncService
 
@@ -206,13 +207,21 @@ def xero_status():
 @oauth_bp.route("/api/crm/xero/sync", methods=["POST"])
 @requires_auth
 def xero_sync():
-    """Trigger a manual incremental sync."""
+    """Trigger a manual sync.
+
+    Defaults to full sync so deleted/missing invoice reconciliation is applied.
+    Pass ?mode=incremental to run a lighter incremental sync.
+    """
     org_id = UUID(g.org_id)
     db = db_session()
+    mode = (request.args.get("mode") or "full").strip().lower()
 
     try:
         sync_service = XeroSyncService(db)
-        result = sync_service.incremental_sync(org_id, triggered_by="manual")
+        if mode == "incremental":
+            result = sync_service.incremental_sync(org_id, triggered_by="manual_incremental")
+        else:
+            result = sync_service.full_sync(org_id, triggered_by="manual_full")
         log_action(
             "sync", "xero_tenant", org_id, {"contacts": result.contacts_synced, "invoices": result.invoices_synced}
         )
@@ -226,6 +235,8 @@ def xero_sync():
         ), 200
     except XeroTokenExpiredError:
         return jsonify({"error": "reconnect_required", "message": "Xero token expired — please reconnect."}), 401
+    except XeroInsufficientScopeError as e:
+        return jsonify({"error": "xero_insufficient_scope", "message": str(e), "action": "reconnect_xero"}), 401
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:

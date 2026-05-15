@@ -21,7 +21,7 @@ XERO_TOKEN_URL = "https://identity.xero.com/connect/token"
 XERO_REVOKE_URL = "https://identity.xero.com/connect/revocation"
 XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 XERO_AUTH_URL = "https://login.xero.com/identity/connect/authorize"
-XERO_SCOPES = "openid profile email accounting.contacts.read accounting.invoices.read offline_access"
+XERO_SCOPES = "openid profile email accounting.contacts.read accounting.invoices.read accounting.invoices offline_access"
 
 
 class XeroTokenExpiredError(Exception):

@@ -1,6 +1,6 @@
 """CRMService — high-level CRM queries, notes, tasks, and product mapping."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -309,6 +309,10 @@ class CRMService:
         if due_date is None:
             due_date = _suggest_due_date_from_terms(invoice_date, contact.payment_terms)
 
+        invoice_status = (data.get("invoice_status") or "DRAFT").strip().upper()
+        if invoice_status not in {"DRAFT", "AUTHORISED"}:
+            raise ValueError("invoice_status must be DRAFT or AUTHORISED")
+
         rows = data.get("line_items") or []
         if not rows:
             raise ValueError("At least one line item is required")
@@ -344,6 +348,7 @@ class CRMService:
             invoice_date=invoice_date,
             due_date=due_date,
             line_items=line_items,
+            status=invoice_status,
         )
         # Refresh local records so the new invoice appears in CRM without waiting for manual sync.
         try:
@@ -360,6 +365,41 @@ class CRMService:
             "due_date": created.due_date.isoformat() if getattr(created, "due_date", None) else None,
             "total": float(getattr(created, "total", 0) or 0),
         }
+
+    def authorise_invoice(self, invoice_id: UUID, org_id: UUID) -> dict:
+        from app.features.crm.services.xero_api_client import XeroAPIClient
+        from app.features.crm.services.xero_sync_service import XeroSyncService
+
+        inv = self.invoice_repo.get_by_id(invoice_id, org_id)
+        if not inv:
+            raise ValueError("Invoice not found")
+        if not inv.xero_invoice_id:
+            raise ValueError("Invoice is missing Xero invoice id")
+
+        current = (inv.status or "").strip().upper()
+        if current in {"AUTHORISED", "PAID"}:
+            return _serialise_invoice(inv, with_line_items=True, db=self.db)
+        if current and current != "DRAFT":
+            raise ValueError(f"Only draft invoices can be authorised (current status: {current}).")
+
+        updated = XeroAPIClient(self.db, org_id).authorise_invoice(xero_invoice_id=inv.xero_invoice_id)
+
+        # Update local copy immediately, then refresh from Xero in background for full fidelity.
+        updated_status = getattr(updated, "status", None)
+        if updated_status:
+            inv.status = str(updated_status)
+            inv.updated_at = datetime.utcnow()
+            self.db.commit()
+
+        try:
+            XeroSyncService(self.db).incremental_sync(org_id, triggered_by="crm_invoice_authorise")
+            refreshed = self.invoice_repo.get_by_id(invoice_id, org_id)
+            if refreshed:
+                return _serialise_invoice(refreshed, with_line_items=True, db=self.db)
+        except Exception:
+            pass
+
+        return _serialise_invoice(inv, with_line_items=True, db=self.db)
 
     # ------------------------------------------------------------------
     # Notes

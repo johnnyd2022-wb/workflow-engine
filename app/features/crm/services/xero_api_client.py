@@ -21,6 +21,10 @@ _MAX_RETRIES = 3
 _RETRY_BACKOFF = [2, 5, 10]
 
 
+class XeroInsufficientScopeError(Exception):
+    """Raised when the connected Xero token is missing required scopes."""
+
+
 class XeroRateLimiter:
     """Thread-local rolling window rate limiter (60 calls/min)."""
 
@@ -98,7 +102,13 @@ class XeroAPIClient:
             try:
                 return fn(*args, **kwargs)
             except Exception as e:
-                code = getattr(e, "status", None)
+                code = _extract_status_code(e)
+
+                if _is_insufficient_scope(e):
+                    raise XeroInsufficientScopeError(
+                        "Connected Xero permissions are missing required invoice scope. "
+                        "Reconnect Xero to update permissions."
+                    ) from e
 
                 if code == 429:
                     wait = _RETRY_BACKOFF[min(attempt, len(_RETRY_BACKOFF) - 1)]
@@ -178,7 +188,7 @@ class XeroAPIClient:
         invoices = []
         page = 1
 
-        kwargs: dict = {"statuses": ["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED"]}
+        kwargs: dict = {"statuses": ["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED", "DELETED"]}
         if modified_after:
             if modified_after.tzinfo is None:
                 modified_after = modified_after.replace(tzinfo=timezone.utc)
@@ -202,13 +212,18 @@ class XeroAPIClient:
         invoice_date: date,
         due_date: date | None,
         line_items: list[dict],
+        status: str = "DRAFT",
     ):
-        """Create a DRAFT ACCREC invoice in Xero and return the created invoice model."""
+        """Create an ACCREC invoice in Xero and return the created invoice model."""
         from xero_python.accounting import AccountingApi
         from xero_python.accounting.models import Contact, Invoice, Invoices, LineItem
 
         api = AccountingApi(self._get_api_client())
         tenant_id = self._xero_tenant_id
+
+        invoice_status = (status or "DRAFT").strip().upper()
+        if invoice_status not in {"DRAFT", "AUTHORISED"}:
+            raise ValueError("status must be DRAFT or AUTHORISED")
 
         li_models = []
         for item in line_items:
@@ -225,7 +240,7 @@ class XeroAPIClient:
 
         invoice_model = Invoice(
             type="ACCREC",
-            status="DRAFT",
+            status=invoice_status,
             contact=Contact(contact_id=contact_xero_id),
             date=invoice_date,
             due_date=due_date,
@@ -243,6 +258,28 @@ class XeroAPIClient:
         invoices = getattr(result, "invoices", None) or []
         if not invoices:
             raise RuntimeError("Xero did not return a created invoice")
+        return invoices[0]
+
+    def authorise_invoice(self, *, xero_invoice_id: str):
+        """Authorise an existing ACCREC invoice in Xero."""
+        from xero_python.accounting import AccountingApi
+        from xero_python.accounting.models import Invoice, Invoices
+
+        api = AccountingApi(self._get_api_client())
+        tenant_id = self._xero_tenant_id
+
+        payload = Invoices(invoices=[Invoice(status="AUTHORISED")])
+
+        def _authorise():
+            try:
+                return api.update_invoice(tenant_id, xero_invoice_id, invoices=payload)
+            except TypeError:
+                return api.update_invoice(tenant_id, xero_invoice_id, payload)
+
+        result = self._call_with_retry(_authorise)
+        invoices = getattr(result, "invoices", None) or []
+        if not invoices:
+            raise RuntimeError("Xero did not return an updated invoice")
         return invoices[0]
 
 
@@ -275,3 +312,40 @@ def _normalise_payment_terms(raw) -> dict | None:
     if not sales and not bills:
         return None
     return {"sales": sales, "bills": bills}
+
+
+def _extract_status_code(error: Exception) -> int | None:
+    for attr in ("status", "status_code", "statusCode", "code"):
+        val = getattr(error, attr, None)
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str) and val.isdigit():
+            return int(val)
+    http_resp = getattr(error, "http_resp", None)
+    if http_resp is not None:
+        val = getattr(http_resp, "status", None)
+        if isinstance(val, int):
+            return val
+    resp = getattr(error, "response", None)
+    if resp is not None:
+        val = getattr(resp, "status_code", None)
+        if isinstance(val, int):
+            return val
+    return None
+
+
+def _is_insufficient_scope(error: Exception) -> bool:
+    text = str(error).lower()
+    if "insufficient_scope" in text:
+        return True
+    http_resp = getattr(error, "http_resp", None)
+    if http_resp is not None:
+        headers = getattr(http_resp, "headers", None)
+        if headers:
+            try:
+                for key, value in headers.items():
+                    if str(key).lower() == "www-authenticate" and "insufficient_scope" in str(value).lower():
+                        return True
+            except Exception:
+                pass
+    return False

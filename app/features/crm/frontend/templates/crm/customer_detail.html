@@ -182,6 +182,15 @@
                   </template>
                 </div>
                 <div style="display:flex; align-items:center; gap:10px;">
+                  <button
+                    type="button"
+                    class="crm-btn crm-btn--primary crm-btn--sm"
+                    x-show="canAuthoriseInvoice(inv)"
+                    x-cloak
+                    @click.stop="authoriseInvoice(inv)"
+                    :disabled="authorisingInvoiceId === inv.id"
+                    x-text="authorisingInvoiceId === inv.id ? 'Authorising…' : 'Authorise'"
+                  ></button>
                   <span class="crm-invoice-total" x-text="formatCurrency(inv.total, inv.currency_code)">—</span>
                   <svg class="crm-invoice-chevron" :class="openInvoiceId === inv.id ? 'open' : ''" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </div>
@@ -422,6 +431,13 @@
             </p>
           </div>
         </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Create Invoice As</label>
+          <select class="crm-form-select" x-model="invoiceForm.invoice_status">
+            <option value="DRAFT">Draft</option>
+            <option value="AUTHORISED">Authorised</option>
+          </select>
+        </div>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
           <p class="crm-form-label" style="margin:0;">Line Items</p>
@@ -474,7 +490,9 @@
           <span x-text="showInvoicePreview ? 'Hide Preview' : 'Preview Invoice'"></span>
         </button>
         <div class="crm-card" style="padding:10px;" x-show="showInvoicePreview" x-cloak>
-          <div style="font-size:.76rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">Draft invoice preview (Xero status: DRAFT)</div>
+          <div style="font-size:.76rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">
+            Invoice preview (Xero status: <span x-text="invoiceForm.invoice_status || 'DRAFT'"></span>)
+          </div>
           <table class="crm-table crm-table--compact" style="width:100%;">
             <thead><tr><th>Description</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Unit</th><th style="text-align:right;">GST</th><th style="text-align:right;">Line Total</th></tr></thead>
             <tbody>
@@ -499,7 +517,7 @@
       <div class="crm-task-sheet__footer">
         <button class="crm-btn crm-btn--secondary" @click="closeInvoiceModal()">Cancel</button>
         <button class="crm-btn crm-btn--primary" @click="submitInvoice()" :disabled="creatingInvoice">
-          <span x-text="creatingInvoice ? 'Creating…' : 'Create Invoice'"></span>
+          <span x-text="creatingInvoice ? 'Creating…' : (invoiceForm.invoice_status === 'AUTHORISED' ? 'Create & Authorise' : 'Create Draft')"></span>
         </button>
       </div>
     </div>
