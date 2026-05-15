@@ -545,6 +545,22 @@ function crmTasks() {
       return null;
     },
 
+    ensureCustomerOptionForTask(task) {
+      const contactId = String(task?.contact_id || '').trim();
+      if (!contactId) return;
+      const exists = this.customers.some((c) => String(c.id || '').trim() === contactId);
+      if (exists) return;
+
+      this.customers.push({
+        id: contactId,
+        name: task.contact_name || 'Customer',
+        first_name: '',
+        last_name: '',
+        email_address: task.contact_email || '',
+        phone_number: task.contact_phone || '',
+      });
+    },
+
     isArchivedCancelled(task) {
       if (!task || task.status !== 'cancelled') return false;
       const ts = task.updated_at || task.completed_at || task.created_at;
@@ -659,6 +675,7 @@ function crmTasks() {
     },
 
     openEdit(task) {
+      this.ensureCustomerOptionForTask(task);
       this.editingTask = task;
       this.drawerForm = {
         title: task.title,
