@@ -7,8 +7,6 @@
   {# inventory-spa-header.css loaded globally in base_spa.html for HTMX boost compatibility. #}
 {% endblock %}
 
-{% block topbar %}{% endblock %}
-
 {% block content %}
   {# Wrapper class ships with HTMX #page-content swaps (head_extras styles do not). Layout lives in styles2.css. #}
   <div class="max-content integrations-page">
@@ -76,7 +74,7 @@
       {% if crm_enabled %}
       <section class="card" x-data="xeroIntegration()" x-init="init()">
         <div class="card-content integration-card-row">
-          <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+          <div style="display:flex; align-items:flex-start; gap:12px; min-width:0;">
             <div style="width: 44px; height: 44px; border-radius: 14px; background: #fff; border: 1px solid var(--border-default, #e5e7eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
               <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" fill="#13B5EA"/>
@@ -89,10 +87,13 @@
                 <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">Loading…</div>
               </template>
               <template x-if="!loading && connected">
-                <div style="font-size: 0.875rem; color: var(--text-secondary, #6b7280); margin-top: 2px;">
-                  <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e; margin-right:5px; vertical-align:middle;"></span>
-                  Connected <span x-show="tenantName" x-text="'· ' + tenantName"></span>
-                  <span x-show="lastSync" style="margin-left:6px;" x-text="'· Synced ' + lastSync"></span>
+                <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+                  <div style="font-size:0.875rem; color:#16a34a; font-weight:600; display:flex; align-items:center; gap:6px;">
+                    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e;"></span>
+                    Connected
+                  </div>
+                  <div x-show="tenantName" style="font-size:0.8125rem; color:var(--text-secondary,#6b7280);" x-text="tenantName"></div>
+                  <div x-show="lastSync" style="font-size:0.8125rem; color:var(--text-secondary,#6b7280);" x-text="'Synced ' + lastSync"></div>
                 </div>
               </template>
               <template x-if="!loading && !connected">
@@ -100,11 +101,11 @@
               </template>
             </div>
           </div>
-          <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; flex-shrink:0;">
             <template x-if="!loading && connected">
               <button
                 type="button"
-                class="btn btn-secondary btn-sm integration-connect-btn"
+                class="btn btn-primary btn-sm integration-connect-btn"
                 @click="doSync()"
                 :disabled="syncing"
                 x-text="syncing ? 'Syncing…' : 'Sync Now'"
@@ -116,7 +117,7 @@
                 class="btn btn-secondary btn-sm integration-connect-btn"
                 @click="doDisconnect()"
                 :disabled="disconnecting"
-                style="color: var(--color-red, #ef4444);"
+                style="border-color:rgba(239,68,68,.35); color:#dc2626;"
               >Disconnect</button>
             </template>
             <template x-if="!loading && !connected">
@@ -167,67 +168,4 @@
       </section>
     </div>
   </div>
-
-{% if crm_enabled %}
-<script src="/crm/static/js/crm-api.js"></script>
-<script>
-function xeroIntegration() {
-  return {
-    loading: true,
-    connected: false,
-    tenantName: '',
-    lastSync: '',
-    syncing: false,
-    disconnecting: false,
-    error: null,
-
-    async init() {
-      try {
-        const data = await CRMAPI.getXeroStatus();
-        this.connected = data.connected || false;
-        this.tenantName = data.tenant_name || '';
-        if (data.last_successful_sync_at) {
-          const d = new Date(data.last_successful_sync_at);
-          this.lastSync = isNaN(d) ? '' : d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-        }
-      } catch (e) {
-        this.error = e.message || 'Failed to load Xero status.';
-      } finally {
-        this.loading = false;
-      }
-    },
-
-    async doSync() {
-      if (this.syncing) return;
-      this.syncing = true;
-      this.error = null;
-      try {
-        await CRMAPI.triggerSync();
-        await this.init();
-      } catch (e) {
-        this.error = e.message || 'Sync failed.';
-      } finally {
-        this.syncing = false;
-      }
-    },
-
-    async doDisconnect() {
-      if (!confirm('Disconnect Xero? This will remove your synced contacts and invoices.')) return;
-      this.disconnecting = true;
-      this.error = null;
-      try {
-        await CRMAPI.disconnectXero();
-        this.connected = false;
-        this.tenantName = '';
-        this.lastSync = '';
-      } catch (e) {
-        this.error = e.message || 'Disconnect failed.';
-      } finally {
-        this.disconnecting = false;
-      }
-    },
-  };
-}
-</script>
-{% endif %}
 {% endblock %}

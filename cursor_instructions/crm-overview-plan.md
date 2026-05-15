@@ -2,10 +2,19 @@
 
 ## Checklist
 
-- [ ] **1. Line items on invoices** — show line items in the invoice accordion on customer detail page
-- [ ] **2. Mappings dropdown** — prefill Xero description dropdown from that customer's invoice line item descriptions/codes
-- [ ] **3. CRM Overview page** — new `/crm` landing page with sales insights, task board
-- [ ] **4. Wire up navigation** — sidebar points to `/crm` overview, overview links to `/crm/customers`
+- [x] **1. Line items on invoices** — show line items in the invoice accordion on customer detail page
+- [x] **2. Mappings dropdown** — prefill Xero description dropdown from that customer's invoice line item descriptions/codes
+- [x] **3. CRM Overview page** — new `/crm` landing page with sales insights, task board
+- [x] **4. Wire up navigation** — sidebar points to `/crm` overview, overview links to `/crm/customers`
+
+## Progress Notes
+
+- Added tax type to the existing invoice line-item accordion on the customer detail page.
+- Updated the customer detail payload so recent invoices include line items immediately.
+- Added `/api/crm/customers/<contact_id>/line-item-descriptions`, service plumbing, and distinct invoice line item query.
+- Changed the new product mapping form's Xero description field to a customer-specific line-item dropdown.
+- Added `/api/crm/overview`, overview aggregation methods, `/crm` overview template, KPI cards, 6-month sales chart, top products, and task board.
+- Updated the CRM sidebar link to `/crm`.
 
 ---
 
@@ -114,12 +123,14 @@ Returns:
 
 ## Implementation Order
 
-1. Line items in customer detail UI (quickest — API already done)
-2. Line item descriptions endpoint + mappings dropdown
-3. Overview API endpoint + service methods + repo queries
-4. Overview page template + JS
-5. Navigation wiring
-6. Ruff check + commit
+1. [x] Line items in customer detail UI (quickest — API already done)
+2. [x] Line item descriptions endpoint + mappings dropdown
+3. [x] Overview API endpoint + service methods + repo queries
+4. [x] Overview page template + JS
+5. [x] Navigation wiring
+6. [x] Ruff check (commit pending)
+
+Validation: `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check app/features/crm --exclude 'app/features/crm/frontend/templates/*'` passed. An earlier attempt to include `app/ui/templates/shared/sidebar-v2.html` failed because Ruff parses HTML as Python; the Python CRM code was then checked separately.
 
 ---
 

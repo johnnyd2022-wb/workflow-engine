@@ -1,23 +1,31 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Customers · CRM{% endblock %}
+{% block body_class %}crm-page{% endblock %}
 
 {% block head_extras %}
   <link rel="stylesheet" href="/crm/static/css/crm.css">
 {% endblock %}
 
 {% block topbar %}
-  <a href="/crm/customers" class="spa-banner-back" aria-label="CRM">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><circle cx="17" cy="7" r="3"/><circle cx="7" cy="17" r="3"/><path d="M14 7H7a2 2 0 0 0-2 2v1"/><path d="M10 17h7a2 2 0 0 0 2-2v-1"/></svg>
+  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to CRM" hx-boost="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M11 19l-7-7 7-7"/>
+      <path d="M4 12h16"/>
+    </svg>
   </a>
 {% endblock %}
 
 {% block content %}
-<div class="crm-root" x-data="crmCustomers()" x-init="init()">
+<div class="max-content crm-root" x-data="crmCustomers()" x-init="init()">
+  {% set crm_heading = "Customers" %}
+  {% set crm_subtitle = "View synced contacts and customer sales context" %}
+  {% include "crm/_crm_banner.html" %}
+  {% set active_crm_tab = "customers" %}
+  {% include "crm/_crm_section_tabs.html" %}
 
   {# ── Page Header ── #}
   <div class="crm-page-header">
     <div>
-      <h1 class="crm-page-title">Customers</h1>
       <p class="crm-page-subtitle">
         <span class="crm-sync-dot" :class="isConnected ? 'crm-sync-dot--ok' : 'crm-sync-dot--off'"></span>
         <span x-text="syncSubtitle">Loading…</span>
@@ -62,10 +70,9 @@
   <div class="crm-card">
     {# Toolbar #}
     <div class="crm-toolbar">
-      <div class="crm-search-wrap">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <div class="crm-search-wrap crm-search-wrap--plain">
         <input
-          class="crm-search"
+          class="crm-search crm-search--plain"
           type="search"
           placeholder="Search by name or email…"
           x-model="search"

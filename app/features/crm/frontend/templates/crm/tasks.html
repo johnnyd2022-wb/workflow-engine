@@ -1,30 +1,27 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Tasks · CRM{% endblock %}
+{% block body_class %}crm-page{% endblock %}
 
 {% block head_extras %}
   <link rel="stylesheet" href="/crm/static/css/crm.css">
 {% endblock %}
 
 {% block topbar %}
-  <a href="/crm/customers" class="spa-banner-back" aria-label="Customers" hx-boost="false">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M11 19l-7-7 7-7"/><path d="M4 12h16"/></svg>
+  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to CRM" hx-boost="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M11 19l-7-7 7-7"/>
+      <path d="M4 12h16"/>
+    </svg>
   </a>
 {% endblock %}
 
 {% block content %}
-<div class="crm-root crm-tasks-page" x-data="crmTasks()" x-init="init()">
-
-  {# ── Header ── #}
-  <div class="crm-page-header">
-    <div>
-      <h1 class="crm-page-title">Tasks</h1>
-      <p class="crm-page-subtitle">Manage follow-ups and actions for your customers</p>
-    </div>
-    <button class="crm-btn crm-btn--primary" @click="openCreate()">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      New Task
-    </button>
-  </div>
+<div class="max-content crm-root crm-tasks-page" x-data="crmTasks()" x-init="init()">
+  {% set crm_heading = "Tasks" %}
+  {% set crm_subtitle = "Manage follow-ups and actions for your customers" %}
+  {% include "crm/_crm_banner.html" %}
+  {% set active_crm_tab = "tasks" %}
+  {% include "crm/_crm_section_tabs.html" %}
 
   {# Error #}
   <div x-show="error" class="crm-error-banner" x-cloak>
@@ -34,13 +31,25 @@
 
   {# ── Calendar Strip ── #}
   <div class="crm-card" style="padding:14px 16px;">
-    <p style="font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary,#9ca3af); margin-bottom:10px;">
-      Upcoming — click a date to filter
-    </p>
-    <div class="crm-cal-strip">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+      <p style="font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-secondary,#9ca3af); margin:0;">
+        Upcoming — click a date to filter
+      </p>
+      <span style="font-size:0.78rem; color:var(--text-secondary,#6b7280);" x-text="calVisibleMonthLabel"></span>
+    </div>
+    <div
+      x-ref="calStrip"
+      class="crm-cal-strip"
+      @pointerdown="onCalPointerDown($event)"
+      @pointermove="onCalPointerMove($event)"
+      @pointerup="onCalPointerUp($event)"
+      @pointercancel="onCalPointerUp($event)"
+      @scroll.passive="onCalScroll()"
+    >
       <template x-for="day in calDays" :key="day.iso">
         <div
           class="crm-cal-day"
+          :data-cal-day="day.iso"
           :class="{ 'active': calSelectedDate === day.iso, 'today': day.isToday }"
           @click="selectCalDay(day.iso)"
         >
@@ -62,13 +71,51 @@
         <button @click="calSelectedDate=null" class="crm-btn crm-btn--ghost crm-btn--sm" style="padding:2px 8px;">&times; Clear</button>
       </div>
     </template>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px;">
+      <div class="crm-search-wrap crm-search-wrap--plain" style="max-width:280px;">
+        <input class="crm-search crm-search--plain" type="search" placeholder="Search tasks…" x-model="searchQuery" autocomplete="off">
+      </div>
+      <button class="crm-btn crm-btn--primary" style="margin-left:auto;" @click="openCreate()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Task
+      </button>
+    </div>
   </div>
 
   {# ── Filter bar ── #}
   <div style="display:flex; gap:10px; flex-wrap:wrap;">
-    <div class="crm-search-wrap" style="max-width:280px;">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="crm-search" type="search" placeholder="Search tasks…" x-model="searchQuery" autocomplete="off">
+    <label style="display:inline-flex; align-items:center; gap:8px; font-size:0.8rem; color:var(--text-secondary,#6b7280);">
+      <input type="checkbox" x-model="onlyAssigned">
+      Assigned only
+    </label>
+    <select class="crm-select" x-model="operatorFilter">
+      <option value="">All operators</option>
+      <template x-for="u in operators" :key="u.id">
+        <option :value="u.id" x-text="u.display_name || u.email"></option>
+      </template>
+    </select>
+    <label style="display:inline-flex; align-items:center; gap:8px; font-size:0.8rem; color:var(--text-secondary,#6b7280);">
+      <input type="checkbox" x-model="showArchivedCancelled">
+      Show archived cancelled tasks
+    </label>
+    <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="openLaneModal()" :disabled="!canAddCustomLane">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Lane
+    </button>
+    <span x-show="!canAddCustomLane" x-cloak style="font-size:0.76rem; color:var(--text-secondary,#6b7280);">Max 1 custom lane</span>
+  </div>
+
+  <div class="crm-lane-mobile-selector" x-show="!loading && lanes.length > 0" x-cloak>
+    <div class="flow-mode-segmented" role="tablist" aria-label="Task lanes">
+      <template x-for="lane in lanes" :key="`${lane.id}-selector`">
+        <button
+          type="button"
+          class="flow-mode-segment"
+          :class="activeLaneId === lane.id ? 'flow-mode-segment--active' : ''"
+          @click="activeLaneId = lane.id"
+          x-text="lane.title"
+        ></button>
+      </template>
     </div>
   </div>
 
@@ -90,109 +137,104 @@
 
   {# ── Kanban ── #}
   <template x-if="!loading">
-    <div class="crm-kanban">
-
-      {# To Do column #}
-      <div class="crm-kanban-col">
-        <div class="crm-kanban-header crm-kanban-header--todo">
-          <span>To Do</span>
-          <span class="crm-kanban-count" x-text="todoTasks.length">0</span>
+    <div class="crm-kanban" :style="{ '--crm-lane-count': String(Math.max(1, visibleLanes.length)) }">
+      <template x-for="lane in visibleLanes" :key="lane.id">
+        <div class="crm-kanban-col">
+          <div class="crm-kanban-header" :class="laneHeaderClass(lane)">
+            <span x-text="lane.title"></span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span class="crm-kanban-count" x-text="tasksForLane(lane).length">0</span>
+              <button
+                x-show="lane.deletable"
+                x-cloak
+                class="crm-btn crm-btn--ghost crm-btn--sm"
+                style="padding:2px 6px; color:inherit;"
+                @click.stop="removeLane(lane.id)"
+                aria-label="Delete lane"
+                title="Delete lane"
+              >&times;</button>
+            </div>
+          </div>
+          <div
+            class="crm-kanban-dropzone"
+            :class="{ 'crm-kanban-dropzone--active': draggingTaskId && dragOverLaneId === lane.id }"
+            @dragover.prevent="setDragOverLane(lane.id)"
+            @dragleave="clearDragOverLane(lane.id)"
+            @drop.prevent="dropTaskToLane(lane)"
+          >
+            <template x-if="tasksForLane(lane).length === 0">
+              <div style="text-align:center; padding:24px 16px; color:var(--text-secondary,#9ca3af); font-size:0.8rem; border:1.5px dashed var(--border-default,#e5e7eb); border-radius:var(--crm-radius-sm);">
+                No tasks
+              </div>
+            </template>
+            <template x-for="task in tasksForLane(lane)" :key="task.id">
+              <div
+                class="crm-task-card"
+                :style="taskCardStyle(task)"
+                @click="handleCardClick(task)"
+                draggable="true"
+                @dragstart="startDragTask(task)"
+                @dragend="endDragTask()"
+              >
+                <div class="crm-task-card-title" :style="taskTitleStyle(task)" x-text="task.title">—</div>
+                <div class="crm-task-card-meta">
+                  <span class="crm-badge" :class="priorityClass(task.priority)" x-text="task.priority">—</span>
+                  <template x-if="task.contact_id">
+                    <span class="crm-badge crm-task-customer-tag" x-text="customerName(task.contact_id)"></span>
+                  </template>
+                  <template x-if="task.assigned_to_user_id">
+                    <span class="crm-task-card-due">
+                      <span x-text="assigneeName(task.assigned_to_user_id)"></span>
+                    </span>
+                  </template>
+                  <template x-if="task.due_date">
+                    <span class="crm-task-card-due" :class="isOverdue(task) ? 'overdue' : ''">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                      <span x-text="formatDue(task.due_date)"></span>
+                    </span>
+                  </template>
+                </div>
+                <div style="font-size:0.74rem; color:var(--text-secondary,#6b7280); margin-top:8px; white-space:pre-wrap;" x-text="task.description || 'No description'"></div>
+                <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                  <button class="crm-btn crm-btn--ghost crm-btn--sm" @click.stop="deleteTask(task)" style="color:var(--crm-red); font-size:0.7rem;">Delete</button>
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
-
-        <template x-if="todoTasks.length === 0">
-          <div style="text-align:center; padding:24px 16px; color:var(--text-secondary,#9ca3af); font-size:0.8rem; border:1.5px dashed var(--border-default,#e5e7eb); border-radius:var(--crm-radius-sm);">
-            No open tasks
-          </div>
-        </template>
-
-        <template x-for="task in todoTasks" :key="task.id">
-          <div class="crm-task-card" @click="openEdit(task)">
-            <div class="crm-task-card-title" x-text="task.title">—</div>
-            <div class="crm-task-card-meta">
-              <span class="crm-badge" :class="priorityClass(task.priority)" x-text="task.priority">—</span>
-              <span class="crm-badge" :class="statusClass(task.status)" x-text="task.status?.replace('_',' ')">—</span>
-              <template x-if="task.due_date">
-                <span class="crm-task-card-due" :class="isOverdue(task) ? 'overdue' : ''">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                  <span x-text="formatDue(task.due_date)"></span>
-                </span>
-              </template>
-            </div>
-            <div style="display:flex; gap:4px; margin-top:8px;">
-              <button class="crm-btn crm-btn--ghost crm-btn--sm" @click.stop="moveTask(task, 'completed')" style="color:var(--crm-green); font-size:0.7rem;">✓ Done</button>
-              <button class="crm-btn crm-btn--ghost crm-btn--sm" @click.stop="moveTask(task, 'cancelled')" style="color:var(--text-secondary,#9ca3af); font-size:0.7rem;">✕ Cancel</button>
-            </div>
-          </div>
-        </template>
-      </div>
-
-      {# Done column #}
-      <div class="crm-kanban-col">
-        <div class="crm-kanban-header crm-kanban-header--done">
-          <span>Completed</span>
-          <span class="crm-kanban-count" x-text="doneTasks.length">0</span>
-        </div>
-
-        <template x-if="doneTasks.length === 0">
-          <div style="text-align:center; padding:24px 16px; color:var(--text-secondary,#9ca3af); font-size:0.8rem; border:1.5px dashed var(--border-default,#e5e7eb); border-radius:var(--crm-radius-sm);">
-            Nothing done yet
-          </div>
-        </template>
-
-        <template x-for="task in doneTasks" :key="task.id">
-          <div class="crm-task-card" @click="openEdit(task)" style="opacity:.75;">
-            <div class="crm-task-card-title" x-text="task.title" style="text-decoration:line-through; opacity:.7;">—</div>
-            <div class="crm-task-card-meta">
-              <span class="crm-badge crm-badge--completed">Completed</span>
-              <template x-if="task.completed_at">
-                <span class="col-secondary" style="font-size:0.7rem;" x-text="new Date(task.completed_at).toLocaleDateString()"></span>
-              </template>
-            </div>
-            <div style="margin-top:8px;">
-              <button class="crm-btn crm-btn--ghost crm-btn--sm" @click.stop="moveTask(task, 'pending')" style="font-size:0.7rem;">↩ Reopen</button>
-            </div>
-          </div>
-        </template>
-      </div>
-
-      {# Cancelled column #}
-      <div class="crm-kanban-col">
-        <div class="crm-kanban-header crm-kanban-header--cancelled">
-          <span>Cancelled</span>
-          <span class="crm-kanban-count" x-text="cancelledTasks.length">0</span>
-        </div>
-
-        <template x-if="cancelledTasks.length === 0">
-          <div style="text-align:center; padding:24px 16px; color:var(--text-secondary,#9ca3af); font-size:0.8rem; border:1.5px dashed var(--border-default,#e5e7eb); border-radius:var(--crm-radius-sm);">
-            Nothing cancelled
-          </div>
-        </template>
-
-        <template x-for="task in cancelledTasks" :key="task.id">
-          <div class="crm-task-card" @click="openEdit(task)" style="opacity:.6;">
-            <div class="crm-task-card-title" x-text="task.title" style="text-decoration:line-through;">—</div>
-            <div class="crm-task-card-meta">
-              <span class="crm-badge crm-badge--cancelled">Cancelled</span>
-            </div>
-            <div style="margin-top:8px;">
-              <button class="crm-btn crm-btn--ghost crm-btn--sm" @click.stop="moveTask(task, 'pending')" style="font-size:0.7rem;">↩ Reopen</button>
-              <button class="crm-btn crm-btn--ghost crm-btn--sm" @click.stop="deleteTask(task)" style="color:var(--crm-red); font-size:0.7rem;">Delete</button>
-            </div>
-          </div>
-        </template>
-      </div>
+      </template>
     </div>
   </template>
 
+  {# ── Lane Modal ── #}
+  <div class="crm-lane-sheet-overlay" x-show="showLaneModal" x-cloak @click.self="closeLaneModal()" style="display:flex;">
+    <div class="crm-lane-sheet">
+      <div class="crm-lane-sheet__header">
+        <h3 class="crm-lane-sheet__title">Add Lane</h3>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeLaneModal()" aria-label="Close lane modal">&times;</button>
+      </div>
+      <div class="crm-lane-sheet__body">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Lane Name</label>
+          <input class="crm-form-input" x-model="laneDraft.title" maxlength="50" placeholder="e.g. Follow Up" @keydown.enter.prevent="saveLane()">
+        </div>
+      </div>
+      <div class="crm-lane-sheet__footer">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeLaneModal()">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" @click="saveLane()" :disabled="!laneDraft.title.trim()">Save Lane</button>
+      </div>
+    </div>
+  </div>
+
   {# ── Task Drawer ── #}
-  <div class="crm-drawer-overlay" x-show="showDrawer" x-cloak @click.self="closeDrawer()" style="display:flex;">
-    <div class="crm-drawer">
-      <div class="crm-drawer-header">
-        <span class="crm-drawer-title" x-text="editingTask ? 'Edit Task' : 'New Task'">Task</span>
+  <div class="crm-task-sheet-overlay" x-show="showDrawer" x-cloak @click.self="closeDrawer()" style="display:flex;">
+    <div class="crm-task-sheet">
+      <div class="crm-task-sheet__header">
+        <span class="crm-task-sheet__title" x-text="editingTask ? 'Edit Task' : 'New Task'">Task</span>
         <button class="crm-btn crm-btn--ghost" @click="closeDrawer()" style="font-size:1.2rem;">&times;</button>
       </div>
 
-      <div class="crm-drawer-body">
+      <div class="crm-task-sheet__body">
         <div class="crm-form-group">
           <label class="crm-form-label">Title <span style="color:var(--crm-red);">*</span></label>
           <input class="crm-form-input" x-model="drawerForm.title" placeholder="Task title" @keydown.enter.prevent="saveTask()">
@@ -219,7 +261,7 @@
         <template x-if="editingTask">
           <div class="crm-form-group">
             <label class="crm-form-label">Status</label>
-            <select class="crm-form-select" x-model="editingTask.status">
+            <select class="crm-form-select" x-model="drawerForm.status">
               <option value="pending">Pending</option>
               <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
@@ -227,9 +269,51 @@
             </select>
           </div>
         </template>
+
+        <div class="crm-form-group">
+          <label class="crm-form-label">Customer Tag</label>
+          <select class="crm-form-select" x-model="drawerForm.contact_id">
+            <option value="">No customer</option>
+            <template x-for="c in customers" :key="`customer-${c.id}`">
+              <option :value="c.id" x-text="c.name"></option>
+            </template>
+          </select>
+        </div>
+
+        <div class="crm-card" style="padding:10px;" x-show="selectedDrawerCustomer()" x-cloak>
+          <div style="font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--text-secondary,#6b7280); margin-bottom:8px;">Customer Details</div>
+          <div class="crm-detail-grid">
+            <div class="crm-detail-field">
+              <label>Name</label>
+              <span x-text="selectedDrawerCustomer()?.name || '—'"></span>
+            </div>
+            <div class="crm-detail-field">
+              <label>Contact</label>
+              <span x-text="((selectedDrawerCustomer()?.first_name || '') + ' ' + (selectedDrawerCustomer()?.last_name || '')).trim() || selectedDrawerCustomer()?.name || '—'"></span>
+            </div>
+            <div class="crm-detail-field">
+              <label>Email</label>
+              <span x-text="selectedDrawerCustomer()?.email_address || selectedDrawerCustomer()?.contact_email || '—'"></span>
+            </div>
+            <div class="crm-detail-field">
+              <label>Phone</label>
+              <span x-text="selectedDrawerCustomer()?.phone_number || selectedDrawerCustomer()?.contact_phone || '—'"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="crm-form-group">
+          <label class="crm-form-label">Assigned To</label>
+          <select class="crm-form-select" x-model="drawerForm.assigned_to_user_id">
+            <option value="">Unassigned</option>
+            <template x-for="u in operators" :key="`drawer-${u.id}`">
+              <option :value="u.id" x-text="u.display_name || u.email"></option>
+            </template>
+          </select>
+        </div>
       </div>
 
-      <div class="crm-drawer-footer">
+      <div class="crm-task-sheet__footer">
         <template x-if="editingTask">
           <button class="crm-btn crm-btn--danger crm-btn--sm" @click="deleteTask(editingTask); closeDrawer();">Delete</button>
         </template>

@@ -1,0 +1,420 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}CRM{% endblock %}
+{% block body_class %}crm-page{% endblock %}
+{% block head_extras %}{% endblock %}
+
+{% block content %}
+<div class="max-content crm-root" x-data="crmOverview()" x-init="init()">
+  {% set crm_heading = "CRM" %}
+  {% set crm_subtitle = "Sales performance and customer insights" %}
+  {% include "crm/_crm_banner.html" %}
+  {% set active_crm_tab = "overview" %}
+  {% include "crm/_crm_section_tabs.html" %}
+
+  <div x-show="error" class="crm-error-banner" x-cloak>
+    <span x-text="error"></span>
+    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
+  </div>
+
+  <template x-if="loading">
+    <div>
+      <div class="crm-kpi-grid">
+        <template x-for="i in 3" :key="i"><div class="crm-skeleton" style="height:96px; border-radius:12px;"></div></template>
+      </div>
+      <div class="crm-skeleton" style="height:320px; border-radius:12px;"></div>
+    </div>
+  </template>
+
+  <div x-show="!loading" x-cloak>
+    <div class="crm-kpi-grid">
+      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openInvoiceModal('this_month')">
+        <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">This Month</div>
+        <div class="crm-kpi-value" x-text="formatCurrency2(overview.current_month_revenue)"></div>
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`${overview.current_month_invoice_count || 0} invoices`"></div>
+      </button>
+      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openInvoiceModal('outstanding')">
+        <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">Outstanding</div>
+        <div class="crm-kpi-value" x-text="formatCurrency2(overview.outstanding_receivables)"></div>
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`${overview.outstanding_invoice_count || 0} invoices`"></div>
+      </button>
+      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openMoMModal()">
+        <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">Month on month change</div>
+        <div class="crm-kpi-value" :style="monthOnMonthChangePct == null ? 'color:var(--text-primary,#111827);' : (monthOnMonthChangePct >= 0 ? 'color:var(--crm-teal);' : 'color:var(--crm-red);')" x-text="formatPercent(monthOnMonthChangePct)"></div>
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`Last ${momPeriodMonths} month${momPeriodMonths > 1 ? 's' : ''} vs prior period`"></div>
+      </button>
+    </div>
+
+    <div class="crm-widget-grid" :class="showGridGuide ? 'crm-widget-grid--guide' : ''">
+      <template x-for="widget in widgetLayout" :key="widget.id">
+        <section
+          class="crm-card crm-widget-card"
+          :class="widget.size === 'full' ? 'crm-widget-card--full' : 'crm-widget-card--half'"
+          :draggable="!widget.locked"
+          @dragstart="startWidgetDrag(widget.id)"
+          @dragend="endWidgetDrag()"
+          @dragover.prevent
+          @drop.prevent="dropWidget(widget.id)"
+        >
+          <header class="crm-widget-card__header">
+            <div>
+              <h2 class="crm-section-title" x-text="widget.title"></h2>
+              <p style="font-size:.76rem; color:var(--text-secondary,#6b7280); margin-top:2px;" x-text="widgetSubtitle(widget)"></p>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" @click="toggleWidgetLock(widget)" :title="widget.locked ? 'Unlock layout' : 'Lock layout'" x-text="widget.locked ? '🔒' : '🔓'"></button>
+              <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" :disabled="widget.locked" title="Drag to move">↕</button>
+              <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" x-show="widget.kind === 'custom'" @click="removeWidget(widget.id)" title="Remove">✕</button>
+            </div>
+          </header>
+
+          <div class="crm-widget-card__body">
+            <template x-if="widget.kind === 'system' && widget.type === 'sales_trend'">
+              <div>
+                <div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:10px; flex-wrap:wrap;">
+                  <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openDateRangeModal()">
+                    Date Range: <span x-text="dateRangeLabel"></span>
+                  </button>
+                </div>
+                <canvas id="crmOverviewSalesChart" style="width:100%; height:220px; display:block;" x-show="chartData.length > 0"></canvas>
+                <div x-show="chartData.length === 0" style="font-size:.82rem; color:var(--text-secondary,#6b7280);">No sales data available for this range.</div>
+              </div>
+            </template>
+
+            <template x-if="widget.kind === 'system' && widget.type === 'task_board'">
+              <div>
+                <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                  <select class="crm-form-select" x-model="boardOperatorFilter" style="max-width:220px;">
+                    <option value="">All operators</option>
+                    <template x-for="u in operators" :key="`board-op-${u.id}`">
+                      <option :value="u.id" x-text="u.display_name || u.email"></option>
+                    </template>
+                  </select>
+                  <a href="/crm/tasks" style="font-size:.78rem; color:var(--crm-teal); font-weight:700;">View all tasks →</a>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:10px;">
+                  <template x-for="column in taskColumns" :key="`${widget.id}-${column.status}`">
+                    <div style="background:var(--surface-subtle,rgba(0,0,0,.03)); border-radius:10px; padding:10px; min-height:180px;" @dragover.prevent @drop.prevent="onColumnDrop(column.status)">
+                      <div style="font-size:.74rem; font-weight:800; text-transform:uppercase; margin-bottom:8px;" x-text="column.title"></div>
+                      <template x-if="tasksFor(column.status).length === 0"><div style="font-size:.78rem; color:var(--text-secondary,#6b7280); padding:12px 0;">No tasks</div></template>
+                      <template x-for="task in tasksFor(column.status).slice(0, 5)" :key="task.id">
+                        <div style="background:var(--surface-card,#fff); border:1px solid var(--border-default,#e5e7eb); border-radius:8px; padding:9px; margin-bottom:8px; cursor:pointer;"
+                          draggable="true"
+                          @dragstart="onTaskDragStart(task)"
+                          @dragend="onTaskDragEnd()"
+                          @click="toggleTask(task)"
+                        >
+                          <div style="font-size:.8rem; font-weight:700;" x-text="task.title"></div>
+                          <div style="display:flex; gap:6px; align-items:center; margin-top:6px;">
+                            <span class="crm-badge" :class="priorityClass(task.priority)" x-text="task.priority"></span>
+                            <span class="crm-task-card-due" x-show="task.assigned_to_user_id" x-cloak>
+                              <span x-text="assigneeName(task.assigned_to_user_id)"></span>
+                            </span>
+                            <span style="font-size:.7rem; color:var(--text-secondary,#6b7280);" x-text="task.due_date || 'No due date'"></span>
+                          </div>
+                          <div style="font-size:.72rem; color:var(--text-secondary,#6b7280); margin-top:6px; white-space:pre-wrap;" x-text="task.description || 'No description'"></div>
+                          <div x-show="expandedTaskId === task.id" x-cloak style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border-default,#e5e7eb);">
+                            <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" style="margin-top:8px;" @click.stop="openTaskInTasksPage(task)">Open in Tasks</button>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="widget.kind === 'system' && widget.type === 'top_products'">
+              <div>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                  <div style="font-size:.75rem; color:var(--text-secondary,#6b7280);">Showing <span x-text="systemRows('top_products').length"></span> of <span x-text="maxSystemRows('top_products')"></span></div>
+                  <div style="display:flex; gap:6px;">
+                    <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openTopNModal('top_products')">Top <span x-text="systemLimitLabel('top_products')"></span></button>
+                    <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" x-show="isSystemExpanded('top_products')" x-cloak @click="collapseSystemRows('top_products')">Collapse</button>
+                  </div>
+                </div>
+                <table class="crm-table crm-table--compact" style="width:100%;">
+                  <thead><tr><th>Item</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Revenue</th></tr></thead>
+                  <tbody>
+                    <template x-for="product in systemRows('top_products')" :key="`${product.item_code || ''}-${product.description || ''}`">
+                      <tr>
+                        <td>
+                          <div style="font-size:.82rem; font-weight:600;" x-text="product.description || product.item_code || '—'"></div>
+                          <div style="font-size:.72rem; color:var(--text-secondary,#6b7280);" x-text="product.item_code || 'No item code'"></div>
+                        </td>
+                        <td style="text-align:right; font-size:.82rem;" x-text="formatNumber(product.total_qty)"></td>
+                        <td style="text-align:right; font-size:.82rem; font-weight:700; color:var(--crm-teal);" x-text="formatCurrency2(product.total_revenue)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
+            <template x-if="widget.kind === 'system' && widget.type === 'top_customers'">
+              <div>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                  <div style="font-size:.75rem; color:var(--text-secondary,#6b7280);">Showing <span x-text="systemRows('top_customers').length"></span> of <span x-text="maxSystemRows('top_customers')"></span></div>
+                  <div style="display:flex; gap:6px;">
+                    <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openTopNModal('top_customers')">Top <span x-text="systemLimitLabel('top_customers')"></span></button>
+                    <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" x-show="isSystemExpanded('top_customers')" x-cloak @click="collapseSystemRows('top_customers')">Collapse</button>
+                  </div>
+                </div>
+                <table class="crm-table crm-table--compact" style="width:100%;">
+                  <thead><tr><th>Customer</th><th style="text-align:right;">Invoices</th><th style="text-align:right;">Revenue</th></tr></thead>
+                  <tbody>
+                    <template x-for="customer in systemRows('top_customers')" :key="customer.contact_id">
+                      <tr>
+                        <td style="font-size:.82rem; font-weight:600;" x-text="customer.contact_name || '—'"></td>
+                        <td style="text-align:right; font-size:.82rem;" x-text="customer.invoice_count || 0"></td>
+                        <td style="text-align:right; font-size:.82rem; font-weight:700; color:var(--crm-teal);" x-text="formatCurrency2(customer.total)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
+            <template x-if="widget.kind === 'custom'">
+              <div>
+                <template x-if="!widget.rows || widget.rows.length === 0">
+                  <div style="font-size:.82rem; color:var(--text-secondary,#6b7280);">No data in this selection.</div>
+                </template>
+                <table x-show="widget.viewMode === 'table' && widget.rows && widget.rows.length > 0" class="crm-table crm-table--compact" style="width:100%;">
+                  <thead><tr><th x-text="customCol1Label(widget)"></th><th style="text-align:right;">Count</th><th style="text-align:right;">Value</th></tr></thead>
+                  <tbody>
+                    <template x-for="(row, idx) in widget.rows" :key="`${widget.id}-${idx}`">
+                      <tr>
+                        <td style="font-size:.82rem;" x-text="customRowLabel(widget, row)"></td>
+                        <td style="text-align:right; font-size:.82rem;" x-text="customRowCount(widget, row)"></td>
+                        <td style="text-align:right; font-size:.82rem; font-weight:700; color:var(--crm-teal);" x-text="formatCurrency2(customRowValue(widget, row))"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <canvas :id="`customWidgetChart-${widget.id}`" x-show="widget.viewMode === 'graph' && widget.rows && widget.rows.length > 0" style="width:100%; height:220px; display:block;"></canvas>
+              </div>
+            </template>
+          </div>
+          <button
+            x-show="!widget.locked"
+            x-cloak
+            type="button"
+            class="crm-widget-resize-handle"
+            @mousedown.prevent="beginWidgetResize(widget.id, $event)"
+            @touchstart.prevent="beginWidgetResize(widget.id, $event)"
+            aria-label="Resize widget"
+            title="Drag to resize"
+          ></button>
+        </section>
+      </template>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:14px;">
+      <button type="button" class="crm-btn crm-btn--secondary" @click="openWidgetModal()">Add Widget</button>
+    </div>
+  </div>
+
+  <div class="crm-lane-sheet-overlay" x-show="showWidgetModal" x-cloak @click.self="closeWidgetModal()" style="display:flex;">
+    <div class="crm-lane-sheet">
+      <div class="crm-lane-sheet__header">
+        <h3 class="crm-lane-sheet__title">Add Custom Widget</h3>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeWidgetModal()">&times;</button>
+      </div>
+      <div class="crm-lane-sheet__body">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Title</label>
+          <input class="crm-form-input" x-model="widgetDraft.title" maxlength="80" placeholder="e.g. Top 5 Customers by Monthly Rate">
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">What do you want to rank?</label>
+          <select class="crm-form-select" x-model="widgetDraft.entity">
+            <option value="customers">Customers</option>
+            <option value="products">Products</option>
+            <option value="customers_by_product">Customer/Product Revenue</option>
+          </select>
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Ranking Metric</label>
+          <select class="crm-form-select" x-model="widgetDraft.metric">
+            <option value="revenue">Revenue</option>
+            <option value="monthly_rate" x-show="widgetDraft.entity === 'customers'">Monthly Revenue Rate</option>
+          </select>
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Ranking Direction</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <select class="crm-form-select" x-model="widgetDraft.direction" :disabled="widgetDraft.entity === 'customers_by_product'">
+              <option value="top">Top</option>
+              <option value="bottom">Bottom</option>
+            </select>
+            <input class="crm-form-input" type="number" min="1" max="20" x-model.number="widgetDraft.limit" placeholder="How many results">
+          </div>
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Time Period</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <input class="crm-form-input" type="number" min="1" max="60" x-model.number="widgetDraft.periodN" placeholder="Time amount">
+            <select class="crm-form-select" x-model="widgetDraft.periodUnit">
+              <option value="days">Days</option>
+              <option value="weeks">Weeks</option>
+              <option value="months">Months</option>
+              <option value="years">Years</option>
+            </select>
+          </div>
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Output Format</label>
+          <select class="crm-form-select" x-model="widgetDraft.viewMode">
+            <option value="table">Table</option>
+            <option value="graph">Graph</option>
+          </select>
+        </div>
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="previewWidget()">Preview</button>
+        </div>
+        <div x-show="widgetDraftLoading" style="font-size:.82rem; color:var(--text-secondary,#6b7280);">Loading preview…</div>
+        <div x-show="widgetDraftError" style="font-size:.82rem; color:var(--crm-red);" x-text="widgetDraftError"></div>
+        <table x-show="!widgetDraftLoading && widgetDraftPreview.length > 0" class="crm-table crm-table--compact" style="width:100%;">
+          <thead><tr><th x-text="widgetDraft.entity === 'products' ? 'Product' : (widgetDraft.entity === 'customers_by_product' ? 'Customer · Product' : 'Customer')"></th><th style="text-align:right;">Count</th><th style="text-align:right;">Value</th></tr></thead>
+          <tbody>
+            <template x-for="(row, idx) in widgetDraftPreview.slice(0, 5)" :key="idx">
+              <tr>
+                <td x-text="previewRowLabel(row)"></td>
+                <td style="text-align:right;" x-text="previewRowCount(row)"></td>
+                <td style="text-align:right;" x-text="formatCurrency2(previewRowValue(row))"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div class="crm-lane-sheet__footer">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeWidgetModal()">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" @click="createWidgetFromDraft()" :disabled="!widgetDraft.title.trim()">Add Widget</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-lane-sheet-overlay" x-show="showDateRangeModal" x-cloak @click.self="closeDateRangeModal()" style="display:flex;">
+    <div class="crm-lane-sheet">
+      <div class="crm-lane-sheet__header">
+        <h3 class="crm-lane-sheet__title">Select Date Range</h3>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeDateRangeModal()">&times;</button>
+      </div>
+      <div class="crm-lane-sheet__body">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="crm-form-group">
+            <label class="crm-form-label">Start Date</label>
+            <input class="crm-form-input" type="date" x-model="dateDraftFrom">
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label">End Date</label>
+            <input class="crm-form-input" type="date" x-model="dateDraftTo">
+          </div>
+        </div>
+      </div>
+      <div class="crm-lane-sheet__footer">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeDateRangeModal()">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" @click="applyDateRange()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-lane-sheet-overlay" x-show="showMoMModal" x-cloak @click.self="closeMoMModal()" style="display:flex;">
+    <div class="crm-lane-sheet">
+      <div class="crm-lane-sheet__header">
+        <h3 class="crm-lane-sheet__title">Month on month change period</h3>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeMoMModal()">&times;</button>
+      </div>
+      <div class="crm-lane-sheet__body">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Compare last N months vs prior N months</label>
+          <input class="crm-form-input" type="number" min="1" max="24" x-model.number="momDraftMonths">
+        </div>
+      </div>
+      <div class="crm-lane-sheet__footer">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeMoMModal()">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" @click="applyMoMPeriod()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-lane-sheet-overlay" x-show="showTopNModal" x-cloak @click.self="closeTopNModal()" style="display:flex;">
+    <div class="crm-lane-sheet">
+      <div class="crm-lane-sheet__header">
+        <h3 class="crm-lane-sheet__title">Select Top N</h3>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeTopNModal()">&times;</button>
+      </div>
+      <div class="crm-lane-sheet__body">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Number of rows to display</label>
+          <input class="crm-form-input" type="number" min="1" :max="maxSystemRows(topNModalType)" x-model.number="topNDraftValue">
+        </div>
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="showAllTopN()">Show all</button>
+        </div>
+      </div>
+      <div class="crm-lane-sheet__footer">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeTopNModal()">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" @click="applyTopNModal()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-task-sheet-overlay" x-show="showInvoiceModal" x-cloak @click.self="closeInvoiceModal()" style="display:flex;">
+    <div class="crm-task-sheet">
+      <div class="crm-task-sheet__header">
+        <span class="crm-task-sheet__title" x-text="invoiceModalTitle"></span>
+        <button class="crm-btn crm-btn--ghost" @click="closeInvoiceModal()" style="font-size:1.2rem;">&times;</button>
+      </div>
+      <div class="crm-task-sheet__body">
+        <template x-if="invoiceModalLoading">
+          <div style="font-size:.84rem; color:var(--text-secondary,#6b7280);">Loading invoices…</div>
+        </template>
+        <template x-if="!invoiceModalLoading && invoiceModalInvoices.length === 0">
+          <div style="font-size:.84rem; color:var(--text-secondary,#6b7280);">No invoices found for this view.</div>
+        </template>
+        <template x-for="inv in invoiceModalInvoices" :key="inv.id">
+          <div class="crm-invoice-row">
+            <div class="crm-invoice-header" @click="toggleModalInvoice(inv.id)">
+              <div class="crm-invoice-meta">
+                <span class="crm-invoice-number" x-text="inv.invoice_number || inv.xero_invoice_id?.slice(0,8)"></span>
+                <span class="crm-badge" :class="invoiceBadgeClass(inv.status)" x-text="inv.status"></span>
+                <template x-if="inv.contact_name"><span class="crm-invoice-date" x-text="inv.contact_name"></span></template>
+                <span class="crm-invoice-date" x-text="formatInvoiceDate(inv.date)"></span>
+                <template x-if="inv.due_date"><span class="crm-invoice-date" style="opacity:.7;">Due <span x-text="formatInvoiceDate(inv.due_date)"></span></span></template>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="crm-invoice-total" x-text="formatInvoiceCurrency(inv.total, inv.currency_code)"></span>
+                <svg class="crm-invoice-chevron" :class="openModalInvoiceId === inv.id ? 'open' : ''" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </div>
+            <div x-show="openModalInvoiceId === inv.id" x-cloak class="crm-line-items">
+              <table>
+                <thead><tr><th>Description</th><th>Code</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Unit</th><th style="text-align:right;">Amount</th></tr></thead>
+                <tbody>
+                  <template x-for="li in inv.line_items || []" :key="li.id">
+                    <tr>
+                      <td x-text="li.description || '—'"></td>
+                      <td x-text="li.item_code || '—'"></td>
+                      <td class="amount" x-text="li.quantity != null ? li.quantity : '—'"></td>
+                      <td class="amount" x-text="li.unit_amount != null ? formatInvoiceCurrency(li.unit_amount, inv.currency_code) : '—'"></td>
+                      <td class="amount" x-text="li.line_amount != null ? formatInvoiceCurrency(li.line_amount, inv.currency_code) : '—'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click.stop="toggleModalInvoice(inv.id)">View</button>
+                <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click.stop="downloadInvoice(inv)">Download</button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div class="crm-task-sheet__footer">
+        <button class="crm-btn crm-btn--secondary" @click="closeInvoiceModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

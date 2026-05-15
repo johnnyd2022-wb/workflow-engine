@@ -1,18 +1,27 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Customer · CRM{% endblock %}
+{% block body_class %}crm-page{% endblock %}
 
 {% block head_extras %}
   <link rel="stylesheet" href="/crm/static/css/crm.css">
 {% endblock %}
 
 {% block topbar %}
-  <a href="/crm/customers" class="spa-banner-back" aria-label="Back to customers" hx-boost="false">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><path d="M11 19l-7-7 7-7"/><path d="M4 12h16"/></svg>
+  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to CRM" hx-boost="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M11 19l-7-7 7-7"/>
+      <path d="M4 12h16"/>
+    </svg>
   </a>
 {% endblock %}
 
 {% block content %}
-<div class="crm-root" x-data="crmCustomerDetail('{{ contact_id }}')" x-init="init()">
+<div class="max-content crm-root" x-data="crmCustomerDetail('{{ contact_id }}')" x-init="init()">
+  {% set crm_heading = "Customer Profile" %}
+  {% set crm_subtitle = "Customer activity, invoices, tasks, and notes" %}
+  {% include "crm/_crm_banner.html" %}
+  {% set active_crm_tab = "customers" %}
+  {% include "crm/_crm_section_tabs.html" %}
 
   {# Loading #}
   <template x-if="loading">
@@ -58,12 +67,13 @@
       </div>
 
       {# ── Tabs ── #}
-      <div class="crm-tabs" role="tablist">
-        <button class="crm-tab" :class="activeTab==='overview' ? 'active' : ''" @click="setTab('overview')" role="tab">Overview</button>
-        <button class="crm-tab" :class="activeTab==='invoices' ? 'active' : ''" @click="setTab('invoices')" role="tab">Invoices <span x-text="invoices.length ? `(${invoices.length})` : ''"></span></button>
-        <button class="crm-tab" :class="activeTab==='notes' ? 'active' : ''" @click="setTab('notes')" role="tab">Notes <span x-text="notes.length ? `(${notes.length})` : ''"></span></button>
-        <button class="crm-tab" :class="activeTab==='tasks' ? 'active' : ''" @click="setTab('tasks')" role="tab">Tasks <span x-text="tasks.length ? `(${tasks.length})` : ''"></span></button>
-        <button class="crm-tab" :class="activeTab==='mappings' ? 'active' : ''" @click="setTab('mappings')" role="tab">Mappings</button>
+      <div class="crm-detail-tabs">
+        <div class="flow-mode-segmented" role="tablist" aria-label="Customer sections">
+          <button type="button" class="flow-mode-segment" :class="activeTab==='overview' ? 'flow-mode-segment--active' : ''" @click="setTab('overview')" role="tab">Overview</button>
+          <button type="button" class="flow-mode-segment" :class="activeTab==='invoices' ? 'flow-mode-segment--active' : ''" @click="setTab('invoices')" role="tab">Invoices <span x-text="invoices.length ? `(${invoices.length})` : ''"></span></button>
+          <button type="button" class="flow-mode-segment" :class="activeTab==='notes' ? 'flow-mode-segment--active' : ''" @click="setTab('notes')" role="tab">Notes <span x-text="notes.length ? `(${notes.length})` : ''"></span></button>
+          <button type="button" class="flow-mode-segment" :class="activeTab==='tasks' ? 'flow-mode-segment--active' : ''" @click="setTab('tasks')" role="tab">Tasks <span x-text="tasks.length ? `(${tasks.length})` : ''"></span></button>
+        </div>
       </div>
 
       {# ══════════════════════════════════════════════
@@ -114,6 +124,29 @@
             </div>
           </div>
         </div>
+
+        <div class="crm-card" style="margin-top:16px; padding:16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+            <div style="font-size:.86rem; font-weight:700;">Customer Sales</div>
+            <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openAnalyticsDateModal()">
+              Date Range: <span x-text="`${analyticsDateFrom || '—'} to ${analyticsDateTo || '—'}`"></span>
+            </button>
+          </div>
+          <div class="crm-detail-grid" style="margin-bottom:10px;">
+            <div class="crm-detail-field"><label>Total Revenue</label><span x-text="formatCurrency(customerAnalytics.total_revenue, 'NZD')"></span></div>
+            <div class="crm-detail-field"><label>Total Invoices</label><span x-text="customerAnalytics.total_invoices || 0"></span></div>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;">
+            <div class="crm-card" style="padding:10px;">
+              <div style="font-size:.78rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">Revenue Trend</div>
+              <canvas id="crmCustomerRevenueChart" style="width:100%; height:220px; display:block;"></canvas>
+            </div>
+            <div class="crm-card" style="padding:10px;">
+              <div style="font-size:.78rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">Top Products</div>
+              <canvas id="crmCustomerProductChart" style="width:100%; height:220px; display:block;"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
 
       {# ══════════════════════════════════════════════
@@ -121,6 +154,12 @@
          ══════════════════════════════════════════════ #}
       <div x-show="activeTab === 'invoices'" x-cloak>
         <div class="crm-card">
+          <div class="crm-toolbar" style="justify-content:flex-end;">
+            <button class="crm-btn crm-btn--primary crm-btn--sm" @click="openInvoiceModal()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Invoice
+            </button>
+          </div>
           <template x-if="invoices.length === 0">
             <div class="crm-empty">
               <div class="crm-empty-icon">
@@ -159,6 +198,7 @@
                         <th style="text-align:right;">Qty</th>
                         <th style="text-align:right;">Unit</th>
                         <th style="text-align:right;">Amount</th>
+                        <th>Tax Type</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -169,6 +209,7 @@
                           <td class="amount" x-text="li.quantity != null ? li.quantity : '—'">—</td>
                           <td class="amount" x-text="li.unit_amount != null ? formatCurrency(li.unit_amount, inv.currency_code) : '—'">—</td>
                           <td class="amount" x-text="li.line_amount != null ? formatCurrency(li.line_amount, inv.currency_code) : '—'">—</td>
+                          <td x-text="li.tax_type || '—'">—</td>
                         </tr>
                       </template>
                     </tbody>
@@ -260,6 +301,7 @@
       <div x-show="activeTab === 'tasks'" x-cloak>
         <div class="crm-card">
           <div class="crm-toolbar">
+            <button class="crm-btn crm-btn--primary crm-btn--sm" @click="openCustomerTaskModal()">+ New Task</button>
             <select class="crm-select" x-model="taskStatusFilter">
               <option value="">All statuses</option>
               <option value="pending">Pending</option>
@@ -275,104 +317,25 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
               </div>
               <h3>No tasks</h3>
-              <p>Create tasks from the <a href="/crm/tasks" style="color:var(--crm-teal);">Tasks page</a>.</p>
+              <p>Create a task for this customer using the button above.</p>
             </div>
           </template>
 
-          <div x-show="filteredTasks.length > 0" class="crm-table-wrap">
-            <table class="crm-table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Due</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template x-for="t in filteredTasks" :key="t.id">
-                  <tr style="cursor:default;">
-                    <td class="col-name" x-text="t.title">—</td>
-                    <td><span class="crm-badge" :class="taskStatusClass(t.status)" x-text="t.status?.replace('_',' ')">—</span></td>
-                    <td><span class="crm-badge" :class="priorityClass(t.priority)" x-text="t.priority">—</span></td>
-                    <td class="col-secondary" x-text="t.due_date || '—'">—</td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {# ══════════════════════════════════════════════
-         PRODUCT MAPPINGS
-         ══════════════════════════════════════════════ #}
-      <div x-show="activeTab === 'mappings'" x-cloak>
-        <div class="crm-card">
-          <div class="crm-analytics-header">
-            <span class="crm-analytics-title">Product Mappings</span>
-            <button class="crm-btn crm-btn--primary crm-btn--sm" @click="showMappingForm = !showMappingForm">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              New Mapping
-            </button>
-          </div>
-
-          {# New mapping form #}
-          <template x-if="showMappingForm">
-            <div style="padding:16px; border-bottom:1px solid var(--border-default,#e5e7eb); display:flex; flex-direction:column; gap:12px; background:var(--crm-teal-dim);">
-              <p style="font-size:0.78rem; font-weight:700; color:var(--crm-teal); text-transform:uppercase; letter-spacing:.05em; margin:0;">New Mapping</p>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; flex-wrap:wrap;">
-                <div class="crm-form-group">
-                  <label class="crm-form-label">Biz-e Product Name</label>
-                  <input class="crm-form-input" x-model="newMapping.biz_e_product_name" placeholder="e.g. Whistlebird Wildflower Gin">
+          <div x-show="filteredTasks.length > 0" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; padding:12px;">
+            <template x-for="t in filteredTasks" :key="t.id">
+              <div class="crm-task-card" @click="openTaskEdit(t)">
+                <div class="crm-task-card-title" x-text="t.title"></div>
+                <div class="crm-task-card-meta">
+                  <span class="crm-badge" :class="taskStatusClass(t.status)" x-text="t.status?.replace('_',' ')"></span>
+                  <span class="crm-badge" :class="priorityClass(t.priority)" x-text="t.priority"></span>
+                  <span class="crm-task-card-due" x-show="t.assigned_to_user_id" x-cloak>
+                    <span x-text="assigneeName(t.assigned_to_user_id)"></span>
+                  </span>
+                  <span class="crm-task-card-due" x-show="t.due_date" x-cloak>
+                    <span x-text="t.due_date"></span>
+                  </span>
                 </div>
-                <div class="crm-form-group">
-                  <label class="crm-form-label">Xero Line Item Description</label>
-                  <input class="crm-form-input" x-model="newMapping.xero_description_pattern" placeholder="e.g. Wildflower Gin 700ml">
-                </div>
-                <div class="crm-form-group">
-                  <label class="crm-form-label">Match Type</label>
-                  <select class="crm-form-select" x-model="newMapping.match_type">
-                    <option value="exact">Exact</option>
-                    <option value="contains">Contains</option>
-                    <option value="alias">Alias</option>
-                  </select>
-                </div>
-                <div class="crm-form-group">
-                  <label class="crm-form-label">Notes (optional)</label>
-                  <input class="crm-form-input" x-model="newMapping.notes" placeholder="Reason for this mapping">
-                </div>
-              </div>
-              <div style="display:flex; gap:8px;">
-                <button class="crm-btn crm-btn--primary crm-btn--sm" @click="submitMapping()" :disabled="savingMapping">
-                  <span x-text="savingMapping ? 'Saving…' : 'Save Mapping'">Save</span>
-                </button>
-                <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="showMappingForm=false">Cancel</button>
-              </div>
-            </div>
-          </template>
-
-          {# Mappings list #}
-          <template x-if="mappings.length === 0">
-            <div class="crm-empty">
-              <div class="crm-empty-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-              </div>
-              <h3>No product mappings</h3>
-              <p>Create mappings to link Biz-e products to Xero invoice line items.</p>
-            </div>
-          </template>
-
-          <div class="crm-mapping-grid">
-            <template x-for="m in mappings" :key="m.id">
-              <div class="crm-mapping-row">
-                <span class="crm-mapping-biz" x-text="m.biz_e_product_name">—</span>
-                <span class="crm-mapping-arrow">→</span>
-                <span class="crm-mapping-xero" x-text="m.xero_description_pattern">—</span>
-                <span class="crm-badge crm-badge--teal" x-text="m.match_type" style="flex-shrink:0;"></span>
-                <div class="crm-mapping-actions">
-                  <button class="crm-btn crm-btn--ghost crm-btn--sm" @click="deleteMapping(m.id)" style="color:var(--crm-red);">Delete</button>
-                </div>
+                <div style="font-size:0.74rem; color:var(--text-secondary,#6b7280); margin-top:8px; white-space:pre-wrap;" x-text="t.description || 'No description'"></div>
               </div>
             </template>
           </div>
@@ -380,6 +343,250 @@
       </div>
     </div>
   </template>
+
+  <div class="crm-task-sheet-overlay" x-show="showCustomerTaskModal" x-cloak @click.self="closeCustomerTaskModal()" style="display:flex;">
+    <div class="crm-task-sheet">
+      <div class="crm-task-sheet__header">
+        <span class="crm-task-sheet__title">New Customer Task</span>
+        <button class="crm-btn crm-btn--ghost" @click="closeCustomerTaskModal()" style="font-size:1.2rem;">&times;</button>
+      </div>
+      <div class="crm-task-sheet__body">
+        <div class="crm-card" style="padding:10px;">
+          <div style="font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--text-secondary,#6b7280); margin-bottom:8px;">Customer Details</div>
+          <div class="crm-detail-grid">
+            <div class="crm-detail-field"><label>Name</label><span x-text="customer?.name || '—'"></span></div>
+            <div class="crm-detail-field"><label>Contact</label><span x-text="((customer?.first_name || '') + ' ' + (customer?.last_name || '')).trim() || customer?.name || '—'"></span></div>
+            <div class="crm-detail-field"><label>Email</label><span x-text="customer?.email_address || '—'"></span></div>
+            <div class="crm-detail-field"><label>Phone</label><span x-text="customer?.phone_number || '—'"></span></div>
+          </div>
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Title <span style="color:var(--crm-red);">*</span></label>
+          <input class="crm-form-input" x-model="customerTaskForm.title" placeholder="Task title">
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Description</label>
+          <textarea class="crm-form-textarea" x-model="customerTaskForm.description" placeholder="Optional description"></textarea>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px;">
+          <div class="crm-form-group">
+            <label class="crm-form-label">Due Date</label>
+            <input class="crm-form-input" type="date" x-model="customerTaskForm.due_date">
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label">Priority</label>
+            <select class="crm-form-select" x-model="customerTaskForm.priority">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label">Assigned To</label>
+            <select class="crm-form-select" x-model="customerTaskForm.assigned_to_user_id">
+              <option value="">Unassigned</option>
+              <template x-for="u in operators" :key="`cust-task-op-${u.id}`">
+                <option :value="u.id" x-text="u.display_name || u.email"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="crm-task-sheet__footer">
+        <button class="crm-btn crm-btn--secondary" @click="closeCustomerTaskModal()">Cancel</button>
+        <button class="crm-btn crm-btn--primary" @click="submitCustomerTask()" :disabled="creatingCustomerTask || !customerTaskForm.title.trim()">
+          <span x-text="creatingCustomerTask ? 'Creating…' : 'Create Task'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-task-sheet-overlay" x-show="showInvoiceModal" x-cloak @click.self="closeInvoiceModal()" style="display:flex;">
+    <div class="crm-task-sheet">
+      <div class="crm-task-sheet__header">
+        <span class="crm-task-sheet__title">New Invoice</span>
+        <button class="crm-btn crm-btn--ghost" @click="closeInvoiceModal()" style="font-size:1.2rem;">&times;</button>
+      </div>
+      <div class="crm-task-sheet__body">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="crm-form-group">
+            <label class="crm-form-label">Invoice Date <span style="color:var(--crm-red);">*</span></label>
+            <input class="crm-form-input" type="date" x-model="invoiceForm.invoice_date" @change="applyInvoiceDueDateDefault(true)">
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label">Due Date</label>
+            <input class="crm-form-input" type="date" x-model="invoiceForm.due_date">
+            <p style="font-size:.72rem; color:var(--text-secondary,#6b7280); margin-top:4px;">
+              <span x-show="hasSalesTerms" x-cloak>Auto-calculated from Xero terms.</span>
+              <span x-show="!hasSalesTerms" x-cloak>Auto-calculated from Xero terms when available.</span>
+            </p>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+          <p class="crm-form-label" style="margin:0;">Line Items</p>
+          <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="addInvoiceLine()">+ Line Item</button>
+        </div>
+
+        <template x-for="(row, idx) in invoiceForm.line_items" :key="idx">
+          <div class="crm-card" style="padding:10px; border-radius:10px;">
+            <div class="crm-form-group" style="margin-bottom:8px;">
+              <label class="crm-form-label">Suggested Items</label>
+              <select class="crm-form-select" x-model="row.option_key" @change="applyLineItemOption(idx)">
+                <option value="">Select a line item (optional)</option>
+                <optgroup label="Repeat purchase items" x-show="repeatLineItemOptions.length > 0">
+                  <template x-for="opt in repeatLineItemOptions" :key="`repeat-${opt.description || ''}-${opt.item_code || ''}`">
+                    <option :value="`${opt.description || ''}||${opt.item_code || ''}`" x-text="opt.display_label"></option>
+                  </template>
+                </optgroup>
+                <optgroup label="All items">
+                  <template x-for="opt in allLineItemOptions" :key="`all-${opt.description || ''}-${opt.item_code || ''}`">
+                    <option :value="`${opt.description || ''}||${opt.item_code || ''}`" x-text="opt.display_label"></option>
+                  </template>
+                </optgroup>
+              </select>
+            </div>
+            <div style="display:grid; grid-template-columns:2fr 1.4fr .9fr 1fr auto; gap:8px; align-items:end;">
+              <div class="crm-form-group">
+                <label class="crm-form-label">Description <span style="color:var(--crm-red);">*</span></label>
+                <input class="crm-form-input" x-model="row.description" @change="applyLineItemText(idx)" placeholder="Type or choose product">
+              </div>
+              <div class="crm-form-group">
+                <label class="crm-form-label">Item Code</label>
+                <input class="crm-form-input" x-model="row.item_code" placeholder="Optional">
+              </div>
+              <div class="crm-form-group">
+                <label class="crm-form-label">Qty <span style="color:var(--crm-red);">*</span></label>
+                <input class="crm-form-input" type="number" min="0.01" step="0.01" x-model.number="row.quantity">
+              </div>
+              <div class="crm-form-group">
+                <label class="crm-form-label">Unit Price <span style="color:var(--crm-red);">*</span></label>
+                <input class="crm-form-input" type="number" min="0" step="0.01" x-model.number="row.unit_amount">
+              </div>
+              <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="removeInvoiceLine(idx)">✕</button>
+            </div>
+            <div style="font-size:.72rem; color:var(--text-secondary,#6b7280); margin-top:6px;" x-show="row.source_invoice_date" x-cloak>
+              Price prefilled from invoice dated <span x-text="formatDate(row.source_invoice_date)"></span>
+            </div>
+          </div>
+        </template>
+        <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="showInvoicePreview = !showInvoicePreview">
+          <span x-text="showInvoicePreview ? 'Hide Preview' : 'Preview Invoice'"></span>
+        </button>
+        <div class="crm-card" style="padding:10px;" x-show="showInvoicePreview" x-cloak>
+          <div style="font-size:.76rem; color:var(--text-secondary,#6b7280); margin-bottom:6px;">Draft invoice preview (Xero status: DRAFT)</div>
+          <table class="crm-table crm-table--compact" style="width:100%;">
+            <thead><tr><th>Description</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Unit</th><th style="text-align:right;">GST</th><th style="text-align:right;">Line Total</th></tr></thead>
+            <tbody>
+              <template x-for="(row, idx) in previewInvoiceRows" :key="`preview-${idx}`">
+                <tr>
+                  <td x-text="row.description || '—'"></td>
+                  <td style="text-align:right;" x-text="row.quantity || '—'"></td>
+                  <td style="text-align:right;" x-text="formatCurrency(row.unit_amount, 'NZD')"></td>
+                  <td style="text-align:right;" x-text="formatCurrency(row.gst_total, 'NZD')"></td>
+                  <td style="text-align:right;" x-text="formatCurrency(row.line_total, 'NZD')"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div style="display:flex; justify-content:flex-end; margin-top:8px; font-size:.82rem; font-weight:700; gap:14px; flex-wrap:wrap;">
+            <span>Subtotal: <span style="margin-left:6px;" x-text="formatCurrency(previewInvoiceTotal, 'NZD')"></span></span>
+            <span>GST: <span style="margin-left:6px;" x-text="formatCurrency(previewInvoiceGstTotal, 'NZD')"></span></span>
+            <span>Total: <span style="margin-left:6px;" x-text="formatCurrency(previewInvoiceGrandTotal, 'NZD')"></span></span>
+          </div>
+        </div>
+      </div>
+      <div class="crm-task-sheet__footer">
+        <button class="crm-btn crm-btn--secondary" @click="closeInvoiceModal()">Cancel</button>
+        <button class="crm-btn crm-btn--primary" @click="submitInvoice()" :disabled="creatingInvoice">
+          <span x-text="creatingInvoice ? 'Creating…' : 'Create Invoice'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-task-sheet-overlay" x-show="showTaskEditModal" x-cloak @click.self="closeTaskEditModal()" style="display:flex;">
+    <div class="crm-task-sheet">
+      <div class="crm-task-sheet__header">
+        <span class="crm-task-sheet__title">Edit Task</span>
+        <button class="crm-btn crm-btn--ghost" @click="closeTaskEditModal()" style="font-size:1.2rem;">&times;</button>
+      </div>
+      <div class="crm-task-sheet__body">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Title <span style="color:var(--crm-red);">*</span></label>
+          <input class="crm-form-input" x-model="taskEditForm.title" placeholder="Task title">
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Description</label>
+          <textarea class="crm-form-textarea" x-model="taskEditForm.description" placeholder="Optional description"></textarea>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px;">
+          <div class="crm-form-group">
+            <label class="crm-form-label">Due Date</label>
+            <input class="crm-form-input" type="date" x-model="taskEditForm.due_date">
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label">Priority</label>
+            <select class="crm-form-select" x-model="taskEditForm.priority">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label">Status</label>
+            <select class="crm-form-select" x-model="taskEditForm.status">
+              <option value="pending">Pending</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label">Assigned To</label>
+            <select class="crm-form-select" x-model="taskEditForm.assigned_to_user_id">
+              <option value="">Unassigned</option>
+              <template x-for="u in operators" :key="`task-edit-op-${u.id}`">
+                <option :value="u.id" x-text="u.display_name || u.email"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="crm-task-sheet__footer">
+        <button class="crm-btn crm-btn--danger crm-btn--sm" @click="deleteTask(editingTask)">Delete</button>
+        <button class="crm-btn crm-btn--secondary" @click="closeTaskEditModal()">Cancel</button>
+        <button class="crm-btn crm-btn--primary" @click="saveTaskEdit()" :disabled="savingTaskEdit || !taskEditForm.title.trim()">
+          <span x-text="savingTaskEdit ? 'Saving…' : 'Save Changes'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-lane-sheet-overlay" x-show="showAnalyticsDateModal" x-cloak @click.self="closeAnalyticsDateModal()" style="display:flex;">
+    <div class="crm-lane-sheet">
+      <div class="crm-lane-sheet__header">
+        <h3 class="crm-lane-sheet__title">Select Date Range</h3>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeAnalyticsDateModal()">&times;</button>
+      </div>
+      <div class="crm-lane-sheet__body">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="crm-form-group">
+            <label class="crm-form-label">Start Date</label>
+            <input class="crm-form-input" type="date" x-model="analyticsDraftFrom">
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label">End Date</label>
+            <input class="crm-form-input" type="date" x-model="analyticsDraftTo">
+          </div>
+        </div>
+      </div>
+      <div class="crm-lane-sheet__footer">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeAnalyticsDateModal()">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" @click="applyAnalyticsDateRange()">OK</button>
+      </div>
+    </div>
+  </div>
 
 </div>
 

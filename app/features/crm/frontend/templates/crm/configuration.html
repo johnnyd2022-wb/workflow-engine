@@ -1,0 +1,200 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Configuration · CRM{% endblock %}
+{% block body_class %}crm-page{% endblock %}
+
+{% block topbar %}
+  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to CRM" hx-boost="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M11 19l-7-7 7-7"/>
+      <path d="M4 12h16"/>
+    </svg>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="max-content crm-root" x-data="crmConfiguration()" x-init="init()">
+  {% set crm_heading = "Configuration" %}
+  {% set crm_subtitle = "Manage CRM integrations, traceability, and mappings" %}
+  {% include "crm/_crm_banner.html" %}
+  {% set active_crm_tab = "configuration" %}
+  {% include "crm/_crm_section_tabs.html" %}
+
+  <div x-show="error" class="crm-error-banner" x-cloak>
+    <span x-text="error"></span>
+    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
+  </div>
+
+  <div class="crm-card" style="margin-bottom:16px;">
+    <div class="crm-analytics-header"><span class="crm-analytics-title">Integrations</span></div>
+    <div style="padding:16px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;">
+        <section class="crm-card" style="padding:14px; border-radius:10px;">
+          <div style="display:flex; align-items:flex-start; gap:12px; min-width:0;">
+            <div style="width:44px; height:44px; border-radius:14px; background:#fff; border:1px solid var(--border-default,#e5e7eb); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="#13B5EA"/>
+                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.5" font-weight="700" fill="#ffffff">X</text>
+              </svg>
+            </div>
+            <div style="min-width:0;">
+              <div style="font-weight:700; color:var(--text-primary,#111827); line-height:1.2;">Xero</div>
+              <template x-if="xero.connected">
+                <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px;">
+                  <div style="font-size:.82rem; color:#16a34a; font-weight:600; display:flex; align-items:center; gap:6px;">
+                    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#22c55e;"></span>
+                    Connected
+                  </div>
+                  <div style="font-size:.8rem; color:var(--text-secondary,#6b7280);" x-text="tenantName || 'Connected tenant'"></div>
+                  <div style="font-size:.8rem; color:var(--text-secondary,#6b7280);" x-show="lastSyncLabel">Synced <span x-text="lastSyncLabel"></span></div>
+                </div>
+              </template>
+              <template x-if="!xero.connected">
+                <div style="font-size:.82rem; color:var(--text-secondary,#6b7280); margin-top:4px;">Connect to sync contacts and invoices</div>
+              </template>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+            <template x-if="xero.connected">
+              <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click="doSync()" :disabled="syncing"><span x-text="syncing ? 'Syncing…' : 'Sync Now'"></span></button>
+            </template>
+            <template x-if="xero.connected">
+              <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openDisconnectModal()" :disabled="disconnecting" style="border-color:rgba(239,68,68,.35); color:#dc2626;">Disconnect</button>
+            </template>
+            <template x-if="!xero.connected">
+              <a href="/crm/xero/auth" hx-boost="false" class="crm-btn crm-btn--primary crm-btn--sm">Connect</a>
+            </template>
+          </div>
+        </section>
+
+        <section class="crm-card" aria-disabled="true" style="padding:14px; border-radius:10px; opacity:.6; filter:grayscale(1);">
+          <div style="display:flex; align-items:flex-start; gap:12px; min-width:0;">
+            <div style="width:44px; height:44px; border-radius:14px; background:#fff; border:1px solid var(--border-default,#e5e7eb); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="#7B3FF2"/>
+                <text x="12" y="15" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="9.25" font-weight="700" fill="#ffffff">M</text>
+              </svg>
+            </div>
+            <div style="min-width:0;">
+              <div style="font-weight:700; color:var(--text-primary,#111827); line-height:1.2;">MYOB</div>
+              <div style="font-size:.82rem; color:var(--text-secondary,#6b7280); margin-top:4px;">Coming soon</div>
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" disabled>Connect</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-card" style="margin-bottom:16px;">
+    <div class="crm-analytics-header"><span class="crm-analytics-title">Sales Traceability</span></div>
+    <div style="padding:16px; display:grid; gap:12px;">
+      <p style="margin:0; font-size:.82rem; color:var(--text-secondary,#6b7280);">
+        Configure how new sales are linked back to biz-e batches for end-to-end traceability.
+      </p>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Matching Strategy</label>
+          <select class="crm-form-select" x-model="traceConfig.mode">
+            <option value="fifo">FIFO Auto-Match</option>
+            <option value="manual">Manual Review Queue</option>
+            <option value="hybrid">Hybrid (Auto then Review)</option>
+          </select>
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'fifo'" x-cloak>FIFO matches the oldest unlinked batch first.</p>
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'manual'" x-cloak>Manual requires an operator to approve each new sales-to-batch match.</p>
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'hybrid'" x-cloak>Hybrid auto-matches high-confidence sales and sends uncertain ones to review.</p>
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Manual Review Window (days)</label>
+          <input class="crm-form-input" type="number" min="1" max="90" x-model.number="traceConfig.review_days">
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">If a sale cannot be confidently matched within this window, it stays in the review queue for an operator decision.</p>
+        </div>
+      </div>
+      <label style="display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text-secondary,#6b7280);">
+        <input type="checkbox" x-model="traceConfig.strict">
+        Require strict product mapping match before linking sales
+      </label>
+      <p style="margin:0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Strict matching only links sales when mapped product details line up exactly, reducing incorrect trace links.</p>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);">Applies to newly synced sales only.</div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <a href="/core/sourcemap" class="crm-btn crm-btn--secondary crm-btn--sm">Open Sourcemap</a>
+          <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Traceability Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-card">
+    <div class="crm-analytics-header"><span class="crm-analytics-title">Product Mappings</span></div>
+    <div style="padding:16px; border-bottom:1px solid var(--border-default,#e5e7eb); display:grid; gap:10px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Biz-e Final Product</label>
+          <select class="crm-form-select" x-model="mappingDraft.product_key">
+            <option value="">Select final product</option>
+            <template x-for="p in finalProducts" :key="`${p.source_output_id || 'none'}-${p.name}`">
+              <option :value="`${p.source_output_id || ''}||${p.name}`" x-text="productOptionLabel(p)"></option>
+            </template>
+          </select>
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label">Xero Line Item Description</label>
+          <select class="crm-form-select" x-model="mappingDraft.xero_description_pattern">
+            <option value="">Select Xero line item</option>
+            <template x-for="opt in lineItemOptions" :key="`${opt.description || ''}-${opt.item_code || ''}`">
+              <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+      <div class="crm-form-group">
+        <label class="crm-form-label">Notes (optional)</label>
+        <input class="crm-form-input" x-model="mappingDraft.notes" placeholder="Internal note">
+      </div>
+      <div>
+        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="createMapping()" :disabled="savingMapping || !mappingDraft.product_key || !mappingDraft.xero_description_pattern">
+          <span x-text="savingMapping ? 'Saving…' : 'Add Mapping'"></span>
+        </button>
+      </div>
+    </div>
+
+    <template x-if="mappings.length === 0">
+      <div class="crm-empty"><h3>No mappings yet</h3></div>
+    </template>
+
+    <div class="crm-mapping-grid" x-show="mappings.length > 0">
+      <template x-for="m in mappings" :key="m.id">
+        <div class="crm-mapping-row">
+          <span class="crm-mapping-biz" x-text="m.biz_e_product_name"></span>
+          <span class="crm-mapping-arrow">→</span>
+          <span class="crm-mapping-xero" x-text="m.xero_description_pattern"></span>
+          <span class="crm-badge" :class="mappingStatusClass(m)" x-text="m.mapping_status || 'active'"></span>
+          <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="deleteMapping(m.id)">Delete</button>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="crm-lane-sheet-overlay" x-show="showDisconnectModal" x-cloak @click.self="closeDisconnectModal()" style="display:flex;">
+    <div class="crm-lane-sheet">
+      <div class="crm-lane-sheet__header">
+        <h3 class="crm-lane-sheet__title">Disconnect Xero</h3>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeDisconnectModal()">&times;</button>
+      </div>
+      <div class="crm-lane-sheet__body">
+        <p style="margin:0; font-size:.84rem; color:var(--text-secondary,#6b7280);">
+          This will disconnect Xero and remove synced contacts and invoices from CRM.
+        </p>
+      </div>
+      <div class="crm-lane-sheet__footer">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeDisconnectModal()">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" style="background:#ef4444; color:#fff;" @click="doDisconnect()" :disabled="disconnecting">
+          <span x-text="disconnecting ? 'Disconnecting…' : 'Disconnect'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

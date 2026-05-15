@@ -17,6 +17,7 @@ function crmCustomers() {
     syncing: false,
 
     async init() {
+      CRMAPI.ensureBackButton('/crm');
       await this.loadXeroStatus();
       await this.loadCustomers();
     },
@@ -78,7 +79,7 @@ function crmCustomers() {
     prevPage() { if (this.page > 1) { this.page--; this.loadCustomers(); } },
     nextPage() { if (this.page < this.totalPages) { this.page++; this.loadCustomers(); } },
 
-    openCustomer(id) { window.location.href = `/crm/customers/${id}`; },
+    openCustomer(id) { CRMAPI.navigate(`/crm/customers/${id}`); },
 
     async doSync() {
       if (this.syncing) return;

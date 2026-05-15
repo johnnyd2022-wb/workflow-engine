@@ -1,5 +1,6 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Analytics · CRM{% endblock %}
+{% block body_class %}crm-page{% endblock %}
 
 {% block head_extras %}
   <link rel="stylesheet" href="/crm/static/css/crm.css">
@@ -12,7 +13,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="crm-root crm-analytics-page" x-data="crmAnalytics()" x-init="init()">
+<div class="max-content crm-root crm-analytics-page" x-data="crmAnalytics()" x-init="init()">
 
   {# ── Header ── #}
   <div class="crm-page-header">
