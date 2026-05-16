@@ -270,14 +270,16 @@
     }
 
     var counts = computeStepCounts(steps, activeExecutions);
-    var nodes = steps.map(function (step) {
+    var nodes = steps.map(function (step, idx) {
       var stepNo = Number(step.step_number || 0);
       var count = Number(counts[String(stepNo)] || 0);
       var boxClass = count > 0 ? 'core2-step-node-num is-active' : 'core2-step-node-num';
       var nodeTitle = step.name || ('Step ' + String(stepNo));
       var meta = count > 0 ? (String(count) + ' batch' + (count === 1 ? '' : 'es') + ' here') : 'No batches';
+      var hasNext = idx < (steps.length - 1);
       return (
         '<div class="core2-step-node">' +
+          (hasNext ? '<span class="core2-step-flow-arrow" aria-hidden="true">&#8594;</span>' : '') +
           '<span class="' + boxClass + '">' + escapeHtml(String(stepNo)) + '</span>' +
           (count > 0 ? '<span class="core2-step-node-badge">' + escapeHtml(String(count)) + '</span>' : '') +
           '<p class="core2-step-node-title">' + escapeHtml(nodeTitle) + '</p>' +
@@ -426,14 +428,21 @@
 
     var marks = [];
     var gridLines = [];
-    var cursor = new Date(rangeStart.getTime());
-    while (cursor <= now) {
-      var pct = pctFromDate(cursor);
-      var label = cursor.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      var edgeClass = pct < 1 ? ' core2-tl-date-mark--start' : (pct > 99 ? ' core2-tl-date-mark--end' : '');
+    var dayMs = 24 * 3600 * 1000;
+    var totalDays = Math.max(1, Math.ceil(rangeMs / dayMs));
+    var tickCount = totalDays <= 14 ? 7 : (totalDays <= 60 ? 8 : 9);
+    var labelFormat = totalDays > 90
+      ? { month: 'short', year: '2-digit' }
+      : { month: 'short', day: 'numeric' };
+
+    for (var i = 0; i <= tickCount; i += 1) {
+      var tickMs = rangeStart.getTime() + Math.round((rangeMs * i) / tickCount);
+      var tickDate = new Date(tickMs);
+      var pct = ((tickMs - rangeStart.getTime()) / rangeMs) * 100;
+      var label = tickDate.toLocaleDateString('en-US', labelFormat);
+      var edgeClass = i === 0 ? ' core2-tl-date-mark--start' : (i === tickCount ? ' core2-tl-date-mark--end' : '');
       marks.push('<span class="core2-tl-date-mark' + edgeClass + '" style="left:' + pct + '%">' + escapeHtml(label) + '</span>');
       gridLines.push('<span class="core2-tl-grid-line" style="left:' + pct + '%"></span>');
-      cursor.setDate(cursor.getDate() + 1);
     }
 
     var gridLineHtml = gridLines.join('');
@@ -628,6 +637,16 @@
     document.body.classList.remove('core2-active-detail-open');
   }
 
+  function setPanelVisibility(visible) {
+    var panel = byId('core2-active-batches-panel');
+    if (panel) {
+      panel.hidden = !visible;
+    }
+    if (!visible) {
+      closeDetail();
+    }
+  }
+
   function bindInteractions() {
     resetDetailUiState();
 
@@ -696,6 +715,12 @@
   }
 
   function renderAll() {
+    var hasAnyActive = state.executions.some(isActiveExecution);
+    setPanelVisibility(hasAnyActive);
+    if (!hasAnyActive) {
+      return;
+    }
+
     renderProcessSelect();
     renderViewToggle();
 
