@@ -1,499 +1,486 @@
-/*
- * Workflow Engine dashboard: palette + components.
- * dashboard-page body class is set by dashboard.html and synced in HTMX afterSettle.
- */
+/* Dashboard V3: operational insights (light-first, dark-colorway supported). */
 
-/* Remove #page-content padding so the dark dashboard fills flush to the topbar in both themes. */
 body.dashboard-page #page-content.page-content {
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  padding: 0 !important;
+  min-height: calc(100vh - var(--spa-mobile-topbar-height, 66px));
+  background: #edf3f8;
 }
 
-/* Ensure the dashboard fills the full height of #page-content. */
+body.dashboard-page .app-layout .main-content {
+  background: #edf3f8;
+}
+
 body.dashboard-page #page-content .workflow-dashboard {
-  min-height: 100%;
-}
-:root {
-  --workflow-dashboard-surface-start: hsl(218, 52%, 11%);
-  --workflow-dashboard-surface-end: hsl(219, 37%, 14%);
+  min-height: calc(100vh - var(--spa-mobile-topbar-height, 66px));
 }
 
-.workflow-dashboard {
-  padding: clamp(16px, 2.5vw, 32px) clamp(12px, 2vw, 24px);
-  --color-midnight: var(--workflow-dashboard-surface-start);
-  --color-midnight-gradient: var(--workflow-dashboard-surface-end);
-  --color-graphite: hsl(218, 27%, 16%);
-  --color-primary: hsl(199, 100%, 46%);
-  --color-primary-hover: hsl(199, 100%, 56%);
-  --color-secondary: hsl(245, 100%, 69%);
-  --color-aqua: hsl(173, 100%, 83%);
-  --color-text-primary: hsl(210, 20%, 98%);
-  --color-text-secondary: hsl(222, 20%, 81%);
-  --color-border: hsl(219, 25%, 22%);
-  --color-success: hsl(154, 77%, 43%);
-  --color-warning: hsl(38, 92%, 50%);
-  --color-error: hsl(0, 86%, 71%);
-  --color-info: hsl(199, 92%, 60%);
-  --background: var(--color-midnight);
-  --foreground: var(--color-text-primary);
-  --card: var(--color-graphite);
-  --muted-foreground: var(--color-text-secondary);
-  --primary: var(--color-primary);
-  --secondary: var(--color-secondary);
-  --success: var(--color-success);
-  --warning: var(--color-warning);
-  --alert: var(--color-error);
-  --info: var(--color-info);
-  --border: var(--color-border);
-  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-  --shadow-glass-hover: 0 12px 48px 0 rgba(0, 0, 0, 0.4);
-  --glass-overlay: rgba(255, 255, 255, 0.08);
-  --glass-border: rgba(255, 255, 255, 0.15);
-  --glass-blur: blur(20px);
-  --radius: 1.5rem;
-  --spacing-sm: 1rem;
-  --spacing-md: 1.5rem;
-  --spacing-lg: 2rem;
-  --spacing-xl: 3rem;
-  color: var(--foreground);
-  /*
-   * Light theme: dashboard brings its own surface (SPA shell stays light outside this block).
-   * Dark theme: #page-content gradient from spa-theme.css matches — avoid double gradient.
-   */
-  background: linear-gradient(
-    180deg,
-    var(--workflow-dashboard-surface-start) 0%,
-    var(--workflow-dashboard-surface-end) 100%
-  );
+.workflow-dashboard.dashboard-v3 {
+  --dash-bg-0: #f7fbff;
+  --dash-bg-1: #edf3f8;
+  --dash-bg-2: #e4edf5;
+  --dash-card: rgba(255, 255, 255, 0.85);
+  --dash-card-strong: rgba(255, 255, 255, 0.94);
+  --dash-border: rgba(20, 49, 84, 0.12);
+  --dash-text: #0f2337;
+  --dash-text-soft: #4f6780;
+  --dash-accent: #007f6d;
+  --dash-accent-2: #196bcc;
+  --dash-alert: #c23f3f;
+  --dash-radius: 18px;
+  --dash-shadow: 0 18px 40px rgba(17, 42, 71, 0.08);
+  color: var(--dash-text);
+  background:
+    radial-gradient(circle at 10% 6%, rgba(25, 107, 204, 0.09), transparent 38%),
+    radial-gradient(circle at 93% 0%, rgba(0, 127, 109, 0.07), transparent 35%),
+    linear-gradient(170deg, var(--dash-bg-0) 0%, var(--dash-bg-1) 48%, var(--dash-bg-2) 100%);
   box-sizing: border-box;
   width: 100%;
+  min-height: calc(100vh - var(--spa-mobile-topbar-height, 66px));
+  padding: clamp(14px, 2.2vw, 30px);
+  font-family: "Manrope", "Roboto", sans-serif;
 }
 
-html[data-spa-theme="dark"] #page-content .workflow-dashboard {
-  background: transparent;
+html[data-spa-theme="dark"] body.dashboard-page #page-content.page-content {
+  background: #081421;
 }
 
-.workflow-dashboard h1,
-.workflow-dashboard h2,
-.workflow-dashboard h3 {
-  color: var(--foreground);
-  font-weight: 700;
+html[data-spa-theme="dark"] body.dashboard-page .app-layout .main-content {
+  background: #081421;
 }
 
-.workflow-dashboard .workflow-dashboard-heading p {
-  color: var(--muted-foreground);
+html[data-spa-theme="dark"] #page-content .workflow-dashboard.dashboard-v3 {
+  --dash-bg-0: #091421;
+  --dash-bg-1: #0d2134;
+  --dash-bg-2: #102940;
+  --dash-card: rgba(9, 22, 35, 0.72);
+  --dash-card-strong: rgba(7, 19, 30, 0.92);
+  --dash-border: rgba(141, 188, 218, 0.24);
+  --dash-text: #f4f8fb;
+  --dash-text-soft: #aac4d7;
+  --dash-accent: #4ed6b8;
+  --dash-accent-2: #79b6ff;
+  --dash-alert: #f16d6d;
 }
 
-.workflow-dashboard-main {
-  padding: var(--spacing-md) 0;
-  max-width: 100%;
-  margin: 0;
-}
-
-.workflow-dashboard-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  margin-bottom: var(--spacing-md);
-  background: var(--glass-overlay);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md, 12px);
-}
-
-.workflow-dashboard-heading h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0.25rem;
-}
-
-.workflow-dashboard-heading .header-actions {
-  display: flex;
-  gap: var(--spacing-sm);
-  align-items: center;
-}
-
-.workflow-dashboard .glass-card {
-  background: var(--glass-overlay);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-glass);
-  padding: 2rem;
-  position: relative;
-}
-
-.workflow-dashboard .glass-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 60%);
-  border-radius: var(--radius);
-  pointer-events: none;
-  opacity: 0.5;
-}
-
-.workflow-dashboard .glass-card > * {
-  position: relative;
-  z-index: 1;
-}
-
-.workflow-dashboard .grid {
+.dashboard-v3 .dashboard-shell {
+  max-width: 1280px;
+  margin: 0 auto;
   display: grid;
-  gap: 1.5rem;
+  gap: 14px;
 }
 
-.workflow-dashboard .grid-cols-2 {
-  grid-template-columns: repeat(2, 1fr);
+.dashboard-v3 .dash-page-hero {
+  margin-bottom: 2px;
 }
 
-.workflow-dashboard .grid-cols-3 {
-  grid-template-columns: repeat(3, 1fr);
+.dashboard-v3 .dash-page-hero .page-title {
+  margin: 0;
+  font-size: clamp(1.3rem, 2vw, 2rem);
 }
 
-.workflow-dashboard .metric-card {
-  background: var(--glass-overlay);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-glass);
-  padding: 1.5rem;
-  position: relative;
+.dashboard-v3 .dash-page-hero .page-subtitle {
+  margin: 6px 0 0;
+  color: var(--dash-text-soft);
+  font-size: 0.9rem;
 }
 
-.workflow-dashboard .metric-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 60%);
-  border-radius: var(--radius);
-  pointer-events: none;
-}
-
-.workflow-dashboard .metric-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--muted-foreground);
-  margin-bottom: 0.5rem;
-  position: relative;
-  z-index: 1;
-}
-
-.workflow-dashboard .metric-value {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  position: relative;
-  z-index: 1;
-}
-
-.workflow-dashboard .metric-trend {
-  font-size: 0.875rem;
-  color: var(--muted-foreground);
-  position: relative;
-  z-index: 1;
-}
-
-.workflow-dashboard .metric-icon {
-  position: absolute;
-  top: 1.5rem;
-  right: 1.5rem;
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-  border-radius: 0.75rem;
+.dashboard-v3 .dash-hero-actions {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  box-shadow: 0 0 15px rgba(0, 168, 232, 0.3);
-  z-index: 2;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.workflow-dashboard .status-success {
-  color: var(--success);
-}
-
-.workflow-dashboard .status-info {
-  color: var(--info);
-}
-
-.workflow-dashboard .flow-container {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  padding: var(--spacing-xl) 0;
-  overflow-x: auto;
-}
-
-.workflow-dashboard .flow-node {
-  flex-shrink: 0;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.workflow-dashboard .flow-icon {
-  width: 64px;
-  height: 64px;
-  background: var(--glass-overlay);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--primary);
-  box-shadow: var(--shadow-glass);
-  transition: all 0.3s ease;
-}
-
-.workflow-dashboard .flow-icon svg {
-  width: 32px;
-  height: 32px;
-}
-
-.workflow-dashboard .flow-node:hover .flow-icon {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-glass-hover);
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.workflow-dashboard .flow-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--foreground);
-}
-
-.workflow-dashboard .flow-arrow {
-  flex-shrink: 0;
-}
-
-.workflow-dashboard .alert {
-  display: flex;
-  gap: 0.75rem;
-  padding: 1rem;
-  border-radius: 0.75rem;
-  margin-bottom: 0.75rem;
-  background: var(--glass-overlay);
-  border: 1px solid var(--glass-border);
-}
-
-.workflow-dashboard .alert:last-child {
-  margin-bottom: 0;
-}
-
-.workflow-dashboard .alert-message {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--foreground);
-  margin-bottom: 0.25rem;
-}
-
-.workflow-dashboard .alert-time {
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-}
-
-.workflow-dashboard .alert-success .alert-icon {
-  color: var(--success);
-}
-
-.workflow-dashboard .alert-info .alert-icon {
-  color: var(--info);
-}
-
-.workflow-dashboard .progress {
-  width: 100%;
-  height: 0.5rem;
-  background: var(--glass-overlay);
-  border-radius: 9999px;
-  overflow: hidden;
-  border: 1px solid var(--glass-border);
-}
-
-.workflow-dashboard .progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--success) 0%, var(--color-aqua) 100%);
-  border-radius: 9999px;
-  transition: width 0.3s ease;
-  box-shadow: 0 0 10px rgba(22, 196, 127, 0.5);
-}
-
-.workflow-dashboard .btn {
+.dashboard-v3 .dash-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 1rem;
-  border: none;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 999px;
+  padding: 10px 16px;
   text-decoration: none;
-  white-space: nowrap;
+  font-weight: 700;
+  font-size: 0.88rem;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  border: 1px solid transparent;
 }
 
-.workflow-dashboard .btn-primary {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-  color: var(--foreground);
-  box-shadow: 0 0 15px rgba(0, 168, 232, 0.3);
-}
-
-.workflow-dashboard .btn-primary:hover {
-  box-shadow: 0 0 25px rgba(0, 168, 232, 0.5), 0 0 40px rgba(108, 99, 255, 0.3);
+.dashboard-v3 .dash-btn:hover {
   transform: translateY(-1px);
 }
 
-.workflow-dashboard .btn-secondary {
-  background: var(--glass-overlay);
-  color: var(--foreground);
-  border: 1px solid var(--glass-border);
+.dashboard-v3 .dash-btn-primary {
+  color: #ffffff;
+  background-color: #1A9E88;
+  background-image: none;
+  box-shadow: 0 8px 20px rgba(26, 158, 136, 0.24);
 }
 
-.workflow-dashboard .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
+.dashboard-v3 .dash-btn-secondary {
+  color: #073b36;
+  background: #2BC4A2;
+  border-color: #2BC4A2;
+  box-shadow: 0 8px 20px rgba(43, 196, 162, 0.2);
 }
 
-.workflow-dashboard .btn-sm {
-  padding: 0.375rem 0.875rem;
-  font-size: 0.813rem;
+.dashboard-v3 .dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.workflow-dashboard .btn-ghost {
-  background: transparent;
-  color: var(--muted-foreground);
+.dashboard-v3 .dash-kpi-card {
+  background: var(--dash-card);
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius);
+  padding: 14px;
+  backdrop-filter: blur(14px);
+  display: grid;
+  grid-template-rows: minmax(2.25rem, auto) minmax(1.9rem, auto) minmax(2rem, auto) auto auto;
+  align-content: start;
 }
 
-.workflow-dashboard .btn-ghost:hover {
-  background: var(--glass-overlay);
-  color: var(--foreground);
+.dashboard-v3 .dash-kpi-label {
+  margin: 0;
+  color: var(--dash-text-soft);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+  min-height: 2.25rem;
 }
 
-.workflow-dashboard .form-group {
-  margin-bottom: 1.5rem;
-}
-
-.workflow-dashboard .form-label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-  color: var(--foreground);
-}
-
-.workflow-dashboard .form-input,
-.workflow-dashboard .form-select {
-  width: 100%;
-  padding: 0.625rem 0.875rem;
-  background: var(--glass-overlay);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: 1rem;
-  font-size: 0.875rem;
-  color: var(--foreground);
-}
-
-.workflow-dashboard .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  z-index: 2500;
-  display: none;
+.dashboard-v3 .dash-kpi-value {
+  margin: 0;
+  font-size: clamp(1.1rem, 1.6vw, 1.55rem);
+  font-weight: 800;
+  line-height: 1.15;
+  min-height: 1.9rem;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 1rem;
 }
 
-.workflow-dashboard .modal-overlay.modal-overlay--open {
-  display: flex;
-  opacity: 1;
-  pointer-events: all;
+.dashboard-v3 .dash-kpi-meta {
+  margin: 2px 0 0;
+  color: var(--dash-text-soft);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  min-height: 2rem;
 }
 
-.workflow-dashboard .modal-content {
-  background: var(--glass-overlay);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-glass);
-  padding: 2rem;
-  max-width: 28rem;
+.dashboard-v3 .dash-kpi-spark {
+  margin-top: 8px;
   width: 100%;
-  position: relative;
-  color: var(--foreground);
+  min-height: 58px;
+  color: #1A9E88;
 }
 
-.workflow-dashboard .modal-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
+.dashboard-v3 .dash-kpi-trend-svg {
+  display: block;
+  width: 100%;
+  height: 44px;
+  overflow: visible;
 }
 
-.workflow-dashboard .modal-footer {
-  margin-top: 1.5rem;
+.dashboard-v3 .dash-kpi-trend-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dashboard-v3 .dash-kpi-trend-svg circle {
+  fill: currentColor;
+  opacity: 0.92;
+}
+
+.dashboard-v3 .dash-kpi-trend-range {
+  margin-top: 4px;
   display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-}
-
-.workflow-dashboard .mb-1 {
-  margin-bottom: 0.25rem;
-}
-
-.workflow-dashboard .mb-3 {
-  margin-bottom: 0.75rem;
-}
-
-.workflow-dashboard .mb-4 {
-  margin-bottom: 1rem;
-}
-
-.workflow-dashboard .flex {
-  display: flex;
-}
-
-.workflow-dashboard .gap-2 {
-  gap: 0.5rem;
-}
-
-.workflow-dashboard .justify-between {
   justify-content: space-between;
+  gap: 8px;
+  color: var(--dash-text-soft);
+  font-size: 0.72rem;
+  font-family: "IBM Plex Mono", monospace;
+  line-height: 1.15;
 }
 
-@media (max-width: 767px) {
-  .workflow-dashboard-main {
-    padding: var(--spacing-sm);
+.dashboard-v3 .dash-kpi-link {
+  display: inline-flex;
+  margin-top: 8px;
+  color: var(--dash-accent-2);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none !important;
+  text-underline-offset: 0;
+}
+
+.dashboard-v3 .dash-kpi-link:hover {
+  text-decoration: none !important;
+}
+
+.dashboard-v3 .dash-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-v3 .dash-card {
+  background: var(--dash-card);
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius);
+  padding: 16px;
+  backdrop-filter: blur(16px);
+  min-height: 220px;
+}
+
+.dashboard-v3 .dash-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.dashboard-v3 .dash-card-header h2 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+.dashboard-v3 .dash-card-header a {
+  color: var(--dash-accent-2);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.dashboard-v3 .dash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-v3 .dash-list-item {
+  border: 1px solid rgba(95, 131, 168, 0.2);
+  background: rgba(255, 255, 255, 0.42);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+html[data-spa-theme="dark"] .dashboard-v3 .dash-list-item {
+  border: 1px solid rgba(141, 188, 218, 0.18);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.dashboard-v3 .dash-empty {
+  border: 1px dashed rgba(95, 131, 168, 0.38);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--dash-text-soft);
+  font-size: 0.85rem;
+}
+
+.dashboard-v3 .dash-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-v3 .dash-action-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dashboard-v3 .dash-action-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.dashboard-v3 .dash-action-meta {
+  margin: 4px 0 0;
+  color: var(--dash-text-soft);
+  font-size: 0.79rem;
+}
+
+.dashboard-v3 .dash-action-link {
+  color: var(--dash-accent-2);
+  text-decoration: none;
+}
+
+.dashboard-v3 .dash-action-count {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 56px;
+  text-align: right;
+  font-size: 1rem;
+  line-height: 1.15;
+  font-weight: 800;
+  color: var(--dash-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-v3 .dash-audit-details {
+  border: 1px solid rgba(95, 131, 168, 0.2);
+  border-radius: 12px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+html[data-spa-theme="dark"] .dashboard-v3 .dash-audit-details {
+  border: 1px solid rgba(141, 188, 218, 0.18);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.dashboard-v3 .dash-audit-summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--dash-text);
+  list-style: none;
+}
+
+.dashboard-v3 .dash-audit-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-v3 .dash-audit-summary::before {
+  content: '▸ ';
+}
+
+.dashboard-v3 .dash-audit-details[open] .dash-audit-summary::before {
+  content: '▾ ';
+}
+
+.dashboard-v3 .dash-audit-controls {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dashboard-v3 .dash-audit-meta {
+  color: var(--dash-text-soft);
+  font-size: 0.78rem;
+}
+
+.dashboard-v3 .dash-audit-toggle {
+  width: auto;
+  min-height: 32px;
+  padding: 2px 0;
+  gap: 10px;
+}
+
+.dashboard-v3 .dash-audit-toggle .spa-advanced-toggle__label {
+  color: var(--dash-text-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.dashboard-v3 .dash-audit-toggle .spa-advanced-toggle__track {
+  width: 40px;
+  height: 23px;
+}
+
+.dashboard-v3 .dash-audit-toggle .spa-advanced-toggle__thumb {
+  width: 17px;
+  height: 17px;
+}
+
+.dashboard-v3 .dash-audit-toggle .spa-advanced-toggle__track--on .spa-advanced-toggle__thumb {
+  transform: translateX(16px);
+}
+
+.dashboard-v3 .dash-audit-title {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.dashboard-v3 .dash-audit-meta-line {
+  margin: 4px 0 0;
+  color: var(--dash-text-soft);
+  font-size: 0.76rem;
+}
+
+.dashboard-v3 .dash-stat-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-v3 .dash-stat-row {
+  border: 1px solid rgba(95, 131, 168, 0.2);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+html[data-spa-theme="dark"] .dashboard-v3 .dash-stat-row {
+  border: 1px solid rgba(141, 188, 218, 0.18);
+}
+
+.dashboard-v3 .dash-stat-row span {
+  color: var(--dash-text-soft);
+  font-size: 0.82rem;
+}
+
+.dashboard-v3 .dash-stat-row strong {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.dashboard-v3 .dash-caption {
+  margin: 10px 0 0;
+  color: var(--dash-text-soft);
+  font-size: 0.78rem;
+}
+
+.dashboard-v3 .dash-footer-note {
+  color: var(--dash-text-soft);
+  font-size: 0.8rem;
+  font-family: "IBM Plex Mono", monospace;
+  min-height: 20px;
+}
+
+.dashboard-v3 .dash-error {
+  color: var(--dash-alert);
+}
+
+@media (max-width: 1200px) {
+  .dashboard-v3 .dash-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-v3 {
+    padding: 12px;
   }
 
-  .workflow-dashboard .grid-cols-2,
-  .workflow-dashboard .grid-cols-3 {
+  .dashboard-v3 .dash-grid {
     grid-template-columns: 1fr;
   }
 
-  .workflow-dashboard-heading {
-    flex-direction: column;
-    align-items: stretch;
+  .dashboard-v3 .dash-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 540px) {
+  .dashboard-v3 .dash-kpi-grid {
+    grid-template-columns: 1fr;
   }
 
-  .workflow-dashboard-heading .header-actions {
+  .dashboard-v3 .dash-btn {
     width: 100%;
-  }
-
-  .workflow-dashboard-heading .header-actions .btn {
-    width: 100%;
-    justify-content: center;
   }
 }

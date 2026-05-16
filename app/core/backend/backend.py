@@ -4,14 +4,14 @@ import hashlib
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
 from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
 from pydantic import ValidationError
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
@@ -32,7 +32,8 @@ from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
-from app.core.db.models.execution import ExecutionStatus
+from app.core.db.models.entity_event import EntityEvent
+from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.inventory_wastage import InventoryWastage
@@ -4133,6 +4134,678 @@ def get_execution_metadata():
     metadata_items.sort(key=lambda x: (x["key"].lower(), x["value"].lower()))
 
     return jsonify({"metadata": metadata_items}), 200
+
+
+def _dashboard_parse_due_date(raw: Any) -> date | None:
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(str(raw)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _dashboard_priority_rank(priority: Any) -> int:
+    p = str(priority or "").strip().lower()
+    if p == "high":
+        return 0
+    if p == "medium":
+        return 1
+    if p == "low":
+        return 2
+    return 3
+
+
+def _dashboard_summarize_tasks(
+    open_tasks: list[dict[str, Any]], today: date, week_start: date | None = None, week_end_exclusive: date | None = None
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for task in open_tasks or []:
+        if not isinstance(task, dict):
+            continue
+        status = str(task.get("status") or "").strip().lower()
+        if status not in {"pending", "in_progress"}:
+            continue
+        due = _dashboard_parse_due_date(task.get("due_date"))
+        rows.append(
+            {
+                "id": task.get("id"),
+                "title": task.get("title"),
+                "due_date": due.isoformat() if due else None,
+                "priority": task.get("priority"),
+                "status": status,
+                "contact_name": task.get("contact_name"),
+                "_due_obj": due,
+            }
+        )
+
+    due_today_count = sum(1 for t in rows if t["_due_obj"] == today)
+    overdue_count = sum(1 for t in rows if t["_due_obj"] is not None and t["_due_obj"] < today)
+    due_this_week_count = 0
+    if week_start is not None and week_end_exclusive is not None:
+        due_this_week_count = sum(
+            1
+            for t in rows
+            if t["_due_obj"] is not None and week_start <= t["_due_obj"] and t["_due_obj"] < week_end_exclusive
+        )
+
+    sorted_rows = sorted(
+        rows,
+        key=lambda t: (
+            t["_due_obj"] is None,
+            t["_due_obj"] or date.max,
+            _dashboard_priority_rank(t.get("priority")),
+            str(t.get("title") or "").lower(),
+        ),
+    )
+    top_tasks = [
+        {
+            "id": t.get("id"),
+            "title": t.get("title"),
+            "due_date": t.get("due_date"),
+            "priority": t.get("priority"),
+            "status": t.get("status"),
+            "contact_name": t.get("contact_name"),
+        }
+        for t in sorted_rows[:5]
+    ]
+
+    return {
+        "enabled": True,
+        "open_count": len(rows),
+        "due_today_count": due_today_count,
+        "overdue_count": overdue_count,
+        "due_this_week_count": due_this_week_count,
+        "top_tasks": top_tasks,
+    }
+
+
+def _dashboard_count_red_amber(items: list[dict[str, Any]] | None) -> tuple[int, int]:
+    red = 0
+    amber = 0
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        severity = str(item.get("severity") or "").strip().lower()
+        if severity == "red":
+            red += 1
+        elif severity == "amber":
+            amber += 1
+    return red, amber
+
+
+def _dashboard_build_compliance_summary(results: list[Any], system_status: dict[str, Any]) -> dict[str, Any]:
+    by_id = {r.check_id: r for r in results}
+
+    expired_data = (by_id.get("expired_materials").data or {}) if by_id.get("expired_materials") else {}
+    untracked_data = (by_id.get("untracked_items").data or {}) if by_id.get("untracked_items") else {}
+    output_expiry_data = (by_id.get("output_expiry").data or {}) if by_id.get("output_expiry") else {}
+    output_ready_data = (by_id.get("output_ready_date").data or {}) if by_id.get("output_ready_date") else {}
+
+    expired_raw = len(expired_data.get("expired_raw_materials") or [])
+    expired_impacted = len(expired_data.get("impacted_items") or [])
+    untracked_count = len(untracked_data.get("untracked_items") or [])
+    output_expiry_red, output_expiry_amber = _dashboard_count_red_amber(output_expiry_data.get("output_expiry_items"))
+    output_ready_red, output_ready_amber = _dashboard_count_red_amber(output_ready_data.get("output_ready_date_items"))
+
+    expired_penalty = min(40, (25 if expired_raw > 0 else 0) + (2 * expired_impacted))
+    untracked_penalty = min(25, 3 * untracked_count)
+    output_expiry_penalty = min(20, (4 * output_expiry_red) + output_expiry_amber)
+    output_ready_penalty = min(15, (2 * output_ready_red) + output_ready_amber)
+    total_penalty = expired_penalty + untracked_penalty + output_expiry_penalty + output_ready_penalty
+    score = max(0, min(100, 100 - total_penalty))
+
+    drivers = [
+        {"key": "expired_materials", "label": "Expired materials", "penalty": expired_penalty},
+        {"key": "untracked_items", "label": "Untracked inventory", "penalty": untracked_penalty},
+        {"key": "output_expiry", "label": "Output expiry", "penalty": output_expiry_penalty},
+        {"key": "output_ready_date", "label": "Output ready-date", "penalty": output_ready_penalty},
+    ]
+    drivers = [d for d in drivers if d["penalty"] > 0]
+    drivers.sort(key=lambda d: d["penalty"], reverse=True)
+
+    active_use_risk_count = 0
+    if isinstance(system_status, dict) and system_status.get("mode") == "health":
+        signals = system_status.get("signals") or []
+        active_use_risk_count = sum(
+            1 for s in signals if isinstance(s, dict) and s.get("has_issue") and s.get("in_active_use")
+        )
+
+    return {
+        "score": score,
+        "score_version": "v1",
+        "trend_delta_7d": None,
+        "state": (system_status or {}).get("state", "unknown"),
+        "top_drivers": drivers[:3],
+        "findings": {
+            "expired_materials": {"count": expired_raw, "impacted_count": expired_impacted},
+            "untracked_items": {"count": untracked_count},
+            "output_expiry": {"red_count": output_expiry_red, "amber_count": output_expiry_amber},
+            "output_ready_date": {"red_count": output_ready_red, "amber_count": output_ready_amber},
+            "active_use_risk_count": active_use_risk_count,
+        },
+    }
+
+
+def _dashboard_event_log_period(
+    org_id: UUID, session, period_start: datetime, period_end: datetime, limit: int = 10
+) -> dict[str, Any]:
+    q = (
+        session.query(EntityEvent)
+        .filter(EntityEvent.org_id == org_id)
+        .filter(EntityEvent.created_at >= period_start, EntityEvent.created_at < period_end)
+    )
+    total = q.count()
+    events = q.order_by(EntityEvent.created_at.desc()).limit(limit).all()
+    items = [
+        {
+            "id": str(ev.id),
+            "event_type": ev.event_type,
+            "summary": _human_summary(ev),
+            "at": ev.created_at.isoformat() if ev.created_at else None,
+            "actor": ev.actor_label or "System",
+            "entity_type": ev.entity_type,
+            "entity_id": str(ev.entity_id) if ev.entity_id else None,
+        }
+        for ev in events
+    ]
+    return {"total": total, "items": items}
+
+
+def _dashboard_operations_summary(org_id: UUID, session, day_start: datetime, next_day_start: datetime) -> dict[str, int]:
+    active_executions = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.status.in_([ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS]))
+        .count()
+    )
+    completed_today = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.status == ExecutionStatus.COMPLETED)
+        .filter(Execution.completed_at.isnot(None))
+        .filter(Execution.completed_at >= day_start, Execution.completed_at < next_day_start)
+        .count()
+    )
+    failed_or_cancelled_today = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.status.in_([ExecutionStatus.FAILED, ExecutionStatus.CANCELLED]))
+        .filter(Execution.updated_at >= day_start, Execution.updated_at < next_day_start)
+        .count()
+    )
+    return {
+        "active_executions": active_executions,
+        "completed_today": completed_today,
+        "failed_or_cancelled_today": failed_or_cancelled_today,
+    }
+
+
+def _dashboard_week_boundaries(today: date) -> tuple[datetime, datetime, datetime]:
+    week_start_date = today - timedelta(days=today.weekday())
+    week_start = datetime.combine(week_start_date, datetime.min.time())
+    next_week_start = week_start + timedelta(days=7)
+    prev_week_start = week_start - timedelta(days=7)
+    return week_start, next_week_start, prev_week_start
+
+
+def _dashboard_parse_date_like(raw: Any) -> date | None:
+    if raw is None:
+        return None
+    if isinstance(raw, date):
+        return raw
+    if isinstance(raw, datetime):
+        return raw.date()
+    try:
+        return date.fromisoformat(str(raw)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _dashboard_short_date_label(day: date) -> str:
+    return f"{day.strftime('%b')} {day.day}"
+
+
+def _dashboard_series_from_date_counts(
+    day_counts: dict[date, int],
+    *,
+    start_day: date | None = None,
+    end_day: date | None = None,
+    cumulative: bool = True,
+) -> dict[str, Any]:
+    if start_day is None and day_counts:
+        start_day = min(day_counts)
+    if end_day is None and day_counts:
+        end_day = max(day_counts)
+    if start_day is None:
+        start_day = date.today()
+    if end_day is None:
+        end_day = start_day
+    if end_day < start_day:
+        end_day = start_day
+
+    points: list[dict[str, Any]] = []
+    cursor = start_day
+    running = 0
+    while cursor <= end_day:
+        value = int(day_counts.get(cursor) or 0)
+        if cumulative:
+            running += value
+            y = running
+        else:
+            y = value
+        points.append({"date": cursor.isoformat(), "value": y})
+        cursor = cursor + timedelta(days=1)
+
+    return {
+        "start": start_day.isoformat(),
+        "end": end_day.isoformat(),
+        "start_label": _dashboard_short_date_label(start_day),
+        "end_label": _dashboard_short_date_label(end_day),
+        "points": points,
+    }
+
+
+def _dashboard_event_counts_by_day(
+    org_id: UUID, session, start_dt: datetime, end_dt: datetime, actor_type: str | None = None
+) -> dict[date, int]:
+    q = (
+        session.query(func.date(EntityEvent.created_at).label("event_day"), func.count(EntityEvent.id).label("total"))
+        .filter(EntityEvent.org_id == org_id)
+        .filter(EntityEvent.created_at >= start_dt, EntityEvent.created_at < end_dt)
+    )
+    if actor_type:
+        q = q.filter(EntityEvent.actor_type == actor_type)
+    rows = q.group_by(func.date(EntityEvent.created_at)).all()
+    out: dict[date, int] = {}
+    for row in rows:
+        day = _dashboard_parse_date_like(getattr(row, "event_day", None))
+        if day is None:
+            continue
+        out[day] = int(getattr(row, "total", 0) or 0)
+    return out
+
+
+def _dashboard_execution_counts_by_day(
+    org_id: UUID, session, start_dt: datetime, end_dt: datetime, column: str
+) -> dict[date, int]:
+    if column == "completed":
+        day_col = Execution.completed_at
+        q = (
+            session.query(func.date(day_col).label("event_day"), func.count(Execution.id).label("total"))
+            .filter(Execution.org_id == org_id)
+            .filter(Execution.status == ExecutionStatus.COMPLETED)
+            .filter(day_col.isnot(None))
+            .filter(day_col >= start_dt, day_col < end_dt)
+        )
+    else:
+        day_col = Execution.started_at
+        q = (
+            session.query(func.date(day_col).label("event_day"), func.count(Execution.id).label("total"))
+            .filter(Execution.org_id == org_id)
+            .filter(day_col.isnot(None))
+            .filter(day_col >= start_dt, day_col < end_dt)
+        )
+    rows = q.group_by(func.date(day_col)).all()
+    out: dict[date, int] = {}
+    for row in rows:
+        day = _dashboard_parse_date_like(getattr(row, "event_day", None))
+        if day is None:
+            continue
+        out[day] = int(getattr(row, "total", 0) or 0)
+    return out
+
+
+def _dashboard_open_action_item_dates(check_results: list[Any], open_tasks: list[dict[str, Any]], today: date) -> list[date]:
+    by_id = {r.check_id: r for r in check_results or []}
+    dates: list[date] = []
+
+    expired_data = (by_id.get("expired_materials").data or {}) if by_id.get("expired_materials") else {}
+    for item in expired_data.get("expired_raw_materials") or []:
+        if not isinstance(item, dict):
+            continue
+        d = _dashboard_parse_date_like(item.get("expiry_date")) or _dashboard_parse_date_like(item.get("created_at"))
+        if d:
+            dates.append(d)
+
+    untracked_data = (by_id.get("untracked_items").data or {}) if by_id.get("untracked_items") else {}
+    for item in untracked_data.get("untracked_items") or []:
+        if not isinstance(item, dict):
+            continue
+        d = _dashboard_parse_date_like(item.get("created_at"))
+        if d:
+            dates.append(d)
+
+    output_expiry_data = (by_id.get("output_expiry").data or {}) if by_id.get("output_expiry") else {}
+    for item in output_expiry_data.get("output_expiry_items") or []:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("severity") or "").strip().lower() != "red":
+            continue
+        d = _dashboard_parse_date_like(item.get("detected_at")) or _dashboard_parse_date_like(item.get("expiry_at"))
+        if d:
+            dates.append(d)
+
+    for task in open_tasks or []:
+        if not isinstance(task, dict):
+            continue
+        status = str(task.get("status") or "").strip().lower()
+        if status not in {"pending", "in_progress"}:
+            continue
+        due = _dashboard_parse_date_like(task.get("due_date"))
+        if due is not None and due < today:
+            dates.append(due)
+
+    return dates
+
+
+def _dashboard_operations_weekly_summary(org_id: UUID, session, now_dt: datetime, today: date) -> dict[str, Any]:
+    week_start, next_week_start, prev_week_start = _dashboard_week_boundaries(today)
+
+    active_executions = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.status.in_([ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS]))
+        .count()
+    )
+    started_this_week = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.started_at >= week_start, Execution.started_at < next_week_start)
+        .count()
+    )
+    completed_this_week = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.status == ExecutionStatus.COMPLETED)
+        .filter(Execution.completed_at.isnot(None))
+        .filter(Execution.completed_at >= week_start, Execution.completed_at < next_week_start)
+        .count()
+    )
+    completed_last_week = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.status == ExecutionStatus.COMPLETED)
+        .filter(Execution.completed_at.isnot(None))
+        .filter(Execution.completed_at >= prev_week_start, Execution.completed_at < week_start)
+        .count()
+    )
+    failed_or_cancelled_this_week = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.status.in_([ExecutionStatus.FAILED, ExecutionStatus.CANCELLED]))
+        .filter(Execution.updated_at >= week_start, Execution.updated_at < next_week_start)
+        .count()
+    )
+    stalled_active_over_48h = (
+        session.query(Execution)
+        .filter(Execution.org_id == org_id)
+        .filter(Execution.status.in_([ExecutionStatus.PENDING, ExecutionStatus.IN_PROGRESS]))
+        .filter(Execution.started_at < (now_dt - timedelta(hours=48)))
+        .count()
+    )
+    completed_vs_last_week_pct = None
+    if completed_last_week > 0:
+        completed_vs_last_week_pct = round(((completed_this_week - completed_last_week) / completed_last_week) * 100, 1)
+
+    return {
+        "window": "week_to_date",
+        "active_executions": active_executions,
+        "started_this_week": started_this_week,
+        "completed_this_week": completed_this_week,
+        "failed_or_cancelled_this_week": failed_or_cancelled_this_week,
+        "stalled_active_over_48h": stalled_active_over_48h,
+        "completed_last_week": completed_last_week,
+        "completed_vs_last_week_pct": completed_vs_last_week_pct,
+    }
+
+
+def _dashboard_build_action_board(tasks_summary: dict[str, Any], compliance: dict[str, Any]) -> dict[str, Any]:
+    findings = (compliance or {}).get("findings") or {}
+    output_expiry = findings.get("output_expiry") or {}
+    output_ready = findings.get("output_ready_date") or {}
+
+    candidates = [
+        {
+            "key": "expired_raw",
+            "label": "Expired raw materials with stock",
+            "count": (findings.get("expired_materials") or {}).get("count") or 0,
+            "severity": "critical",
+            "href": "/core/inventory/view",
+        },
+        {
+            "key": "untracked_items",
+            "label": "Untracked items needing reconciliation",
+            "count": (findings.get("untracked_items") or {}).get("count") or 0,
+            "severity": "high",
+            "href": "/core/notifications",
+        },
+        {
+            "key": "output_expired",
+            "label": "Expired outputs",
+            "count": output_expiry.get("red_count") or 0,
+            "severity": "critical",
+            "href": "/core/notifications",
+        },
+        {
+            "key": "output_not_ready",
+            "label": "Outputs waiting for ready date",
+            "count": output_ready.get("red_count") or 0,
+            "severity": "informational",
+            "href": "/core/notifications",
+        },
+        {
+            "key": "overdue_tasks",
+            "label": "Overdue CRM tasks",
+            "count": (tasks_summary or {}).get("overdue_count") or 0,
+            "severity": "high",
+            "href": "/crm/tasks",
+        },
+    ]
+
+    severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
+    items = [item for item in candidates if (item.get("count") or 0) > 0]
+    items.sort(key=lambda item: (severity_rank.get(str(item.get("severity") or "low"), 4), -(item.get("count") or 0)))
+    critical_actions_total = sum(
+        int(item.get("count") or 0) for item in items if str(item.get("severity") or "").lower() != "informational"
+    )
+
+    return {"critical_actions_total": critical_actions_total, "items": items[:6]}
+
+
+@core_bp.route("/api/core/dashboard/summary", methods=["GET"])
+@requires_auth
+def get_dashboard_summary():
+    org_id = UUID(g.org_id)
+    window_days_raw = (request.args.get("window_days") or "30").strip()
+    try:
+        window_days = int(window_days_raw)
+    except ValueError:
+        return jsonify({"error": "window_days must be an integer"}), 400
+    if window_days < 7 or window_days > 180:
+        return jsonify({"error": "window_days must be between 7 and 180"}), 400
+
+    today = date.today()
+    now_dt = datetime.now()
+    day_start = datetime.combine(today, datetime.min.time())
+    next_day_start = day_start + timedelta(days=1)
+    week_start, next_week_start, _prev_week_start = _dashboard_week_boundaries(today)
+
+    runner = corechecks.CoreChecksRunner(org_id=org_id, session=db_session)
+    check_results = runner.run_all_checks()
+
+    from app.core.backend.system_status import build_system_status_payload
+
+    system_status = build_system_status_payload(org_id, db_session, check_results)
+    compliance = _dashboard_build_compliance_summary(check_results, system_status)
+
+    operations_day_summary = _dashboard_operations_summary(org_id, db_session, day_start, next_day_start)
+    operations_week_summary = _dashboard_operations_weekly_summary(org_id, db_session, now_dt, today)
+    operator_actions_this_week = (
+        db_session.query(EntityEvent)
+        .filter(EntityEvent.org_id == org_id)
+        .filter(EntityEvent.created_at >= week_start, EntityEvent.created_at < next_week_start)
+        .filter(EntityEvent.actor_type == "user")
+        .count()
+    )
+    audit_log = {
+        "limit": 10,
+        "day": _dashboard_event_log_period(org_id, db_session, day_start, next_day_start, limit=10),
+        "week": _dashboard_event_log_period(org_id, db_session, week_start, next_week_start, limit=10),
+    }
+
+    tasks_summary: dict[str, Any] = {
+        "enabled": False,
+        "open_count": 0,
+        "due_today_count": 0,
+        "overdue_count": 0,
+        "due_this_week_count": 0,
+        "top_tasks": [],
+    }
+    open_tasks_for_insights: list[dict[str, Any]] = []
+    sales_summary: dict[str, Any] = {
+        "enabled": False,
+        "current_month_revenue": 0.0,
+        "outstanding_receivables": 0.0,
+        "revenue_vs_last_month_pct": None,
+        "baseline_target_mtd": None,
+        "baseline_variance_mtd": None,
+        "baseline_attainment_pct": None,
+    }
+    revenue_daily_mtd: list[dict[str, Any]] = []
+
+    if config.crm_enabled:
+        try:
+            from app.features.crm.services.crm_service import CRMService
+
+            crm_service = CRMService(db_session)
+            crm_overview = crm_service.get_overview(org_id)
+            trace_cfg = crm_service.get_traceability_config(org_id)
+            open_tasks_for_insights = crm_overview.get("open_tasks") or []
+            tasks_summary = _dashboard_summarize_tasks(
+                open_tasks_for_insights,
+                today,
+                week_start=week_start.date(),
+                week_end_exclusive=next_week_start.date(),
+            )
+            month_start = today.replace(day=1)
+            revenue_daily_mtd = crm_service.daily_sales_for_period(org_id, month_start, today + timedelta(days=1))
+            baseline_target = trace_cfg.get("revenue_baseline_target_mtd")
+            baseline_variance = None
+            baseline_attainment = None
+            if baseline_target is not None:
+                try:
+                    baseline_target = float(baseline_target)
+                    baseline_variance = float((crm_overview.get("current_month_revenue") or 0.0) - baseline_target)
+                    if baseline_target > 0:
+                        baseline_attainment = round(((crm_overview.get("current_month_revenue") or 0.0) / baseline_target) * 100, 1)
+                except (TypeError, ValueError):
+                    baseline_target = None
+            sales_summary = {
+                "enabled": True,
+                "current_month_revenue": crm_overview.get("current_month_revenue") or 0.0,
+                "outstanding_receivables": crm_overview.get("outstanding_receivables") or 0.0,
+                "revenue_vs_last_month_pct": crm_overview.get("revenue_vs_last_month_pct"),
+                "baseline_target_mtd": baseline_target,
+                "baseline_variance_mtd": baseline_variance,
+                "baseline_attainment_pct": baseline_attainment,
+            }
+        except Exception:
+            logger.exception("Failed to assemble CRM summary for org_id=%s", org_id)
+
+    action_board = _dashboard_build_action_board(tasks_summary, compliance)
+
+    operator_series = _dashboard_series_from_date_counts(
+        _dashboard_event_counts_by_day(org_id, db_session, week_start, next_week_start, actor_type="user"),
+        start_day=week_start.date(),
+        end_day=today,
+        cumulative=True,
+    )
+
+    open_action_dates = _dashboard_open_action_item_dates(check_results, open_tasks_for_insights, today)
+    open_action_counts: dict[date, int] = {}
+    for d in open_action_dates:
+        open_action_counts[d] = int(open_action_counts.get(d, 0)) + 1
+    open_action_series = _dashboard_series_from_date_counts(
+        open_action_counts,
+        start_day=min(open_action_counts) if open_action_counts else (today - timedelta(days=6)),
+        end_day=max(open_action_counts) if open_action_counts else today,
+        cumulative=True,
+    )
+
+    execution_started_series = _dashboard_series_from_date_counts(
+        _dashboard_execution_counts_by_day(org_id, db_session, week_start, next_week_start, column="started"),
+        start_day=week_start.date(),
+        end_day=today,
+        cumulative=True,
+    )
+    execution_completed_series = _dashboard_series_from_date_counts(
+        _dashboard_execution_counts_by_day(org_id, db_session, week_start, next_week_start, column="completed"),
+        start_day=week_start.date(),
+        end_day=today,
+        cumulative=True,
+    )
+
+    tasks_due_counts: dict[date, int] = {}
+    for task in open_tasks_for_insights:
+        if not isinstance(task, dict):
+            continue
+        status = str(task.get("status") or "").strip().lower()
+        if status not in {"pending", "in_progress"}:
+            continue
+        due = _dashboard_parse_date_like(task.get("due_date"))
+        if due is None:
+            continue
+        if week_start.date() <= due < next_week_start.date():
+            tasks_due_counts[due] = int(tasks_due_counts.get(due, 0)) + 1
+    tasks_due_series = _dashboard_series_from_date_counts(
+        tasks_due_counts,
+        start_day=week_start.date(),
+        end_day=today,
+        cumulative=True,
+    )
+
+    revenue_day_counts: dict[date, int] = {}
+    for row in revenue_daily_mtd:
+        if not isinstance(row, dict):
+            continue
+        d = _dashboard_parse_date_like(row.get("day"))
+        if d is None:
+            continue
+        revenue_day_counts[d] = int(round(float(row.get("total") or 0)))
+    month_start_date = today.replace(day=1)
+    revenue_series = _dashboard_series_from_date_counts(
+        revenue_day_counts,
+        start_day=month_start_date,
+        end_day=today,
+        cumulative=True,
+    )
+
+    return (
+        jsonify(
+            {
+                "generated_at": datetime.now().isoformat(),
+                "window_days": window_days,
+                "tasks": tasks_summary,
+                "compliance": compliance,
+                "action_board": action_board,
+                "operator_actions": {"week_to_date": operator_actions_this_week},
+                "audit_log": audit_log,
+                "operations": operations_week_summary,
+                "operations_today": operations_day_summary,
+                "sales": sales_summary,
+                "insight_series": {
+                    "operator_actions_week": operator_series,
+                    "open_action_items": open_action_series,
+                    "active_batches_week": execution_started_series,
+                    "batch_completion_week": execution_completed_series,
+                    "tasks_due_week": tasks_due_series,
+                    "revenue_goal_mtd": revenue_series,
+                },
+            }
+        ),
+        200,
+    )
 
 
 @core_bp.route("/api/core/metrics", methods=["GET"])

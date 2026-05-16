@@ -268,6 +268,7 @@ class CRMService:
                 "manual_review_days": 7,
                 "strict_mapping": True,
                 "task_done_archive_days": 7,
+                "revenue_baseline_target_mtd": None,
             }
         return {
             "matching_strategy": row.matching_strategy,
@@ -275,6 +276,9 @@ class CRMService:
             "manual_review_days": row.manual_review_days,
             "strict_mapping": bool(row.strict_mapping),
             "task_done_archive_days": int(getattr(row, "task_done_archive_days", 7) or 7),
+            "revenue_baseline_target_mtd": float(row.revenue_baseline_target_mtd)
+            if getattr(row, "revenue_baseline_target_mtd", None) is not None
+            else None,
         }
 
     def update_traceability_config(self, org_id: UUID, data: dict) -> dict:
@@ -286,6 +290,13 @@ class CRMService:
         strict_mapping = bool(data.get("strict_mapping", True))
         task_done_archive_days = int(data.get("task_done_archive_days") or 7)
         task_done_archive_days = min(90, max(1, task_done_archive_days))
+        revenue_baseline_target_mtd = data.get("revenue_baseline_target_mtd")
+        if revenue_baseline_target_mtd in ("", None):
+            revenue_baseline_target_mtd = None
+        else:
+            revenue_baseline_target_mtd = round(float(revenue_baseline_target_mtd), 2)
+            if revenue_baseline_target_mtd < 0:
+                raise ValueError("revenue_baseline_target_mtd must be >= 0")
         row = self.traceability_repo.upsert(
             org_id=org_id,
             matching_strategy=strategy,
@@ -293,6 +304,7 @@ class CRMService:
             manual_review_days=manual_review_days,
             strict_mapping=strict_mapping,
             task_done_archive_days=task_done_archive_days,
+            revenue_baseline_target_mtd=revenue_baseline_target_mtd,
         )
         self.db.commit()
         return {
@@ -301,6 +313,9 @@ class CRMService:
             "manual_review_days": row.manual_review_days,
             "strict_mapping": bool(row.strict_mapping),
             "task_done_archive_days": int(getattr(row, "task_done_archive_days", 7) or 7),
+            "revenue_baseline_target_mtd": float(row.revenue_baseline_target_mtd)
+            if getattr(row, "revenue_baseline_target_mtd", None) is not None
+            else None,
         }
 
     def create_customer_invoice(self, contact_id: UUID, org_id: UUID, data: dict) -> dict:
@@ -587,6 +602,9 @@ class CRMService:
 
     def monthly_sales(self, org_id: UUID, months: int = 12) -> list[dict]:
         return self.invoice_repo.monthly_sales_totals(org_id, months=months)
+
+    def daily_sales_for_period(self, org_id: UUID, start_date: date, end_date: date) -> list[dict]:
+        return self.invoice_repo.daily_sales_totals_for_period(org_id, start_date, end_date)
 
     def customer_breakdown(self, org_id: UUID, top_n: int = 20) -> list[dict]:
         return self.invoice_repo.customer_sales_breakdown(org_id, top_n=top_n)

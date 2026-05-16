@@ -76,10 +76,14 @@
       _smAllActivity = activityData.events || [];
 
       smUpdateSearchPool();
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = (params.get('tab') || '').toLowerCase().trim();
+      if (['inventory', 'batches', 'suppliers', 'activity'].includes(tabParam)) {
+        currentBrowseTab = tabParam;
+      }
       smRenderBrowseGrid();
       smLoadFindings();
 
-      const params = new URLSearchParams(window.location.search);
       if (params.get('show') === 'check-needed') smSwitchFindingsTab('expired');
     } catch (err) {
       console.error('[sourcemap] load failed', err);

@@ -85,6 +85,74 @@
             </div>
           </section>
 
+          <section class="spa-form-section core2-active-batches-panel" aria-labelledby="core2-active-batches-title">
+            <div class="core2-active-header-row">
+              <div class="core2-active-heading-wrap">
+                <h2 id="core2-active-batches-title" class="core2-active-title">Active batches</h2>
+                <p class="core2-active-subline">CORE · EXECUTIONS <span class="core2-active-live-dot"></span> LIVE</p>
+              </div>
+              <div class="core2-active-controls">
+                <label class="core2-active-control">
+                  <span>Process</span>
+                  <select id="core2-active-process-select" class="core2-active-select" aria-label="Select process">
+                    <option value="">Loading processes...</option>
+                  </select>
+                </label>
+                <div class="core2-active-view-toggle" role="tablist" aria-label="Active batch view mode">
+                  <button type="button" class="core2-active-view-btn core2-active-view-btn--active" data-core2-active-view="pipeline" role="tab" aria-selected="true">Pipeline</button>
+                  <button type="button" class="core2-active-view-btn" data-core2-active-view="timeline" role="tab" aria-selected="false">Timeline</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="core2-active-step-rail" id="core2-active-step-rail">
+              <p class="core2-active-batches-empty">Loading process steps...</p>
+            </div>
+
+            <div class="core2-active-status-row">
+              <div class="core2-active-status-metrics">
+                <span><strong data-core2-inflight-count>0</strong> in flight</span>
+                <span><strong data-core2-completed7d-count>0</strong> completed (7d)</span>
+              </div>
+              <div class="core2-active-status-note">
+                <span data-core2-active-total-note>Showing 0 active batches</span>
+              </div>
+            </div>
+
+            <div class="core2-active-view" id="core2-active-pipeline-view">
+              <div class="core2-active-pipeline-grid" id="core2-active-pipeline-grid">
+                <p class="core2-active-batches-empty">Loading active batches...</p>
+              </div>
+            </div>
+
+            <div class="core2-active-view" id="core2-active-timeline-view" hidden>
+              <div class="core2-active-timeline" id="core2-active-timeline">
+                <p class="core2-active-batches-empty">Loading timeline...</p>
+              </div>
+            </div>
+          </section>
+
+          <div class="core2-active-detail-overlay" id="core2-active-detail-overlay" hidden>
+            <div class="core2-active-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-active-detail-title">
+              <div class="core2-active-detail-head">
+                <h3 id="core2-active-detail-title">Batch details</h3>
+                <button type="button" class="core2-active-detail-close" data-core2-detail-close aria-label="Close batch details">&times;</button>
+              </div>
+              <div class="core2-active-detail-body">
+                <p class="core2-active-detail-id" id="core2-active-detail-id">Execution</p>
+                <p class="core2-active-detail-meta" id="core2-active-detail-process">Process</p>
+                <p class="core2-active-detail-meta" id="core2-active-detail-started">Started</p>
+                <div class="core2-active-detail-steps" id="core2-active-detail-steps">
+                  <p class="core2-active-batches-empty">No step metadata available.</p>
+                </div>
+              </div>
+              <div class="core2-active-detail-foot">
+                <button type="button" class="core2-active-detail-btn core2-active-detail-btn--ghost" data-core2-detail-close>Close</button>
+                <a class="core2-active-detail-btn core2-active-detail-btn--primary" id="core2-active-detail-next-step" href="/core/processes" hx-boost="false">Record next step</a>
+              </div>
+            </div>
+          </div>
+
           <!-- Traceability (sourcemap) -->
           <section class="spa-form-section" style="margin-top: 24px; margin-bottom: 32px;" aria-labelledby="core2-section-traceability">
             <h2 id="core2-section-traceability" class="spa-form-section-title">Traceability</h2>
@@ -351,7 +419,7 @@
       div.textContent = text;
       return div.innerHTML;
     }
-    
+
     // Render inventory for V2 Modern design
     function countInventoryByType(items) {
       const grouped = { raw: 0, intermediate: 0, final: 0 };

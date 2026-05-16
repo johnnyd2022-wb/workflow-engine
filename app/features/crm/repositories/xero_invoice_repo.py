@@ -383,6 +383,35 @@ class XeroInvoiceRepository:
             for row in rows
         ]
 
+    def daily_sales_totals_for_period(self, org_id: UUID, start_date: date, end_date: date) -> list[dict]:
+        """Return daily sales totals for AUTHORISED/PAID invoices (ACCREC only)."""
+        rows = (
+            self.db.query(
+                XeroInvoice.date.label("day"),
+                func.sum(XeroInvoice.total).label("total"),
+                func.count(XeroInvoice.id).label("invoice_count"),
+            )
+            .filter(
+                XeroInvoice.org_id == org_id,
+                XeroInvoice.invoice_type == "ACCREC",
+                XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
+                XeroInvoice.date.isnot(None),
+                XeroInvoice.date >= start_date,
+                XeroInvoice.date < end_date,
+            )
+            .group_by(XeroInvoice.date)
+            .order_by(XeroInvoice.date.asc())
+            .all()
+        )
+        return [
+            {
+                "day": row.day.isoformat() if row.day else None,
+                "total": float(row.total or 0),
+                "invoice_count": int(row.invoice_count or 0),
+            }
+            for row in rows
+        ]
+
     def monthly_sales_totals_for_contact(
         self,
         contact_id: UUID,
