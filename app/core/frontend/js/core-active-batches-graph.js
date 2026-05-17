@@ -430,7 +430,10 @@
     var gridLines = [];
     var dayMs = 24 * 3600 * 1000;
     var totalDays = Math.max(1, Math.ceil(rangeMs / dayMs));
-    var tickCount = totalDays <= 14 ? 7 : (totalDays <= 60 ? 8 : 9);
+    var viewportWidth = Math.max(320, (host && host.clientWidth) ? host.clientWidth : (window.innerWidth || 1024));
+    var maxTicksByViewport = viewportWidth < 640 ? 4 : (viewportWidth < 900 ? 6 : 8);
+    var baseTicksByRange = totalDays <= 14 ? 7 : (totalDays <= 60 ? 8 : 9);
+    var tickCount = Math.max(3, Math.min(maxTicksByViewport, baseTicksByRange));
     var labelFormat = totalDays > 90
       ? { month: 'short', year: '2-digit' }
       : { month: 'short', day: 'numeric' };

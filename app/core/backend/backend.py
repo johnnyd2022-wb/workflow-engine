@@ -663,6 +663,20 @@ def inventory_view():
     return render_template("inventory/view.html", active_page="core")
 
 
+@core_bp.route("/core/inventory/live", methods=["GET"])
+@requires_auth
+def inventory_live_view():
+    """Dedicated live inventory experience (drill-in from Core inventory tab)."""
+    return render_template("core/core2.html", active_page="core", core2_focus="inventory_live")
+
+
+@core_bp.route("/core/executions/live", methods=["GET"])
+@requires_auth
+def executions_live_view():
+    """Dedicated active batches experience (drill-in from Core product workflows tab)."""
+    return render_template("core/core2.html", active_page="core", core2_focus="active_batches_live")
+
+
 @core_bp.route("/core/inventory/dispose", methods=["GET"])
 @requires_auth
 def inventory_dispose():
