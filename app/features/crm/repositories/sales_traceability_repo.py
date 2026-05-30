@@ -23,6 +23,7 @@ class SalesTraceabilityConfigRepository:
         manual_review_days: int = 7,
         strict_mapping: bool = True,
         task_done_archive_days: int = 7,
+        revenue_baseline_target_mtd=None,
     ) -> SalesTraceabilityConfig:
         row = self.get_for_org(org_id)
         if row is None:
@@ -33,6 +34,7 @@ class SalesTraceabilityConfigRepository:
                 manual_review_days=manual_review_days,
                 strict_mapping=strict_mapping,
                 task_done_archive_days=task_done_archive_days,
+                revenue_baseline_target_mtd=revenue_baseline_target_mtd,
             )
             self.db.add(row)
             return row
@@ -41,4 +43,5 @@ class SalesTraceabilityConfigRepository:
         row.manual_review_days = manual_review_days
         row.strict_mapping = strict_mapping
         row.task_done_archive_days = task_done_archive_days
+        row.revenue_baseline_target_mtd = revenue_baseline_target_mtd
         return row

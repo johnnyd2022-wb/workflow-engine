@@ -315,6 +315,12 @@ window.CoreAPI = window.CoreAPI || {
         return this.request('/metrics');
     },
 
+    // Dashboard aggregate summary
+    async getDashboardSummary(windowDays = 30) {
+        const days = Number(windowDays) || 30;
+        return this.request(`/dashboard/summary?window_days=${encodeURIComponent(days)}`);
+    },
+
     // Reset demo DB (test environment only)
     async resetDemoDb() {
         return this.request('/reset-demo-db', {
@@ -909,5 +915,4 @@ if (typeof window !== 'undefined') {
         });
     };
 }
-
 

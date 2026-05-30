@@ -142,6 +142,31 @@
     </div>
   </div>
 
+  <div class="crm-card" style="margin-bottom:16px;">
+    <div class="crm-analytics-header"><span class="crm-analytics-title">Revenue</span></div>
+    <div style="padding:16px; display:grid; gap:12px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;">
+        <div class="crm-form-group">
+          <label class="crm-form-label">Monthly Revenue Baseline Target</label>
+          <input
+            class="crm-form-input"
+            type="number"
+            min="0"
+            step="0.01"
+            x-model="traceConfig.revenue_baseline_target_mtd"
+            placeholder="e.g. 120000"
+          >
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">
+            Optional target used by dashboard to show MTD attainment and variance against plan.
+          </p>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end;">
+        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Revenue Settings</button>
+      </div>
+    </div>
+  </div>
+
   <div class="crm-card">
     <div class="crm-analytics-header"><span class="crm-analytics-title">Product Mappings</span></div>
     <div style="padding:16px; border-bottom:1px solid var(--border-default,#e5e7eb); display:grid; gap:10px;">

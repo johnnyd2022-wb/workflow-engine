@@ -33,7 +33,7 @@
     /* Sidebar Text */
     --sidebar-text: #94A3B8;
     --sidebar-text-hover: hsl(210, 20%, 85%);
-    --sidebar-text-active: #2DD4BF;
+    --sidebar-text-active: #2BC4A2;
     --sidebar-label: rgba(148, 163, 184, 0.6);
 
     /* Mustard accent (shared with base_spa.html gradients) */
@@ -318,15 +318,16 @@
     color: var(--sidebar-text-hover);
   }
   
-  /* Selected default (mobile bottom tab + fallback): teal text. Desktop left nav overrides ≥768px below. */
+  /* Selected default (mobile bottom tab + fallback): solid teal with high-contrast label/icon. */
   .nav-link.active {
-    background: rgba(45, 212, 191, 0.1);
-    color: var(--sidebar-text-active);
+    background: #2BC4A2;
+    color: #081716;
+    box-shadow: none;
   }
 
   .nav-link.active .nav-link-text {
-    color: var(--sidebar-text-active);
-    font-weight: 500;
+    color: #081716;
+    font-weight: 700;
   }
   
   .nav-link-icon-wrapper {
@@ -355,6 +356,8 @@
     font-size: 14px;
     font-weight: 500;
     flex: 1;
+    font-family: "Momo Trust Display", sans-serif;
+    letter-spacing: 0.01em;
   }
   
   .sidebar.collapsed .nav-link-text {
@@ -377,6 +380,7 @@
   .nav-link.active .nav-link-arrow {
     opacity: 0.6;
     transform: translateX(0);
+    color: #081716;
   }
   
   .sidebar.collapsed .nav-link-arrow {
@@ -550,6 +554,7 @@
       font-weight: 600;
       line-height: 1.05;
       letter-spacing: 0.01em;
+      font-family: "Momo Trust Display", sans-serif;
     }
     .sidebar .nav-link-arrow {
       display: none;
@@ -565,45 +570,29 @@
       display: block;
     }
 
-    /* Selected tab: small circular halo behind icon only (not full-row rectangle) */
+    /* Selected tab: cutout style against solid teal rail */
     .sidebar .nav-link.active {
-      background: transparent;
+      background: #2BC4A2;
+      border-radius: 12px;
+      border: none;
       box-shadow: none;
     }
     .sidebar .nav-link.active .nav-link-text,
     .sidebar .nav-link.active .nav-link-icon {
-      color: var(--sidebar-text-active);
+      color: #081716;
     }
-    /* Circle halo on ::before so layout matches inactive tabs (no flex box / fixed size lift) */
     .sidebar .nav-link.active .nav-link-icon-wrapper {
-      position: relative;
       padding: 5px;
       margin-bottom: -2px;
       background: transparent;
       box-shadow: none;
     }
-    .sidebar .nav-link.active .nav-link-icon-wrapper::before {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      background: rgba(45, 212, 191, 0.18);
-      z-index: 0;
-      pointer-events: none;
-    }
-    .sidebar .nav-link.active .nav-link-icon {
-      position: relative;
-      z-index: 1;
+    .sidebar .nav-link.active .nav-link-arrow {
+      color: #081716;
+      opacity: 0.72;
     }
     .sidebar .nav-link.active:hover {
-      background: transparent;
-    }
-    .sidebar .nav-link.active:hover .nav-link-icon-wrapper::before {
-      background: rgba(45, 212, 191, 0.26);
+      background: #2BC4A2;
     }
 
     /* Bottom tab: subtler hover than full desktop row tint */
@@ -622,36 +611,37 @@
     }
   }
 
-  /* Left sidebar (laptop + desktop): active tab = teal pill. */
+  /* Left sidebar (laptop + desktop): solid teal active tab. */
   @media (min-width: 768px) {
     .sidebar .nav-link {
       border-radius: 8px;
     }
     .sidebar .nav-link.active {
-      background: rgba(45, 212, 191, 0.1);
-      color: #2DD4BF;
-      font-weight: 500;
+      background: #2BC4A2;
+      color: #081716;
+      font-weight: 700;
+      border: none;
       box-shadow: none;
     }
     .sidebar .nav-link.active .nav-link-text,
     .sidebar .nav-link.active .nav-link-icon {
-      color: #2DD4BF;
+      color: #081716;
     }
     .sidebar .nav-link.active .nav-link-icon-wrapper {
       background: transparent;
       box-shadow: none;
     }
     .sidebar .nav-link.active .nav-link-arrow {
-      color: #2DD4BF;
+      color: #081716;
       opacity: 0.6;
     }
     .sidebar .nav-link.active:hover {
-      background: rgba(45, 212, 191, 0.14);
-      color: #2DD4BF;
+      background: #2BC4A2;
+      color: #081716;
     }
     .sidebar .nav-link.active:hover .nav-link-text,
     .sidebar .nav-link.active:hover .nav-link-icon {
-      color: #2DD4BF;
+      color: #081716;
     }
   }
   

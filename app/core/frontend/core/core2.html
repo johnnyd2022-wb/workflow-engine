@@ -9,7 +9,7 @@
 
 {% block content %}
         {# System findings moved to /core/notifications #}
-
+        {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
         <div class="max-content">
           {# Dark mode: full-bleed yellow sleeve (spa-theme.css) pulls into #page-content top padding so fill meets the header. #}
           <div class="spa-hub-yellow-sleeve">
@@ -57,155 +57,419 @@
           </div>
 
           <section class="spa-form-section spa-page-hero spa-page-hero--core" aria-labelledby="core2-hub-title">
-            <h1 id="core2-hub-title" class="page-title">Core</h1>
+            <h1 id="core2-hub-title" class="page-title">
+              {% if core2_focus_mode == 'inventory_live' %}Live inventory
+              {% elif core2_focus_mode == 'active_batches_live' %}Active batches
+              {% else %}Core
+              {% endif %}
+            </h1>
           </section>
 
-          <section class="spa-form-section core2-journey-section" aria-label="Traceability actions">
+          <section class="spa-form-section core2-journey-section core2-journey-section--actions" aria-label="Traceability actions">
             <div id="core2-journey-actions"></div>
           </section>
 
-          <section class="spa-form-section core2-stats-panel" aria-label="Core overview stats">
-            <div class="core2-stats-hybrid" role="group" aria-label="Core metrics segmented">
-              <div class="core2-stats-hybrid__cell">
-                <div class="core2-stats-hybrid__label">Total Processes</div>
-                <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
+          {% if core2_focus_mode == '' %}
+          <section class="spa-form-section core2-main-tabs-wrap" aria-label="Core sections">
+            <div class="flow-mode-segmented core2-main-tabs" role="tablist" aria-label="Core pages">
+              <button type="button" class="flow-mode-segment flow-mode-segment--active" data-core2-tab-target="overview" role="tab" aria-selected="true">Overview</button>
+              <button type="button" class="flow-mode-segment" data-core2-tab-target="inventory" role="tab" aria-selected="false">Inventory</button>
+              <button type="button" class="flow-mode-segment" data-core2-tab-target="workflows" role="tab" aria-selected="false">Product workflows</button>
+            </div>
+          </section>
+
+          <div class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview">
+            <section class="spa-form-section core2-stats-panel" aria-label="Core overview stats">
+              <div class="core2-stats-hybrid" role="group" aria-label="Core metrics segmented">
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Total Processes</div>
+                  <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
+                </div>
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Active Batches</div>
+                  <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
+                </div>
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Completed Batches</div>
+                  <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
+                </div>
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Inventory Items</div>
+                  <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
+                </div>
               </div>
-              <div class="core2-stats-hybrid__cell">
-                <div class="core2-stats-hybrid__label">Active Batches</div>
-                <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
+            </section>
+            <section class="spa-form-section core2-kpi-grid" aria-label="Overview insights">
+              <article class="core2-kpi-card">
+                <h3 class="core2-kpi-card__title">Batch dwell by current step</h3>
+                <p class="core2-kpi-card__sub">Average hours batches are spending at each process step</p>
+                <div id="core2-overview-batch-aging" class="core2-kpi-bars">
+                  <p class="core2-active-batches-empty">Loading...</p>
+                </div>
+              </article>
+              <article class="core2-kpi-card">
+                <h3 class="core2-kpi-card__title">Traceability capture</h3>
+                <p class="core2-kpi-card__sub">Inventory items linked to execution flow or supplier batch</p>
+                <div id="core2-overview-traceability" class="core2-kpi-stack">
+                  <p class="core2-active-batches-empty">Loading...</p>
+                </div>
+              </article>
+              <article class="core2-kpi-card">
+                <h3 class="core2-kpi-card__title">Inventory alerts</h3>
+                <p class="core2-kpi-card__sub">Low stock, expiring, and expired item pressure</p>
+                <div id="core2-overview-inventory-alerts" class="core2-kpi-stack">
+                  <p class="core2-active-batches-empty">Loading...</p>
+                </div>
+                <p class="core2-kpi-card__note">Low stock means 10% or less remaining vs starting quantity. Allocated means linked to an active execution via source execution.</p>
+              </article>
+            </section>
+          </div>
+
+          <div class="core2-tab-panel" data-core2-tab-panel="inventory" hidden>
+            <section class="spa-form-section core2-stats-panel core2-tab-summary" aria-label="Inventory summary">
+              <div class="core2-stats-hybrid" role="group" aria-label="Inventory summary metrics">
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Items on hand</div>
+                  <div class="core2-stats-hybrid__value" id="core2-inv-summary-lines">0</div>
+                  <div class="core2-mini-meter"><span id="core2-inv-summary-lines-bar" style="width:0%"></span></div>
+                </div>
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Items in use</div>
+                  <div class="core2-stats-hybrid__value" id="core2-inv-summary-inuse">0</div>
+                  <div class="core2-mini-meter"><span id="core2-inv-summary-inuse-bar" style="width:0%"></span></div>
+                </div>
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Low stock</div>
+                  <div class="core2-stats-hybrid__value" id="core2-inv-summary-low">0</div>
+                  <div class="core2-mini-meter"><span id="core2-inv-summary-low-bar" style="width:0%"></span></div>
+                </div>
               </div>
-              <div class="core2-stats-hybrid__cell">
-                <div class="core2-stats-hybrid__label">Completed Batches</div>
-                <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
+              <div class="core2-kpi-grid core2-kpi-grid--two">
+                <article class="core2-kpi-card">
+                  <h3 class="core2-kpi-card__title">Expiry pressure</h3>
+                  <p class="core2-kpi-card__sub">How much stock is at risk over time horizons</p>
+                  <div id="core2-inventory-expiry-pressure" class="core2-kpi-stack">
+                    <p class="core2-active-batches-empty">Loading...</p>
+                  </div>
+                </article>
+                <article class="core2-kpi-card">
+                  <h3 class="core2-kpi-card__title">Traceability gaps</h3>
+                  <p class="core2-kpi-card__sub">Items missing both execution linkage and supplier batch</p>
+                  <div id="core2-inventory-traceability-gaps" class="core2-kpi-table">
+                    <p class="core2-active-batches-empty">Loading...</p>
+                  </div>
+                </article>
+                <article class="core2-kpi-card">
+                  <h3 class="core2-kpi-card__title">Recent stock movement</h3>
+                  <p class="core2-kpi-card__sub">Quantity changes in the last 24 hours</p>
+                  <div id="core2-inventory-recent-movement" class="core2-kpi-stack">
+                    <p class="core2-active-batches-empty">Loading...</p>
+                  </div>
+                  <p class="core2-kpi-card__note">Net change is signed quantity movement in the last 24h. Total moved is absolute volume moved regardless of direction.</p>
+                </article>
               </div>
-              <div class="core2-stats-hybrid__cell">
-                <div class="core2-stats-hybrid__label">Inventory Items</div>
-                <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
+              <div class="core2-hub-card-stack core2-hub-card-stack--single">
+                <a href="/core/inventory/live?back_tab=inventory" class="core2-hub-card" aria-labelledby="core2-live-inventory-title">
+                  <span class="core2-hub-card__icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 7l9-4 9 4-9 4-9-4z"></path>
+                      <path d="M3 17l9 4 9-4"></path>
+                      <path d="M3 12l9 4 9-4"></path>
+                    </svg>
+                  </span>
+                  <span class="core2-hub-card__text">
+                    <h3 id="core2-live-inventory-title" class="spa-form-section-title">Open live inventory</h3>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Drill into item cards, movement feed, and by-process stock view.</p>
+                  </span>
+                </a>
+              </div>
+            </section>
+          </div>
+
+          <div class="core2-tab-panel" data-core2-tab-panel="workflows" hidden>
+            <section class="spa-form-section core2-stats-panel core2-tab-summary" aria-label="Product workflow summary">
+              <div class="core2-stats-hybrid" role="group" aria-label="Workflow summary metrics">
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Batches in flight</div>
+                  <div class="core2-stats-hybrid__value" id="core2-wf-summary-active">0</div>
+                  <div class="core2-mini-meter"><span id="core2-wf-summary-active-bar" style="width:0%"></span></div>
+                </div>
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Completed this week</div>
+                  <div class="core2-stats-hybrid__value" id="core2-wf-summary-completed7d">0</div>
+                  <div class="core2-mini-meter"><span id="core2-wf-summary-completed7d-bar" style="width:0%"></span></div>
+                </div>
+                <div class="core2-stats-hybrid__cell">
+                  <div class="core2-stats-hybrid__label">Active workflows</div>
+                  <div class="core2-stats-hybrid__value" id="core2-wf-summary-processes">0</div>
+                  <div class="core2-mini-meter"><span id="core2-wf-summary-processes-bar" style="width:0%"></span></div>
+                </div>
+              </div>
+              <div class="core2-kpi-grid core2-kpi-grid--two">
+                <article class="core2-kpi-card">
+                  <h3 class="core2-kpi-card__title">Batches at current step</h3>
+                  <p class="core2-kpi-card__sub">Active queue by process and current step</p>
+                  <div id="core2-workflow-step-load" class="core2-kpi-bars">
+                    <p class="core2-active-batches-empty">Loading...</p>
+                  </div>
+                </article>
+                <article class="core2-kpi-card">
+                  <h3 class="core2-kpi-card__title">Throughput by workflow (7d)</h3>
+                  <p class="core2-kpi-card__sub">Completed batches per process this week</p>
+                  <div id="core2-workflow-throughput" class="core2-kpi-table">
+                    <p class="core2-active-batches-empty">Loading...</p>
+                  </div>
+                </article>
+                <article class="core2-kpi-card">
+                  <h3 class="core2-kpi-card__title">Action readiness</h3>
+                  <p class="core2-kpi-card__sub">Whether active batches are ready to be progressed now</p>
+                  <div id="core2-workflow-readiness" class="core2-kpi-stack">
+                    <p class="core2-active-batches-empty">Loading...</p>
+                  </div>
+                </article>
+              </div>
+              <div class="core2-hub-card-stack core2-hub-card-stack--single">
+                <a href="/core/executions/live?back_tab=workflows" class="core2-hub-card" aria-labelledby="core2-open-batches-title">
+                  <span class="core2-hub-card__icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 12h7"></path>
+                      <path d="M14 12h7"></path>
+                      <path d="M10 5l4 7-4 7"></path>
+                    </svg>
+                  </span>
+                  <span class="core2-hub-card__text">
+                    <h3 id="core2-open-batches-title" class="spa-form-section-title">Open active batches</h3>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Pipeline and timeline views to continue in-flight production quickly.</p>
+                  </span>
+                </a>
+              </div>
+              <div class="core2-hub-card-stack">
+                <a href="/core/flows/create" class="core2-hub-card" aria-labelledby="core2-proc-create-title">
+                  <span class="core2-hub-card__icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="2" y="8" width="6" height="6" rx="1"/>
+                      <rect x="9" y="8" width="6" height="6" rx="1"/>
+                      <path d="M8 11h1"/>
+                      <path d="M15 11h1"/>
+                      <circle cx="19" cy="11" r="3"/>
+                      <path d="M19 9.5v3"/>
+                      <path d="M17.5 11h3"/>
+                    </svg>
+                  </span>
+                  <span class="core2-hub-card__text">
+                    <h3 id="core2-proc-create-title" class="spa-form-section-title">Create product workflow</h3>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Define process steps, inputs, outputs and custom data to record.</p>
+                  </span>
+                </a>
+                <a href="/core/processes" class="core2-hub-card" aria-labelledby="core2-proc-view-title">
+                  <span class="core2-hub-card__icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="3" width="7" height="9" rx="1"/>
+                      <rect x="14" y="3" width="7" height="5" rx="1"/>
+                      <rect x="14" y="12" width="7" height="9" rx="1"/>
+                      <rect x="3" y="16" width="7" height="5" rx="1"/>
+                    </svg>
+                  </span>
+                  <span class="core2-hub-card__text">
+                    <h3 id="core2-proc-view-title" class="spa-form-section-title">View workflows</h3>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Open a product to run executions, edit steps, and manage inventory.</p>
+                  </span>
+                </a>
+              </div>
+            </section>
+          </div>
+          {% elif core2_focus_mode == 'inventory_live' %}
+          <section class="spa-form-section core2-focus-nav">
+            <a href="/core?tab=inventory" class="core2-focus-nav__back">← Back to inventory</a>
+          </section>
+          <section class="spa-form-section core2-stats-panel" aria-label="Live inventory snapshot">
+            <div class="core2-live-inv__snapshot" id="core2-live-inv-snapshot">
+              <div class="core2-live-inv__snapshot-main">
+                <div class="core2-live-inv__snap-cell"><span class="core2-live-inv__snap-value" id="core2-inv-snap-lines">0</span><span class="core2-live-inv__snap-label">Lines</span></div>
+                <div class="core2-live-inv__snap-cell"><span class="core2-live-inv__snap-value core2-live-inv__snap-value--teal" id="core2-inv-snap-inuse">0</span><span class="core2-live-inv__snap-label">In use</span></div>
+                <div class="core2-live-inv__snap-cell"><span class="core2-live-inv__snap-value" id="core2-inv-snap-received24h">0</span><span class="core2-live-inv__snap-label">Received 24h</span></div>
+                <div class="core2-live-inv__snap-cell"><span class="core2-live-inv__snap-value core2-live-inv__snap-value--amber" id="core2-inv-snap-low">0</span><span class="core2-live-inv__snap-label">Low stock</span></div>
+                <div class="core2-live-inv__snap-cell"><span class="core2-live-inv__snap-value core2-live-inv__snap-value--amber" id="core2-inv-snap-expiring">0</span><span class="core2-live-inv__snap-label">Expiring 7d</span></div>
+                <div class="core2-live-inv__snap-cell"><span class="core2-live-inv__snap-value core2-live-inv__snap-value--pink" id="core2-inv-snap-expired">0</span><span class="core2-live-inv__snap-label">Expired</span></div>
+              </div>
+              <div class="core2-live-inv__snapshot-side">
+                <div><span>Raw</span><strong id="core2-inv-count-raw">0</strong></div>
+                <div><span>Intermediate</span><strong id="core2-inv-count-wip">0</strong></div>
+                <div><span>Final</span><strong id="core2-inv-count-final">0</strong></div>
               </div>
             </div>
           </section>
 
-          <!-- Traceability (sourcemap) -->
-          <section class="spa-form-section" style="margin-top: 24px; margin-bottom: 32px;" aria-labelledby="core2-section-traceability">
-            <h2 id="core2-section-traceability" class="spa-form-section-title">Traceability</h2>
-            <div class="core2-hub-card-stack">
-              <a href="/core/sourcemap" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-section-sourcemap">
-                <span class="core2-hub-card__icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-8 4z"/>
-                    <path d="M8 2v16"/>
-                    <path d="M16 6v16"/>
-                  </svg>
-                </span>
-                <span class="core2-hub-card__text">
-                  <h3 id="core2-section-sourcemap" class="spa-form-section-title core2-hub-card__title-lowercase">sourcemap</h3>
-                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Trace any inventory item, process completion or custom recorded data</p>
-                </span>
-              </a>
+          <section class="spa-form-section core2-live-inv" aria-label="Live inventory">
+            <div class="core2-live-inv__header">
+              <div>
+                <h2 class="spa-form-section-title">LIVE INVENTORY</h2>
+                <p class="core2-live-inv__subline">INVENTORY <span class="core2-active-live-dot"></span> LIVE</p>
+              </div>
+              <div class="core2-live-inv__actions">
+                <div class="flow-mode-segmented core2-live-inv__mode" role="tablist" aria-label="Inventory view mode">
+                  <button type="button" class="flow-mode-segment flow-mode-segment--active" data-core2-inv-view="items" role="tab" aria-selected="true">Items</button>
+                  <button type="button" class="flow-mode-segment" data-core2-inv-view="movements" role="tab" aria-selected="false">Movements</button>
+                  <button type="button" class="flow-mode-segment" data-core2-inv-view="process" role="tab" aria-selected="false">By process</button>
+                </div>
+                <a href="/core/inventory/add" class="btn btn-primary core2-live-inv__receive-btn">+ Receive stock</a>
+              </div>
             </div>
-          </section>
 
-          <!-- Inventory Section -->
-          <section class="spa-form-section" aria-labelledby="core2-section-inventory">
-            <h2 id="core2-section-inventory" class="spa-form-section-title">Inventory</h2>
-            <div class="core2-hub-card-stack">
-              <a href="/core/inventory/view" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-inv-view-title">
-                <span class="core2-hub-card__icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="8" y1="6" x2="21" y2="6"/>
-                    <line x1="8" y1="12" x2="21" y2="12"/>
-                    <line x1="8" y1="18" x2="21" y2="18"/>
-                    <line x1="3" y1="6" x2="3.01" y2="6"/>
-                    <line x1="3" y1="12" x2="3.01" y2="12"/>
-                    <line x1="3" y1="18" x2="3.01" y2="18"/>
-                  </svg>
-                </span>
-                <span class="core2-hub-card__text">
-                  <h3 id="core2-inv-view-title" class="spa-form-section-title">View inventory</h3>
-                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">
-                    <span id="inv-hub-count-raw">0</span> raw, <span id="inv-hub-count-intermediate">0</span> intermediate, <span id="inv-hub-count-final">0</span> final items
-                  </p>
-                </span>
-              </a>
-              <a href="/core/inventory/add" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-inv-add-title">
-                <span class="core2-hub-card__icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="16"/>
-                    <line x1="8" y1="12" x2="16" y2="12"/>
-                  </svg>
-                </span>
-                <span class="core2-hub-card__text">
-                  <h3 id="core2-inv-add-title" class="spa-form-section-title">Add to inventory</h3>
-                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Add a single item manually, bulk upload via CSV, or scan a barcode to add stock.</p>
-                </span>
-              </a>
-              <a href="/core/inventory/dispose" hx-boost="false" id="record-wastage-btn" class="core2-hub-card" aria-labelledby="core2-inv-dispose-title">
-                <span class="core2-hub-card__icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    <line x1="10" y1="11" x2="10" y2="17"/>
-                    <line x1="14" y1="11" x2="14" y2="17"/>
-                  </svg>
-                </span>
-                <span class="core2-hub-card__text">
-                  <h3 id="core2-inv-dispose-title" class="spa-form-section-title">Dispose of inventory</h3>
-                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Record disposal of waste, overage, lost, or expired stock.</p>
-                </span>
-              </a>
+            <div class="core2-live-inv__filter-card">
+              <div class="core2-live-inv__search-row">
+                <input type="search" id="core2-inv-search" class="spa-inp" placeholder="Search name, batch, supplier, barcode, or metadata..." autocomplete="off">
+              </div>
+              <div class="core2-live-inv__type-row">
+                <div class="flow-mode-segmented core2-live-inv__type-tabs" role="tablist" aria-label="Inventory type">
+                  <button type="button" class="flow-mode-segment flow-mode-segment--active" data-core2-inv-type="" role="tab" aria-selected="true">All</button>
+                  <button type="button" class="flow-mode-segment" data-core2-inv-type="raw_material" role="tab" aria-selected="false">Raw</button>
+                  <button type="button" class="flow-mode-segment" data-core2-inv-type="work_in_progress" role="tab" aria-selected="false">Intermediate</button>
+                  <button type="button" class="flow-mode-segment" data-core2-inv-type="final_product" role="tab" aria-selected="false">Final</button>
+                </div>
+              </div>
+              <div class="core2-live-inv__chip-row" id="core2-live-inv-chip-row"></div>
+              <div class="core2-live-inv__refine-row">
+                <button type="button" class="btn btn-secondary btn-sm" id="core2-inv-refine-toggle" aria-expanded="false">Refine</button>
+                <button type="button" class="core2-live-inv__clear-link" id="core2-inv-clear">Clear filters</button>
+              </div>
+              <div class="core2-live-inv__refine-panel" id="core2-inv-refine-panel" hidden>
+                <details class="core2-live-inv__refine-group">
+                  <summary>Supplier and process</summary>
+                  <div class="core2-live-inv__refine-fields">
+                    <label><span>Supplier</span><select id="core2-inv-supplier" class="spa-inp"><option value="">Any supplier</option></select></label>
+                    <label><span>Process</span><select id="core2-inv-process" class="spa-inp"><option value="">Any process</option></select></label>
+                  </div>
+                </details>
+                <details class="core2-live-inv__refine-group">
+                  <summary>Date filters</summary>
+                  <div class="core2-live-inv__refine-fields">
+                    <label>
+                      <span>Expiry dates</span>
+                      <div class="core2-live-inv__date-range">
+                        <input id="core2-inv-exp-from" class="spa-inp" type="date" aria-label="Expiry start date">
+                        <span>to</span>
+                        <input id="core2-inv-exp-to" class="spa-inp" type="date" aria-label="Expiry end date">
+                      </div>
+                    </label>
+                    <label>
+                      <span>Purchase dates</span>
+                      <div class="core2-live-inv__date-range">
+                        <input id="core2-inv-pur-from" class="spa-inp" type="date" aria-label="Purchase start date">
+                        <span>to</span>
+                        <input id="core2-inv-pur-to" class="spa-inp" type="date" aria-label="Purchase end date">
+                      </div>
+                    </label>
+                  </div>
+                </details>
+              </div>
             </div>
-            <!--
-            Raw / intermediate / final category column cards (hidden for now; restore by uncommenting)
-            <div class="inventory-category-grid card-content" id="inventory-grid">
-            </div>
-            -->
-          </section>
 
-          <!-- Product workflows Section -->
-          <section class="spa-form-section" style="margin-top: 32px;" aria-labelledby="core2-section-product-workflows">
-            <h2 id="core2-section-product-workflows" class="spa-form-section-title">PRODUCT WORKFLOWS</h2>
-            <div class="core2-hub-card-stack">
-              <a href="/core/flows/create" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-proc-create-title">
-                <span class="core2-hub-card__icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="8" width="6" height="6" rx="1"/>
-                    <rect x="9" y="8" width="6" height="6" rx="1"/>
-                    <path d="M8 11h1"/>
-                    <path d="M15 11h1"/>
-                    <circle cx="19" cy="11" r="3"/>
-                    <path d="M19 9.5v3"/>
-                    <path d="M17.5 11h3"/>
-                  </svg>
-                </span>
-                <span class="core2-hub-card__text">
-                  <h3 id="core2-proc-create-title" class="spa-form-section-title">Create product workflow</h3>
-                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Define process steps, inputs, outputs and custom data to record.</p>
-                </span>
-              </a>
-              <a href="/core/processes" hx-boost="false" class="core2-hub-card" aria-labelledby="core2-proc-view-title">
-                <span class="core2-hub-card__icon" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="7" height="9" rx="1"/>
-                    <rect x="14" y="3" width="7" height="5" rx="1"/>
-                    <rect x="14" y="12" width="7" height="9" rx="1"/>
-                    <rect x="3" y="16" width="7" height="5" rx="1"/>
-                  </svg>
-                </span>
-                <span class="core2-hub-card__text">
-                  <h3 id="core2-proc-view-title" class="spa-form-section-title">View workflows</h3>
-                  <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Open a product to run executions, edit steps, and manage inventory.</p>
-                </span>
-              </a>
+            <div class="core2-live-inv__result-head">
+              <span id="core2-inv-result-count">Loading inventory...</span>
             </div>
-            <!--
-            Legacy hub actions (kept for reference; modal + flows/create still available via cards)
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn btn-secondary btn-sm" data-modal-open="create-process-modal" type="button">Create New Process</button>
-              <a href="/core/flows/create" class="btn btn-ghost btn-sm">Define steps (full page)</a>
+
+            <div id="core2-inv-items-view" class="core2-live-inv__view">
+              <div id="core2-inv-items-grid" class="core2-live-inv__items-grid"></div>
             </div>
-            -->
+            <div id="core2-inv-movements-view" class="core2-live-inv__view" hidden>
+              <div id="core2-inv-movements-list" class="core2-live-inv__movements-list"></div>
+            </div>
+            <div id="core2-inv-process-view" class="core2-live-inv__view" hidden>
+              <div id="core2-inv-process-groups" class="core2-live-inv__process-groups"></div>
+            </div>
           </section>
+          {% elif core2_focus_mode == 'active_batches_live' %}
+          <section class="spa-form-section core2-focus-nav">
+            <a href="/core?tab=workflows" class="core2-focus-nav__back">← Back to product workflows</a>
+          </section>
+          <section id="core2-active-batches-panel" class="spa-form-section core2-active-batches-panel" aria-labelledby="core2-active-batches-title">
+            <details id="core2-active-details" class="core2-active-details" open>
+              <summary id="core2-active-batches-title" class="spa-form-section-title core2-active-details-summary">ACTIVE BATCHES</summary>
+              <div class="core2-active-details-body">
+              <div class="core2-active-header-row">
+                <div class="core2-active-heading-wrap">
+                  <p class="core2-active-subline">EXECUTIONS <span class="core2-active-live-dot"></span> LIVE</p>
+                </div>
+                <div class="core2-active-controls">
+                  <label class="core2-active-control">
+                    <span>Process</span>
+                    <select id="core2-active-process-select" class="core2-active-select" aria-label="Select process">
+                      <option value="">Loading processes...</option>
+                    </select>
+                  </label>
+                  <div class="core2-active-view-toggle" role="tablist" aria-label="Active batch view mode">
+                    <button type="button" class="core2-active-view-btn core2-active-view-btn--active" data-core2-active-view="pipeline" role="tab" aria-selected="true">Pipeline</button>
+                    <button type="button" class="core2-active-view-btn" data-core2-active-view="timeline" role="tab" aria-selected="false">Timeline</button>
+                  </div>
+                </div>
+              </div>
+              <div class="core2-active-step-rail" id="core2-active-step-rail">
+                <p class="core2-active-batches-empty">Loading process steps...</p>
+              </div>
+
+              <div class="core2-active-status-row">
+                <div class="core2-active-status-metrics">
+                  <span><strong data-core2-inflight-count>0</strong> in flight</span>
+                  <span><strong data-core2-completed7d-count>0</strong> completed (7d)</span>
+                </div>
+                <div class="core2-active-status-note">
+                  <span data-core2-active-total-note>Showing 0 active batches</span>
+                </div>
+              </div>
+
+              <div class="core2-active-view" id="core2-active-pipeline-view">
+                <div class="core2-active-pipeline-grid" id="core2-active-pipeline-grid">
+                  <p class="core2-active-batches-empty">Loading active batches...</p>
+                </div>
+              </div>
+
+              <div class="core2-active-view" id="core2-active-timeline-view" hidden>
+                <div class="core2-active-timeline" id="core2-active-timeline">
+                  <p class="core2-active-batches-empty">Loading timeline...</p>
+                </div>
+              </div>
+              </div>
+            </details>
+          </section>
+          {% endif %}
+
+          <div class="core2-health-sheet-overlay" id="core2-health-sheet-overlay" hidden>
+            <div class="core2-health-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-health-sheet-title">
+              <div class="core2-health-sheet__header">
+                <h3 id="core2-health-sheet-title" class="core2-health-sheet__title">System status</h3>
+                <button type="button" class="core2-health-sheet__close" data-core2-health-close aria-label="Close system status">&times;</button>
+              </div>
+              <div class="core2-health-sheet__body" id="core2-health-sheet-body">
+                <p class="core2-active-batches-empty">No details available.</p>
+              </div>
+              <div class="core2-health-sheet__footer">
+                <button type="button" class="core2-active-detail-btn core2-active-detail-btn--ghost" data-core2-health-close>Close</button>
+              </div>
+            </div>
+          </div>
+          {% if core2_focus_mode == 'active_batches_live' %}
+          <div class="core2-active-detail-overlay" id="core2-active-detail-overlay" hidden>
+            <div class="core2-active-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-active-detail-title">
+              <div class="core2-active-detail-head">
+                <h3 id="core2-active-detail-title">Batch details</h3>
+                <button type="button" class="core2-active-detail-close" data-core2-detail-close aria-label="Close batch details">&times;</button>
+              </div>
+              <div class="core2-active-detail-body">
+                <p class="core2-active-detail-id" id="core2-active-detail-id">Execution</p>
+                <p class="core2-active-detail-meta" id="core2-active-detail-process">Process</p>
+                <p class="core2-active-detail-meta" id="core2-active-detail-started">Started</p>
+                <div class="core2-active-detail-steps" id="core2-active-detail-steps">
+                  <p class="core2-active-batches-empty">No step metadata available.</p>
+                </div>
+              </div>
+              <div class="core2-active-detail-foot">
+                <button type="button" class="core2-active-detail-btn core2-active-detail-btn--ghost" data-core2-detail-close>Close</button>
+                <a class="core2-active-detail-btn core2-active-detail-btn--primary" id="core2-active-detail-next-step" href="/core/processes">Record next step</a>
+              </div>
+            </div>
+          </div>
+          {% endif %}
         </div>
 {% endblock %}
 
@@ -288,9 +552,115 @@
     window.showError = function(message) {
       window.showNotification('error', 'Error', message);
     };
+
+    function closeCore2HealthSheet() {
+      const overlay = document.getElementById('core2-health-sheet-overlay');
+      if (!overlay || overlay.hidden) return;
+      overlay.hidden = true;
+      document.body.classList.remove('core2-sheet-open');
+    }
+
+    function openCore2HealthSheet(state, signals) {
+      const overlay = document.getElementById('core2-health-sheet-overlay');
+      const body = document.getElementById('core2-health-sheet-body');
+      const title = document.getElementById('core2-health-sheet-title');
+      if (!overlay || !body || !title) return;
+
+      title.textContent = core2HealthCollapsedTitle(state || 'healthy');
+      body.innerHTML = '';
+      body.appendChild(buildCore2HealthCategoryNav(state || 'healthy', signals || []));
+      overlay.hidden = false;
+      document.body.classList.add('core2-sheet-open');
+    }
+
+    function initCore2HealthSheet() {
+      const overlay = document.getElementById('core2-health-sheet-overlay');
+      if (!overlay || overlay.dataset.boundCore2HealthSheet) return;
+
+      overlay.addEventListener('click', function(event) {
+        if (event.target === overlay) closeCore2HealthSheet();
+      });
+
+      overlay.querySelectorAll('[data-core2-health-close]').forEach((el) => {
+        el.addEventListener('click', closeCore2HealthSheet);
+      });
+
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') closeCore2HealthSheet();
+      });
+
+      overlay.dataset.boundCore2HealthSheet = '1';
+    }
     
+    function setCore2MainTab(tab) {
+      const safeTab = (tab === 'inventory' || tab === 'workflows') ? tab : 'overview';
+      const tabButtons = document.querySelectorAll('[data-core2-tab-target]');
+      const tabPanels = document.querySelectorAll('[data-core2-tab-panel]');
+
+      tabButtons.forEach((btn) => {
+        const isActive = btn.getAttribute('data-core2-tab-target') === safeTab;
+        btn.classList.toggle('flow-mode-segment--active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+
+      tabPanels.forEach((panel) => {
+        const isActive = panel.getAttribute('data-core2-tab-panel') === safeTab;
+        panel.classList.toggle('core2-tab-panel--active', isActive);
+        panel.hidden = !isActive;
+      });
+
+      // Defensive cleanup: prevent stale overlays from intercepting clicks after SPA/tab transitions.
+      closeCore2HealthSheet();
+      const batchDetailOverlay = document.getElementById('core2-active-detail-overlay');
+      if (batchDetailOverlay) batchDetailOverlay.hidden = true;
+      document.body.classList.remove('core2-sheet-open');
+      document.body.classList.remove('core2-active-detail-open');
+      document.body.style.overflow = '';
+
+      try {
+        window.localStorage.setItem('core2.mainTab', safeTab);
+      } catch (e) {}
+
+      try {
+        const url = new URL(window.location.href);
+        if (safeTab === 'overview') url.searchParams.delete('tab');
+        else url.searchParams.set('tab', safeTab);
+        window.history.replaceState({}, '', url.toString());
+      } catch (e) {}
+    }
+
+    function initCore2MainTabs() {
+      const buttons = document.querySelectorAll('[data-core2-tab-target]');
+      if (!buttons.length) return;
+
+      buttons.forEach((btn) => {
+        if (btn.dataset.boundCore2MainTab) return;
+        btn.addEventListener('click', () => {
+          setCore2MainTab(btn.getAttribute('data-core2-tab-target'));
+        });
+        btn.dataset.boundCore2MainTab = '1';
+      });
+
+      let stored = 'overview';
+      try {
+        const fromUrl = (new URL(window.location.href)).searchParams.get('tab');
+        if (fromUrl === 'inventory' || fromUrl === 'workflows' || fromUrl === 'overview') {
+          stored = fromUrl;
+        }
+      } catch (e) {}
+      if (stored === 'overview') {
+        try {
+          stored = window.localStorage.getItem('core2.mainTab') || 'overview';
+        } catch (e) {}
+      }
+      setCore2MainTab(stored);
+    }
+
     // Initialize account info component and Reset DB button (test env only)
     function initCore2Page() {
+      closeCore2HealthSheet();
+      initCore2MainTabs();
+      initCore2HealthSheet();
       if (window.initAccountInfo) {
         window.initAccountInfo('account-info-container');
       }
@@ -351,7 +721,7 @@
       div.textContent = text;
       return div.innerHTML;
     }
-    
+
     // Render inventory for V2 Modern design
     function countInventoryByType(items) {
       const grouped = { raw: 0, intermediate: 0, final: 0 };
@@ -373,12 +743,320 @@
     }
 
     function updateInventoryHubCountDisplay(counts) {
-      const rawEl = document.getElementById('inv-hub-count-raw');
-      const intEl = document.getElementById('inv-hub-count-intermediate');
-      const finEl = document.getElementById('inv-hub-count-final');
+      const rawEl = document.getElementById('core2-inv-count-raw');
+      const intEl = document.getElementById('core2-inv-count-wip');
+      const finEl = document.getElementById('core2-inv-count-final');
       if (rawEl) rawEl.textContent = String(counts.raw);
       if (intEl) intEl.textContent = String(counts.intermediate);
       if (finEl) finEl.textContent = String(counts.final);
+    }
+
+    function core2SetText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(value);
+    }
+
+    function core2SetBar(id, value, maxValue) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const safeMax = Math.max(1, Number(maxValue || 1));
+      const pct = Math.max(0, Math.min(100, Math.round((Number(value || 0) / safeMax) * 100)));
+      el.style.width = String(pct) + '%';
+    }
+
+    function core2IsLowStock(item) {
+      const qty = Number(item && item.quantity != null ? item.quantity : 0);
+      const startQty = Number(item && item.initial_quantity != null ? item.initial_quantity : qty);
+      if (startQty <= 0 || qty <= 0) return qty <= 0;
+      const ratio = qty / startQty;
+      return ratio <= 0.10;
+    }
+
+    function updateCore2InventorySummary(items) {
+      const nonZeroItems = (items || []).filter(function (it) {
+        const qty = Number(it && it.quantity != null ? it.quantity : 0);
+        return qty > 0.0001;
+      });
+      const inUse = nonZeroItems.filter(function (it) { return !!(it && it.source_execution_id); }).length;
+      const low = nonZeroItems.filter(core2IsLowStock).length;
+      const total = nonZeroItems.length;
+
+      core2SetText('core2-inv-summary-lines', total);
+      core2SetText('core2-inv-summary-inuse', inUse);
+      core2SetText('core2-inv-summary-low', low);
+
+      core2SetBar('core2-inv-summary-lines-bar', total, Math.max(total, 1));
+      core2SetBar('core2-inv-summary-inuse-bar', inUse, Math.max(total, 1));
+      core2SetBar('core2-inv-summary-low-bar', low, Math.max(total, 1));
+    }
+
+    function updateCore2WorkflowSummary(processes, executions) {
+      const allExecutions = (executions || []).filter(function (e) { return !!e; });
+      const inFlight = allExecutions.filter(function (e) {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'in_progress' || status === 'pending';
+      }).length;
+
+      const sevenDaysAgo = new Date(Date.now() - (7 * 24 * 3600 * 1000));
+      const completed7d = allExecutions.filter(function (e) {
+        if (String(e.status || '').toLowerCase() !== 'completed') return false;
+        if (!e.completed_at) return false;
+        const dt = new Date(e.completed_at);
+        return !Number.isNaN(dt.getTime()) && dt >= sevenDaysAgo;
+      }).length;
+
+      const processCount = (processes || []).length;
+      const executionTotal = Math.max(1, allExecutions.length);
+
+      core2SetText('core2-wf-summary-active', inFlight);
+      core2SetText('core2-wf-summary-completed7d', completed7d);
+      core2SetText('core2-wf-summary-processes', processCount);
+
+      core2SetBar('core2-wf-summary-active-bar', inFlight, executionTotal);
+      core2SetBar('core2-wf-summary-completed7d-bar', completed7d, executionTotal);
+      core2SetBar('core2-wf-summary-processes-bar', processCount, Math.max(processCount, 1));
+    }
+
+    function core2RenderKpiBars(targetId, rows) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      if (!rows || !rows.length) {
+        el.innerHTML = '<p class="core2-active-batches-empty">No data yet.</p>';
+        return;
+      }
+      const maxValue = Math.max(1, ...rows.map((r) => Number(r.value || 0)));
+      el.innerHTML = rows.map((r) => {
+        const pct = Math.max(0, Math.min(100, Math.round((Number(r.value || 0) / maxValue) * 100)));
+        return '<div class="core2-kpi-bars__row">' +
+          '<div class="core2-kpi-bars__head"><span>' + escapeHtml(r.label) + '</span><strong>' + escapeHtml(String(r.value)) + '</strong></div>' +
+          '<div class="core2-kpi-bars__meter"><span style="width:' + pct + '%"></span></div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function core2RenderKpiStack(targetId, rows) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      if (!rows || !rows.length) {
+        el.innerHTML = '<p class="core2-active-batches-empty">No data yet.</p>';
+        return;
+      }
+      el.innerHTML = rows.map((r) => {
+        return '<div class="core2-kpi-stack__item">' +
+          '<span class="core2-kpi-stack__label">' + escapeHtml(r.label) + '</span>' +
+          '<span class="core2-kpi-stack__value">' + escapeHtml(String(r.value)) + '</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    function core2RenderKpiTable(targetId, rows) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      if (!rows || !rows.length) {
+        el.innerHTML = '<p class="core2-active-batches-empty">No data yet.</p>';
+        return;
+      }
+      el.innerHTML = rows.map((r) => {
+        return '<div class="core2-kpi-table__row">' +
+          '<span class="core2-kpi-table__name">' + escapeHtml(r.name) + '</span>' +
+          '<span class="core2-kpi-table__meta">' + escapeHtml(String(r.metaA || '')) + '</span>' +
+          '<span class="core2-kpi-table__meta">' + escapeHtml(String(r.metaB || '')) + '</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    function updateCore2OverviewInsights(items, processes, executions) {
+      const now = new Date();
+      const processNameById = {};
+      (processes || []).forEach((p) => {
+        if (!p || !p.id) return;
+        processNameById[String(p.id)] = p.name || 'Untitled process';
+      });
+      const activeExecs = (executions || []).filter((e) => {
+        const s = String(e.status || '').toLowerCase();
+        return s === 'in_progress' || s === 'pending';
+      });
+      const dwellByStep = {};
+      activeExecs.forEach((e) => {
+        if (!e.started_at) return;
+        const startDt = new Date(e.started_at);
+        if (Number.isNaN(startDt.getTime())) return;
+        const processName = e.process_name || processNameById[String(e.process_id)] || 'Untitled process';
+        const stepName = e.current_step && e.current_step.name ? e.current_step.name : 'Awaiting step';
+        const key = `${processName} · ${stepName}`;
+        const ageH = (now.getTime() - startDt.getTime()) / (3600 * 1000);
+        if (!dwellByStep[key]) dwellByStep[key] = { totalHours: 0, count: 0 };
+        dwellByStep[key].totalHours += ageH;
+        dwellByStep[key].count += 1;
+      });
+      const dwellRows = Object.entries(dwellByStep)
+        .map(([label, bucket]) => {
+          const avg = bucket.count > 0 ? (bucket.totalHours / bucket.count) : 0;
+          return { label: `${label} (${bucket.count})`, value: Math.max(0, Math.round(avg)) };
+        })
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6);
+      core2RenderKpiBars('core2-overview-batch-aging', dwellRows);
+
+      const nonZeroItems = (items || []).filter((it) => Number(it.quantity || 0) > 0.0001);
+      const linkedItems = nonZeroItems.filter((it) => {
+        return !!(it.source_execution_id || it.supplier_batch_number);
+      }).length;
+      const tracePct = nonZeroItems.length ? Math.round((linkedItems / nonZeroItems.length) * 100) : 0;
+      core2RenderKpiStack('core2-overview-traceability', [
+        { label: 'Linked items', value: `${linkedItems} / ${nonZeroItems.length}` },
+        { label: 'Coverage', value: `${tracePct}%` },
+        { label: 'Unlinked items', value: Math.max(0, nonZeroItems.length - linkedItems) },
+      ]);
+
+      const withinDays = (it, days) => {
+        if (!it || !it.expiry_date) return false;
+        const dt = new Date(it.expiry_date);
+        if (Number.isNaN(dt.getTime())) return false;
+        const diffDays = (dt.getTime() - now.getTime()) / (24 * 3600 * 1000);
+        return diffDays >= 0 && diffDays <= days;
+      };
+      const expired = nonZeroItems.filter((it) => {
+        if (!it.expiry_date) return false;
+        const dt = new Date(it.expiry_date);
+        return !Number.isNaN(dt.getTime()) && dt < now;
+      }).length;
+      const low = nonZeroItems.filter(core2IsLowStock).length;
+      const expiring7 = nonZeroItems.filter((it) => withinDays(it, 7)).length;
+      const inUse = nonZeroItems.filter((it) => !!it.source_execution_id).length;
+      core2RenderKpiStack('core2-overview-inventory-alerts', [
+        { label: 'Low stock', value: low },
+        { label: 'Expiring in 7 days', value: expiring7 },
+        { label: 'Expired', value: expired },
+        { label: 'Allocated to executions', value: inUse },
+      ]);
+    }
+
+    function updateCore2InventoryInsights(items, processes, executions) {
+      const now = new Date();
+      const nonZeroItems = (items || []).filter((it) => Number(it.quantity || 0) > 0.0001);
+
+      const diffDays = (dateStr) => {
+        if (!dateStr) return null;
+        const dt = new Date(dateStr);
+        if (Number.isNaN(dt.getTime())) return null;
+        return (dt.getTime() - now.getTime()) / (24 * 3600 * 1000);
+      };
+      const expiry7 = nonZeroItems.filter((it) => {
+        const d = diffDays(it.expiry_date);
+        return d != null && d >= 0 && d <= 7;
+      }).length;
+      const expiry30 = nonZeroItems.filter((it) => {
+        const d = diffDays(it.expiry_date);
+        return d != null && d > 7 && d <= 30;
+      }).length;
+      const expiry90 = nonZeroItems.filter((it) => {
+        const d = diffDays(it.expiry_date);
+        return d != null && d > 30 && d <= 90;
+      }).length;
+      const expired = nonZeroItems.filter((it) => {
+        const d = diffDays(it.expiry_date);
+        return d != null && d < 0;
+      }).length;
+      core2RenderKpiStack('core2-inventory-expiry-pressure', [
+        { label: 'Expired', value: expired },
+        { label: '0-7 days', value: expiry7 },
+        { label: '8-30 days', value: expiry30 },
+        { label: '31-90 days', value: expiry90 },
+      ]);
+
+      const traceabilityGaps = nonZeroItems
+        .filter((it) => !it.source_execution_id && !it.supplier_batch_number)
+        .slice(0, 6)
+        .map((it) => ({
+          name: it.name || 'Inventory item',
+          metaA: `${it.quantity || 0}${it.unit || ''}`,
+          metaB: 'missing link',
+        }));
+      core2RenderKpiTable('core2-inventory-traceability-gaps', traceabilityGaps);
+
+      let movementNet = 0;
+      let movementAbs = 0;
+      let movementEvents = 0;
+      const dayAgo = new Date(now.getTime() - (24 * 3600 * 1000));
+      nonZeroItems.forEach((it) => {
+        const logs = Array.isArray(it.audit_logs) ? it.audit_logs : [];
+        logs.forEach((log) => {
+          if (!log || !log.created_at) return;
+          const dt = new Date(log.created_at);
+          if (Number.isNaN(dt.getTime()) || dt < dayAgo) return;
+          const qty = Number(log.quantity_changed || 0);
+          movementNet += qty;
+          movementAbs += Math.abs(qty);
+          movementEvents += 1;
+        });
+      });
+      core2RenderKpiStack('core2-inventory-recent-movement', [
+        { label: 'Net change (24h)', value: movementNet.toFixed(1) },
+        { label: 'Total moved (24h)', value: movementAbs.toFixed(1) },
+        { label: 'Movement events (24h)', value: movementEvents },
+      ]);
+    }
+
+    function updateCore2WorkflowInsights(processes, executions) {
+      const now = new Date();
+      const processNameById = {};
+      (processes || []).forEach((p) => {
+        if (!p || !p.id) return;
+        processNameById[String(p.id)] = p.name || 'Untitled process';
+      });
+      const activeStepCounts = {};
+      const allExecutions = (executions || []);
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+      const throughputByProcess = {};
+      let readyNow = 0;
+      let inProgressNow = 0;
+      let pendingNow = 0;
+
+      allExecutions.forEach((e) => {
+        const processName = e.process_name || processNameById[String(e.process_id)] || 'Untitled process';
+        const status = String(e.status || '').toLowerCase();
+        if (status === 'in_progress' || status === 'pending') {
+          const stepName = e.current_step && e.current_step.name ? e.current_step.name : 'Awaiting step';
+          const key = `${processName} · ${stepName}`;
+          activeStepCounts[key] = Number(activeStepCounts[key] || 0) + 1;
+          if (status === 'pending') pendingNow += 1;
+          const currentNo = e.current_step && e.current_step.step_number != null ? Number(e.current_step.step_number) : NaN;
+          const stepRecord = Array.isArray(e.execution_steps)
+            ? e.execution_steps.find((s) => Number(s.step_number) === currentNo)
+            : null;
+          const stepStatus = String(stepRecord && stepRecord.status ? stepRecord.status : '').toLowerCase();
+          if (stepStatus === 'ready') readyNow += 1;
+          else if (stepStatus === 'in_progress') inProgressNow += 1;
+          else if (status === 'in_progress') {
+            inProgressNow += 1;
+          }
+        }
+        if (status === 'completed' && e.completed_at) {
+          const comp = new Date(e.completed_at);
+          if (!Number.isNaN(comp.getTime()) && comp >= weekAgo) {
+            throughputByProcess[processName] = Number(throughputByProcess[processName] || 0) + 1;
+          }
+        }
+      });
+
+      const throughputRows = Object.entries(throughputByProcess)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([name, count]) => ({ name, metaA: `${count} completed`, metaB: 'last 7d' }));
+      core2RenderKpiTable('core2-workflow-throughput', throughputRows);
+
+      core2RenderKpiStack('core2-workflow-readiness', [
+        { label: 'Ready to record now', value: readyNow },
+        { label: 'Currently in progress', value: inProgressNow },
+        { label: 'Pending batches', value: pendingNow },
+      ]);
+
+      const stepRows = Object.entries(activeStepCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 7)
+        .map(([name, count]) => ({ label: name, value: count }));
+      core2RenderKpiBars('core2-workflow-step-load', stepRows);
     }
 
     /** SVG icons for journey CTAs (24 viewBox; drawn at 26px inside 64px circle) */
@@ -418,7 +1096,7 @@
     };
 
     /**
-     * Expanded health panel: category + meaning; whole card links to filtered Notifications (no CTA line).
+     * Health detail content for the bottom sheet modal.
      */
     function buildCore2HealthCategoryNav(state, signals) {
       var frag = document.createDocumentFragment();
@@ -446,7 +1124,6 @@
         nav.appendChild(p);
         var allA = document.createElement('a');
         allA.href = '/core/notifications';
-        allA.setAttribute('hx-boost', 'false');
         allA.className = 'core2-journey-health-nav__all';
         allA.textContent = 'Notifications';
         allA.setAttribute('aria-label', 'Open notifications');
@@ -462,7 +1139,6 @@
         var a = document.createElement('a');
         a.className = 'core2-journey-health-nav__link';
         a.href = '/core/notifications?category=' + encodeURIComponent(key);
-        a.setAttribute('hx-boost', 'false');
         a.setAttribute(
           'aria-label',
           meta.title + ': ' + meta.meaning + '. Opens notifications filtered for this category.'
@@ -511,7 +1187,7 @@
       } else if (stage === 3) {
         primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
       } else {
-        primary = { label: 'Trace product flow', href: '/core/sourcemap', icon: 'trace' };
+        primary = { label: 'Trace', href: '/core/sourcemap', icon: 'trace' };
       }
 
       var addInv = { kind: 'addInventory' };
@@ -605,15 +1281,14 @@
         detailsH.className = 'core2-journey-system-active-details core2-journey-health-details';
 
         const summaryH = document.createElement('summary');
-        summaryH.setAttribute('aria-label', 'Production integrity details');
+        summaryH.setAttribute('aria-label', 'Open production integrity details');
         summaryH.textContent = '';
         summaryH.appendChild(barRootH);
+        summaryH.addEventListener('click', function(event) {
+          event.preventDefault();
+          openCore2HealthSheet(state, signals);
+        });
         detailsH.appendChild(summaryH);
-
-        const bodyH = document.createElement('div');
-        bodyH.className = 'core2-journey-health-details-body';
-        bodyH.appendChild(buildCore2HealthCategoryNav(state, signals));
-        detailsH.appendChild(bodyH);
 
         barFinalEl = detailsH;
       } else {
@@ -708,7 +1383,6 @@
         const primaryA = document.createElement('a');
         primaryA.className = 'core2-journey-primary';
         primaryA.href = primary.href;
-        primaryA.setAttribute('hx-boost', 'false');
         const circle = document.createElement('span');
         circle.className = 'core2-journey-primary__circle';
         circle.setAttribute('aria-hidden', 'true');
@@ -753,7 +1427,6 @@
           } else {
             const a = document.createElement('a');
             a.href = item.href;
-            a.setAttribute('hx-boost', 'false');
             a.className = 'core2-journey-secondary__link';
             a.textContent = item.label;
             sec.appendChild(a);
@@ -793,115 +1466,476 @@
     }
     
     function renderInventoryV2(items) {
-      updateInventoryHubCountDisplay(countInventoryByType(items || []));
-      const inventoryGrid = document.getElementById('inventory-grid');
-      if (!inventoryGrid) return;
-      
-      inventoryGrid.innerHTML = '';
-      
-      if (!items || items.length === 0) {
-        // Show empty state
-        inventoryGrid.innerHTML = `
-          <div style="grid-column: 1 / -1; text-align: center; padding: 32px;">
-            <p style="color: var(--text-secondary);">No inventory items yet. Add your first item to get started.</p>
-          </div>
-        `;
-        // Update the summary metric to 0
-        const inventoryEl = document.getElementById('metric-inventory');
-        if (inventoryEl) {
-          inventoryEl.textContent = '0';
-        }
-        return;
-      }
-      
-      // Group by inventory type
-      const grouped = {
-        raw_material: [],
-        work_in_progress: [],
-        final_product: []
+      const shell = document.querySelector('[data-core2-tab-panel="inventory"] .core2-live-inv') || document.querySelector('.core2-live-inv');
+      if (!shell) return;
+
+      const state = shell.__core2InvState || {
+        allItems: [],
+        view: 'items',
+        type: '',
+        chip: '',
+        bound: false,
       };
-      
-      // Count items with quantity > 0 for the summary metric
-      let visibleItemCount = 0;
-      
-      items.forEach(item => {
-        // Filter out items with zero or negative quantity
-        // Parse quantity more robustly - handle string "0", "0.0", "0.00", etc.
-        let quantity = 0;
-        try {
-          const qtyStr = String(item.quantity || '0').trim();
-          quantity = parseFloat(qtyStr);
-          if (isNaN(quantity)) {
-            quantity = 0;
-          }
-        } catch (e) {
-          quantity = 0;
-        }
-        
-        // Skip items with zero or negative quantity (including very small numbers due to floating point)
-        if (quantity <= 0 || Math.abs(quantity) < 0.0001) {
-          return; // Skip this item
-        }
-        
-        // Count this item as visible
-        visibleItemCount++;
-        
-        const type = item.inventory_type || 'raw_material';
-        if (grouped[type]) {
-          grouped[type].push(item);
-        }
-      });
-      
-      // Update the summary metric to reflect only visible items (quantity > 0)
-      const inventoryEl = document.getElementById('metric-inventory');
-      if (inventoryEl) {
-        inventoryEl.textContent = visibleItemCount;
+      shell.__core2InvState = state;
+      state.allItems = Array.isArray(items) ? items : [];
+
+      function qNum(v) {
+        const n = parseFloat(String(v == null ? '0' : v).trim());
+        return Number.isFinite(n) ? n : 0;
       }
-      
-      // If raw materials exist, show all three categories (even if empty) to help users understand the lifecycle
-      const hasRawMaterials = grouped.raw_material.length > 0;
-      
-      // Calculate totals for final products (grouped by process name and unit)
-      // Structure: { "Process Name": { "unit": total, ... }, ... }
-      const finalProductTotals = {};
-      grouped.final_product.forEach(item => {
-        const processName = item.process_name || 'Unknown Process';
-        const unit = item.unit || 'units';
-        let quantity = 0;
-        try {
-          quantity = parseFloat(item.quantity || '0');
-          if (isNaN(quantity)) {
-            quantity = 0;
-          }
-        } catch (e) {
-          quantity = 0;
+      function onHand(it) {
+        return qNum(it && it.quantity);
+      }
+      function isVisible(it) {
+        const q = onHand(it);
+        return q > 0 && Math.abs(q) >= 0.0001;
+      }
+      function parseDay(v) {
+        if (!v) return null;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? null : d;
+      }
+      function dayDiffFromNow(iso) {
+        const d = parseDay(iso);
+        if (!d) return null;
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        return Math.floor((target - today) / 86400000);
+      }
+      function allAuditEntries(it) {
+        const hist = (((it || {}).extra_data || {}).inventory_audit_history || []);
+        return Array.isArray(hist) ? hist : [];
+      }
+      function qtyBaseline(it) {
+        const es = (it || {}).event_summary || {};
+        if (es && Array.isArray(es.quantity_history) && es.quantity_history.length) {
+          let peak = 0;
+          es.quantity_history.forEach(function (h) {
+            const v = qNum(h && h.qty);
+            if (v > peak) peak = v;
+          });
+          if (peak > 0) return peak;
         }
-        if (quantity > 0) {
-          if (!finalProductTotals[processName]) {
-            finalProductTotals[processName] = {};
+        const cur = onHand(it);
+        if (cur > 0) return cur;
+        return 0;
+      }
+      function isLowStock(it) {
+        const baseline = qtyBaseline(it);
+        if (baseline <= 0) return false;
+        return (onHand(it) / baseline) <= 0.10;
+      }
+      function fmtDate(iso) {
+        if (!iso) return '—';
+        try { return new Date(iso).toLocaleDateString(); } catch (e) { return String(iso).slice(0, 10); }
+      }
+      function fmtAgo(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '—';
+        const ms = Date.now() - d.getTime();
+        const mins = Math.floor(ms / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return mins + ' min ago';
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return hrs + 'h ago';
+        const days = Math.floor(hrs / 24);
+        return days + 'd ago';
+      }
+      function esc(s) {
+        return escapeHtml(s == null ? '' : String(s));
+      }
+      function typeLabel(t) {
+        if (t === 'work_in_progress') return 'Intermediate';
+        if (t === 'final_product') return 'Final';
+        return 'Raw';
+      }
+      function typePillClass(t) {
+        if (t === 'work_in_progress') return 'core2-live-inv__pill--wip';
+        if (t === 'final_product') return 'core2-live-inv__pill--final';
+        return 'core2-live-inv__pill--raw';
+      }
+      function processDisplayName(it) {
+        const ed = (it && it.extra_data) || {};
+        return String(
+          (it && it.process_name) ||
+          ed.producing_process_name ||
+          ed.process_name ||
+          (it && it.source_step_name) ||
+          'No process linked'
+        ).trim();
+      }
+
+      function setIf(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(text);
+      }
+      function populateSelect(selectId, values, placeholder) {
+        const el = document.getElementById(selectId);
+        if (!el) return;
+        const current = el.value;
+        el.innerHTML = '<option value="">' + esc(placeholder) + '</option>';
+        values.forEach(function (v) {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = v;
+          el.appendChild(opt);
+        });
+        if (values.indexOf(current) >= 0) el.value = current;
+      }
+
+      function buildHistoryToggle(itemId) {
+        return '<details class="core2-live-inv__audit" data-item-id="' + esc(itemId) + '">' +
+          '<summary>Audit history</summary>' +
+          '<div class="core2-live-inv__audit-body" data-loaded="false"><span class="core2-active-batches-empty">Loading...</span></div>' +
+          '</details>';
+      }
+
+      function renderTimelineEvents(events) {
+        return '<ol class="inv-audit-timeline">' +
+          events.map(function (ev) {
+            var actorHtml = ev.actor ? '<span class="inv-audit-timeline__actor">' + esc(ev.actor) + '</span>' : '';
+            return '<li class="inv-audit-timeline__item">' +
+              '<span class="inv-audit-timeline__dot"></span>' +
+              '<div class="inv-audit-timeline__content">' +
+                '<span class="inv-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
+                actorHtml +
+              '</div>' +
+              '<span class="inv-audit-timeline__time">' + esc(fmtAgo(ev.at)) + '</span>' +
+            '</li>';
+          }).join('') +
+          '</ol>';
+      }
+
+      function wireHistoryToggles(container) {
+        container.querySelectorAll('.core2-live-inv__audit').forEach(function (det) {
+          if (det.dataset.bound === '1') return;
+          det.dataset.bound = '1';
+          det.addEventListener('toggle', function () {
+            if (!det.open) return;
+            const body = det.querySelector('.core2-live-inv__audit-body');
+            if (!body || body.dataset.loaded === 'true') return;
+            const itemId = det.dataset.itemId;
+            fetch('/api/core/entities/inventory_item/' + encodeURIComponent(itemId) + '/story', { credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                body.dataset.loaded = 'true';
+                const events = data.events || [];
+                if (!events.length) {
+                  body.innerHTML = '<span class="core2-active-batches-empty">No history recorded yet.</span>';
+                  return;
+                }
+                body.innerHTML = renderTimelineEvents(events.slice().reverse());
+              })
+              .catch(function () {
+                body.dataset.loaded = 'true';
+                body.innerHTML = '<span class="core2-active-batches-empty">Could not load history.</span>';
+              });
+          });
+        });
+      }
+
+      function renderInventoryViews() {
+        const visibleItems = state.allItems.filter(isVisible);
+        const countsByType = countInventoryByType(visibleItems);
+        updateInventoryHubCountDisplay(countsByType);
+        setIf('core2-inv-snap-lines', visibleItems.length);
+        setIf('core2-inv-snap-inuse', visibleItems.filter(function (it) { return !!it.source_execution_id; }).length);
+        setIf('core2-inv-snap-received24h', visibleItems.filter(function (it) {
+          return allAuditEntries(it).some(function (e) {
+            const t = parseDay(e && e.timestamp_utc);
+            return t && (Date.now() - t.getTime() <= 24 * 60 * 60 * 1000);
+          });
+        }).length);
+        setIf('core2-inv-snap-low', visibleItems.filter(isLowStock).length);
+        setIf('core2-inv-snap-expiring', visibleItems.filter(function (it) {
+          const dd = dayDiffFromNow(it.expiry_date);
+          return dd != null && dd >= 0 && dd <= 7;
+        }).length);
+        setIf('core2-inv-snap-expired', visibleItems.filter(function (it) {
+          const dd = dayDiffFromNow(it.expiry_date);
+          return dd != null && dd < 0;
+        }).length);
+
+        const metricInventory = document.getElementById('metric-inventory');
+        if (metricInventory) metricInventory.textContent = visibleItems.length;
+
+        populateSelect(
+          'core2-inv-supplier',
+          Array.from(new Set(visibleItems.map(function (it) { return (it.supplier || '').trim(); }).filter(Boolean))).sort(),
+          'Any supplier'
+        );
+        populateSelect(
+          'core2-inv-process',
+          Array.from(new Set(visibleItems.map(function (it) { return processDisplayName(it); }).filter(function (v) { return v && v !== 'No process linked'; }))).sort(),
+          'Any process'
+        );
+
+        const search = ((document.getElementById('core2-inv-search') || {}).value || '').trim().toLowerCase();
+        const supplier = (document.getElementById('core2-inv-supplier') || {}).value || '';
+        const process = (document.getElementById('core2-inv-process') || {}).value || '';
+        const expFrom = (document.getElementById('core2-inv-exp-from') || {}).value || '';
+        const expTo = (document.getElementById('core2-inv-exp-to') || {}).value || '';
+        const purFrom = (document.getElementById('core2-inv-pur-from') || {}).value || '';
+        const purTo = (document.getElementById('core2-inv-pur-to') || {}).value || '';
+
+        let filtered = visibleItems.filter(function (it) {
+          if (state.type && it.inventory_type !== state.type) return false;
+          if (supplier && String(it.supplier || '').trim() !== supplier) return false;
+          if (process && processDisplayName(it) !== process) return false;
+          const expDate = it.expiry_date ? String(it.expiry_date).slice(0, 10) : '';
+          if (expFrom && (!expDate || expDate < expFrom)) return false;
+          if (expTo && (!expDate || expDate > expTo)) return false;
+          const purDate = it.purchase_date ? String(it.purchase_date).slice(0, 10) : '';
+          if (purFrom && (!purDate || purDate < purFrom)) return false;
+          if (purTo && (!purDate || purDate > purTo)) return false;
+          if (search) {
+            let metaText = '';
+            try { metaText = JSON.stringify(it.extra_data || {}).toLowerCase(); } catch (e) {}
+            const hay = [
+              it.name, it.supplier, it.unit, it.process_name, it.source_step_name, it.barcode,
+              it.supplier_batch_number, metaText
+            ].filter(Boolean).join(' ').toLowerCase();
+            if (hay.indexOf(search) === -1) return false;
           }
-          if (!finalProductTotals[processName][unit]) {
-            finalProductTotals[processName][unit] = 0;
+          return true;
+        });
+
+        if (state.chip) {
+          filtered = filtered.filter(function (it) {
+            if (state.chip === 'in_use') return !!it.source_execution_id;
+            if (state.chip === 'received24h') {
+              return allAuditEntries(it).some(function (e) {
+                const t = parseDay(e && e.timestamp_utc);
+                return t && (Date.now() - t.getTime() <= 24 * 60 * 60 * 1000);
+              });
+            }
+            if (state.chip === 'low_stock') return isLowStock(it);
+            if (state.chip === 'expiring_7d') {
+              const dd = dayDiffFromNow(it.expiry_date);
+              return dd != null && dd >= 0 && dd <= 7;
+            }
+            if (state.chip === 'expired') {
+              const dd = dayDiffFromNow(it.expiry_date);
+              return dd != null && dd < 0;
+            }
+            return true;
+          });
+        }
+
+        const resultCountEl = document.getElementById('core2-inv-result-count');
+        if (resultCountEl) {
+          resultCountEl.textContent = filtered.length + ' of ' + visibleItems.length + ' shown';
+        }
+
+        const chipDefs = [
+          { key: 'in_use', label: 'In use', count: visibleItems.filter(function (it) { return !!it.source_execution_id; }).length },
+          { key: 'received24h', label: 'Received 24h', count: visibleItems.filter(function (it) { return allAuditEntries(it).some(function (e) { const t = parseDay(e && e.timestamp_utc); return t && (Date.now() - t.getTime() <= 24 * 60 * 60 * 1000); }); }).length },
+          { key: 'low_stock', label: 'Low stock', count: visibleItems.filter(isLowStock).length },
+          { key: 'expiring_7d', label: 'Expiring 7d', count: visibleItems.filter(function (it) { const dd = dayDiffFromNow(it.expiry_date); return dd != null && dd >= 0 && dd <= 7; }).length },
+          { key: 'expired', label: 'Expired', count: visibleItems.filter(function (it) { const dd = dayDiffFromNow(it.expiry_date); return dd != null && dd < 0; }).length },
+        ];
+        const chipRow = document.getElementById('core2-live-inv-chip-row');
+        if (chipRow) {
+          chipRow.innerHTML = chipDefs.map(function (c) {
+            const cls = 'core2-live-inv__chip' + (state.chip === c.key ? ' is-active' : '');
+            return '<button type="button" class="' + cls + '" data-core2-chip="' + c.key + '">' + esc(c.label) + '  ' + c.count + '</button>';
+          }).join('');
+        }
+
+        const itemsView = document.getElementById('core2-inv-items-view');
+        const movesView = document.getElementById('core2-inv-movements-view');
+        const procView = document.getElementById('core2-inv-process-view');
+        if (itemsView) itemsView.hidden = state.view !== 'items';
+        if (movesView) movesView.hidden = state.view !== 'movements';
+        if (procView) procView.hidden = state.view !== 'process';
+
+        const itemsGrid = document.getElementById('core2-inv-items-grid');
+        if (itemsGrid) {
+          itemsGrid.innerHTML = filtered.map(function (it) {
+            const low = isLowStock(it);
+            const expired = (dayDiffFromNow(it.expiry_date) != null && dayDiffFromNow(it.expiry_date) < 0);
+            const inUse = !!it.source_execution_id;
+            return '<article class="core2-live-inv__item-card">' +
+              '<div class="core2-live-inv__item-head">' +
+                '<h3 class="core2-live-inv__item-title">' + esc(it.name || 'Unnamed item') + '</h3>' +
+                '<div class="core2-live-inv__item-badges">' +
+                  '<span class="core2-live-inv__pill ' + typePillClass(it.inventory_type) + '">' + esc(typeLabel(it.inventory_type)) + '</span>' +
+                  (inUse ? '<span class="core2-live-inv__pill core2-live-inv__pill--wip">In use</span>' : '') +
+                  (low ? '<span class="core2-live-inv__pill core2-live-inv__pill--low">Low</span>' : '') +
+                  (expired ? '<span class="core2-live-inv__pill core2-live-inv__pill--expired">Expired</span>' : '') +
+                '</div>' +
+              '</div>' +
+              '<div class="core2-live-inv__qty"><span class="core2-live-inv__qty-value">' + esc(it.quantity) + '</span><span class="core2-live-inv__qty-unit">' + esc(it.unit || '') + '</span></div>' +
+              '<dl class="core2-live-inv__meta">' +
+                '<dt>Supplier</dt><dd>' + esc(it.supplier || '—') + '</dd>' +
+                '<dt>Batch</dt><dd>' + esc(it.supplier_batch_number || '—') + '</dd>' +
+                '<dt>Purchase</dt><dd>' + esc(fmtDate(it.purchase_date)) + '</dd>' +
+                '<dt>Expiry</dt><dd>' + esc(fmtDate(it.expiry_date)) + '</dd>' +
+                '<dt>Process</dt><dd>' + esc(processDisplayName(it)) + '</dd>' +
+                '<dt>Barcode</dt><dd>' + esc(it.barcode || '—') + '</dd>' +
+              '</dl>' +
+              (it.id ? buildHistoryToggle(it.id) : '') +
+            '</article>';
+          }).join('');
+          wireHistoryToggles(itemsGrid);
+        }
+
+        const movesList = document.getElementById('core2-inv-movements-list');
+        if (movesList) {
+          const movementRows = [];
+          filtered.forEach(function (it) {
+            const history = allAuditEntries(it);
+            history.forEach(function (h) {
+              const ts = h && h.timestamp_utc ? h.timestamp_utc : it.created_at;
+              const added = qNum(h && h.quantity_added);
+              movementRows.push({
+                at: ts,
+                item_name: it.name || 'Inventory item',
+                process_name: processDisplayName(it),
+                line: (h && h.source_method ? String(h.source_method).replace(/_/g, ' ') : 'manual') + ' · ' + (h && (h.operator_name || h.operator_email) ? (h.operator_name || h.operator_email) : 'system'),
+                qty: added,
+                unit: it.unit || '',
+              });
+            });
+          });
+          movementRows.sort(function (a, b) { return new Date(b.at || 0) - new Date(a.at || 0); });
+          if (!movementRows.length) {
+            movesList.innerHTML = '<p class="core2-active-batches-empty" style="padding:12px;">No movement events in current filters.</p>';
+          } else {
+            movesList.innerHTML = movementRows.map(function (m) {
+              const qtyClass = m.qty >= 0 ? 'is-pos' : 'is-neg';
+              const qtyLabel = (m.qty >= 0 ? '+' : '') + m.qty + (m.unit ? ' ' + m.unit : '');
+              return '<div class="core2-live-inv__movement-row">' +
+                '<div class="core2-live-inv__movement-main"><strong>' + esc(m.item_name) + '</strong><span>' + esc(m.process_name) + ' · ' + esc(m.line) + '</span></div>' +
+                '<div class="core2-live-inv__movement-qty ' + qtyClass + '">' + esc(qtyLabel) + '</div>' +
+                '<div class="core2-live-inv__movement-time">' + esc(fmtAgo(m.at)) + '</div>' +
+              '</div>';
+            }).join('');
           }
-          finalProductTotals[processName][unit] += quantity;
         }
-      });
-      
-      // Always show raw materials if they exist
-      if (hasRawMaterials) {
-        inventoryGrid.appendChild(createInventoryCategoryCard('raw', grouped.raw_material));
-        // Also show intermediate and final product categories even if empty
-        inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
-        inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
-      } else {
-        // Only show categories that have items if no raw materials exist
-        if (grouped.work_in_progress.length > 0) {
-          inventoryGrid.appendChild(createInventoryCategoryCard('intermediate', grouped.work_in_progress));
-        }
-        if (grouped.final_product.length > 0) {
-          inventoryGrid.appendChild(createInventoryCategoryCard('final', grouped.final_product));
+
+        const procGroups = document.getElementById('core2-inv-process-groups');
+        if (procGroups) {
+          const grouped = {};
+          filtered.forEach(function (it) {
+            const key = processDisplayName(it);
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(it);
+          });
+          const keys = Object.keys(grouped).sort(function (a, b) { return a.localeCompare(b); });
+          if (!keys.length) {
+            procGroups.innerHTML = '<p class="core2-active-batches-empty" style="padding:12px;">No process groups in current filters.</p>';
+          } else {
+            procGroups.innerHTML = keys.map(function (k) {
+              const list = grouped[k];
+              const raw = list.filter(function (it) { return it.inventory_type === 'raw_material'; }).length;
+              const wip = list.filter(function (it) { return it.inventory_type === 'work_in_progress'; }).length;
+              const fin = list.filter(function (it) { return it.inventory_type === 'final_product'; }).length;
+              const cards = list.map(function (it) {
+                return '<article class="core2-live-inv__item-card">' +
+                  '<div class="core2-live-inv__item-head">' +
+                    '<h3 class="core2-live-inv__item-title">' + esc(it.name || 'Unnamed item') + '</h3>' +
+                    '<span class="core2-live-inv__pill ' + typePillClass(it.inventory_type) + '">' + esc(typeLabel(it.inventory_type)) + '</span>' +
+                  '</div>' +
+                  '<div class="core2-live-inv__qty"><span class="core2-live-inv__qty-value">' + esc(it.quantity) + '</span><span class="core2-live-inv__qty-unit">' + esc(it.unit || '') + '</span></div>' +
+                  '<dl class="core2-live-inv__meta">' +
+                    '<dt>Batch</dt><dd>' + esc(it.supplier_batch_number || '—') + '</dd>' +
+                    '<dt>Supplier</dt><dd>' + esc(it.supplier || '—') + '</dd>' +
+                    '<dt>Barcode</dt><dd>' + esc(it.barcode || '—') + '</dd>' +
+                    '<dt>Updated</dt><dd>' + esc(fmtAgo(it.created_at)) + '</dd>' +
+                  '</dl>' +
+                '</article>';
+              }).join('');
+              return '<section class="core2-live-inv__process-group">' +
+                '<div class="core2-live-inv__process-head"><strong>' + esc(k) + '</strong><span class="core2-live-inv__process-counts">' + raw + ' raw · ' + wip + ' intermediate · ' + fin + ' final</span></div>' +
+                '<div class="core2-live-inv__process-items">' + cards + '</div>' +
+              '</section>';
+            }).join('');
+          }
         }
       }
+
+      if (!state.bound) {
+        const modeBtns = shell.querySelectorAll('[data-core2-inv-view]');
+        modeBtns.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const v = btn.getAttribute('data-core2-inv-view') || 'items';
+            state.view = v;
+            modeBtns.forEach(function (b) {
+              const on = b === btn;
+              b.classList.toggle('flow-mode-segment--active', on);
+              b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            renderInventoryViews();
+          });
+        });
+
+        const typeBtns = shell.querySelectorAll('[data-core2-inv-type]');
+        typeBtns.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            state.type = btn.getAttribute('data-core2-inv-type') || '';
+            typeBtns.forEach(function (b) {
+              const on = b === btn;
+              b.classList.toggle('flow-mode-segment--active', on);
+              b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            renderInventoryViews();
+          });
+        });
+
+        const refineBtn = document.getElementById('core2-inv-refine-toggle');
+        const refinePanel = document.getElementById('core2-inv-refine-panel');
+        if (refineBtn && refinePanel) {
+          refineBtn.addEventListener('click', function () {
+            const show = refinePanel.hidden;
+            refinePanel.hidden = !show;
+            refineBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+          });
+        }
+
+        ['core2-inv-search', 'core2-inv-supplier', 'core2-inv-process', 'core2-inv-exp-from', 'core2-inv-exp-to', 'core2-inv-pur-from', 'core2-inv-pur-to'].forEach(function (id) {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', renderInventoryViews);
+          el.addEventListener('change', renderInventoryViews);
+        });
+
+        const chipRow = document.getElementById('core2-live-inv-chip-row');
+        if (chipRow) {
+          chipRow.addEventListener('click', function (e) {
+            const b = e.target.closest('[data-core2-chip]');
+            if (!b) return;
+            const next = b.getAttribute('data-core2-chip');
+            state.chip = (state.chip === next) ? '' : next;
+            renderInventoryViews();
+          });
+        }
+
+        const clear = document.getElementById('core2-inv-clear');
+        if (clear) {
+          clear.addEventListener('click', function () {
+            const ids = ['core2-inv-search', 'core2-inv-supplier', 'core2-inv-process', 'core2-inv-exp-from', 'core2-inv-exp-to', 'core2-inv-pur-from', 'core2-inv-pur-to'];
+            ids.forEach(function (id) {
+              const el = document.getElementById(id);
+              if (el) el.value = '';
+            });
+            state.type = '';
+            state.chip = '';
+            shell.querySelectorAll('[data-core2-inv-type]').forEach(function (b) {
+              const on = (b.getAttribute('data-core2-inv-type') || '') === '';
+              b.classList.toggle('flow-mode-segment--active', on);
+              b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            renderInventoryViews();
+          });
+        }
+
+        state.bound = true;
+      }
+
+      renderInventoryViews();
     }
     
     function createInventoryCategoryCard(type, items) {
@@ -1385,9 +2419,14 @@
         ]);
         updateMetricsV2(metrics);
         const items = inventoryData.inventory_items || [];
+        updateCore2InventorySummary(items);
+        updateCore2InventoryInsights(items, processesData.processes || [], executionsData.executions || []);
         renderInventoryV2(items);
         const procsHub = processesData.processes || [];
         const execsHub = (executionsData.executions || []).filter(function (e) { return e && e.id; });
+        updateCore2WorkflowSummary(procsHub, execsHub);
+        updateCore2WorkflowInsights(procsHub, execsHub);
+        updateCore2OverviewInsights(items, procsHub, execsHub);
         var systemStatusHub = null;
         if (items.length > 0 && procsHub.length > 0 && execsHub.length > 0 && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
           try {
@@ -1506,19 +2545,16 @@
       menu.setAttribute('role', 'menu');
       var aMan = document.createElement('a');
       aMan.href = '/core/inventory/add/manual';
-      aMan.setAttribute('hx-boost', 'false');
       aMan.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__manual';
       aMan.setAttribute('role', 'menuitem');
       aMan.textContent = 'Manual entry';
       var aCsv = document.createElement('a');
       aCsv.href = '/core/inventory/add/csv';
-      aCsv.setAttribute('hx-boost', 'false');
       aCsv.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__csv';
       aCsv.setAttribute('role', 'menuitem');
       aCsv.textContent = 'CSV upload';
       var aScan = document.createElement('a');
       aScan.href = '/core/inventory/add/barcode';
-      aScan.setAttribute('hx-boost', 'false');
       aScan.className = 'core2-journey-addinv-menu__opt core2-journey-addinv-menu__scan';
       aScan.setAttribute('role', 'menuitem');
       aScan.textContent = 'Barcode / camera scan';

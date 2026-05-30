@@ -16,6 +16,7 @@ function crmConfiguration() {
       review_days: 7,
       strict: true,
       task_done_archive_days: 7,
+      revenue_baseline_target_mtd: '',
     },
     savingMapping: false,
     mappingDraft: {
@@ -46,6 +47,8 @@ function crmConfiguration() {
           review_days: Number(traceCfg?.manual_review_days || 7),
           strict: traceCfg?.strict_mapping !== false,
           task_done_archive_days: Number(traceCfg?.task_done_archive_days || 7),
+          revenue_baseline_target_mtd:
+            traceCfg?.revenue_baseline_target_mtd == null ? '' : Number(traceCfg.revenue_baseline_target_mtd),
         };
       } catch (e) {
         this.error = e.message || 'Failed to load configuration.';
@@ -142,12 +145,18 @@ function crmConfiguration() {
           manual_review_days: this.traceConfig.review_days,
           strict_mapping: this.traceConfig.strict,
           task_done_archive_days: this.traceConfig.task_done_archive_days,
+          revenue_baseline_target_mtd:
+            this.traceConfig.revenue_baseline_target_mtd === '' || this.traceConfig.revenue_baseline_target_mtd == null
+              ? null
+              : Number(this.traceConfig.revenue_baseline_target_mtd),
         });
         this.traceConfig.mode = saved?.matching_strategy || this.traceConfig.mode;
         this.traceConfig.key = saved?.matching_key || 'batch_id';
         this.traceConfig.review_days = Number(saved?.manual_review_days || this.traceConfig.review_days);
         this.traceConfig.strict = saved?.strict_mapping !== false;
         this.traceConfig.task_done_archive_days = Number(saved?.task_done_archive_days || this.traceConfig.task_done_archive_days);
+        this.traceConfig.revenue_baseline_target_mtd =
+          saved?.revenue_baseline_target_mtd == null ? '' : Number(saved.revenue_baseline_target_mtd);
       } catch (e) {
         this.error = e.message || 'Failed to save traceability settings.';
       }
