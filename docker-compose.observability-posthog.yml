@@ -126,11 +126,17 @@ services:
     environment:
       CLICKHOUSE_SKIP_USER_SETUP: "1"
       KAFKA_HOSTS: "posthog-kafka:9092"
+    # SYS_PTRACE lets ClickHouse install its crash-signal handler, which is
+    # what actually attaches system.crash_log; without it the table silently
+    # never gets created even though <crash_log> is configured.
+    cap_add:
+      - SYS_PTRACE
     depends_on:
       - posthog-kafka
       - posthog-zookeeper
     volumes:
       - posthog-clickhouse-data:/var/lib/clickhouse
+      - ./observability/posthog-stack/clickhouse/cluster.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
       interval: 3s
@@ -179,6 +185,9 @@ services:
       CLICKHOUSE_DATABASE: posthog
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ""
+      # This local ClickHouse container has no TLS listener (only 9000/8123 are
+      # open); Django's CLICKHOUSE_SECURE default otherwise targets port 9440.
+      CLICKHOUSE_SECURE: "false"
       OBJECT_STORAGE_ENABLED: "true"
       OBJECT_STORAGE_ENDPOINT: http://posthog-objectstorage:19000
       OBJECT_STORAGE_PUBLIC_ENDPOINT: http://localhost:19000
@@ -223,6 +232,9 @@ services:
       CLICKHOUSE_DATABASE: posthog
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ""
+      # This local ClickHouse container has no TLS listener (only 9000/8123 are
+      # open); Django's CLICKHOUSE_SECURE default otherwise targets port 9440.
+      CLICKHOUSE_SECURE: "false"
       OBJECT_STORAGE_ENABLED: "true"
       OBJECT_STORAGE_ENDPOINT: http://posthog-objectstorage:19000
       OBJECT_STORAGE_PUBLIC_ENDPOINT: http://localhost:19000
